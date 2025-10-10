@@ -1,0 +1,69 @@
+# Full server compose used in production deploys
+# - Frontend published on host port 8088
+# - Backend internal (no host port), only exposed inside network
+# - Logging limited to prevent log growth
+# - Healthchecks and restart policies
+# - Deterministic container names and dedicated network
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: final8new-backend
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/dongbodulieuweb-8de0c9a12896.json
+      BACKEND_ROOT: /app
+      MEDIA_DIR: /app/uploads/media
+      MEDIA_PUBLIC_BASE: /media
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/dongbodulieuweb-8de0c9a12896.json:/app/dongbodulieuweb-8de0c9a12896.json:ro
+      # Media shared storage (persist on host)
+      - ./media:/app/uploads/media
+    expose:
+      - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: final8new-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8088:80"
+    volumes:
+      # Read-only mount of media for static serving under /media
+      - ./media:/var/www/media:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  default:
+    name: final8new-net
+    driver: bridge

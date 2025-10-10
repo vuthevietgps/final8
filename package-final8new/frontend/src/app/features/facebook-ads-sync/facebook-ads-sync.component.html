@@ -1,0 +1,230 @@
+<!-- facebook-ads-sync.component.html -->
+<div class="facebook-sync-container">
+  <div class="header">
+    <h2>🔄 Đồng Bộ Chi Phí Facebook Ads</h2>
+    <p class="description">
+      Tự động cập nhật chi phí quảng cáo từ Facebook Marketing API vào hệ thống
+    </p>
+  </div>
+
+  <!-- Configuration Form -->
+  <div class="config-section">
+    <!-- Section 1: Time Selection -->
+    <div class="config-card">
+      <h3>⏰ Cấu Hình Thời Gian</h3>
+      
+      <div class="form-group">
+        <label for="syncType"><strong>Loại Đồng Bộ</strong></label>
+        <select
+          id="syncType"
+          [(ngModel)]="syncType"
+          (change)="onSyncTypeChange()"
+          class="form-control"
+          [disabled]="loading()"
+        >
+          <option value="yesterday">📅 Ngày hôm qua</option>
+          <option value="lastWeek">📆 Tuần trước (7 ngày)</option>
+          <option value="range">🗓️ Khoảng thời gian tùy chọn</option>
+          <option value="all">🌍 Tất cả dữ liệu</option>
+        </select>
+      </div>
+
+      <!-- Date Range Selection -->
+      <div class="form-row horizontal" *ngIf="syncType === 'range'">
+        <div class="form-group">
+          <label><strong>Từ ngày</strong></label>
+          <input
+            type="date"
+            [(ngModel)]="dateFrom"
+            class="form-control"
+            [disabled]="loading()"
+          />
+        </div>
+
+        <div class="form-group">
+          <label><strong>Đến ngày</strong></label>
+          <input
+            type="date"
+            [(ngModel)]="dateTo"
+            class="form-control"
+            [disabled]="loading()"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="section-divider"></div>
+
+    <!-- Section 2: Account & Token Selection -->
+    <div class="config-card">
+      <h3>🔑 Cấu Hình Tài Khoản</h3>
+      
+      <div class="form-group">
+        <label for="tokenId"><strong>Facebook Access Token *</strong></label>
+        <select
+          id="tokenId"
+          [(ngModel)]="selectedTokenId"
+          class="form-control"
+          [disabled]="loading()"
+        >
+          <option value="">-- Chọn token --</option>
+          <option *ngFor="let token of availableTokens()" [value]="token._id">
+            {{ token.name }} 
+            <span *ngIf="token.isDefault">(Mặc định)</span>
+            <span *ngIf="!token.isActive" class="inactive">(Không hoạt động)</span>
+          </option>
+        </select>
+        <small class="help-text">
+          Token sẽ được lấy từ database và được mã hóa bảo mật
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="accountId"><strong>Tài Khoản Quảng Cáo</strong></label>
+        <select
+          id="accountId"
+          [(ngModel)]="selectedAccountId"
+          class="form-control"
+          [disabled]="loading()"
+        >
+          <option value="">-- Chọn tài khoản --</option>
+          <option *ngFor="let account of adAccounts()" [value]="account.accountId">
+            {{ account.name }} ({{ account.accountId }})
+          </option>
+        </select>
+        <small class="help-text">
+          Để trống để đồng bộ tất cả tài khoản
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions-section">
+    <div class="actions">
+      <button
+        class="btn btn-primary btn-large"
+        (click)="syncData()"
+        [disabled]="loading() || !selectedTokenId"
+      >
+        <span *ngIf="loading()">⏳ Đang đồng bộ...</span>
+        <span *ngIf="!loading()">🚀 Bắt đầu đồng bộ</span>
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        (click)="testConnection()"
+        [disabled]="loading() || !selectedTokenId || !selectedAccountId"
+      *ngIf="syncType === 'account'"
+    >
+      🔍 Test kết nối
+    </button>
+
+    <button
+      class="btn btn-outline"
+      (click)="clearResults()"
+      [disabled]="loading()"
+      *ngIf="syncResult() || error()"
+    >
+      🗑️ Xóa kết quả
+    </button>
+    </div>
+  </div>
+
+  <!-- Error Message -->
+  <div class="alert alert-error" *ngIf="error()">
+    <strong>❌ Lỗi:</strong> {{ error() }}
+  </div>
+
+  <!-- Success Results -->
+  <div class="results-section" *ngIf="syncResult()">
+    <h3>📊 Kết Quả Đồng Bộ</h3>
+    
+    <div class="stats-grid">
+      <div class="stat-card success">
+        <div class="stat-number">{{ syncResult()!.success }}</div>
+        <div class="stat-label">Thành công</div>
+      </div>
+      <div class="stat-card error" *ngIf="syncResult()!.failed > 0">
+        <div class="stat-number">{{ syncResult()!.failed }}</div>
+        <div class="stat-label">Thất bại</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-number">{{ getTotalSpend() | currency:'VND' }}</div>
+        <div class="stat-label">Tổng chi phí</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-number">{{ syncResult()!.synced.length }}</div>
+        <div class="stat-label">Adset đồng bộ</div>
+      </div>
+    </div>
+
+    <!-- Detailed Results -->
+    <div class="detailed-results" *ngIf="syncResult()!.synced.length > 0">
+      <h4>📋 Chi Tiết Adset Đã Đồng Bộ</h4>
+      <div class="results-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Adset ID</th>
+              <th>Ngày</th>
+              <th>Chi phí</th>
+              <th>CPM</th>
+              <th>CPC</th>
+              <th>Lượt hiển thị</th>
+              <th>Lượt click</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of syncResult()!.synced">
+              <td>{{ item.adGroupId }}</td>
+              <td>{{ formatDate(item.date) }}</td>
+              <td>{{ formatCurrency(item.spend) }}</td>
+              <td>{{ item.cpm.toFixed(2) }}</td>
+              <td>{{ item.cpc.toFixed(2) }}</td>
+              <td>{{ item.impressions | number }}</td>
+              <td>{{ item.clicks | number }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Error Details -->
+    <div class="error-details" *ngIf="syncResult()!.errors.length > 0">
+      <h4>⚠️ Chi Tiết Lỗi</h4>
+      <ul class="error-list">
+        <li *ngFor="let error of syncResult()!.errors">{{ error }}</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Help Section -->
+  <div class="help-section">
+    <h3>📚 Hướng Dẫn</h3>
+    <div class="help-content">
+      <p><strong>1. Lấy Facebook Access Token:</strong></p>
+      <ul>
+        <li>Truy cập <a href="https://developers.facebook.com/apps" target="_blank">Facebook Developers</a></li>
+        <li>Chọn ứng dụng → Marketing API → Tools → Graph API Explorer</li>
+        <li>Chọn permissions: ads_read, ads_management</li>
+        <li>Generate Access Token và copy</li>
+      </ul>
+
+      <p><strong>2. Cron Job Tự Động:</strong></p>
+      <ul>
+        <li>📅 Hàng ngày lúc 9:00 AM: Sync ngày hôm qua</li>
+        <li>📆 Chủ nhật lúc 10:00 AM: Sync lại cả tuần</li>
+        <li>Cần cấu hình FACEBOOK_ACCESS_TOKEN trong environment</li>
+      </ul>
+
+      <p><strong>3. Lưu Ý:</strong></p>
+      <ul>
+        <li>Chi phí sẽ được lưu vào module "Chi Phí Quảng Cáo"</li>
+        <li>Dữ liệu trùng lặp sẽ được cập nhật (không tạo mới)</li>
+        <li>Impressions được lưu trong trường "Tần suất"</li>
+      </ul>
+    </div>
+  </div>
+</div>

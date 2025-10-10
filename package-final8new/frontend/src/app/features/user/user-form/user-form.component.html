@@ -1,0 +1,194 @@
+<div class="user-form-container">
+  <div class="header">
+    <h2>{{ isEditMode ? 'Chỉnh Sửa Người Dùng' : 'Thêm Người Dùng Mới' }}</h2>
+  </div>
+
+  <div class="content">
+    <div *ngIf="loading" class="loading">
+      Đang tải...
+    </div>
+
+    <div *ngIf="error" class="error">
+      {{ error }}
+    </div>
+
+    <form *ngIf="!loading" [formGroup]="userForm" (ngSubmit)="onSubmit()" class="user-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="fullName">Họ và Tên *</label>
+          <input 
+            type="text" 
+            id="fullName" 
+            formControlName="fullName" 
+            class="form-control"
+            [class.error]="isFieldInvalid('fullName')"
+            placeholder="Nhập họ và tên"
+          >
+          <div *ngIf="isFieldInvalid('fullName')" class="error-message">
+            {{ getFieldError('fullName') }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email *</label>
+          <input 
+            type="email" 
+            id="email" 
+            formControlName="email" 
+            class="form-control"
+            [class.error]="isFieldInvalid('email')"
+            placeholder="Nhập email"
+          >
+          <div *ngIf="isFieldInvalid('email')" class="error-message">
+            {{ getFieldError('email') }}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="password">Mật khẩu {{ isEditMode ? '(để trống nếu không thay đổi)' : '*' }}</label>
+          <input 
+            type="password" 
+            id="password" 
+            formControlName="password" 
+            class="form-control"
+            [class.error]="isFieldInvalid('password')"
+            placeholder="Nhập mật khẩu"
+          >
+          <div *ngIf="isFieldInvalid('password')" class="error-message">
+            {{ getFieldError('password') }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Số Điện Thoại *</label>
+          <input 
+            type="tel" 
+            id="phone" 
+            formControlName="phone" 
+            class="form-control"
+            [class.error]="isFieldInvalid('phone')"
+            placeholder="Nhập số điện thoại"
+          >
+          <div *ngIf="isFieldInvalid('phone')" class="error-message">
+            {{ getFieldError('phone') }}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="role">Vai Trò *</label>
+          <select 
+            id="role" 
+            formControlName="role" 
+            class="form-control"
+            [class.error]="isFieldInvalid('role')"
+          >
+            <option value="">Chọn vai trò</option>
+            <option *ngFor="let role of userRoles" [value]="role">
+              {{ getRoleDisplayName(role) }}
+            </option>
+          </select>
+          <div *ngIf="isFieldInvalid('role')" class="error-message">
+            {{ getFieldError('role') }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="departmentId">Phòng Ban</label>
+          <input 
+            type="text" 
+            id="departmentId" 
+            formControlName="departmentId" 
+            class="form-control"
+            placeholder="Nhập mã phòng ban"
+          >
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="managerId">Quản Lý</label>
+          <input 
+            type="text" 
+            id="managerId" 
+            formControlName="managerId" 
+            class="form-control"
+            placeholder="Nhập mã quản lý"
+          >
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              formControlName="isActive"
+            >
+            <span class="checkmark"></span>
+            Hoạt động
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="address">Địa Chỉ</label>
+        <textarea 
+          id="address" 
+          formControlName="address" 
+          class="form-control"
+          rows="3"
+          placeholder="Nhập địa chỉ"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="notes">Ghi Chú</label>
+        <textarea 
+          id="notes" 
+          formControlName="notes" 
+          class="form-control"
+          rows="3"
+          placeholder="Nhập ghi chú"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="googleDriveLink">Link Google Drive</label>
+        <input
+          type="url"
+          id="googleDriveLink"
+          formControlName="googleDriveLink"
+          class="form-control"
+          [class.error]="isFieldInvalid('googleDriveLink')"
+          placeholder="https://drive.google.com/..."
+        >
+        <div *ngIf="isFieldInvalid('googleDriveLink')" class="error-message">
+          {{ getFieldError('googleDriveLink') || 'Link không hợp lệ' }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="allowedLoginIps">Danh sách IP được phép đăng nhập</label>
+        <textarea
+          id="allowedLoginIps"
+          formControlName="allowedLoginIps"
+          class="form-control"
+          rows="4"
+          placeholder="Ví dụ:\n192.168.1.10\n203.113.131.1"
+        ></textarea>
+        <div class="hint">Bắt buộc cho vai trò Quản Lý và Nhân Viên. Mỗi dòng một địa chỉ IP.</div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" (click)="onCancel()">
+          {{ isViewMode ? 'Đóng' : 'Hủy' }}
+        </button>
+        <button *ngIf="!isViewMode" type="submit" class="btn btn-primary" [disabled]="loading">
+          {{ isEditMode ? 'Cập Nhật' : 'Thêm Mới' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

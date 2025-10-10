@@ -1,0 +1,533 @@
+<!-- Header và toolbar -->
+<div class="fanpage-container">
+  <div class="header">
+    <h2>📘 Quản lý Fanpage</h2>
+    <div class="header-actions">
+      <button class="btn-primary" (click)="openAddModal()">
+        ➕ Thêm mới
+      </button>
+    </div>
+  </div>
+
+  <!-- Thông báo lỗi -->
+  <div *ngIf="error()" class="alert alert-error">
+    {{ error() }}
+    <button (click)="error.set(null)" class="btn-close">×</button>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading()" class="loading">
+    Đang tải dữ liệu...
+  </div>
+
+  <!-- Bảng danh sách fanpage -->
+  <div *ngIf="!loading()" class="table-container">
+    <table class="fanpage-table">
+      <thead>
+        <tr>
+          <th>Avatar</th>
+          <th>Tên</th>
+          <th>ID</th>
+          <th>Trạng thái</th>
+          <th>Kết nối</th>
+          <th>OpenAI Config</th>
+          <th>Token</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let fanpage of fanpages(); trackBy: trackById" class="fanpage-row">
+          <td class="avatar-col">
+            <div class="avatar" [style.background-image]="fanpage.avatarUrl ? 'url(' + fanpage.avatarUrl + ')' : ''">
+                          <span class="avatar-text" *ngIf="!fanpage.avatarUrl">{{ fanpage.name.charAt(0).toUpperCase() }}</span>
+            </div>
+          </td>
+          <td>
+            <div class="fanpage-name">{{ fanpage.name }}</div>
+            <div class="fanpage-desc" *ngIf="fanpage.description">{{ fanpage.description }}</div>
+          </td>
+          <td>{{ fanpage.pageId }}</td>
+          <td>
+            <span class="status-badge" [class]="fanpage.status">
+              {{ fanpage.status === 'active' ? 'Hoạt động' : 'Tạm dừng' }}
+            </span>
+          </td>
+          <td>
+            <div class="connection-info">
+              <div>{{ fanpage.connectedAt | date:'dd/MM/yyyy' }}</div>
+              <div class="ai-status">
+                <span [class]="fanpage.aiEnabled ? 'ai-enabled' : 'ai-disabled'">
+                  {{ fanpage.aiEnabled ? '🤖 AI Bật' : '⭕ AI Tắt' }}
+                </span>
+                <small *ngIf="fanpage.openAIConfigId" style="display:block;opacity:.6;font-size:10px;">Cfg: {{ fanpage.openAIConfigId.slice(-6) }}</small>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="ai-config-col">
+              <ng-container *ngIf="fanpage.openAIConfigId; else noConfig">
+                <span>{{ getOpenAIConfigName(fanpage) }}</span>
+              </ng-container>
+              <ng-template #noConfig><span class="muted">Chưa chọn</span></ng-template>
+            </div>
+          </td>
+          <td>
+            <div class="token-col">
+              <ng-container *ngIf="hasApiTokens(fanpage._id); else noApiTokens">
+                <span class="token-status" [class]="getTokenStatus(fanpage._id).css">
+                  <ng-container [ngSwitch]="getTokenStatus(fanpage._id).css">
+                    <span *ngSwitchCase="'status-valid'">✅ Hợp lệ</span>
+                    <span *ngSwitchCase="'status-expired'">⚠️ Hết hạn</span>
+                    <span *ngSwitchCase="'status-invalid'">❌ Không hợp lệ</span>
+                    <span *ngSwitchDefault>⏺ Chưa kiểm tra</span>
+                  </ng-container>
+                </span>
+                <small *ngIf="getTokenStatus(fanpage._id).detail" class="muted" style="display:block">{{ getTokenStatus(fanpage._id).detail }}</small>
+                <div class="token-actions">
+                  <button class="btn-xs" (click)="checkToken(fanpage)" [disabled]="validatingTokenFor()===fanpage._id">
+                    {{ validatingTokenFor()===fanpage._id ? 'Đang kiểm tra...' : 'Kiểm tra' }}
+                  </button>
+                  <button 
+                    class="btn-xs btn-refresh" 
+                    (click)="openTokenRecovery(fanpage)" 
+                    title="Khôi phục token"
+                    *ngIf="getTokenStatus(fanpage._id).css === 'status-expired' || getTokenStatus(fanpage._id).css === 'status-invalid'">
+                    🔧 Khôi phục
+                  </button>
+                </div>
+              </ng-container>
+              <ng-template #noApiTokens>
+                <div class="muted">
+                  <span *ngIf="hasFanpageAccessToken(fanpage); else noAccess">Chưa có trạng thái</span>
+                  <ng-template #noAccess>Chưa có</ng-template>
+                </div>
+              </ng-template>
+            </div>
+          </td>
+          <td class="actions">
+            <button class="btn-icon" (click)="openEditModal(fanpage)" title="Chỉnh sửa">
+              ✏️
+            </button>
+            <button class="btn-icon" (click)="toggleAI(fanpage)" [title]="fanpage.aiEnabled ? 'Tắt AI' : 'Bật AI'">
+              {{ fanpage.aiEnabled ? '🔴' : '🟢' }}
+            </button>
+            <button class="btn-icon" *ngIf="!fanpage.openAIConfigId" (click)="createAIConfig(fanpage)" title="Tạo config AI">
+              🤖
+            </button>
+            <button class="btn-icon btn-danger" (click)="deleteFanpage(fanpage)" title="Xóa">
+              🗑️
+            </button>
+          </td>
+        </tr>
+        <tr *ngIf="fanpages().length === 0" class="empty-row">
+          <td colspan="8" class="text-center">Chưa có fanpage nào</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal thêm/sửa fanpage -->
+<div *ngIf="showAddModal()" class="modal-overlay" (click)="closeModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ editingFanpage() ? 'Chỉnh sửa' : 'Thêm mới' }} Fanpage</h3>
+      <button class="btn-close" (click)="closeModal()">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Page ID -->
+      <div class="form-group">
+        <label for="pageId">Page ID **</label>
+        <input 
+          id="pageId"
+          type="text" 
+          [value]="formData().pageId || ''"
+          (input)="onInputChange($event, 'pageId')"
+          placeholder="Nhập Page ID"
+          required>
+      </div>
+
+      <!-- Tên fanpage -->
+      <div class="form-group">
+        <label for="name">Tên Fanpage **</label>
+        <input 
+          id="name"
+          type="text" 
+          [value]="formData().name || ''"
+          (input)="onInputChange($event, 'name')"
+          placeholder="Nhập tên fanpage"
+          required>
+      </div>
+
+      <!-- Access Token -->
+      <div class="form-group">
+        <label for="accessToken">Access Token **</label>
+        <textarea 
+          id="accessToken"
+          [value]="formData().accessToken || ''"
+          (input)="onInputChange($event, 'accessToken')"
+          placeholder="Nhập access token"
+          rows="3"
+          required></textarea>
+      </div>
+
+      <!-- Trạng thái và ngày -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="status">Trạng thái **</label>
+          <select 
+            id="status"
+            [value]="formData().status || 'active'"
+            (change)="onInputChange($event, 'status')">
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Kết nối **</label>
+          <input type="text" value="09/29/2025 05" readonly>
+        </div>
+        <div class="form-group">
+          <label>Refresh gần nhất</label>
+          <input type="text" placeholder="mm/dd/yyyy --:-">
+        </div>
+      </div>
+
+      <!-- Avatar URL -->
+      <div class="form-group">
+        <label for="avatarUrl">Avatar URL</label>
+        <input 
+          id="avatarUrl"
+          type="text" 
+          [value]="formData().avatarUrl || ''"
+          (input)="onInputChange($event, 'avatarUrl')"
+          placeholder="https://...">
+      </div>
+
+      <!-- OpenAI Config: luôn hiển thị để dễ tìm thấy -->
+      <div class="form-group">
+        <label for="openAIConfig">Cấu hình OpenAI</label>
+        <select id="openAIConfig" [value]="formData().openAIConfigId || ''" (change)="onInputChange($event, 'openAIConfigId')">
+          <option value="">(Tự tạo config AI mặc định theo mô tả fanpage)</option>
+          <option *ngFor="let c of aiConfigs()" [value]="c._id">{{ c.name }} • {{ c.model }}</option>
+        </select>
+        <div class="hint" *ngIf="aiConfigLoading()">Đang tải danh sách cấu hình...</div>
+        <div class="hint">Để trống: hệ thống tự tạo config AI sau khi lưu fanpage.</div>
+      </div>
+
+      <!-- ConnectedBy và Default Product Group -->
+      <div class="form-row">
+        <div class="form-group">
+          <label>ConnectedBy (UserId)</label>
+          <input type="text" [value]="formData().connectedBy || ''" readonly>
+        </div>
+        <div class="form-group">
+          <label>Default Product Group **</label>
+          <select [value]="formData().defaultProductGroup || ''">
+            <option value="">Chọn nhóm sản phẩm...</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Mô tả -->
+      <div class="form-group">
+        <label for="description">Mô tả fanpage / lĩnh vực kinh doanh</label>
+        <textarea 
+          id="description"
+          [value]="formData().description || ''"
+          (input)="onInputChange($event, 'description')"
+          rows="3"
+          placeholder="Mô tả ngắn gọn về fanpage..."></textarea>
+      </div>
+
+      <!-- Scripts -->
+      <div class="scripts-section">
+        <h4>Kịch bản Chat Fallback (Generic Script)</h4>
+        <p class="help-text">Sử dụng khi không xác định được nhóm quảng cáo từ tin nhắn</p>
+        
+        <div class="script-grid">
+          <div class="form-group">
+            <label>Lời chào (Greeting)</label>
+            <textarea 
+              [value]="formData().greetingScript || ''"
+              (input)="onInputChange($event, 'greetingScript')"
+              placeholder="Tin nhắn đầu tiên"></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label>Yêu cầu làm rõ (Clarify)</label>
+            <textarea 
+              [value]="formData().clarifyScript || ''"
+              (input)="onInputChange($event, 'clarifyScript')"
+              placeholder="Khi tin nhận chưa rõ ràng, cần clarify tôi để biết sẵn sàng, hỗ trợ thông tin..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Đề xuất sản phẩm</label>
+            <textarea 
+              [value]="formData().productSuggestScript || ''"
+              (input)="onInputChange($event, 'productSuggestScript')"
+              placeholder="Trước khi AI đề xuất, hỏi thêm các thông tin khách hàng để làm rõ thêm và nghiêm tự khách..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Tin nhắn chuyển nhân viên</label>
+            <textarea 
+              [value]="formData().fallbackScript || ''"
+              (input)="onInputChange($event, 'fallbackScript')"
+              placeholder="Khi không thể xử lý"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Lời kết thúc (Closing)</label>
+            <textarea 
+              [value]="formData().closingScript || ''"
+              (input)="onInputChange($event, 'closingScript')"
+              placeholder="Tin nhắn kết thúc cuộc hội thoại. Định hướng các thủ tục tinh AI cần. Lần clarify liên hệ cho hỏi thông tin AI (size, màu sắc, v.v.)"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quản lý sản phẩm cho fanpage -->
+      <details class="products-section" [open]="true">
+        <summary>📦 Quản lý sản phẩm cho fanpage này</summary>
+        
+        <div class="products-manager">
+          <!-- Search và add sản phẩm -->
+          <div class="product-search-section">
+            <div class="search-row">
+              <input 
+                type="text" 
+                placeholder="Tìm sản phẩm để thêm vào fanpage..."
+                [(ngModel)]="productSearchQuery"
+                (input)="searchProducts()"
+                class="product-search-input">
+              <button class="btn-primary btn-sm" (click)="loadAllProducts()">
+                🔍 Tìm kiếm
+              </button>
+            </div>
+            
+            <!-- Danh sách sản phẩm có thể thêm -->
+            <div *ngIf="availableProducts().length > 0" class="available-products">
+              <h5>Sản phẩm có thể thêm:</h5>
+              <div class="product-list">
+                <div *ngFor="let product of availableProducts()" class="product-item">
+                  <div class="product-info">
+                    <div class="product-name">{{ product.name }}</div>
+                    <div class="product-price">{{ product.importPrice | number }}đ</div>
+                  </div>
+                  <button class="btn-primary btn-xs" (click)="addProductToFanpage(product)">
+                    ➕ Thêm
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sản phẩm đã thêm vào fanpage -->
+          <div class="fanpage-products-section">
+            <h5>Sản phẩm của fanpage này:</h5>
+            <div *ngIf="fanpageProducts().length === 0" class="empty-products">
+              <p>{{ editingFanpage() ? 'Chưa có sản phẩm nào được thêm vào fanpage này.' : 'Chưa có sản phẩm nào được chọn cho fanpage mới.' }}</p>
+              <p class="hint">Sử dụng tìm kiếm ở trên để thêm sản phẩm{{ editingFanpage() ? '.' : ' (sẽ được lưu khi tạo fanpage).' }}</p>
+            </div>
+            
+            <div *ngIf="fanpageProducts().length > 0" class="fanpage-product-list">
+              <div *ngFor="let productVariation of fanpageProducts()" class="fanpage-product-item">
+                <div class="product-details">
+                  <div class="product-name">{{ productVariation.productName }}</div>
+                  <div class="product-custom-info">
+                    <div class="custom-name" *ngIf="productVariation.customName">
+                      <strong>Tên tùy chỉnh:</strong> {{ productVariation.customName }}
+                    </div>
+                    <div class="custom-price" *ngIf="productVariation.price">
+                      <strong>Giá bán:</strong> {{ productVariation.price | number }}đ
+                    </div>
+                    <div class="priority">
+                      <strong>Ưu tiên:</strong> {{ productVariation.priority || 0 }}
+                    </div>
+                    <div class="status">
+                      <span [class]="productVariation.isActive ? 'status-active' : 'status-inactive'">
+                        {{ productVariation.isActive ? 'Đang bán' : 'Tạm dừng' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="product-actions">
+                  <button class="btn-secondary btn-xs" (click)="editProductVariation(productVariation)">
+                    ✏️ Sửa
+                  </button>
+                  <button class="btn-danger btn-xs" (click)="removeProductFromFanpage(productVariation)">
+                    🗑️ Xóa
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Thống kê -->
+      <details class="stats-section">
+        <summary>📊 Thống kê và cài đặt nâng cao</summary>
+        <div class="stats-grid">
+          <div class="form-group">
+            <label>Subscriber</label>
+            <input 
+              type="number" 
+              [value]="formData().subscriberCount || 0"
+              (input)="onNumberChange($event, 'subscriberCount')"
+              min="0">
+          </div>
+          <div class="form-group">
+            <label>Message quota</label>
+            <input 
+              type="number" 
+              [value]="formData().messageQuota || 10000"
+              (input)="onNumberChange($event, 'messageQuota')"
+              min="0">
+          </div>
+          <div class="form-group">
+            <label>Sent this month</label>
+            <input 
+              type="number" 
+              [value]="formData().sentThisMonth || 0"
+              (input)="onNumberChange($event, 'sentThisMonth')"
+              min="0"
+              readonly>
+          </div>
+        </div>
+
+        <!-- Timezone và flags -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>Múi giờ</label>
+            <input 
+              type="text" 
+              [value]="formData().timezone || 'Asia/Ho_Chi_Minh'"
+              (input)="onInputChange($event, 'timezone')">
+          </div>
+          <div class="form-group checkbox-group">
+            <label>
+              <input 
+                type="checkbox" 
+                [checked]="formData().subscribedWebhook || false"
+                (change)="onCheckboxChange($event, 'subscribedWebhook')">
+              Đã subscribe webhook
+            </label>
+          </div>
+          <div class="form-group checkbox-group">
+            <label>
+              <input 
+                type="checkbox" 
+                [checked]="formData().aiEnabled || false"
+                (change)="onCheckboxChange($event, 'aiEnabled')">
+              Bật AI Chatbot
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="closeModal()">Hủy</button>
+      <button class="btn-primary" (click)="saveFanpage()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal sửa product variation -->
+<div *ngIf="showProductModal()" class="modal-overlay" (click)="closeProductModal()">
+  <div class="modal-content modal-sm" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Tùy chỉnh sản phẩm cho fanpage</h3>
+      <button class="btn-close" (click)="closeProductModal()">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Sản phẩm gốc:</label>
+        <div class="product-original">{{ editingProductVariation()?.productName }}</div>
+      </div>
+
+      <div class="form-group">
+        <label for="customName">Tên tùy chỉnh cho fanpage:</label>
+        <input 
+          id="customName"
+          type="text" 
+          [value]="productFormData().customName || ''"
+          (input)="onProductInputChange($event, 'customName')"
+          placeholder="Để trống sẽ dùng tên gốc">
+      </div>
+
+      <div class="form-group">
+        <label for="customDescription">Mô tả tùy chỉnh:</label>
+        <textarea 
+          id="customDescription"
+          [value]="productFormData().customDescription || ''"
+          (input)="onProductInputChange($event, 'customDescription')"
+          rows="3"
+          placeholder="Mô tả đặc biệt cho fanpage này..."></textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="customPrice">Giá bán (đ):</label>
+          <input 
+            id="customPrice"
+            type="number" 
+            [value]="productFormData().price || ''"
+            (input)="onProductNumberChange($event, 'price')"
+            placeholder="Giá bán cho fanpage này"
+            min="0">
+        </div>
+        <div class="form-group">
+          <label for="priority">Ưu tiên:</label>
+          <input 
+            id="priority"
+            type="number" 
+            [value]="productFormData().priority || 0"
+            (input)="onProductNumberChange($event, 'priority')"
+            min="0"
+            max="10">
+        </div>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <label>
+          <input 
+            type="checkbox" 
+            [checked]="productFormData().isActive !== false"
+            (change)="onProductCheckboxChange($event, 'isActive')">
+          Đang bán trên fanpage này
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label>Ảnh tùy chỉnh (URLs, mỗi URL một dòng):</label>
+        <textarea 
+          [value]="(productFormData().customImages || []).join('\n')"
+          (input)="onCustomImagesChange($event)"
+          rows="3"
+          placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"></textarea>
+        <div class="hint">Để trống sẽ dùng ảnh gốc của sản phẩm</div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="closeProductModal()">Hủy</button>
+      <button class="btn-primary" (click)="saveProductVariation()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Token Recovery Modal -->
+<app-token-recovery
+  [showModal]="showTokenRecovery()"
+  [tokenStatus]="tokenRecoveryData()"
+  [hasBackupTokens]="hasBackupTokens()"
+  [backupTokenCount]="backupTokenCount()"
+  (onClose)="closeTokenRecovery()"
+  (onRecovery)="handleTokenRecovery($event)">
+</app-token-recovery>

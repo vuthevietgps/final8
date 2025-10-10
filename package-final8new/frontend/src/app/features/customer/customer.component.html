@@ -1,0 +1,261 @@
+<div class="customer-container">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>👥 Quản Lý Khách Hàng</h1>
+      <p>Quản lý thông tin khách hàng và thời hạn sử dụng sản phẩm</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="syncFromOrders()" [disabled]="isLoading()">
+        <span class="icon">🔄</span>
+        {{ isLoading() ? 'Đang đồng bộ...' : 'Đồng Bộ Dữ Liệu' }}
+      </button>
+      <button class="btn btn-primary" (click)="updateRemainingDays()" [disabled]="isLoading()">
+        <span class="icon">📊</span>
+        Cập Nhật Thời Gian
+      </button>
+    </div>
+  </div>
+
+  <!-- Statistics Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats().totalCustomers }}</div>
+        <div class="stat-label">Tổng Khách Hàng</div>
+      </div>
+    </div>
+    <div class="stat-card active">
+      <div class="stat-icon">✅</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats().activeCustomers }}</div>
+        <div class="stat-label">Đang Hoạt Động</div>
+      </div>
+    </div>
+    <div class="stat-card warning">
+      <div class="stat-icon">⚠️</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats().expiringSoon }}</div>
+        <div class="stat-label">Sắp Hết Hạn</div>
+      </div>
+    </div>
+    <div class="stat-card danger">
+      <div class="stat-icon">❌</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats().expired }}</div>
+        <div class="stat-label">Đã Hết Hạn</div>
+      </div>
+    </div>
+    <div class="stat-card disabled">
+      <div class="stat-icon">🚫</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats().disabledCustomers }}</div>
+        <div class="stat-label">Đã Vô Hiệu Hóa</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Message -->
+  <div *ngIf="error()" class="error-banner" (click)="clearError()">
+    <span class="error-icon">⚠️</span>
+    <span class="error-text">{{ error() }}</span>
+    <span class="error-close">✕</span>
+  </div>
+
+  <!-- Search and Filters -->
+  <div class="filters">
+    <div class="filter-group">
+      <input
+        type="text"
+        placeholder="🔍 Tìm theo tên hoặc số điện thoại..."
+        class="search-input"
+        [value]="searchTerm()"
+        (input)="onSearchChange($event)"
+      />
+    </div>
+    <div class="filter-group">
+      <select
+        class="filter-select"
+        [value]="selectedFilter()"
+        (change)="onFilterChange($event)"
+      >
+        <option value="all">Tất cả khách hàng</option>
+        <option value="active">Đang hoạt động</option>
+        <option value="expiring">Sắp hết hạn (< 15 ngày)</option>
+        <option value="expired">Đã hết hạn</option>
+        <option value="disabled">Đã vô hiệu hóa</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Customers Table -->
+  <div class="table-container">
+    <div *ngIf="isLoading()" class="loading">
+      <div class="spinner"></div>
+      <p>Đang tải dữ liệu...</p>
+    </div>
+
+    <table *ngIf="!isLoading()" class="customers-table">
+      <thead>
+        <tr>
+          <th>Tên Khách Hàng</th>
+          <th>Số Điện Thoại</th>
+          <th>Địa Chỉ</th>
+          <th>Sản Phẩm</th>
+          <th>Ngày Mua Gần Nhất</th>
+          <th>Thời Hạn S.Dụng</th>
+          <th>Thời Gian Còn Lại</th>
+          <th>Trạng Thái</th>
+          <th>Hành Động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let customer of customers()" class="customer-row" 
+            [class.expiring]="customer.remainingDays < 15 && customer.remainingDays > 0"
+            [class.expired]="customer.remainingDays <= 0"
+            [class.disabled]="customer.isDisabled">
+          <td class="name-cell">
+            <div class="customer-name">{{ customer.customerName }}</div>
+            <div *ngIf="customer.notes" class="customer-notes">{{ customer.notes }}</div>
+          </td>
+          <td class="phone-cell">
+            <div class="phone-number">{{ customer.phoneNumber }}</div>
+          </td>
+          <td class="address-cell">
+            <div class="address" [title]="customer.address">{{ customer.address }}</div>
+          </td>
+          <td class="product-cell">
+            <div class="product-info" [style.background-color]="customer.productId.color + '20'">
+              <div class="product-name">{{ customer.productId.name }}</div>
+              <div class="product-sku">{{ customer.productId.sku }}</div>
+            </div>
+          </td>
+          <td class="purchase-date-cell">
+            <div class="purchase-date">{{ formatDate(customer.latestPurchaseDate) }}</div>
+          </td>
+          <td class="duration-cell">
+            <div class="duration">
+              <span class="duration-value">{{ customer.usageDurationMonths }}</span>
+              <span class="duration-unit">tháng</span>
+            </div>
+          </td>
+          <td class="remaining-cell">
+            <div class="remaining-days" [class]="getRemainingDaysClass(customer.remainingDays)">
+              <span class="days-value">{{ customer.remainingDays }}</span>
+              <span class="days-unit">ngày</span>
+            </div>
+          </td>
+          <td class="status-cell">
+            <span class="status-badge" [class]="getStatusClass(customer)">
+              {{ getStatusText(customer) }}
+            </span>
+          </td>
+          <td class="actions-cell">
+            <button 
+              *ngIf="!customer.isDisabled" 
+              class="btn-icon btn-disable" 
+              (click)="disableCustomer(customer)" 
+              title="Vô hiệu hóa">
+              🚫
+            </button>
+            <button 
+              *ngIf="customer.isDisabled" 
+              class="btn-icon btn-enable" 
+              (click)="enableCustomer(customer)" 
+              title="Kích hoạt lại">
+              ✅
+            </button>
+            <button class="btn-icon btn-edit" (click)="openEditModal(customer)" title="Chỉnh sửa">
+              ✏️
+            </button>
+            <button class="btn-icon btn-delete" (click)="deleteCustomer(customer)" title="Xóa">
+              🗑️
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div *ngIf="!isLoading() && customers().length === 0" class="empty-state">
+      <div class="empty-icon">👥</div>
+      <h3>Không có khách hàng nào</h3>
+      <p>Hãy đồng bộ dữ liệu từ đơn hàng hoặc điều chỉnh bộ lọc tìm kiếm</p>
+      <button class="btn btn-primary" (click)="syncFromOrders()">
+        <span class="icon">🔄</span>
+        Đồng Bộ Dữ Liệu
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Customer Modal -->
+<div *ngIf="isEditModalOpen()" class="modal-overlay" (click)="closeEditModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>✏️ Chỉnh Sửa Khách Hàng</h2>
+      <button class="modal-close" (click)="closeEditModal()">✕</button>
+    </div>
+
+    <form class="modal-form" (ngSubmit)="updateCustomer()">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="edit-customerName">Tên Khách Hàng *</label>
+          <input
+            type="text"
+            id="edit-customerName"
+            required
+            [value]="formData().customerName"
+            (input)="onInputChange('customerName', $event)"
+            placeholder="Nhập tên khách hàng"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-phoneNumber">Số Điện Thoại *</label>
+          <input
+            type="tel"
+            id="edit-phoneNumber"
+            required
+            [value]="formData().phoneNumber"
+            (input)="onInputChange('phoneNumber', $event)"
+            placeholder="Nhập số điện thoại"
+          />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="edit-address">Địa Chỉ *</label>
+          <textarea
+            id="edit-address"
+            required
+            rows="3"
+            [value]="formData().address"
+            (input)="onInputChange('address', $event)"
+            placeholder="Nhập địa chỉ khách hàng"
+          ></textarea>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="edit-notes">Ghi Chú</label>
+          <textarea
+            id="edit-notes"
+            rows="3"
+            [value]="formData().notes"
+            (input)="onInputChange('notes', $event)"
+            placeholder="Ghi chú về khách hàng..."
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" (click)="closeEditModal()">
+          Hủy
+        </button>
+        <button type="submit" class="btn btn-primary" [disabled]="isLoading()">
+          <span *ngIf="isLoading()" class="spinner small"></span>
+          {{ isLoading() ? 'Đang cập nhật...' : 'Cập Nhật' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

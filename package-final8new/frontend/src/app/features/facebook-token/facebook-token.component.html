@@ -1,0 +1,277 @@
+<!-- facebook-token.component.html -->
+<div class="facebook-token-container">
+  <div class="header">
+    <h2>🔐 Quản Lý Facebook Access Tokens</h2>
+    <p class="description">
+      Lưu và quản lý Facebook Access Tokens để tự động đồng bộ chi phí quảng cáo
+    </p>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button
+      class="btn btn-primary"
+      (click)="openCreate()"
+      [disabled]="loading()"
+    >
+      ➕ Thêm Token Mới
+    </button>
+
+    <div class="status-info">
+      <span class="status-badge" [class.success]="hasDefaultToken" [class.warning]="!hasDefaultToken">
+        {{ hasDefaultToken ? '✅ Có token mặc định' : '⚠️ Chưa có token mặc định' }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Error Message -->
+  <div class="alert alert-error" *ngIf="error()">
+    <strong>❌ Lỗi:</strong> {{ error() }}
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" *ngIf="loading()">
+    <div class="spinner"></div>
+    <span>Đang tải...</span>
+  </div>
+
+  <!-- Tokens List -->
+  <div class="tokens-grid" *ngIf="!loading()">
+    <div 
+      *ngFor="let token of tokens()" 
+      class="token-card"
+      [class.default]="token.isDefault"
+      [class.inactive]="!token.isActive"
+    >
+      <div class="token-header">
+        <h3>{{ token.name }}</h3>
+        <div class="token-badges">
+          <span class="badge default" *ngIf="token.isDefault">Mặc định</span>
+          <span class="badge type">{{ token.tokenType }}</span>
+          <span class="badge inactive" *ngIf="!token.isActive">Không hoạt động</span>
+        </div>
+      </div>
+
+      <div class="token-info">
+        <div class="info-row">
+          <strong>App ID:</strong> {{ token.appId || 'N/A' }}
+        </div>
+        <div class="info-row">
+          <strong>Permissions:</strong> {{ formatPermissions(token.permissions) }}
+        </div>
+        <div class="info-row">
+          <strong>Expires:</strong> {{ formatDate(token.expiresAt) }}
+        </div>
+        <div class="info-row">
+          <strong>Usage:</strong> {{ token.usageCount }} lần
+        </div>
+        <div class="info-row">
+          <strong>Last Used:</strong> {{ formatDate(token.lastUsedAt) }}
+        </div>
+        <div class="info-row" *ngIf="token.notes">
+          <strong>Notes:</strong> {{ token.notes }}
+        </div>
+      </div>
+
+      <div class="token-actions">
+        <button
+          class="btn btn-sm btn-success"
+          (click)="testToken(token._id!)"
+          [disabled]="loading() || !token.isActive"
+          title="Test token"
+        >
+          🔍 Test
+        </button>
+
+        <button
+          class="btn btn-sm btn-primary"
+          (click)="setDefault(token._id!)"
+          [disabled]="loading() || token.isDefault || !token.isActive"
+          title="Set as default"
+        >
+          ⭐ Set Default
+        </button>
+
+        <button
+          class="btn btn-sm btn-secondary"
+          (click)="openEdit(token)"
+          [disabled]="loading()"
+          title="Edit token"
+        >
+          ✏️ Edit
+        </button>
+
+        <button
+          class="btn btn-sm btn-danger"
+          (click)="delete(token._id!)"
+          [disabled]="loading()"
+          title="Delete token"
+        >
+          🗑️ Delete
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="tokens().length === 0">
+      <div class="empty-icon">🔐</div>
+      <h3>Chưa có Facebook Token nào</h3>
+      <p>Thêm token đầu tiên để bắt đầu đồng bộ tự động</p>
+      <button class="btn btn-primary" (click)="openCreate()">
+        ➕ Thêm Token Đầu Tiên
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" *ngIf="showModal()" (click)="closeModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>{{ editingId ? 'Chỉnh Sửa' : 'Thêm Mới' }} Facebook Token</h3>
+        <button class="close-btn" (click)="closeModal()">✕</button>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="name">Tên Token *</label>
+              <input
+                type="text"
+                id="name"
+                formControlName="name"
+                placeholder="VD: Production Token, Test Token..."
+                class="form-control"
+                [class.error]="form.get('name')?.invalid && form.get('name')?.touched"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="tokenType">Loại Token</label>
+              <select id="tokenType" formControlName="tokenType" class="form-control">
+                <option value="user">User Token</option>
+                <option value="page">Page Token</option>
+                <option value="app">App Token</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="accessToken">Access Token *</label>
+            <textarea
+              id="accessToken"
+              formControlName="accessToken"
+              placeholder="Nhập Facebook Access Token..."
+              class="form-control"
+              rows="3"
+              [class.error]="form.get('accessToken')?.invalid && form.get('accessToken')?.touched"
+            ></textarea>
+            <small class="help-text" *ngIf="editingId">
+              Để trống nếu không muốn thay đổi token hiện tại
+            </small>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="appId">App ID</label>
+              <input
+                type="text"
+                id="appId"
+                formControlName="appId"
+                placeholder="Facebook App ID..."
+                class="form-control"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="userId">User ID</label>
+              <input
+                type="text"
+                id="userId"
+                formControlName="userId"
+                placeholder="Facebook User ID..."
+                class="form-control"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="expiresAt">Ngày Hết Hạn</label>
+              <input
+                type="date"
+                id="expiresAt"
+                formControlName="expiresAt"
+                class="form-control"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="permissions">Permissions</label>
+              <input
+                type="text"
+                id="permissions"
+                formControlName="permissions"
+                placeholder="ads_read, ads_management..."
+                class="form-control"
+              />
+              <small class="help-text">Cách nhau bằng dấu phẩy</small>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="notes">Ghi Chú</label>
+            <textarea
+              id="notes"
+              formControlName="notes"
+              placeholder="Ghi chú về token này..."
+              class="form-control"
+              rows="2"
+            ></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  formControlName="isActive"
+                />
+                <span>Token đang hoạt động</span>
+              </label>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  formControlName="isDefault"
+                />
+                <span>Đặt làm token mặc định</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-outline"
+            (click)="closeModal()"
+            [disabled]="loading()"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            [disabled]="form.invalid || loading()"
+          >
+            <span *ngIf="loading()">⏳ Đang lưu...</span>
+            <span *ngIf="!loading()">💾 {{ editingId ? 'Cập nhật' : 'Tạo mới' }}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

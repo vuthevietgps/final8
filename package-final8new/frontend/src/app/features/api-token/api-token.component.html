@@ -1,0 +1,86 @@
+<div class="api-token-container">
+  <div class="header-row">
+    <h2>🔐 API & Tokens</h2>
+    <div class="actions">
+      <button class="btn" (click)="openCreate()">➕ Thêm Token</button>
+      <button class="btn secondary" (click)="load()" [disabled]="loading()">⟳ Tải lại</button>
+      <button class="btn secondary" (click)="sync()" [disabled]="syncLoading()">⇅ Đồng bộ Fanpage</button>
+    </div>
+  </div>
+
+  <div *ngIf="error()" class="error-box">{{ error() }}</div>
+  <div *ngIf="loading()" class="loading">Đang tải...</div>
+
+  <table class="token-table" *ngIf="!loading() && tokens().length">
+    <thead>
+      <tr>
+        <th>Tên</th>
+        <th>Provider</th>
+        <th>Fanpage</th>
+        <th>Primary</th>
+        <th>Trạng thái</th>
+        <th>Lần kiểm tra</th>
+        <th>Kết quả</th>
+        <th>Thao tác</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let t of tokens()">
+        <td><strong>{{ t.name }}</strong><div class="sub" *ngIf="t.notes">{{ t.notes }}</div></td>
+        <td>{{ t.provider }}</td>
+        <td>{{ t.fanpageId || '-' }}</td>
+        <td>{{ t.isPrimary ? '⭐' : '' }}</td>
+        <td>{{ t.status }}</td>
+        <td>{{ t.lastCheckedAt ? (t.lastCheckedAt | date:'short') : '-' }}</td>
+        <td>
+          <span class="badge" [class.valid]="t.lastCheckStatus==='valid'" [class.invalid]="t.lastCheckStatus==='invalid'" [class.expired]="t.lastCheckStatus==='expired'">
+            {{ t.lastCheckStatus || 'chưa' }}
+          </span>
+        </td>
+        <td class="op-col">
+          <button class="mini" (click)="validate(t)" title="Validate">✔</button>
+          <button class="mini" (click)="setPrimary(t)" [disabled]="!t.fanpageId" title="Set Primary">★</button>
+          <button class="mini" (click)="startRotate(t)" title="Rotate">⟳</button>
+          <button class="mini danger" (click)="delete(t)" title="Xóa">🗑</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <div *ngIf="!loading() && !tokens().length" class="empty">Chưa có token nào.</div>
+
+  <!-- Modal tạo token -->
+  <div class="modal-backdrop" *ngIf="showModal()" (click)="showModal.set(false)">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>Thêm Token</h3>
+      <label>Tên<input [ngModel]="form().name" (ngModelChange)="updateForm('name',$event)"/></label>
+      <label>Token<input [ngModel]="form().token" (ngModelChange)="updateForm('token',$event)"/></label>
+      <label>Provider
+        <select [ngModel]="form().provider" (ngModelChange)="updateForm('provider',$event)">
+          <option value="facebook">facebook</option>
+          <option value="zalo">zalo</option>
+          <option value="other">other</option>
+        </select>
+      </label>
+      <label>Fanpage ID<input [ngModel]="form().fanpageId" (ngModelChange)="updateForm('fanpageId',$event)"/></label>
+      <label>Ghi chú<textarea rows="2" [ngModel]="form().notes" (ngModelChange)="updateForm('notes',$event)"></textarea></label>
+      <div class="modal-actions">
+        <button class="btn" (click)="save()">Lưu</button>
+        <button class="btn secondary" (click)="showModal.set(false)">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal rotate -->
+  <div class="modal-backdrop" *ngIf="rotating()" (click)="cancelRotate()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>Rotate Token: {{ rotating()?.name }}</h3>
+      <p class="help">Token cũ sẽ được đánh dấu đã rotate và liên kết token mới.</p>
+  <label>Token mới<input [ngModel]="rotateForm().newToken" (ngModelChange)="updateRotateForm('newToken',$event)"/></label>
+  <label>Ghi chú<textarea rows="2" [ngModel]="rotateForm().notes" (ngModelChange)="updateRotateForm('notes',$event)"></textarea></label>
+      <div class="modal-actions">
+        <button class="btn" (click)="doRotate()">Rotate</button>
+        <button class="btn secondary" (click)="cancelRotate()">Hủy</button>
+      </div>
+    </div>
+  </div>
+</div>

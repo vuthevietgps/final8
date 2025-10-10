@@ -1,0 +1,375 @@
+<!-- Header với tiêu đề và nút thêm mới -->
+<div class="header-section">
+  <div class="page-title">
+    <h2>
+      <span class="icon">📦</span>
+      Quản Lý Trạng Thái Đơn Hàng
+    </h2>
+  </div>
+  
+  <div class="header-actions">
+    <button 
+      type="button" 
+      class="btn btn-primary btn-add"
+      (click)="openAddModal()">
+      <span class="icon">➕</span>
+      Thêm Trạng Thái Mới
+    </button>
+  </div>
+</div>
+
+<!-- Thanh tìm kiếm và bộ lọc -->
+<div class="filters-section">
+  <div class="search-box">
+    <input 
+      type="text" 
+      class="form-control"
+      placeholder="Tìm kiếm trạng thái đơn hàng..."
+      (input)="onSearch($event)"
+      [value]="searchTerm">
+    <span class="search-icon">🔍</span>
+  </div>
+  
+  <div class="filter-buttons">
+    <button 
+      type="button"
+      class="btn filter-btn"
+      [class.active]="currentFilter === 'all'"
+      (click)="onFilterChange('all')">
+      Tất Cả
+    </button>
+    <button 
+      type="button"
+      class="btn filter-btn"
+      [class.active]="currentFilter === 'active'"
+      (click)="onFilterChange('active')">
+      Đang Hoạt Động
+    </button>
+    <button 
+      type="button"
+      class="btn filter-btn"
+      [class.active]="currentFilter === 'inactive'"
+      (click)="onFilterChange('inactive')">
+      Không Hoạt Động
+    </button>
+    <button 
+      type="button"
+      class="btn filter-btn"
+      [class.active]="currentFilter === 'processing'"
+      (click)="onFilterChange('processing')">
+      Đang Xử Lý
+    </button>
+    <button 
+      type="button"
+      class="btn filter-btn"
+      [class.active]="currentFilter === 'final'"
+      (click)="onFilterChange('final')">
+      Trạng Thái Cuối
+    </button>
+  </div>
+</div>
+
+<!-- Thông báo lỗi -->
+<div *ngIf="error" class="alert alert-danger">
+  <span class="icon">⚠️</span>
+  {{ error }}
+</div>
+
+<!-- Loading spinner -->
+<div *ngIf="isLoading" class="loading-spinner">
+  <div class="spinner"></div>
+  <span>Đang tải...</span>
+</div>
+
+<!-- Danh sách trạng thái đơn hàng -->
+<div class="statuses-grid" *ngIf="!isLoading">
+  <div 
+    *ngFor="let status of filteredStatuses" 
+    class="status-card"
+    [class.inactive]="!status.isActive"
+    [class.final]="status.isFinal">
+    
+    <!-- Header của card với màu sắc -->
+    <div class="status-header" [style.background-color]="status.color">
+      <div class="status-title">
+        <span class="status-icon">{{ status.icon }}</span>
+        <h4 class="status-name">{{ status.name }}</h4>
+      </div>
+      <div class="status-actions">
+        <button 
+          type="button"
+          class="btn-icon btn-edit"
+          (click)="openEditModal(status)"
+          title="Chỉnh sửa">
+          ✏️
+        </button>
+        <button 
+          type="button"
+          class="btn-icon btn-delete"
+          (click)="deleteOrderStatus(status)"
+          title="Xóa">
+          🗑️
+        </button>
+      </div>
+    </div>
+    
+    <!-- Nội dung card -->
+    <div class="status-body">
+      <div class="status-info">
+        <div class="info-row" *ngIf="status.description">
+          <span class="label">Mô tả:</span>
+          <span class="value">{{ status.description }}</span>
+        </div>
+        
+        <div class="info-row">
+          <span class="label">Thứ tự:</span>
+          <span class="value">{{ status.order }}</span>
+        </div>
+        
+        <div class="info-row">
+          <span class="label">Màu sắc:</span>
+          <span class="value">
+            <span class="color-preview" [style.background-color]="status.color"></span>
+            {{ status.color }}
+          </span>
+        </div>
+        
+        <div class="info-row">
+          <span class="label">Loại:</span>
+          <span class="value">
+            <span 
+              class="status-badge type-badge"
+              [class.processing]="!status.isFinal"
+              [class.final]="status.isFinal"
+              (click)="toggleFinalStatus(status)"
+              title="Nhấn để thay đổi">
+              {{ status.isFinal ? 'Trạng thái cuối' : 'Đang xử lý' }}
+            </span>
+          </span>
+        </div>
+        
+        <div class="info-row">
+          <span class="label">Trạng thái:</span>
+          <span class="value">
+            <span 
+              class="status-badge"
+              [class.active]="status.isActive"
+              [class.inactive]="!status.isActive"
+              (click)="toggleActiveStatus(status)"
+              title="Nhấn để thay đổi">
+              {{ status.isActive ? 'Hoạt động' : 'Không hoạt động' }}
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Footer với thời gian -->
+    <div class="status-footer">
+      <small class="text-muted">
+        Tạo: {{ status.createdAt | date:'dd/MM/yyyy HH:mm' }}
+        <span *ngIf="status.updatedAt !== status.createdAt">
+          | Cập nhật: {{ status.updatedAt | date:'dd/MM/yyyy HH:mm' }}
+        </span>
+      </small>
+    </div>
+  </div>
+</div>
+
+<!-- Thông báo không có dữ liệu -->
+<div *ngIf="!isLoading && filteredStatuses.length === 0" class="no-data">
+  <div class="no-data-icon">📋</div>
+  <h4>Không có trạng thái đơn hàng nào</h4>
+  <p *ngIf="searchTerm || currentFilter !== 'all'">
+    Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm
+  </p>
+  <p *ngIf="!searchTerm && currentFilter === 'all'">
+    Hãy thêm trạng thái đơn hàng đầu tiên
+  </p>
+</div>
+
+<!-- Modal thêm/sửa trạng thái đơn hàng -->
+<div class="modal fade" #orderStatusModal tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="icon">📦</span>
+          {{ editingStatus ? 'Chỉnh Sửa Trạng Thái Đơn Hàng' : 'Thêm Trạng Thái Đơn Hàng Mới' }}
+        </h5>
+        <button 
+          type="button" 
+          class="btn-close" 
+          (click)="hideModal()"
+          aria-label="Đóng">
+          ✕
+        </button>
+      </div>
+      
+      <form [formGroup]="orderStatusForm" (ngSubmit)="onSubmit()">
+        <div class="modal-body">
+          <!-- Thông báo lỗi trong modal -->
+          <div *ngIf="error" class="alert alert-danger">
+            <span class="icon">⚠️</span>
+            {{ error }}
+          </div>
+          
+          <div class="row">
+            <!-- Tên trạng thái -->
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="name" class="form-label required">Tên Trạng Thái</label>
+                <input 
+                  type="text" 
+                  id="name"
+                  class="form-control"
+                  [class.is-invalid]="hasFieldError('name')"
+                  formControlName="name"
+                  placeholder="VD: Chờ xác nhận, Đang xử lý...">
+                <div *ngIf="hasFieldError('name')" class="invalid-feedback">
+                  {{ getFieldError('name') }}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Icon -->
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="icon" class="form-label required">Icon</label>
+                <div class="icon-selector">
+                  <div class="selected-icon">
+                    <span class="current-icon">{{ orderStatusForm.get('icon')?.value }}</span>
+                    <small class="text-muted">Icon hiện tại</small>
+                  </div>
+                  <div class="icon-grid">
+                    <button 
+                      *ngFor="let icon of availableIcons"
+                      type="button"
+                      class="icon-option"
+                      [class.selected]="orderStatusForm.get('icon')?.value === icon"
+                      (click)="selectIcon(icon)">
+                      {{ icon }}
+                    </button>
+                  </div>
+                </div>
+                <div *ngIf="hasFieldError('icon')" class="invalid-feedback">
+                  {{ getFieldError('icon') }}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="row">
+            <!-- Màu sắc -->
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="color" class="form-label required">Màu Sắc</label>
+                <div class="color-input-group">
+                  <input 
+                    type="color" 
+                    id="color"
+                    class="form-control color-input"
+                    [class.is-invalid]="hasFieldError('color')"
+                    formControlName="color">
+                  <input 
+                    type="text"
+                    class="form-control color-text"
+                    [class.is-invalid]="hasFieldError('color')"
+                    formControlName="color"
+                    placeholder="#007bff">
+                </div>
+                <div *ngIf="hasFieldError('color')" class="invalid-feedback">
+                  {{ getFieldError('color') }}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Thứ tự -->
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="order" class="form-label">Thứ Tự Hiển Thị</label>
+                <input 
+                  type="number" 
+                  id="order"
+                  class="form-control"
+                  [class.is-invalid]="hasFieldError('order')"
+                  formControlName="order"
+                  min="0"
+                  placeholder="0">
+                <div *ngIf="hasFieldError('order')" class="invalid-feedback">
+                  {{ getFieldError('order') }}
+                </div>
+                <small class="form-text text-muted">Số nhỏ hơn sẽ hiển thị trước</small>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Mô tả -->
+          <div class="form-group">
+            <label for="description" class="form-label">Mô Tả</label>
+            <textarea 
+              id="description"
+              class="form-control"
+              formControlName="description"
+              rows="3"
+              placeholder="Mô tả chi tiết về trạng thái này..."></textarea>
+          </div>
+          
+          <div class="row">
+            <!-- Trạng thái hoạt động -->
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label">Trạng Thái</label>
+                <div class="form-check form-switch">
+                  <input 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="isActive"
+                    formControlName="isActive">
+                  <label class="form-check-label" for="isActive">
+                    Đang hoạt động
+                  </label>
+                </div>
+                <small class="form-text text-muted">Trạng thái hoạt động sẽ được hiển thị cho người dùng</small>
+              </div>
+            </div>
+            
+            <!-- Trạng thái cuối -->
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label">Loại Trạng Thái</label>
+                <div class="form-check form-switch">
+                  <input 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="isFinal"
+                    formControlName="isFinal">
+                  <label class="form-check-label" for="isFinal">
+                    Trạng thái cuối
+                  </label>
+                </div>
+                <small class="form-text text-muted">Trạng thái cuối như "Hoàn thành", "Đã hủy"</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            (click)="hideModal()">
+            Hủy
+          </button>
+          <button 
+            type="submit" 
+            class="btn btn-primary"
+            [disabled]="orderStatusForm.invalid || isLoading">
+            <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
+            {{ editingStatus ? 'Cập Nhật' : 'Thêm Mới' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

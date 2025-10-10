@@ -1,0 +1,247 @@
+<!--
+  File: features/ad-account/ad-account.component.html
+  Mục đích: Template HTML cho quản lý Tài Khoản Quảng Cáo với inline editing và responsive design.
+-->
+
+<div class="ad-account-manager">
+  <!-- Header section -->
+  <div class="header-section">
+    <div class="title-area">
+      <h1>🎯 Quản Lý Tài Khoản Quảng Cáo</h1>
+      <p class="subtitle">Quản lý các tài khoản quảng cáo trên các nền tảng khác nhau</p>
+    </div>
+    
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="addNew()">
+        <span class="icon">➕</span>
+        Thêm Tài Khoản
+      </button>
+      <button class="btn btn-secondary" (click)="refresh()">
+        <span class="icon">🔄</span>
+        Làm Mới
+      </button>
+    </div>
+  </div>
+
+  <!-- Statistics cards -->
+  <div class="stats-section" *ngIf="stats().length > 0">
+    <div class="stats-grid">
+      <div class="stat-card" *ngFor="let stat of stats()">
+        <div class="stat-icon">{{ getAccountTypeIcon(stat._id) }}</div>
+        <div class="stat-info">
+          <div class="stat-label">{{ getAccountTypeLabel(stat._id) }}</div>
+          <div class="stat-value">{{ stat.count }} tài khoản</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search and filter section -->
+  <div class="search-section">
+    <div class="search-row">
+      <!-- Keyword search -->
+      <div class="search-field">
+        <input 
+          type="text" 
+          placeholder="Tìm kiếm theo tên hoặc ID tài khoản..."
+          (input)="onSearchKeyword($any($event.target).value)"
+          class="search-input">
+      </div>
+
+      <!-- Account type filter -->
+      <div class="filter-field">
+        <select (change)="onFilterAccountType($any($event.target).value)" class="filter-select">
+          <option value="">Tất cả loại tài khoản</option>
+          <option *ngFor="let type of accountTypeOptions" [value]="type.value">
+            {{ type.icon }} {{ type.label }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Status filter -->
+      <div class="filter-field">
+        <select (change)="onFilterStatus($any($event.target).value)" class="filter-select">
+          <option value="">Tất cả trạng thái</option>
+          <option value="active">Đang hoạt động</option>
+          <option value="inactive">Ngừng hoạt động</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add new form -->
+  <!-- Removed form section - using inline editing instead -->
+
+  <!-- Loading state -->
+  <div class="loading-section" *ngIf="isLoading()">
+    <div class="loading-spinner">🔄</div>
+    <p>Đang tải dữ liệu...</p>
+  </div>
+
+  <!-- Error state -->
+  <div class="error-section" *ngIf="error()">
+    <div class="error-message">
+      <span class="error-icon">⚠️</span>
+      {{ error() }}
+    </div>
+    <button class="btn btn-primary" (click)="refresh()">Thử lại</button>
+  </div>
+
+  <!-- Data table -->
+  <div class="table-section" *ngIf="!isLoading() && !error() && adAccounts().length > 0">
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="col-icon">Loại</th>
+            <th class="col-name">Tên Tài Khoản</th>
+            <th class="col-account-id">ID Tài Khoản</th>
+            <th class="col-description">Mô Tả</th>
+            <th class="col-status">Trạng Thái</th>
+            <th class="col-notes">Ghi Chú</th>
+            <th class="col-dates">Ngày Tạo</th>
+            <th class="col-actions">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let account of adAccounts(); trackBy: trackById" 
+              class="data-row" 
+              [class.editing]="editingAccountId() === account._id"
+              [class.new-account]="account._id.startsWith('temp_')">
+            
+            <!-- Account type icon with select for new accounts -->
+            <td class="col-icon">
+              <select 
+                *ngIf="account._id.startsWith('temp_')" 
+                [value]="account.accountType"
+                (change)="updateField(account, 'accountType', $any($event.target).value)"
+                class="type-select">
+                <option *ngFor="let type of accountTypeOptions" [value]="type.value">
+                  {{ type.icon }} {{ type.label }}
+                </option>
+              </select>
+              <span *ngIf="!account._id.startsWith('temp_')" class="account-type-icon">
+                {{ getAccountTypeIcon(account.accountType) }}
+              </span>
+            </td>
+
+            <!-- Name (editable) -->
+            <td class="col-name">
+              <input 
+                type="text" 
+                [value]="account.name"
+                (blur)="updateField(account, 'name', $any($event.target).value)"
+                (keyup.enter)="updateField(account, 'name', $any($event.target).value)"
+                [placeholder]="account._id.startsWith('temp_') ? 'Nhập tên tài khoản...' : ''"
+                class="inline-input font-medium"
+                [class.required]="account._id.startsWith('temp_') && !account.name">
+            </td>
+
+            <!-- Account ID (editable) -->
+            <td class="col-account-id">
+              <input 
+                type="text" 
+                [value]="account.accountId"
+                (blur)="updateField(account, 'accountId', $any($event.target).value)"
+                (keyup.enter)="updateField(account, 'accountId', $any($event.target).value)"
+                [placeholder]="account._id.startsWith('temp_') ? 'Nhập ID tài khoản...' : ''"
+                class="inline-input code-text"
+                [class.required]="account._id.startsWith('temp_') && !account.accountId">
+            </td>
+
+            <!-- Description (editable) -->
+            <td class="col-description">
+              <input 
+                type="text" 
+                [value]="account.description || ''"
+                (blur)="updateField(account, 'description', $any($event.target).value)"
+                (keyup.enter)="updateField(account, 'description', $any($event.target).value)"
+                placeholder="Thêm mô tả..."
+                class="inline-input">
+            </td>
+
+            <!-- Status (editable) -->
+            <td class="col-status">
+              <label class="status-toggle">
+                <input 
+                  type="checkbox" 
+                  [checked]="account.isActive"
+                  (change)="updateField(account, 'isActive', $any($event.target).checked)"
+                  class="status-checkbox">
+                <span class="status-label" [class.active]="account.isActive">
+                  {{ account.isActive ? '✅ Hoạt động' : '❌ Ngừng' }}
+                </span>
+              </label>
+            </td>
+
+            <!-- Notes (editable) -->
+            <td class="col-notes">
+              <input 
+                type="text" 
+                [value]="account.notes || ''"
+                (blur)="updateField(account, 'notes', $any($event.target).value)"
+                (keyup.enter)="updateField(account, 'notes', $any($event.target).value)"
+                placeholder="Thêm ghi chú..."
+                class="inline-input">
+            </td>
+
+            <!-- Created date -->
+            <td class="col-dates">
+              <div class="date-info" *ngIf="!account._id.startsWith('temp_')">
+                <div class="date-primary">{{ account.createdAt | date:'dd/MM/yyyy' }}</div>
+                <div class="date-secondary">{{ account.createdAt | date:'HH:mm' }}</div>
+              </div>
+              <div class="new-label" *ngIf="account._id.startsWith('temp_')">
+                <span class="new-badge">Mới</span>
+              </div>
+            </td>
+
+            <!-- Actions -->
+            <td class="col-actions">
+              <div class="action-buttons">
+                <!-- Save/Cancel for new accounts -->
+                <div *ngIf="account._id.startsWith('temp_')" class="new-account-actions">
+                  <button 
+                    class="btn-action btn-save" 
+                    (click)="saveNewAccount(account)"
+                    [disabled]="!account.name || !account.accountId"
+                    title="Lưu tài khoản">
+                    💾
+                  </button>
+                  <button 
+                    class="btn-action btn-cancel" 
+                    (click)="cancelAdd(account._id)"
+                    title="Hủy">
+                    ✖
+                  </button>
+                </div>
+                
+                <!-- Delete for existing accounts -->
+                <button 
+                  *ngIf="!account._id.startsWith('temp_')"
+                  class="btn-action btn-danger" 
+                  (click)="deleteAccount(account)"
+                  title="Xóa tài khoản">
+                  🗑️
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty-section" *ngIf="!isLoading() && !error() && adAccounts().length === 0">
+    <div class="empty-content">
+      <div class="empty-icon">📭</div>
+      <h3>Chưa có tài khoản quảng cáo nào</h3>
+      <p>Bắt đầu bằng cách thêm tài khoản quảng cáo đầu tiên của bạn</p>
+      <button class="btn btn-primary" (click)="addNew()">
+        <span class="icon">➕</span>
+        Thêm Tài Khoản Đầu Tiên
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,238 @@
+<div class="summary4-container">
+  <div class="header">
+    <h1>📊 Báo Cáo Tổng Hợp 4</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="toggleFilters()">
+        {{ showFilters() ? '🔼 Ẩn Bộ Lọc' : '🔽 Hiện Bộ Lọc' }}
+      </button>
+      <button class="btn btn-primary" (click)="syncData()" [disabled]="loading()">
+        {{ loading() ? 'Đang đồng bộ...' : '🔄 Đồng bộ dữ liệu' }}
+      </button>
+      <button class="btn btn-warning" (click)="exportUnpaidToExcel()" [disabled]="loading()">
+        {{ loading() ? 'Đang xuất...' : '📋 Chưa Thanh Toán' }}
+      </button>
+      <button class="btn btn-info" (click)="exportManualPaymentTemplate()" [disabled]="loading()">
+        {{ loading() ? 'Đang xuất...' : '📄 Tải Template' }}
+      </button>
+      <div class="manual-payment-upload">
+        <input type="file" 
+               id="manual-payment-file" 
+               accept=".xlsx,.xls" 
+               (change)="onFileSelected($event)"
+               style="display: none;">
+        <button class="btn btn-success" (click)="triggerFileInput()" [disabled]="loading()">
+          {{ loading() ? 'Đang xử lý...' : '📤 Thanh Toán Tay' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Panel -->
+  <div class="filter-panel" *ngIf="showFilters()">
+    <div class="filter-grid">
+      <!-- Agent Filter -->
+      <div class="filter-group">
+        <label>🏢 Đại Lý:</label>
+        <select (change)="filterByAgent($any($event.target).value)" [value]="filter().agentId || 'all'">
+          <option value="all">Tất cả đại lý</option>
+          <option *ngFor="let agent of agents()" [value]="agent.agentId">
+            {{ agent.agentName }} ({{ agent.orderCount }} đơn)
+          </option>
+        </select>
+        <input type="text" 
+               placeholder="Tìm theo tên đại lý..." 
+               #agentNameInput
+               (keyup.enter)="searchAgent(agentNameInput.value)"
+               [value]="filter().agentName || ''">
+      </div>
+
+      <!-- Date Filter -->
+      <div class="filter-group">
+        <label>📅 Thời Gian:</label>
+        <div class="date-inputs">
+          <input type="date" 
+                 placeholder="Từ ngày" 
+                 [value]="startDateInput()"
+                 (change)="startDateInput.set($any($event.target).value)">
+          <input type="date" 
+                 placeholder="Đến ngày"
+                 [value]="endDateInput()"
+                 (change)="endDateInput.set($any($event.target).value)">
+          <button class="btn btn-sm btn-primary" (click)="applyDateFilter()">Áp dụng</button>
+          <button class="btn btn-sm btn-secondary" (click)="clearDateFilter()">Xóa</button>
+        </div>
+      </div>
+
+      <!-- Payment Status Filter -->
+      <div class="filter-group">
+        <label>💰 Thanh Toán:</label>
+        <select (change)="filterByPaymentStatus($any($event.target).value)" [value]="filter().paymentStatus || 'all'">
+          <option value="all">Tất cả</option>
+          <option value="unpaid">Chưa thanh toán</option>
+          <option value="paid">Đã thanh toán</option>
+          <option value="manual">Có thanh toán tay</option>
+        </select>
+      </div>
+
+      <!-- Customer Search -->
+      <div class="filter-group">
+        <label>👤 Khách Hàng:</label>
+        <input type="text" 
+               placeholder="Tìm theo tên khách hàng..." 
+               #customerNameInput
+               (keyup.enter)="searchCustomer(customerNameInput.value)"
+               [value]="filter().customerName || ''">
+      </div>
+
+      <!-- Product Search -->
+      <div class="filter-group">
+        <label>📦 Sản Phẩm:</label>
+        <input type="text" 
+               placeholder="Tìm theo tên sản phẩm..." 
+               #productNameInput
+               (keyup.enter)="searchProduct(productNameInput.value)"
+               [value]="filter().productName || ''">
+      </div>
+
+      <!-- Clear Filters -->
+      <div class="filter-group">
+        <button class="btn btn-warning" (click)="clearAllFilters()">
+          🗑️ Xóa Tất Cả Bộ Lọc
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Statistics Panel (Summary1-like) -->
+  <div class="stats-panel" *ngIf="stats()">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-label">Tổng số dòng:</div>
+        <div class="stat-value">{{ stats()?.totalRecords }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Tổng phải trả:</div>
+        <div class="stat-value">{{ formatCurrency(stats()?.totalMustPay || 0) }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Tổng đã trả:</div>
+        <div class="stat-value">{{ formatCurrency(stats()?.totalPaidToCompany || 0) }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Tổng thanh toán tay:</div>
+        <div class="stat-value">{{ formatCurrency(stats()?.totalManualPayment || 0) }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Tổng cần thanh toán:</div>
+        <div class="stat-value">{{ formatCurrency(stats()?.totalNeedToPay || 0) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Toolbar removed per requirement -->
+
+  <!-- Error message -->
+  <div class="alert alert-danger" *ngIf="error()">
+    {{ error() }}
+  </div>
+
+  <!-- Loading indicator -->
+  <div class="loading" *ngIf="loading()">
+    <div class="spinner"></div>
+    <p>Đang tải dữ liệu...</p>
+  </div>
+
+  <!-- Data Table -->
+  <div class="table-wrapper" *ngIf="!loading()">
+  <table class="data-table">
+      <thead>
+        <tr>
+          <th (click)="onSortChange('orderDate')" class="sortable">
+            Ngày tháng
+            <span class="sort-icon">{{ filter().sortBy === 'orderDate' ? (filter().sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span>
+          </th>
+          <th (click)="onSortChange('customerName')" class="sortable">
+            Tên khách hàng
+            <span class="sort-icon">{{ filter().sortBy === 'customerName' ? (filter().sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span>
+          </th>
+          <th>Sản phẩm</th>
+          <th>Số lượng</th>
+          <th>Tên đại lý</th>
+          <th>ID nhóm quảng cáo</th>
+          <th>Kích hoạt</th>
+          <th>Chi tiết dịch vụ</th>
+          <th>Trạng thái sản xuất</th>
+          <th>Trạng thái vận đơn</th>
+          <th>Link nộp</th>
+          <th>Mã vận đơn</th>
+          <th>Đặt cọc</th>
+          <th>COD</th>
+          <th>Báo giá đại lý</th>
+          <th>Phải Trả công ty<br/><span class="muted">Tổng: {{ (stats()?.totalMustPay || 0) | number:'1.0-0' }}</span></th>
+          <th>Đã Trả công ty<br/><span class="muted">Tổng: {{ (stats()?.totalPaidToCompany || 0) | number:'1.0-0' }}</span></th>
+          <th>Cần thanh toán<br/><span class="muted">Tổng: {{ (stats()?.totalNeedToPay || 0) | number:'1.0-0' }}</span></th>
+          <th>Thanh toán tay</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of filteredData(); trackBy: trackByFn">
+          <td>{{ formatDate(item.orderDate) }}</td>
+          <td>{{ item.customerName }}</td>
+          <td>{{ item.product }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.agentName }}</td>
+          <td>{{ item.adGroupId }}</td>
+          <td>{{ item.isActive ? 'Có' : 'Không' }}</td>
+          <td>{{ item.serviceDetails || '' }}</td>
+          <td>
+            <span [class]="getStatusColor(item.productionStatus)">{{ item.productionStatus }}</span>
+          </td>
+          <td>
+            <span [class]="getStatusColor(item.orderStatus)">{{ item.orderStatus }}</span>
+          </td>
+          <td>
+            <a *ngIf="item.submitLink" [href]="item.submitLink" target="_blank" rel="noopener">Mở</a>
+          </td>
+          <td>{{ item.trackingNumber }}</td>
+          <td>{{ formatCurrency(item.depositAmount) }}</td>
+          <td>{{ formatCurrency(item.codAmount) }}</td>
+          <td>{{ formatCurrency(item.approvedQuotePrice) }}</td>
+          <td>{{ formatCurrency(item.mustPayToCompany) }}</td>
+          <td>{{ formatCurrency(item.paidToCompany) }}</td>
+          <td [class]="item.needToPay > 0 ? 'text-red-600' : item.needToPay < 0 ? 'text-green-600' : ''">
+            {{ formatCurrency(item.needToPay) }}
+          </td>
+          <td>
+            <input 
+              class="input" 
+              type="number" 
+              step="1000"
+              [ngModel]="item.manualPayment || 0"
+              (blur)="onBlurManual(item._id, $event)"
+              (keydown.enter)="$event.target.blur()" />
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination (Summary1-like) -->
+  <div class="pagination-wrapper" *ngIf="!loading() && totalRecords() > 0">
+    <div class="pagination-info">
+      Hiển thị {{ displayFrom() }} - {{ displayTo() }} trong tổng số {{ totalRecords() }} kết quả
+    </div>
+    <div class="pagination-controls">
+      <select [ngModel]="filter().limit" (ngModelChange)="changePageSize($event)" class="page-size-select">
+        <option value="10">10/trang</option>
+        <option value="25">25/trang</option>
+        <option value="50">50/trang</option>
+        <option value="100">100/trang</option>
+      </select>
+      <button class="btn btn-sm" [disabled]="currentPage() <= 1" (click)="goToPage(1)">⏮️ Đầu</button>
+      <button class="btn btn-sm" [disabled]="currentPage() <= 1" (click)="goToPage(currentPage() - 1)">⬅️ Trước</button>
+      <span class="page-info">Trang {{ currentPage() }} / {{ totalPages() }}</span>
+      <button class="btn btn-sm" [disabled]="currentPage() >= totalPages()" (click)="goToPage(currentPage() + 1)">Sau ➡️</button>
+      <button class="btn btn-sm" [disabled]="currentPage() >= totalPages()" (click)="goToPage(totalPages())">Cuối ⏭️</button>
+    </div>
+  </div>
+</div>

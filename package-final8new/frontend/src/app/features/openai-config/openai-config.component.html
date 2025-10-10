@@ -1,0 +1,268 @@
+<div class="openai-config-container">
+  <!-- Header với title và action buttons -->
+  <div class="header">
+    <h2>🤖 Quản lý Cấu hình OpenAI</h2>
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary" (click)="openAddModal()" [disabled]="loading()">
+        ➕ Thêm cấu hình
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="loadConfigs()" [disabled]="loading()">
+        🔄 Tải lại
+      </button>
+    </div>
+  </div>
+
+  <!-- Error message -->
+  <div *ngIf="error() && !showModal()" class="error-message">
+    <span>⚠️ {{ error() }}</span>
+    <button type="button" (click)="error.set(null)" class="close-btn">×</button>
+  </div>
+
+  <!-- Loading state -->
+  <div *ngIf="loading() && !showModal()" class="loading-state">
+    <span>🔄 Đang tải dữ liệu...</span>
+  </div>
+
+  <!-- Bảng danh sách cấu hình OpenAI -->
+  <div class="table-container" *ngIf="!loading()">
+    <table class="openai-config-table">
+      <thead>
+        <tr>
+          <th>Tên cấu hình</th>
+          <th>Model</th>
+          <th>API Key</th>
+          <th>Temperature</th>
+          <th>Max Tokens</th>
+          <th>Scope</th>
+          <th>Trạng thái</th>
+          <th>Mặc định</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let config of configs(); trackBy: trackById" class="config-row">
+          <td>
+            <div class="config-info">
+              <div class="config-name">{{ config.name }}</div>
+              <div class="config-desc" *ngIf="config.description">{{ config.description }}</div>
+            </div>
+          </td>
+          <td>
+            <span class="model-badge">{{ config.model }}</span>
+          </td>
+          <td>
+            <span class="api-key">{{ maskApiKey(config.apiKey) }}</span>
+          </td>
+          <td>
+            <span class="temperature">{{ config.temperature }}</span>
+          </td>
+          <td>
+            <span class="max-tokens">{{ config.maxTokens }}</span>
+          </td>
+          <td>
+            <div class="scope-info">
+              <span class="scope-type">{{ config.scopeType }}</span>
+              <span class="scope-ref" *ngIf="config.scopeRef">{{ config.scopeRef }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="status-badge" [class]="'status-' + config.status">
+              {{ config.status === 'active' ? 'Hoạt động' : 'Ngưng' }}
+            </span>
+          </td>
+          <td>
+            <span class="default-badge" *ngIf="config.isDefault">⭐ Mặc định</span>
+          </td>
+          <td class="actions">
+            <button type="button" class="btn-action edit" (click)="openEditModal(config)" title="Chỉnh sửa">
+              ✏️
+            </button>
+            <button type="button" class="btn-action delete" (click)="deleteConfig(config)" title="Xóa">
+              🗑️
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Empty state -->
+  <div *ngIf="!loading() && configs().length === 0" class="empty-state">
+    <div class="empty-icon">🤖</div>
+    <h3>Chưa có cấu hình OpenAI</h3>
+    <p>Thêm cấu hình đầu tiên để bắt đầu sử dụng AI chatbot.</p>
+    <button type="button" class="btn btn-primary" (click)="openAddModal()">
+      ➕ Thêm cấu hình OpenAI
+    </button>
+  </div>
+
+  <!-- Modal form -->
+  <div class="modal-overlay" *ngIf="showModal()" (click)="closeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>{{ isEditing() ? '✏️ Chỉnh sửa cấu hình' : '➕ Tạo cấu hình OpenAI mới' }}</h3>
+        <button type="button" class="close-btn" (click)="closeModal()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Error trong modal -->
+        <div *ngIf="error()" class="error-message">
+          <span>⚠️ {{ error() }}</span>
+          <button type="button" (click)="error.set(null)" class="close-btn">×</button>
+        </div>
+
+        <form (submit)="$event.preventDefault(); saveConfig()">
+          <!-- Thông tin cơ bản -->
+          <div class="form-section">
+            <h4>Thông tin cơ bản</h4>
+            
+            <div class="form-group">
+              <label for="name">Tên cấu hình *</label>
+              <input type="text" id="name" 
+                     [value]="formData().name || ''" 
+                     (input)="onInputChange($event, 'name')" 
+                     placeholder="Ví dụ: ChatBot Fanpage Chính"
+                     required>
+            </div>
+
+            <div class="form-group">
+              <label for="description">Mô tả</label>
+              <textarea id="description" 
+                        [value]="formData().description || ''" 
+                        (input)="onInputChange($event, 'description')" 
+                        rows="2" 
+                        placeholder="Mô tả ngắn gọn về cấu hình này"></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="status">Trạng thái</label>
+                <select id="status" 
+                        [value]="formData().status || 'active'" 
+                        (change)="onInputChange($event, 'status')">
+                  <option value="active">Hoạt động</option>
+                  <option value="inactive">Ngưng</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Mặc định</label>
+                <input type="checkbox" 
+                       [checked]="formData().isDefault || false" 
+                       (change)="onCheckboxChange($event, 'isDefault')">
+                <span class="checkbox-label">Đặt làm cấu hình mặc định</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cấu hình OpenAI -->
+          <div class="form-section">
+            <h4>Cấu hình OpenAI</h4>
+            
+            <div class="form-group">
+              <label for="model">Model OpenAI *</label>
+              <select id="model" 
+                      [value]="formData().model || 'gpt-4o-mini'" 
+                      (change)="onInputChange($event, 'model')">
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                <option value="o4-mini">o4-mini (reasoning)</option>
+                <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                <option value="gpt-4.1">gpt-4.1</option>
+                <option value="gpt-4.1-nano">gpt-4.1-nano</option>
+                <option value="o3-mini">o3-mini</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="apiKey">OpenAI API Key *</label>
+              <div class="input-with-icon">
+                <input type="password" id="apiKey" 
+                       [value]="formData().apiKey || ''" 
+                       (input)="onInputChange($event, 'apiKey')" 
+                       placeholder="sk-proj-...">
+                <button type="button" class="test-btn" (click)="testApiKey()" [disabled]="testingKey()">
+                  {{ testingKey() ? '⏳ Đang test...' : '🔍 Test API Key' }}
+                </button>
+              </div>
+              <small *ngIf="testResult() && !error()" style="border-left-color:#00b894; color:#1a6b46;">✅ {{ testResult() }}</small>
+              <small>API key từ OpenAI platform (https://platform.openai.com/api-keys)</small>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="maxTokens">Max Tokens *</label>
+                <input type="number" id="maxTokens" 
+                       [value]="formData().maxTokens || 150" 
+                       (input)="onNumberChange($event, 'maxTokens')" 
+                       min="1" max="4000">
+                <small>Số token tối đa cho mỗi response (50-4000)</small>
+              </div>
+              <div class="form-group">
+                <label for="temperature">Temperature *</label>
+                <input type="number" id="temperature" 
+                       [value]="formData().temperature || 0.7" 
+                       (input)="onNumberChange($event, 'temperature')" 
+                       min="0" max="2" step="0.1">
+                <small>Độ sáng tạo (0: nghiêm túc, 2: sáng tạo)</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tham số AI -->
+          <div class="form-section">
+            <h4>Tham số AI</h4>
+            
+            <div class="form-group">
+              <label for="systemPrompt">System Prompt *</label>
+              <textarea id="systemPrompt" 
+                        [value]="formData().systemPrompt || ''" 
+                        (input)="onInputChange($event, 'systemPrompt')" 
+                        rows="4" 
+                        placeholder="Hướng dẫn cho AI về cách trả lời khách hàng..."></textarea>
+              <small>Hướng dẫn chi cho AI về cách trả lời và hành vi</small>
+            </div>
+          </div>
+
+          <!-- Phạm vi áp dụng -->
+          <div class="form-section">
+            <h4>Phạm vi áp dụng</h4>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="scopeType">Loại phạm vi *</label>
+                <select id="scopeType" 
+                        [value]="formData().scopeType || 'global'" 
+                        (change)="onInputChange($event, 'scopeType')">
+                  <option value="global">Toàn cục</option>
+                  <option value="fanpage">Fanpage</option>
+                  <option value="adgroup">Ad Group</option>
+                  <option value="messageScope">Message Scope</option>
+                </select>
+                <small>Xác định cấu hình áp dụng ở đâu trong hệ thống</small>
+              </div>
+              <div class="form-group" *ngIf="formData().scopeType !== 'global'">
+                <label for="scopeRef">ID tham chiếu</label>
+                <input type="text" id="scopeRef" 
+                       [value]="formData().scopeRef || ''" 
+                       (input)="onInputChange($event, 'scopeRef')" 
+                       placeholder="Chọn fanpage áp dụng cấu hình này">
+                <small>Chọn fanpage áp dụng cấu hình này</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="loading()">
+              Hủy
+            </button>
+            <button type="submit" class="btn btn-primary" [disabled]="loading()">
+              {{ loading() ? '⏳ Đang lưu...' : (isEditing() ? '💾 Cập nhật' : '➕ Tạo mới') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

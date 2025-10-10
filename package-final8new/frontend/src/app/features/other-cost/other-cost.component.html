@@ -1,0 +1,103 @@
+<div class="other-cost-page">
+  <div class="toolbar">
+    <div class="title">
+      <span class="icon">💸</span>
+      <h2>Chi Phí Khác</h2>
+    </div>
+    <div class="filters">
+      <label>
+        Từ ngày
+        <input type="date" [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+      </label>
+      <label>
+        Đến ngày
+        <input type="date" [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+      </label>
+      <button class="btn" (click)="loadData()">Lọc</button>
+      <button class="btn btn-secondary" (click)="fromDate.set(''); toDate.set(''); loadData()">Reset</button>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" (click)="openCreate()">➕ Thêm</button>
+  <a class="btn" [href]="getExportUrl()" target="_blank" rel="noopener">⬇️ Xuất CSV</a>
+    </div>
+  </div>
+
+  <div class="summary" *ngIf="summary()">
+    <div class="card">
+      <div class="label">Tổng chi phí</div>
+      <div class="value">{{ summary()!.totalAmount | number:'1.0-0' }} đ</div>
+    </div>
+    <div class="card">
+      <div class="label">Số giao dịch</div>
+      <div class="value">{{ summary()!.count }}</div>
+    </div>
+  </div>
+
+  <div class="table-wrapper" *ngIf="!loading(); else loadingTpl">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Ngày</th>
+          <th class="right">Chi phí</th>
+          <th>Ghi chú</th>
+          <th>Link chứng từ</th>
+          <th class="center">Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of costs()">
+          <td>{{ c.date | date:'yyyy-MM-dd' }}</td>
+          <td class="right">{{ c.amount | number:'1.0-0' }} đ</td>
+          <td>{{ c.notes }}</td>
+          <td>
+            <a *ngIf="c.documentLink" [href]="c.documentLink" target="_blank" rel="noopener">Mở link</a>
+          </td>
+          <td class="center">
+            <button class="btn btn-sm" (click)="openEdit(c)">Sửa</button>
+            <button class="btn btn-sm btn-danger" (click)="remove(c._id!)">Xóa</button>
+          </td>
+        </tr>
+        <tr *ngIf="costs().length === 0">
+          <td colspan="5" class="center muted">Chưa có dữ liệu</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ng-template #loadingTpl>
+    <div class="loading">Đang tải...</div>
+  </ng-template>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" *ngIf="showModal()" (click)="closeModal()"></div>
+  <div class="modal" *ngIf="showModal()">
+    <div class="modal-header">
+      <h3>{{ editingId ? 'Chỉnh sửa' : 'Thêm mới' }} Chi phí</h3>
+      <button class="btn-close" (click)="closeModal()">✕</button>
+    </div>
+    <form [formGroup]="form" (ngSubmit)="save()" class="modal-body">
+      <div class="grid">
+        <label>
+          Ngày
+          <input type="date" formControlName="date" />
+        </label>
+        <label>
+          Chi phí (đ)
+          <input type="number" formControlName="amount" min="0" step="1000" />
+        </label>
+        <label class="col-span-2">
+          Ghi chú
+          <input type="text" formControlName="notes" placeholder="Ghi chú (không bắt buộc)" />
+        </label>
+        <label class="col-span-2">
+          Link chứng từ
+          <input type="text" formControlName="documentLink" placeholder="Dán link tài liệu (tùy chọn)" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" [disabled]="form.invalid || loading()">Lưu</button>
+        <button type="button" class="btn" (click)="closeModal()">Hủy</button>
+      </div>
+    </form>
+  </div>
+</div>

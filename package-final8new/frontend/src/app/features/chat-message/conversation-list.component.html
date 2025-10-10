@@ -1,0 +1,178 @@
+<div class="conversation-container">
+  <div class="header-row">
+    <h2>🗂️ Hội Thoại Fanpage</h2>
+    <div class="filters">
+      <input placeholder="Fanpage ID" [ngModel]="filter().fanpageId" (ngModelChange)="updateFilter('fanpageId',$event)"/>
+      <input placeholder="Sender PSID" [ngModel]="filter().senderPsid" (ngModelChange)="updateFilter('senderPsid',$event)"/>
+      <input placeholder="Khách hàng" [ngModel]="filter().orderCustomerName" (ngModelChange)="updateFilter('orderCustomerName',$event)"/>
+      <input placeholder="Số điện thoại" [ngModel]="filter().orderPhone" (ngModelChange)="updateFilter('orderPhone',$event)"/>
+      <select [ngModel]="filter().needsHuman" (ngModelChange)="updateFilter('needsHuman',$event)">
+        <option value="">--Needs Human?--</option>
+        <option value="true">Cần xử lý</option>
+        <option value="false">Đã ổn</option>
+      </select>
+      <button class="btn" (click)="page.set(1); load()" [disabled]="loading()">Tải</button>
+    </div>
+  </div>
+  <div *ngIf="error()" class="error-box">{{ error() }}</div>
+  <div *ngIf="loading()" class="loading">Đang tải...</div>
+  <table class="conv-table" *ngIf="!loading() && items().length">
+    <thead>
+      <tr>
+        <th>Fanpage</th>
+  <th>Sender</th>
+  <th>Khách hàng</th>
+  <th>Điện thoại</th>
+        <th>Ad Group</th>
+        <th>Tổng</th>
+        <th>Inbound/Out</th>
+        <th>Chờ</th>
+        <th>Cuối (ago)</th>
+        <th>Snippet</th>
+        <th>Trạng thái</th>
+        <th>AI</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let c of items()" (dblclick)="open(c)" [class.needs]="c.needsHuman" [class.recent]="timeAgo(c.lastMessageAt||'').endsWith('s') || timeAgo(c.lastMessageAt||'').endsWith('m')">
+        <td>
+          <div class="fanpage-cell">
+            <span class="fanpage-id">{{ getFanpagePageId(c.fanpageId) }}</span>
+            <span *ngIf="getFanpageName(c.fanpageId)" class="fanpage-name">{{ getFanpageName(c.fanpageId) }}</span>
+            <a *ngIf="isFanpageObject(c.fanpageId)" [href]="'https://facebook.com/' + getFanpagePageId(c.fanpageId)" target="_blank" class="fb-link" title="Xem fanpage trên Facebook">🔗</a>
+          </div>
+        </td>
+  <td>{{ c.senderPsid }}</td>
+  <td>{{ c.orderCustomerName || '-' }}</td>
+  <td>{{ c.orderPhone || '-' }}</td>
+        <td>
+          <span *ngIf="c.lastAdGroupId" class="ad-group-badge">{{ c.lastAdGroupId }}</span>
+          <span *ngIf="!c.lastAdGroupId" class="no-ad-group">-</span>
+        </td>
+        <td>{{ c.totalMessages }}</td>
+        <td>{{ c.inboundCount }}/{{ c.outboundCount }}</td>
+        <td>{{ c.awaitingCount }}</td>
+        <td>{{ timeAgo(c.lastMessageAt||'') }}</td>
+        <td>{{ c.lastMessageSnippet }}</td>
+        <td>
+          <span class="badge needs" *ngIf="c.needsHuman">Cần người</span>
+          <span class="badge ok" *ngIf="!c.needsHuman">OK</span>
+        </td>
+        <td>
+          <span class="badge ai-on" *ngIf="c.autoAiEnabled!==false">AI</span>
+          <span class="badge ai-off" *ngIf="c.autoAiEnabled===false">Tắt</span>
+        </td>
+        <td><button class="mini" (click)="open(c)">Chi tiết</button></td>
+      </tr>
+    </tbody>
+  </table>
+  <div *ngIf="!loading() && !items().length" class="empty">Không có hội thoại</div>
+
+  <div class="pagination" *ngIf="total()>limit()">
+    <button (click)="setPage(page()-1)" [disabled]="page()===1">«</button>
+    <span>Trang {{ page() }}</span>
+    <button (click)="setPage(page()+1)" [disabled]="page()*limit()>=total()">»</button>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal-backdrop" *ngIf="showDetail()" (click)="showDetail.set(false)">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>Hội thoại: {{ currentConv()?.senderPsid }}</h3>
+      <div class="meta-row" *ngIf="currentConv()">
+        <span>Tổng: {{ currentConv()?.totalMessages }}</span>
+        <span>Inbound: {{ currentConv()?.inboundCount }}</span>
+        <span>Outbound: {{ currentConv()?.outboundCount }}</span>
+        <span>Chờ: {{ currentConv()?.awaitingCount }}</span>
+        <span>Cuối: {{ currentConv()?.lastMessageAt | date:'short' }}</span>
+      </div>
+      <div class="ai-info" *ngIf="currentConv()?.autoAiEnabled!==false">
+        <small>🤖 AI đang bật: Tự động trả lời dựa trên mô tả fanpage và lịch sử chat. AI sẽ tắt khi bạn bấm "Tắt AI".</small>
+      </div>
+      <div class="ai-info" *ngIf="currentConv()?.autoAiEnabled===false">
+        <small>⭕ AI đã tắt: Tin nhắn mới sẽ không được AI tự trả lời. Bấm "Bật AI" để kích hoạt lại.</small>
+      </div>
+      <div class="detail-actions">
+        <button class="btn" (click)="resolve()" *ngIf="currentConv()?.needsHuman">Đánh dấu xong</button>
+        <button class="btn" (click)="toggleAI()">{{ currentConv()?.autoAiEnabled===false ? 'Bật AI' : 'Tắt AI' }}</button>
+        <button class="btn" (click)="showDetail.set(false)">Đóng</button>
+        <small class="performance-info" *ngIf="detailLoading()">⚡ Tải nhanh...</small>
+      </div>
+      <div class="thread-layout">
+        <div class="thread-col">
+          <div class="thread">
+            <div *ngIf="detailLoading() && messages().length === 0" class="loading-messages">
+              <div class="loading-spinner">⏳</div>
+              <div>Đang tải tin nhắn...</div>
+            </div>
+            <div *ngFor="let m of messages()" class="msg" [class.in]="m.direction==='in'" [class.out]="m.direction==='out'" [class.ai]="m.isAI">
+              <div class="meta">
+                <span class="sender-label">{{ m.direction==='in' ? '👤 Khách hàng' : (m.isAI ? '🤖 AI Assistant' : '👨‍💼 Nhân viên') }}</span>
+                <span class="time-label">{{ m.createdAt | date:'HH:mm, dd/MM' }}</span>
+                <span *ngIf="m.isAI && m.aiModelUsed" class="model-tag">{{ m.aiModelUsed }}</span>
+              </div>
+              <div class="body">{{ m.content }}</div>
+              <div class="flags" *ngIf="m.awaitingHuman || m.adGroupId || m.isAI">
+                <span *ngIf="m.awaitingHuman" class="flag-item awaiting">⏳ Chờ xử lý</span>
+                <span *ngIf="m.adGroupId" class="flag-item adgroup">🎯 {{ m.adGroupId }}</span>
+                <span *ngIf="m.isAI" class="flag-item ai-generated">✨ AI tự động</span>
+              </div>
+            </div>
+          </div>
+          <div class="reply-box">
+            <textarea rows="2" placeholder="Trả lời (Ctrl+Enter gửi)" [ngModel]="replyText()" (ngModelChange)="replyText.set($event)" (keydown)="onReplyKey($event)"></textarea>
+            <div class="reply-actions">
+              <button class="btn" (click)="sendReply()" [disabled]="sending() || !replyText().trim()">Gửi</button>
+            </div>
+          </div>
+        </div>
+        <div class="order-col">
+          <h4>📝 Đơn Hàng</h4>
+          <div class="mini-hint" *ngIf="orderExtractLoading()">Đang quét hội thoại...</div>
+          <div class="mini-hint" *ngIf="!orderExtractLoading() && extractSuggestions()">Gợi ý đã điền tự động – kiểm tra lại trước khi lưu.</div>
+          <div class="form-grid">
+            <label>Sản phẩm
+              <select [ngModel]="orderDraft()?.productId" (ngModelChange)="setDraftField('productId',$event)">
+                <option value="">-- Chọn --</option>
+                <option *ngFor="let p of products()" [value]="p._id">{{ p.name }}</option>
+              </select>
+            </label>
+            <label>Khách Hàng<input [ngModel]="orderDraft()?.customerName" (ngModelChange)="setDraftField('customerName',$event)"/></label>
+            <label>Điện Thoại<input [ngModel]="orderDraft()?.phone" (ngModelChange)="setDraftField('phone',$event)"/></label>
+            <label>Địa Chỉ<textarea rows="2" [ngModel]="orderDraft()?.address" (ngModelChange)="setDraftField('address',$event)"></textarea></label>
+            <label>Số lượng<input type="number" min="1" [ngModel]="orderDraft()?.quantity" (ngModelChange)="setDraftField('quantity',$event)"/></label>
+            <label>Ad Group<input [ngModel]="orderDraft()?.adGroupId" (ngModelChange)="setDraftField('adGroupId',$event)"/></label>
+            <label>Đại lý
+              <select [ngModel]="orderDraft()?.agentId" (ngModelChange)="setDraftField('agentId',$event)">
+                <option value="">-- Chọn đại lý --</option>
+                <option *ngFor="let a of agents()" [value]="a._id">{{ a.fullName }} ({{ a.role }})</option>
+              </select>
+            </label>
+            <label>Ghi chú<textarea rows="2" [ngModel]="orderDraft()?.notes" (ngModelChange)="setDraftField('notes',$event)"></textarea></label>
+          </div>
+          <div class="draft-actions">
+            <div class="action-row">
+              <button class="mini secondary" (click)="extractOrder()" [disabled]="orderExtractLoading() || draftSaving()">🔍 Quét lại</button>
+              <button class="mini secondary" (click)="saveDraft('draft')" [disabled]="draftSaving()">{{ draftSaving() ? 'Đang lưu...' : '💾 Lưu nháp' }}</button>
+            </div>
+            <div class="action-row">
+              <button class="mini primary" (click)="saveDraft('awaiting')" [disabled]="draftSaving()">{{ draftSaving() ? 'Đang gửi...' : '📤 Gửi duyệt' }}</button>
+              <button class="btn primary" (click)="approve()" [disabled]="approveLoading() || draftSaving() || (orderDraft()?.status==='approved') || !orderDraft()?.productId || !orderDraft()?.customerName || !orderDraft()?.phone || !orderDraft()?.address || !orderDraft()?.adGroupId">{{ approveLoading() ? 'Đang duyệt...' : '✅ Duyệt & Tạo' }}</button>
+            </div>
+          </div>
+          <div *ngIf="draftMsg()" class="mini-hint" style="margin-top:4px;white-space:pre-line">{{ draftMsg() }}</div>
+          <div class="status-box" *ngIf="orderDraft()" [class]="'status-' + (orderDraft()?.status || 'draft')">
+            <div class="status-indicator"></div>
+            <span>{{ getStatusText(orderDraft()?.status || 'draft') }}</span>
+          </div>
+          <div *ngIf="createdOrderId()" class="mini-hint" style="margin-top:6px;">
+            Đơn đã tạo: <strong>#{{ createdOrderId() }}</strong>
+            <button class="mini" (click)="copyCreatedOrderId()">Copy ID</button>
+            <!-- Có thể thêm link điều hướng nếu có route quản lý đơn -->
+          </div>
+        </div>
+      </div>
+      <ng-template #loadingTpl><div class="loading">Đang tải...</div></ng-template>
+    </div>
+  </div>
+</div>

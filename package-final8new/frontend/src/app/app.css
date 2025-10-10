@@ -1,0 +1,7 @@
+.app-layout { display:flex; height:100vh; overflow:hidden; background:var(--color-bg); color:var(--color-text); }
+.main-content { flex:1; margin-left:280px; padding:20px; overflow-y:auto; background:var(--color-bg); }
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .main-content { margin-left:0; padding:10px; }
+}

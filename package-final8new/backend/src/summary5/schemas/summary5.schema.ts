@@ -1,0 +1,101 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
+
+export type Summary5Document = Summary5 & Document;
+
+@Schema({ collection: 'summary5', timestamps: true })
+export class Summary5 {
+  // All fields from Summary4
+  @Prop({ type: Types.ObjectId, ref: 'TestOrder2', required: true })
+  testOrder2Id: Types.ObjectId;
+
+  @Prop({ type: Date, required: true })
+  orderDate: Date;
+
+  @Prop({ required: true })
+  customerName: string;
+
+  @Prop({ required: true })
+  product: string;
+
+  @Prop({ type: Number, required: true, min: 1 })
+  quantity: number;
+
+  @Prop({ required: true })
+  agentName: string;
+
+  @Prop({ required: true, default: '0' })
+  adGroupId: string;
+
+  @Prop({ type: Boolean, default: true })
+  isActive: boolean;
+
+  @Prop()
+  serviceDetails?: string;
+
+  @Prop({ required: true })
+  productionStatus: string;
+
+  @Prop({ required: true })
+  orderStatus: string;
+
+  @Prop()
+  submitLink?: string;
+
+  @Prop()
+  trackingNumber?: string;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  depositAmount: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  codAmount: number;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  agentId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
+  productId: Types.ObjectId;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  approvedQuotePrice: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  mustPayToCompany: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  paidToCompany: number;
+
+  @Prop({ type: Number, default: 0 })
+  manualPayment: number;
+
+  @Prop({ type: Number, default: 0 })
+  needToPay: number;
+
+  // Extra fields for Summary5
+  @Prop({ type: Number, default: 0 })
+  adCost: number; // Chi phí ads phân bổ theo adGroupId/ngày * quantity
+
+  @Prop({ type: Number, default: 0 })
+  laborCost: number; // Chi phí nhân công theo ngày * quantity
+
+  @Prop({ type: Number, default: 0 })
+  otherCost: number; // Chi phí khác theo ngày * quantity
+
+  @Prop({ type: Number, default: 0 })
+  costOfGoods: number; // Giá vốn = importPrice * quantity
+
+  @Prop({ type: Number, default: 0 })
+  revenue: number; // Doanh thu theo rules
+
+  @Prop({ type: Number, default: 0 })
+  profit: number; // Lợi nhuận = Revenue - costOfGoods - otherCost - laborCost - adCost
+}
+
+export const Summary5Schema = SchemaFactory.createForClass(Summary5);
+
+Summary5Schema.index({ testOrder2Id: 1 }, { unique: true });
+Summary5Schema.index({ orderDate: -1 });
+Summary5Schema.index({ agentId: 1 });
+Summary5Schema.index({ productId: 1 });
+Summary5Schema.index({ adGroupId: 1 });
