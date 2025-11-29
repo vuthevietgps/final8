@@ -110,4 +110,32 @@ export class UserService {
       .lean();
     return users.map((u: any) => ({ _id: String(u._id), fullName: u.fullName, email: u.email, role: u.role }));
   }
+
+  /**
+   * Tìm danh sách Nhà Cung Cấp (Internal/External) với optional search/active
+   * @param params.q   - Tìm theo tên, email, điện thoại, địa chỉ (regex, i)
+   * @param params.active - Chỉ lấy isActive=true nếu true
+   * @param params.minimal - Chỉ trả về trường tối giản nếu true
+   */
+  async findSuppliers(params: { q?: string; active?: boolean; minimal?: boolean } = {}) {
+    const { q, active, minimal } = params;
+    const filter: any = { role: { $in: [UserRole.INTERNAL_SUPPLIER, UserRole.EXTERNAL_SUPPLIER] } };
+    if (active === true) filter.isActive = true;
+    if (q && q.trim()) {
+      const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [
+        { fullName: rx },
+        { email: rx },
+        { phone: rx },
+        { address: rx }
+      ];
+    }
+
+    const query = this.userModel.find(filter).sort({ fullName: 1 });
+    if (minimal) {
+      query.select('_id fullName email phone role isActive');
+    }
+    const docs = await query.lean();
+    return docs.map((u: any) => ({ ...u, _id: String(u._id) }));
+  }
 }

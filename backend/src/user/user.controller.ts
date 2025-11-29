@@ -81,6 +81,25 @@ export class UserController {
   }
 
   /**
+   * GET /users/suppliers - Danh sách Nhà Cung Cấp (nội bộ/ngoài)
+   * Query:
+   *  - q: search theo tên/email/điện thoại/địa chỉ
+   *  - active: true để chỉ lấy NCC đang hoạt động
+   *  - minimal: true để trả về trường tối giản
+   */
+  @Get('suppliers')
+  @RequirePermissions('users')
+  getSuppliers(
+    @Query('q') q?: string,
+    @Query('active') active?: string,
+    @Query('minimal') minimal?: string,
+  ) {
+    const activeBool = active === 'true' ? true : active === 'false' ? false : undefined;
+    const minimalBool = minimal === 'true';
+    return this.userService.findSuppliers({ q, active: activeBool, minimal: minimalBool });
+  }
+
+  /**
    * GET /users/:id - Lấy thông tin 1 user theo ID
    * @param id - ID của user cần lấy
    * @returns User với ID đó

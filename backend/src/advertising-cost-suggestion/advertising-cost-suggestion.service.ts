@@ -1,20 +1,26 @@
 /**
  * File: advertising-cost-suggestion.service.ts
- * Mục đích: Service xử lý logic nghiệp vụ cho đề xuất chi phí quảng cáo
- * Chức năng: CRUD operations, tính toán chênh lệch, đồng bộ với advertising-cost2
+ * Mục đích: Core CRUD operations cho đề xuất chi phí quảng cáo
+ * Chức năng: Refactored to focus only on core business logic
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AdvertisingCostSuggestion, AdvertisingCostSuggestionDocument } from './schemas/advertising-cost-suggestion.schema';
 import { CreateAdvertisingCostSuggestionDto } from './dto/create-advertising-cost-suggestion.dto';
 import { UpdateAdvertisingCostSuggestionDto } from './dto/update-advertising-cost-suggestion.dto';
+import { QualityControlService } from '../advertising-optimization/quality-control/quality-control.service';
+import { AIOptimizationService } from '../advertising-optimization/ai-optimization/ai-optimization.service';
 
 @Injectable()
 export class AdvertisingCostSuggestionService {
+  private readonly logger = new Logger(AdvertisingCostSuggestionService.name);
+  
   constructor(
     @InjectModel(AdvertisingCostSuggestion.name) 
-    private suggestionModel: Model<AdvertisingCostSuggestionDocument>
+    private suggestionModel: Model<AdvertisingCostSuggestionDocument>,
+    private qualityControlService: QualityControlService,
+    private aiOptimizationService: AIOptimizationService
   ) {}
 
   async create(createDto: CreateAdvertisingCostSuggestionDto): Promise<AdvertisingCostSuggestionDocument> {
@@ -128,4 +134,39 @@ export class AdvertisingCostSuggestionService {
       }
     }
   }
+
+  /**
+   * 🔄 INTEGRATION METHODS
+   * Delegate to specialized services
+   */
+  
+  // Manual trigger for AI optimization
+  async triggerAIOptimization(): Promise<void> {
+    await this.aiOptimizationService.runAIOptimization();
+  }
+
+  // Manual trigger for Advanced Mathematical Optimization
+  async triggerAdvancedOptimization(adGroupId?: string): Promise<void> {
+    await this.aiOptimizationService.runAdvancedOptimization(adGroupId);
+  }
+
+  // Manual trigger for validation
+  async triggerValidation(): Promise<void> {
+    await this.qualityControlService.validatePastPredictions();
+  }
+
+  // Get quality control reports
+  async getAdGroupQualityReport(adGroupId: string): Promise<any> {
+    return this.qualityControlService.getAdGroupQualityReport(adGroupId);
+  }
+
+  async getSystemQualityOverview(): Promise<any> {
+    return this.qualityControlService.getSystemQualityOverview();
+  }
+
+
+
+
+
+
 }

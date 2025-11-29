@@ -12,7 +12,7 @@ import { Fanpage, FanpageDocument } from '../fanpage/schemas/fanpage.schema';
 import { CreateApiTokenDto } from './dto/create-api-token.dto';
 import { UpdateApiTokenDto } from './dto/update-api-token.dto';
 import { RotateTokenDto, SetPrimaryTokenDto, ValidateTokenDto } from './dto/token-actions.dto';
-import { encryptToken, hashToken } from './crypto.util';
+import { encryptToken, hashToken, decryptToken } from './crypto.util';
 
 // ---------------- Provider Validation Strategies ----------------
 // Interface đơn giản cho các strategy
@@ -126,26 +126,37 @@ export class ApiTokenService {
     @InjectModel(Fanpage.name) private fanpageModel: Model<FanpageDocument>
   ) {}
 
+  // Ẩn trường nhạy cảm trước khi trả về cho client
+  private sanitize(doc: any){
+    if(!doc) return doc;
+    const obj = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+    delete obj.token;
+    delete obj.tokenEnc;
+    delete obj.tokenHash;
+    return obj;
+  }
+
   async create(dto: CreateApiTokenDto) {
     const tokenHash = hashToken(dto.token);
     const tokenEnc = encryptToken(dto.token);
     const doc = new this.model({ ...dto, token: dto.token, tokenEnc, tokenHash });
     await doc.save();
     await this.audit('create', doc._id, undefined, { _id: doc._id, name: doc.name });
-    return doc;
+    return this.sanitize(doc);
   }
-  findAll(filter: any = {}) { return this.model.find(filter).sort({ createdAt: -1 }).lean(); }
-  async findOne(id: string) { const doc = await this.model.findById(id).lean(); if (!doc) throw new NotFoundException('Token không tồn tại'); return doc as any; }
-  async update(id: string, dto: UpdateApiTokenDto) { const doc = await this.model.findByIdAndUpdate(id, dto, { new: true }).lean(); if (!doc) throw new NotFoundException('Token không tồn tại'); return doc as any; }
+  async findAll(filter: any = {}) { const items = await this.model.find(filter).sort({ createdAt: -1 }).lean(); return items.map(i => this.sanitize(i)); }
+  async findOne(id: string) { const doc = await this.model.findById(id).lean(); if (!doc) throw new NotFoundException('Token không tồn tại'); return this.sanitize(doc) as any; }
+  async update(id: string, dto: UpdateApiTokenDto) { const doc = await this.model.findByIdAndUpdate(id, dto, { new: true }); if (!doc) throw new NotFoundException('Token không tồn tại'); return this.sanitize(doc) as any; }
   async remove(id: string) { const res = await this.model.findByIdAndDelete(id); if (!res) throw new NotFoundException('Token không tồn tại'); }
 
   /** Validate token thông qua strategy theo provider */
   async validate(id: string, _dto: ValidateTokenDto) {
-    const token = await this.model.findById(id);
-    if(!token) throw new NotFoundException('Token không tồn tại');
-    const validator = buildValidator(token.provider);
-    const result = await validator.validate(token.token);
-    token.lastCheckedAt = new Date();
+  const token = await this.model.findById(id);
+  if(!token) throw new NotFoundException('Token không tồn tại');
+  const validator = buildValidator(token.provider);
+  const raw = token.tokenEnc ? decryptToken(token.tokenEnc) : token.token;
+  const result = await validator.validate(raw || token.token);
+  token.lastCheckedAt = new Date();
   token.lastCheckStatus = result.status;
   token.lastCheckMessage = result.message;
   if(result.status==='valid') token.consecutiveFail = 0; else token.consecutiveFail = (token.consecutiveFail||0)+1;
@@ -158,7 +169,7 @@ export class ApiTokenService {
     token.nextCheckAt = new Date(Date.now() + delta);
     await token.save();
     await this.audit('validate', token._id, undefined, { status: token.lastCheckStatus });
-    return token.toObject();
+    return this.sanitize(token);
   }
 
   /**
@@ -174,7 +185,7 @@ export class ApiTokenService {
     token.isPrimary = true;
     await token.save();
     await this.audit('setPrimary', token._id, undefined, { fanpageId: dto.fanpageId });
-    return token.toObject();
+    return this.sanitize(token);
   }
 
   /**
@@ -201,7 +212,7 @@ export class ApiTokenService {
     current.rotatedTo = newDoc._id as any;
     await current.save();
     await this.audit('rotate', newDoc._id, { oldId: current._id }, { newId: newDoc._id });
-    return { old: current.toObject(), fresh: newDoc.toObject() };
+    return { old: this.sanitize(current), fresh: this.sanitize(newDoc) } as any;
   }
 
   /**
@@ -229,7 +240,7 @@ export class ApiTokenService {
       await doc.save();
       // Validate immediately to populate status/nextCheckAt
       try { await this.validate(doc._id.toString(), { force: true }); } catch {}
-      created.push(doc.toObject());
+      created.push(this.sanitize(doc));
       await this.audit('syncImport', doc._id, undefined, { fanpageId: fp._id });
     }
     return { imported: created.length, items: created };
@@ -243,7 +254,7 @@ export class ApiTokenService {
   /** Resolve token cho chatbot sử dụng (primary trước, fallback nếu degraded/invalid) */
   async resolveForFanpage(fanpageId: string, provider: string = 'facebook') {
     let primary = await this.model.findOne({ fanpageId, provider, isPrimary: true }).lean();
-    if(primary && primary.lastCheckStatus === 'valid') return { token: primary, fallback: false };
+    if(primary && primary.lastCheckStatus === 'valid') return { token: this.sanitize(primary), fallback: false } as any;
     // fallback tìm token hợp lệ khác
     const alt = await this.model.find({ fanpageId, provider, status: 'active', lastCheckStatus: 'valid' })
       .sort({ lastCheckedAt: -1 }).limit(1).lean();
@@ -252,8 +263,112 @@ export class ApiTokenService {
         await this.model.updateOne({ _id: primary._id }, { $set: { degraded: true } });
         await this.audit('fallback', primary._id, undefined, { fallbackTo: alt[0]._id });
       }
-      return { token: alt[0], fallback: true };
+      return { token: this.sanitize(alt[0]), fallback: true } as any;
     }
-    return { token: primary || null, fallback: false };
+    return { token: primary ? this.sanitize(primary) : null, fallback: false } as any;
+  }
+
+  /** INTERNAL ONLY: Lấy raw access_token dùng nội bộ server để gọi Graph API (không trả qua HTTP) */
+  async getRawAccessTokenForFanpage(
+    fanpageId: string,
+    provider: string = 'facebook',
+    requireScopes?: string[]
+  ): Promise<string | undefined> {
+    let pick: any = null;
+    if (requireScopes && requireScopes.length) {
+      pick = await this.model.findOne({
+        fanpageId,
+        provider,
+        status: 'active',
+        lastCheckStatus: 'valid',
+        scopes: { $all: requireScopes }
+      }).sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 }).lean();
+    }
+    if (!pick) {
+      pick = await this.model.findOne({ fanpageId, provider, status: 'active', lastCheckStatus: 'valid' })
+        .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 }).lean();
+    }
+    if (!pick) return undefined;
+    try {
+      const raw = pick.tokenEnc ? decryptToken(pick.tokenEnc) : (pick as any).token;
+      return raw || undefined;
+    } catch {
+      return (pick as any).token || undefined;
+    }
+  }
+
+  /** INTERNAL: Lấy token Facebook có scope ads_management, ưu tiên token gắn với adAccountId (nếu cung cấp) */
+  async getRawAccessTokenForAdsManagement(adAccountId?: string): Promise<string | undefined> {
+    const normalize = (v?: string) => {
+      if (!v) return undefined;
+      const m = String(v).trim().match(/^(?:act_)?(\d+)$/i);
+      return m ? `act_${m[1]}` : v.trim();
+    };
+    const want = normalize(adAccountId);
+
+    // 1) Ưu tiên token đã khai báo adAccountId trùng khớp và hợp lệ
+    if (want) {
+      const pick = await this.model.findOne({
+        provider: 'facebook', status: 'active', lastCheckStatus: 'valid',
+        scopes: { $in: ['ads_management'] }, adAccountId: want
+      }).sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 }).lean();
+      if (pick) {
+        try{ return pick.tokenEnc ? decryptToken(pick.tokenEnc) : (pick as any).token; } catch { return (pick as any).token; }
+      }
+    }
+
+    // 2) Fallback: bất kỳ token facebook hợp lệ có ads_management
+    const anyTok = await this.model.findOne({
+      provider: 'facebook', status: 'active', lastCheckStatus: 'valid',
+      scopes: { $in: ['ads_management'] }
+    }).sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 }).lean();
+    if (anyTok) {
+      try{ return anyTok.tokenEnc ? decryptToken(anyTok.tokenEnc) : (anyTok as any).token; } catch { return (anyTok as any).token; }
+    }
+    return undefined;
+  }
+
+  /** Kiểm tra token có truy cập được tài khoản quảng cáo Facebook không */
+  async testAdAccountAccess(id: string, adAccountId: string) {
+    const tokenDoc = await this.model.findById(id);
+    if(!tokenDoc) throw new NotFoundException('Token không tồn tại');
+    const raw = tokenDoc.tokenEnc ? decryptToken(tokenDoc.tokenEnc) : tokenDoc.token;
+    if(!raw) throw new BadRequestException('Không đọc được access token');
+
+    // Chuẩn hóa định danh ad account: phải có tiền tố act_
+    const node = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+    const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(node)}`;
+    const params = new URLSearchParams({
+      fields: 'id,name,account_status,owner,business,spend_cap,age,capabilities',
+      access_token: raw
+    });
+    const res = await fetch(`${url}?${params.toString()}`);
+    const data = await res.json();
+    if(res.ok && data?.id){
+      const scopeOk = Array.isArray((tokenDoc as any).scopes) ? (tokenDoc as any).scopes.includes('ads_management') : false;
+      // Ghi nhận ad account vào token để hiển thị về sau
+      try {
+        tokenDoc.adAccountId = data.id;
+        tokenDoc.adAccountName = data.name;
+        await tokenDoc.save();
+      } catch {}
+      return {
+        ok: true,
+        account: {
+          id: data.id,
+          name: data.name,
+          account_status: data.account_status,
+          age: data.age,
+          capabilities: data.capabilities || []
+        },
+        scopeOk,
+        message: scopeOk ? 'Có quyền ads_management và truy cập được tài khoản' : 'Truy cập được tài khoản, nhưng scope ads_management chưa được ghi nhận trong token. Vẫn có thể hợp lệ nếu token thực sự có quyền.'
+      };
+    }
+    return {
+      ok: false,
+      error: data?.error?.message || 'Không truy cập được tài khoản',
+      code: data?.error?.code
+    };
   }
 }

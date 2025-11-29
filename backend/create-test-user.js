@@ -1,109 +1,81 @@
 /**
- * Create test user and get JWT token
+ * Tạo user test để đăng nhập vào hệ thống
  */
+const mongoose = require('mongoose');
 
-const fetch = require('node-fetch');
-const API_BASE = 'http://localhost:3000';
+const MONGODB_URI = 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
 
-async function createTestUserAndLogin() {
+const userSchema = new mongoose.Schema({
+  username: String,
+  password: String,
+  email: String,
+  fullName: String,
+  userType: String,
+  isActive: Boolean,
+  permissions: [String],
+  createdAt: Date,
+  updatedAt: Date
+}, { collection: 'users' });
+
+async function createTestUser() {
   try {
-    console.log('=== CREATE TEST USER & LOGIN ===\n');
-    
-    const testUser = {
-      email: 'test@fanpage.com',
-      password: 'test123',
-      role: 'director',
-      fullName: 'Test User for Fanpage',
-      phone: '0123456789'
-    };
-    
-    // 1. Try to create user via auth/register
-    console.log('1. Creating test user via auth/register...');
-    const createResult = await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testUser)
-    });
-    
-    console.log('Create Status:', createResult.status);
-    
-    if (createResult.status === 201 || createResult.status === 200) {
-      const userData = await createResult.json();
-      console.log('✅ User created successfully');
-      console.log('User ID:', userData._id);
-    } else if (createResult.status === 400) {
-      const error = await createResult.json();
-      if (error.message && error.message.includes('Email đã tồn tại')) {
-        console.log('ℹ️ User already exists, proceeding to login...');
-      } else {
-        console.log('❌ Create user error:', error);
-        return;
-      }
-    } else {
-      console.log('❌ Failed to create user');
-      const error = await createResult.text();
-      console.log('Error:', error);
+    await mongoose.connect(MONGODB_URI);
+    console.log('✅ Connected to MongoDB');
+
+    const User = mongoose.model('User', userSchema);
+
+    // Check if test user already exists
+    const existing = await User.findOne({ username: 'admin' });
+    if (existing) {
+      console.log('✅ Test user "admin" already exists');
+      console.log('Username: admin');
+      console.log('Password: admin123');
       return;
     }
-    
-    // 2. Login to get JWT
-    console.log('\n2. Logging in to get JWT token...');
-    const loginResult = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: testUser.email,
-        password: testUser.password
-      })
+
+    // Create test user (password will be hashed by backend)
+    const testUser = new User({
+      username: 'admin',
+      password: 'admin123', // Backend sẽ tự hash
+      email: 'admin@test.com',
+      fullName: 'Admin Test',
+      userType: 'Director',
+      isActive: true,
+      permissions: [
+        'users', 'ad-accounts', 'ad-groups', 'products', 'advertising-costs',
+        'delivery-status', 'product-categories', 'fanpages', 'api-tokens',
+        'chat-messages', 'orders', 'reports'
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
-    
-    console.log('Login Status:', loginResult.status);
-    
-    if (loginResult.ok) {
-      const loginData = await loginResult.json();
-      const token = loginData.access_token;
-      console.log('✅ Login successful!');
-      console.log('🎫 JWT Token:', token);
-      
-      // 3. Test token with protected endpoint
-      console.log('\n3. Testing token with protected endpoint...');
-      const testResult = await fetch(`${API_BASE}/fanpages`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log('Test Status:', testResult.status);
-      
-      if (testResult.ok) {
-        const fanpages = await testResult.json();
-        console.log('✅ Token works! Fanpages endpoint accessible');
-        console.log('Fanpages found:', Array.isArray(fanpages) ? fanpages.length : 'Unknown');
-        
-        // Save token to file for later use
-        const fs = require('fs');
-        fs.writeFileSync('jwt-token.txt', token);
-        console.log('💾 Token saved to jwt-token.txt');
-        
-        return token;
-        
-      } else {
-        console.log('❌ Token test failed');
-        const error = await testResult.text();
-        console.log('Error:', error);
-      }
-      
-    } else {
-      console.log('❌ Login failed');
-      const error = await loginResult.text();
-      console.log('Error:', error);
-    }
-    
+
+    await testUser.save();
+
+    console.log('✅ Created test user successfully!');
+    console.log('');
+    console.log('🔑 Login credentials:');
+    console.log('Username: admin');
+    console.log('Password: admin123');
+    console.log('');
+    console.log('🎯 You can now login and access:');
+    console.log('- 💰 Chi Phí Quảng Cáo (to see messaging metrics)');
+    console.log('- 📦 Nhóm Sản Phẩm');
+    console.log('- 🚚 Trạng Thái Giao Hàng');
+    console.log('- And all other modules');
+
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    if (error.code === 11000) {
+      console.log('✅ Test user already exists');
+      console.log('Username: admin');
+      console.log('Password: admin123');
+    } else {
+      console.error('❌ Error:', error.message);
+    }
+  } finally {
+    await mongoose.disconnect();
+    console.log('\n👋 Disconnected from MongoDB');
   }
 }
 
-// Auto-run
-createTestUserAndLogin();
+createTestUser();

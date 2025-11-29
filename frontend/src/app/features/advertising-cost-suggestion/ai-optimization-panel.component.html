@@ -1,0 +1,165 @@
+<!-- 
+File: frontend/src/app/features/advertising-cost-suggestion/ai-optimization-panel.component.html
+Mục đích: UI panel điều khiển AI optimization và auto mode
+-->
+<div class="ai-optimization-panel">
+  <div class="panel-header">
+    <h3>🤖 AI Tối Ưu Hóa Tự Động</h3>
+    <div class="panel-controls">
+      <button 
+        class="btn btn-primary"
+        (click)="triggerManualOptimization()"
+        [disabled]="optimizing()"
+      >
+        {{ optimizing() ? '⏳ Đang xử lý...' : '🚀 Chạy AI Optimization' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="optimization-stats">
+    <div class="stat-card">
+      <div class="stat-number">{{ stats().totalAdGroups || 0 }}</div>
+      <div class="stat-label">Tổng Ad Groups</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">{{ stats().autoModeEnabled || 0 }}</div>
+      <div class="stat-label">Chế độ tự động</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">{{ stats().pendingRecommendations || 0 }}</div>
+      <div class="stat-label">Đang chờ duyệt</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">{{ stats().lastOptimization || 'Chưa có' }}</div>
+      <div class="stat-label">Lần cuối chạy</div>
+    </div>
+  </div>
+
+  <!-- Auto Mode Controls -->
+  <div class="auto-mode-section">
+    <h4>🎛️ Điều Khiển Chế độ Tự Động</h4>
+    <div class="auto-mode-explanation">
+      <p>
+        <strong>Chế độ Tự Động:</strong> AI sẽ tự động điều chỉnh ngân sách dựa trên phân tích ROI và market trends.
+      </p>
+      <p>
+        <strong>Chế độ Phê Duyệt:</strong> AI sẽ đưa ra đề xuất và chờ bạn phê duyệt trước khi thực hiện.
+      </p>
+    </div>
+
+    <div class="auto-mode-grid">
+      @for (adGroup of adGroupsWithAutoMode(); track adGroup.adGroupId) {
+        <div class="auto-mode-card">
+          <div class="ad-group-info">
+            <div class="ad-group-name">{{ adGroup.adGroupName }}</div>
+            <div class="ad-group-id">ID: {{ adGroup.adGroupId }}</div>
+            <div class="current-budget">
+              Ngân sách: {{ formatCurrency(adGroup.suggestedCost) }}
+            </div>
+          </div>
+          
+          <div class="auto-mode-toggle">
+            <label class="toggle-switch">
+              <input 
+                type="checkbox" 
+                [checked]="adGroup.autoModeEnabled"
+                (change)="toggleAutoMode(adGroup.adGroupId, $event)"
+              >
+              <span class="toggle-slider">
+                <span class="toggle-label">
+                  {{ adGroup.autoModeEnabled ? '🤖 Tự Động' : '👤 Thủ Công' }}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div class="performance-indicator">
+            @if (adGroup.roi > 3) {
+              <span class="performance-badge good">📈 ROI: {{ adGroup.roi.toFixed(2) }}</span>
+            } @else if (adGroup.roi < 1) {
+              <span class="performance-badge poor">📉 ROI: {{ adGroup.roi.toFixed(2) }}</span>
+            } @else {
+              <span class="performance-badge average">📊 ROI: {{ adGroup.roi.toFixed(2) }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Pending Recommendations -->
+  @if (pendingRecommendations().length > 0) {
+    <div class="pending-section">
+      <h4>📋 Đề Xuất Đang Chờ Phê Duyệt</h4>
+      
+      @for (recommendation of pendingRecommendations(); track recommendation.id) {
+        <div class="recommendation-card">
+          <div class="recommendation-header">
+            <div class="ad-group-info">
+              <strong>{{ recommendation.adGroupName }}</strong>
+              <span class="ad-group-id">{{ recommendation.adGroupId }}</span>
+            </div>
+            <div class="recommendation-action">
+              @if (recommendation.action === 'INCREASE') {
+                <span class="action-badge increase">📈 Tăng ngân sách</span>
+              } @else if (recommendation.action === 'DECREASE') {
+                <span class="action-badge decrease">📉 Giảm ngân sách</span>
+              } @else if (recommendation.action === 'PAUSE') {
+                <span class="action-badge pause">⏸️ Tạm dừng</span>
+              }
+            </div>
+          </div>
+
+          <div class="recommendation-details">
+            <div class="budget-change">
+              <span>Từ {{ formatCurrency(recommendation.currentBudget) }}</span>
+              <span class="arrow">→</span>
+              <span>{{ formatCurrency(recommendation.suggestedBudget) }}</span>
+              <span class="change-percent">({{ recommendation.changePercent > 0 ? '+' : '' }}{{ recommendation.changePercent.toFixed(1) }}%)</span>
+            </div>
+            <div class="ai-reasoning">
+              <strong>AI Phân Tích:</strong> {{ recommendation.reasoning }}
+            </div>
+            <div class="confidence">
+              <strong>Độ tin cậy:</strong> {{ recommendation.confidence }}%
+            </div>
+          </div>
+
+          <div class="recommendation-actions">
+            <button 
+              class="btn btn-success btn-sm"
+              (click)="approveRecommendation(recommendation.id)"
+            >
+              ✅ Phê duyệt
+            </button>
+            <button 
+              class="btn btn-secondary btn-sm"
+              (click)="rejectRecommendation(recommendation.id)"
+            >
+              ❌ Từ chối
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Optimization Log -->
+  <div class="optimization-log">
+    <h4>📊 Lịch Sử Tối Ưu Hóa</h4>
+    <div class="log-entries">
+      @for (log of optimizationLog(); track log.id) {
+        <div class="log-entry">
+          <div class="log-time">{{ log.timestamp | date:'dd/MM/yyyy HH:mm' }}</div>
+          <div class="log-action">{{ log.action }}</div>
+          <div class="log-details">{{ log.details }}</div>
+          @if (log.success) {
+            <span class="log-status success">✅</span>
+          } @else {
+            <span class="log-status error">❌</span>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>

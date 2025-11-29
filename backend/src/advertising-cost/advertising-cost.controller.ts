@@ -2,17 +2,22 @@
  * File: advertising-cost/advertising-cost.controller.ts
  * Mục đích: Cung cấp REST API CRUD cho Chi Phí Quảng Cáo.
  */
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdvertisingCostService } from './advertising-cost.service';
 import { CreateAdvertisingCostDto } from './dto/create-advertising-cost.dto';
 import { UpdateAdvertisingCostDto } from './dto/update-advertising-cost.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-sync.service';
 
 @Controller('advertising-cost')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdvertisingCostController {
-  constructor(private readonly service: AdvertisingCostService) {}
+  constructor(
+    private readonly service: AdvertisingCostService,
+    private readonly fbSync: AdvertisingCostFacebookSyncService,
+  ) {}
 
   @Post()
   @RequirePermissions('advertising-costs')
@@ -32,6 +37,28 @@ export class AdvertisingCostController {
     return this.service.summary();
   }
 
+  @Get('stats/by-adgroup')
+  @RequirePermissions('advertising-costs')
+  statsByAdGroup(@Query('adGroupId') adGroupId: string) {
+    return this.service.getTotalSpentByAdGroup(adGroupId);
+  }
+
+  @Get('stats/conversation-cost')
+  @RequirePermissions('advertising-costs')
+  conversationCost(@Query('adGroupId') adGroupId: string) {
+    return this.service.getConversationCostByAdGroup(adGroupId);
+  }
+  
+    // GET /advertising-cost/stats/conversation-cost/daily?adGroupId=...&date=YYYY-MM-DD
+    @Get('stats/conversation-cost/daily')
+    @RequirePermissions('advertising-costs')
+    async getDailyConversationCost(
+      @Query('adGroupId') adGroupId: string,
+      @Query('date') date: string,
+    ) {
+      return this.service.getDailyConversationCost({ adGroupId, date });
+    }
+
   @Get(':id')
   @RequirePermissions('advertising-costs')
   findOne(@Param('id') id: string) {
@@ -48,5 +75,32 @@ export class AdvertisingCostController {
   @RequirePermissions('advertising-costs')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
+  }
+
+  @Post('upload-facebook-excel')
+  @RequirePermissions('advertising-costs')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadFacebookExcel(@UploadedFile() file: Express.Multer.File) {
+    return this.service.processFacebookExcelUpload(file);
+  }
+
+  // Manual trigger: đồng bộ chi phí từ Facebook theo ngày hoặc khoảng N ngày
+  @Post('fetch/facebook')
+  @RequirePermissions('advertising-costs')
+  async fetchFacebook(@Query('date') date?: string, @Query('days') days?: string) {
+    const n = days ? parseInt(days, 10) : undefined;
+    return this.fbSync.syncRange({ date, days: n });
+  }
+
+  // Manual trigger: đồng bộ theo DANH SÁCH tài khoản quảng cáo
+  // Body: { accounts: string[]; date?: string; days?: number; cleanup?: boolean }
+  @Post('fetch/facebook/by-accounts')
+  @RequirePermissions('advertising-costs')
+  async fetchFacebookByAccounts(@Body() body: any) {
+    const accounts: string[] = Array.isArray(body?.accounts) ? body.accounts : [];
+    const date: string | undefined = body?.date;
+    const days: number | undefined = body?.days ? parseInt(String(body.days), 10) : undefined;
+    const cleanup: boolean = Boolean(body?.cleanup);
+    return this.fbSync.syncRangeByAdAccounts({ accounts, date, days, cleanup });
   }
 }

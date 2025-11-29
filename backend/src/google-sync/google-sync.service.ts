@@ -1,16 +1,9 @@
-/**
- * Google Sync Service - Simplified Version
- * DEPRECATED: Summary1 functionality replaced by Summary4 Google Sync
- * - Keeping only Google Sheets API utilities
- * - Use Summary4GoogleSyncService for new implementations
- */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { Quote, QuoteDocument } from '../quote/schemas/quote.schema';
 import { User, UserDocument } from '../user/user.schema';
-
 import { google, sheets_v4 } from 'googleapis';
 import * as path from 'path';
 import * as fs from 'fs';

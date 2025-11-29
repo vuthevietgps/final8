@@ -10,7 +10,7 @@ import { FanpageService, Fanpage, CreateFanpageRequest } from './fanpage.service
 import { OpenAIConfigService, OpenAIConfig } from '../openai-config/openai-config.service';
 import { ProductService } from '../product/product.service';
 import { ApiTokenService, ApiToken } from '../api-token/api-token.service';
-import TokenRecoveryComponent from '../../shared/token-recovery/token-recovery.component';
+
 
 interface Product {
   _id: string;
@@ -34,7 +34,7 @@ interface ProductVariation {
 @Component({
   selector: 'app-fanpage',
   standalone: true,
-  imports: [CommonModule, FormsModule, TokenRecoveryComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './fanpage.component.html',
   styleUrls: ['./fanpage.component.css']
 })
@@ -62,25 +62,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
     isActive: true
   });
 
-  // Token Recovery
-  showTokenRecovery = signal(false);
-  tokenRecoveryData = signal<{
-    id: string;
-    status: 'valid' | 'expired' | 'invalid' | 'unknown';
-    message: string;
-    lastChecked: string;
-    fanpageId: string;
-    fanpageName: string;
-  }>({
-    id: '',
-    status: 'unknown',
-    message: '',
-    lastChecked: '',
-    fanpageId: '',
-    fanpageName: ''
-  });
-  hasBackupTokens = signal(false);
-  backupTokenCount = signal(0);
+  // Facebook token recovery functionality removed
 
   // Form data for new/edit
   formData = signal<Partial<CreateFanpageRequest>>({
@@ -98,13 +80,11 @@ export class FanpageComponent implements OnInit, OnDestroy {
   tokens = signal<ApiToken[]>([]);
   tokenLoading = signal(false);
   validatingTokenFor = signal<string | null>(null); // fanpageId currently validating
+  testingTokenFor = signal<string | null>(null); // fanpageId currently testing access token
+  accessTokenStatuses = signal<Map<string, {status: string, detail?: string, lastTested?: Date}>>(new Map());
 
   private tokenRefreshTimer: any;
-  private onVisibilityChange = () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-      this.loadTokens();
-    }
-  };
+  // Facebook token functionality removed
   private loadAIConfigs(){
     this.aiConfigLoading.set(true);
     this.aiConfigSvc.list({ status: 'active' }).subscribe({
@@ -114,32 +94,22 @@ export class FanpageComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(){
-    this.load(); this.loadAIConfigs(); this.loadTokens();
+    this.load(); this.loadAIConfigs();
     // Refresh token list every 120s only when tab is visible to reduce load
     this.tokenRefreshTimer = setInterval(() => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-        this.loadTokens();
+
       }
     }, 120000);
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', this.onVisibilityChange);
-    }
+
   }
 
   ngOnDestroy(){
     if(this.tokenRefreshTimer) clearInterval(this.tokenRefreshTimer);
-    if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.onVisibilityChange);
-    }
+
   }
 
-  private loadTokens(){
-    this.tokenLoading.set(true);
-    this.apiTokenService.list().subscribe({
-      next: list=>{ this.tokens.set(list); this.tokenLoading.set(false); },
-      error: _=>{ this.tokenLoading.set(false); }
-    });
-  }
+
 
   /**
    * Tải danh sách fanpage từ server
@@ -277,7 +247,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
    */
   private buildPayload(src: any){
     if(!src) return {};
-    const allowed = ['pageId','name','accessToken','status','avatarUrl','connectedBy','defaultProductGroup','description','greetingScript','clarifyScript','productSuggestScript','fallbackScript','closingScript','messageQuota','subscriberCount','sentThisMonth','aiEnabled','subscribedWebhook','timezone','openAIConfigId'];
+  const allowed = ['pageId','name','accessToken','status','avatarUrl','connectedBy','defaultProductGroup','description','messageQuota','subscriberCount','sentThisMonth','aiEnabled','subscribedWebhook','timezone','openAIConfigId'];
     const out: any = {};
     for(const k of allowed){ if(src[k] !== undefined && src[k] !== null) out[k]=src[k]; }
     return out;
@@ -412,108 +382,90 @@ export class FanpageComponent implements OnInit, OnDestroy {
   }
 
   // ======== TOKEN RECOVERY METHODS ========
-  openTokenRecovery(fanpage: Fanpage) {
-    const token = this.getPrimaryToken(fanpage._id);
-    if (!token) {
-      alert('Fanpage chưa có API Token');
-      return;
-    }
 
-    // Set recovery data
-    this.tokenRecoveryData.set({
-      id: token._id,
-      status: token.lastCheckStatus as any || 'unknown',
-      message: token.lastCheckMessage || 'Chưa có thông tin',
-      lastChecked: token.lastCheckedAt || '',
-      fanpageId: fanpage._id,
-      fanpageName: fanpage.name
-    });
-
-    // Check for backup tokens (simulate - in real app would call API)
-    this.checkBackupTokens(fanpage._id);
-
-    this.showTokenRecovery.set(true);
-  }
-
-  closeTokenRecovery() {
-    this.showTokenRecovery.set(false);
-  }
-
-  async handleTokenRecovery(event: {method: string, data: any}) {
-    const { method, data } = event;
-    const tokenData = this.tokenRecoveryData();
-
-    try {
-      switch (method) {
-        case 'manual':
-          await this.refreshTokenManually(tokenData.id, data.newToken);
-          break;
-        case 'oauth':
-          await this.initiateOAuthFlow(tokenData.fanpageId);
-          break;
-        case 'backup':
-          await this.activateBackupToken(tokenData.fanpageId);
-          break;
-      }
-
-      // Refresh token list and fanpage list
-      await this.loadTokens();
-      this.load();
-      
-      this.closeTokenRecovery();
-      alert(`Token đã được khôi phục thành công bằng phương pháp: ${this.getRecoveryMethodName(method)}`);
-      
-    } catch (error: any) {
-      this.handleError(error, `Khôi phục token thất bại (${method})`);
-    }
-  }
-
-  private async refreshTokenManually(tokenId: string, newToken: string) {
-    return new Promise((resolve, reject) => {
-      this.apiTokenService.refreshManually(tokenId, newToken).subscribe({
-        next: resolve,
-        error: reject
-      });
-    });
-  }
-
-  private async initiateOAuthFlow(fanpageId: string) {
-    // In real implementation, this would:
-    // 1. Redirect to Facebook OAuth
-    // 2. Handle callback with new token
-    // 3. Update token in backend
-    throw new Error('OAuth flow chưa được implement - sẽ có trong version tiếp theo');
-  }
-
-  private async activateBackupToken(fanpageId: string) {
-    return new Promise((resolve, reject) => {
-      this.apiTokenService.activateBackup(fanpageId).subscribe({
-        next: resolve,
-        error: reject
-      });
-    });
-  }
-
-  private checkBackupTokens(fanpageId: string) {
-    // Count backup tokens for this fanpage
-    const backupTokens = this.tokens().filter(t => 
-      t.fanpageId === fanpageId && 
-      !t.isPrimary && 
-      t.status === 'active'
-    );
+  // ======== ACCESS TOKEN TESTING ========
+  testAccessToken(fanpage: Fanpage) {
+    this.testingTokenFor.set(fanpage._id);
     
-    this.hasBackupTokens.set(backupTokens.length > 0);
-    this.backupTokenCount.set(backupTokens.length);
+    // Cập nhật trạng thái đang test
+    const currentStatuses = this.accessTokenStatuses();
+    currentStatuses.set(fanpage._id, { status: 'testing', detail: 'Đang kiểm tra với Facebook Graph API...' });
+    this.accessTokenStatuses.set(new Map(currentStatuses));
+
+    this.service.validateAccessToken(fanpage._id).subscribe({
+      next: (result: any) => {
+        const newStatuses = this.accessTokenStatuses();
+        if (result.valid) {
+          newStatuses.set(fanpage._id, {
+            status: 'valid',
+            detail: `✅ ${result.pageInfo?.name || 'Token hợp lệ'}`,
+            lastTested: new Date()
+          });
+        } else {
+          newStatuses.set(fanpage._id, {
+            status: 'invalid',
+            detail: `❌ ${result.error || 'Token không hợp lệ'}`,
+            lastTested: new Date()
+          });
+        }
+        this.accessTokenStatuses.set(new Map(newStatuses));
+        this.testingTokenFor.set(null);
+      },
+      error: (err: any) => {
+        const newStatuses = this.accessTokenStatuses();
+        newStatuses.set(fanpage._id, {
+          status: 'invalid',
+          detail: `❌ Lỗi kiểm tra: ${err.message}`,
+          lastTested: new Date()
+        });
+        this.accessTokenStatuses.set(new Map(newStatuses));
+        this.testingTokenFor.set(null);
+        this.handleError(err, 'Kiểm tra access token thất bại');
+      }
+    });
   }
 
-  private getRecoveryMethodName(method: string): string {
-    switch (method) {
-      case 'manual': return 'Nhập token thủ công';
-      case 'oauth': return 'Kết nối Facebook OAuth';
-      case 'backup': return 'Chuyển token dự phòng';
-      default: return 'Không xác định';
+  getAccessTokenStatus(fanpage: Fanpage): { css: string; detail?: string } {
+    if (this.testingTokenFor() === fanpage._id) {
+      return { css: 'testing', detail: 'Đang kiểm tra...' };
     }
+
+    const statusMap = this.accessTokenStatuses();
+    const status = statusMap.get(fanpage._id);
+    
+    if (status) {
+      const timeAgo = status.lastTested ? this.formatTimeAgo(status.lastTested) : '';
+      return {
+        css: status.status,
+        detail: status.detail + (timeAgo ? ` (${timeAgo})` : '')
+      };
+    }
+
+    // No access token test recorded yet
+    return { css: 'unknown', detail: 'Chưa kiểm tra' };
   }
+
+  private formatTimeAgo(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} ngày trước`;
+  }
+
+
+
+
+
+
+
 
   // no explicit sync UI; backend may auto-sync elsewhere
 

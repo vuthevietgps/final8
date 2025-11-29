@@ -1,0 +1,1 @@
+{"version":3,"file":"test-order2.policy.js","sourceRoot":"","sources":["../../src/test-order2/test-order2.policy.ts"],"names":[],"mappings":";;;;;;;;;AAAA,2CAA4C;AAGrC,IAAM,uBAAuB,GAA7B,MAAM,uBAAuB;IAElC,kCAAkC,CAAC,aAAsB;QACvD,OAAO,OAAO,aAAa,KAAK,QAAQ,IAAI,aAAa,GAAG,CAAC,CAAC;IAChE,CAAC;CACF,CAAA;AALY,0DAAuB;kCAAvB,uBAAuB;IADnC,IAAA,mBAAU,GAAE;GACA,uBAAuB,CAKnC"}

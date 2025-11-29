@@ -11,6 +11,8 @@ export interface ApiToken {
   provider: 'facebook'|'zalo'|'other';
   status: 'active'|'inactive';
   fanpageId?: string;
+  adAccountId?: string;
+  adAccountName?: string;
   notes?: string;
   isPrimary?: boolean;
   expireAt?: string;
@@ -24,7 +26,16 @@ export interface ApiToken {
   updatedAt?: string;
 }
 
-export interface CreateApiTokenRequest { name: string; token: string; provider: 'facebook'|'zalo'|'other'; status?: 'active'|'inactive'; fanpageId?: string; notes?: string; }
+export interface CreateApiTokenRequest { 
+  name: string; 
+  token: string; 
+  provider: 'facebook'|'zalo'|'other'; 
+  status?: 'active'|'inactive'; 
+  fanpageId?: string; 
+  adAccountId?: string; 
+  adAccountName?: string; 
+  notes?: string; 
+}
 export interface UpdateApiTokenRequest extends Partial<CreateApiTokenRequest> {}
 export interface RotateTokenRequest { newToken: string; notes?: string; }
 export interface SetPrimaryRequest { fanpageId: string; }
@@ -41,6 +52,11 @@ export class ApiTokenService {
   setPrimary(id: string, fanpageId: string) { return this.http.post<ApiToken>(`${this.baseUrl}/${id}/set-primary`, { fanpageId }); }
   rotate(id: string, body: RotateTokenRequest) { return this.http.post(`${this.baseUrl}/${id}/rotate`, body); }
   syncFromFanpages(){ return this.http.post<{imported:number, items:ApiToken[]}>(`${this.baseUrl}/sync/from-fanpages`, {}); }
+  testAdAccount(id: string, adAccountId: string){
+    return this.http.post<{ ok: boolean; account?: any; scopeOk?: boolean; message?: string; error?: string; code?: number }>(
+      `${this.baseUrl}/${id}/test-adaccount`, { adAccountId }
+    );
+  }
   
   // Token Recovery Methods
   refreshManually(id: string, newToken: string) { 

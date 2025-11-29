@@ -32,6 +32,8 @@ export class PendingOrder {
   @Prop({ trim: true }) notes?: string;
   /** Thời điểm capture */
   @Prop({ type: Date, default: Date.now }) capturedAt: Date;
+  /** Ngày đặt hàng mong muốn khi duyệt (nếu bỏ trống sẽ dùng ngày hiện tại) */
+  @Prop({ type: Date, required: false }) orderDate?: Date;
 }
 
 export const PendingOrderSchema = SchemaFactory.createForClass(PendingOrder);

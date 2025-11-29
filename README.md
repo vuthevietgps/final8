@@ -604,3 +604,21 @@ Hệ thống quản lý tổng hợp với NestJS backend và Angular frontend.
 
 ### Dependency conflicts
 - Chạy `npm install --legacy-peer-deps` nếu gặp conflict
+
+## Cấu hình giới hạn đăng nhập theo IP (tùy chọn)
+
+Từ ngày 2025-10-26, hệ thống đã bỏ yêu cầu "đúng địa chỉ IP mới đăng nhập được" cho tất cả vai trò (mặc định không giới hạn IP).
+
+- Mặc định: KHÔNG kiểm tra IP khi đăng nhập.
+- Bật lại kiểm tra IP (áp dụng cho Manager và Employee): đặt biến môi trường `AUTH_ENABLE_IP_RESTRICTION=true` khi chạy backend.
+- Khi bật, người dùng thuộc các vai trò này cần có trường `allowedLoginIps` (mảng chuỗi IP) trong hồ sơ người dùng để đăng nhập được.
+
+Ví dụ (PowerShell, chạy trước khi start backend):
+
+```
+$env:AUTH_ENABLE_IP_RESTRICTION="true"
+```
+
+Ghi chú:
+- Backend tự động chuẩn hóa IP (xử lý `::ffff:` và `::1`) và tôn trọng header `x-forwarded-for` khi chạy sau proxy.
+- Không cần thay đổi gì nếu bạn muốn mở truy cập từ mọi IP (mặc định hiện tại).

@@ -1,0 +1,412 @@
+/* 
+File: frontend/src/app/features/advertising-cost-suggestion/ai-optimization-panel.component.css
+Mục đích: Styling cho AI optimization panel
+*/
+
+.ai-optimization-panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin: 20px 0;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.panel-header h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 1.25rem;
+}
+
+.panel-controls .btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.btn-primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Optimization Stats */
+.optimization-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 20px;
+  background: #f8fafc;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+/* Auto Mode Section */
+.auto-mode-section {
+  padding: 20px;
+}
+
+.auto-mode-section h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.auto-mode-explanation {
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.auto-mode-explanation p {
+  margin: 8px 0;
+  color: #1e40af;
+  font-size: 0.875rem;
+}
+
+.auto-mode-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+}
+
+.auto-mode-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  background: white;
+}
+
+.ad-group-info .ad-group-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.ad-group-info .ad-group-id {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.ad-group-info .current-budget {
+  font-size: 0.875rem;
+  color: #059669;
+  font-weight: 500;
+}
+
+/* Toggle Switch */
+.auto-mode-toggle {
+  margin: 12px 0;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  display: inline-block;
+  width: 140px;
+  height: 40px;
+  background: #e5e7eb;
+  border-radius: 20px;
+  position: relative;
+  transition: background 0.3s;
+}
+
+.toggle-slider:before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: #10b981;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(100px);
+}
+
+.toggle-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #374151;
+  left: 8px;
+  right: 8px;
+  text-align: center;
+}
+
+.toggle-switch input:checked + .toggle-slider .toggle-label {
+  color: white;
+}
+
+/* Performance Indicators */
+.performance-indicator {
+  margin-top: 8px;
+}
+
+.performance-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.performance-badge.good {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.performance-badge.average {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.performance-badge.poor {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Pending Recommendations */
+.pending-section {
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.pending-section h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.recommendation-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: white;
+}
+
+.recommendation-header {
+  display: flex;
+  justify-content: between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.recommendation-action {
+  margin-left: auto;
+}
+
+.action-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.action-badge.increase {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.action-badge.decrease {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.action-badge.pause {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.recommendation-details {
+  margin: 12px 0;
+}
+
+.budget-change {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.arrow {
+  color: #6b7280;
+}
+
+.change-percent {
+  color: #059669;
+  font-size: 0.875rem;
+}
+
+.ai-reasoning,
+.confidence {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.recommendation-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.875rem;
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background: #059669;
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+}
+
+/* Optimization Log */
+.optimization-log {
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.optimization-log h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.log-entries {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 120px 1fr auto auto;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+  align-items: center;
+}
+
+.log-time {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.log-action {
+  font-size: 0.875rem;
+  color: #1f2937;
+}
+
+.log-details {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.log-status {
+  font-size: 0.875rem;
+}
+
+.log-status.success {
+  color: #10b981;
+}
+
+.log-status.error {
+  color: #ef4444;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .panel-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .optimization-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .auto-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .log-entry {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

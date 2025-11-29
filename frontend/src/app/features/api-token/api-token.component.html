@@ -3,8 +3,8 @@
     <h2>🔐 API & Tokens</h2>
     <div class="actions">
       <button class="btn" (click)="openCreate()">➕ Thêm Token</button>
-      <button class="btn secondary" (click)="load()" [disabled]="loading()">⟳ Tải lại</button>
-      <button class="btn secondary" (click)="sync()" [disabled]="syncLoading()">⇅ Đồng bộ Fanpage</button>
+  <button class="btn secondary" (click)="load()" [disabled]="loading()">⟳ Tải lại</button>
+  <button class="btn secondary" (click)="sync()" [disabled]="syncLoading()" title="Nhập token trực tiếp; nút này chỉ dùng khi muốn nhập từ Tài khoản quảng cáo">⇅ Đồng bộ từ Tài khoản quảng cáo</button>
     </div>
   </div>
 
@@ -14,9 +14,9 @@
   <table class="token-table" *ngIf="!loading() && tokens().length">
     <thead>
       <tr>
-        <th>Tên</th>
+        <th>Ad Account (Name)</th>
+        <th>Ad Account ID</th>
         <th>Provider</th>
-        <th>Fanpage</th>
         <th>Primary</th>
         <th>Trạng thái</th>
         <th>Lần kiểm tra</th>
@@ -26,9 +26,13 @@
     </thead>
     <tbody>
       <tr *ngFor="let t of tokens()">
-        <td><strong>{{ t.name }}</strong><div class="sub" *ngIf="t.notes">{{ t.notes }}</div></td>
+        <td>
+          <strong>{{ t.adAccountName || adAccountNames[t._id] || '—' }}</strong>
+          <div class="sub">Token: {{ t.name }}</div>
+          <div class="sub" *ngIf="t.notes">{{ t.notes }}</div>
+        </td>
+        <td>{{ t.adAccountId || adAccountIds[t._id] || testAdAccountId[t._id] || '—' }}</td>
         <td>{{ t.provider }}</td>
-        <td>{{ t.fanpageId || '-' }}</td>
         <td>{{ t.isPrimary ? '⭐' : '' }}</td>
         <td>{{ t.status }}</td>
         <td>{{ t.lastCheckedAt ? (t.lastCheckedAt | date:'short') : '-' }}</td>
@@ -42,6 +46,11 @@
           <button class="mini" (click)="setPrimary(t)" [disabled]="!t.fanpageId" title="Set Primary">★</button>
           <button class="mini" (click)="startRotate(t)" title="Rotate">⟳</button>
           <button class="mini danger" (click)="delete(t)" title="Xóa">🗑</button>
+          <div class="inline-test">
+            <input placeholder="adAccountId" [value]="testAdAccountId[t._id] || ''" (input)="setTestId(t, $any($event.target).value)" />
+            <button class="mini" (click)="runTest(t)" [disabled]="testing[t._id]" title="Test ad account">🧪</button>
+            <div class="sub" *ngIf="testResult[t._id]">{{ testResult[t._id] }}</div>
+          </div>
         </td>
       </tr>
     </tbody>
@@ -61,7 +70,8 @@
           <option value="other">other</option>
         </select>
       </label>
-      <label>Fanpage ID<input [ngModel]="form().fanpageId" (ngModelChange)="updateForm('fanpageId',$event)"/></label>
+      <label>Ad Account ID<input placeholder="act_123456... hoặc 123456..." [ngModel]="form().adAccountId" (ngModelChange)="updateForm('adAccountId',$event)"/></label>
+      <label>Ad Account Name (tùy chọn)<input [ngModel]="form().adAccountName" (ngModelChange)="updateForm('adAccountName',$event)"/></label>
       <label>Ghi chú<textarea rows="2" [ngModel]="form().notes" (ngModelChange)="updateForm('notes',$event)"></textarea></label>
       <div class="modal-actions">
         <button class="btn" (click)="save()">Lưu</button>

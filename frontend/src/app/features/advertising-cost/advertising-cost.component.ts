@@ -29,6 +29,14 @@ export class AdvertisingCostComponent implements OnInit {
   loading = signal(false);
   error = signal<string | null>(null);
   summary = signal<AdvertisingCostSummary | null>(null);
+  // Manual FB sync
+  syncLoading = signal(false);
+  syncDate = signal<string>('');
+  syncDays = signal<number>(1);
+  // Total spent by adGroupId for each row
+  totalSpentByGroup = signal<Map<string, number>>(new Map());
+  // Conversation cost by adGroupId for each row  
+  conversationCostByGroup = signal<Map<string, { totalSpent: number; conversationCount: number; costPerConversation: number }>>(new Map());
 
   // Filters
   filterAdAccountId = signal('all');
@@ -36,6 +44,12 @@ export class AdvertisingCostComponent implements OnInit {
   // UI
   showModal = signal(false);
   editingId: string | null = null;
+
+  // Upload Excel
+  showUploadSection = signal(false);
+  selectedFile: File | null = null;
+  uploadProgress = signal<any | null>(null);
+  uploadLoading = signal(false);
 
   form = this.fb.group({
     // Ngày: UI nhập theo mm/dd/yyyy nhưng lưu ISO yyyy-mm-dd
@@ -51,6 +65,10 @@ export class AdvertisingCostComponent implements OnInit {
     // default values
     const todayIso = new Date().toISOString().slice(0, 10);
     this.form.patchValue({ date: todayIso, spentAmount: 0, cpm: 0, cpc: 0 });
+    // default sync date: yesterday
+    const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().slice(0,10);
+    this.syncDate.set(yesterday);
+    this.syncDays.set(1);
     this.loadAdAccounts();
     this.loadData();
   }
@@ -97,6 +115,10 @@ export class AdvertisingCostComponent implements OnInit {
         // chuẩn hoá hiển thị ngày theo mm/dd/yyyy
         const normalized = data.map(d => ({ ...d, date: this.toMmDdYyyy(d.date?.slice(0,10) || new Date().toISOString().slice(0,10)) } as AdvertisingCost));
         this.items.set(normalized);
+        
+        // Load total spent for each unique adGroupId
+        this.loadTotalSpentByGroups(normalized);
+        
         this.loading.set(false);
       },
       error: (err) => {
@@ -109,6 +131,41 @@ export class AdvertisingCostComponent implements OnInit {
     this.service.getSummary().subscribe({
       next: (sum) => this.summary.set(sum),
       error: () => this.summary.set({ totalSpent: 0, count: 0, avgCPM: 0, avgCPC: 0 }),
+    });
+  }
+
+  private loadTotalSpentByGroups(items: AdvertisingCost[]) {
+    const uniqueAdGroupIds = Array.from(new Set(items.map(item => item.adGroupId)));
+    const totalMap = new Map<string, number>();
+    const conversationMap = new Map<string, { totalSpent: number; conversationCount: number; costPerConversation: number }>();
+    
+    // Load total spent and conversation cost for each unique adGroupId
+    uniqueAdGroupIds.forEach(adGroupId => {
+      // Load total spent
+      this.service.getTotalSpentByAdGroup(adGroupId).subscribe({
+        next: (result) => {
+          totalMap.set(adGroupId, result.totalSpent);
+          this.totalSpentByGroup.set(new Map(totalMap));
+        },
+        error: (err) => {
+          console.error(`Error loading total spent for adGroupId ${adGroupId}:`, err);
+          totalMap.set(adGroupId, 0);
+          this.totalSpentByGroup.set(new Map(totalMap));
+        }
+      });
+
+      // Load conversation cost
+      this.service.getConversationCostByAdGroup(adGroupId).subscribe({
+        next: (result) => {
+          conversationMap.set(adGroupId, result);
+          this.conversationCostByGroup.set(new Map(conversationMap));
+        },
+        error: (err) => {
+          console.error(`Error loading conversation cost for adGroupId ${adGroupId}:`, err);
+          conversationMap.set(adGroupId, { totalSpent: 0, conversationCount: 0, costPerConversation: 0 });
+          this.conversationCostByGroup.set(new Map(conversationMap));
+        }
+      });
     });
   }
 
@@ -203,6 +260,83 @@ export class AdvertisingCostComponent implements OnInit {
         this.error.set('Lỗi khi xóa');
         this.loading.set(false);
       },
+    });
+  }
+
+  // ===== UPLOAD EXCEL METHODS =====
+  
+  toggleUploadSection() {
+    this.showUploadSection.update(val => !val);
+    if (!this.showUploadSection()) {
+      this.resetUpload();
+    }
+  }
+
+  onFileSelected(event: any) {
+    const file = event.target.files[0];
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      this.selectedFile = file;
+      this.error.set(null);
+    } else {
+      this.selectedFile = null;
+      this.error.set('Vui lòng chọn file Excel (.xlsx hoặc .xls)');
+    }
+  }
+
+  uploadExcel() {
+    if (!this.selectedFile) {
+      this.error.set('Vui lòng chọn file Excel');
+      return;
+    }
+
+    this.uploadLoading.set(true);
+    this.uploadProgress.set(null);
+    this.error.set(null);
+
+    this.service.uploadFacebookExcel(this.selectedFile).subscribe({
+      next: (result) => {
+        this.uploadLoading.set(false);
+        this.uploadProgress.set(result);
+        
+        // Reload data to show updates
+        this.loadData();
+        
+        // Reset file input
+        this.resetUpload();
+      },
+      error: (err) => {
+        console.error('Upload error:', err);
+        this.uploadLoading.set(false);
+        this.error.set(err.error?.message || 'Lỗi khi tải file Excel');
+      }
+    });
+  }
+
+  resetUpload() {
+    this.selectedFile = null;
+    this.uploadProgress.set(null);
+    // Reset file input
+    const fileInput = document.getElementById('excelFileInput') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.value = '';
+    }
+  }
+
+  // ===== Manual Facebook sync =====
+  syncFacebook() {
+    this.syncLoading.set(true);
+    const date = this.syncDate();
+    const days = this.syncDays();
+    this.service.fetchFacebookCost({ date, days }).subscribe({
+      next: () => {
+        this.syncLoading.set(false);
+        this.loadData();
+      },
+      error: (err) => {
+        console.error('Sync FB cost error', err);
+        this.syncLoading.set(false);
+        this.error.set(err?.error?.message || 'Không thể đồng bộ chi phí từ Facebook');
+      }
     });
   }
 }

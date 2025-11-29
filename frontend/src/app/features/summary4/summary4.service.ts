@@ -12,42 +12,35 @@ export class Summary4Service {
 
   constructor(private http: HttpClient) {}
 
-  findAll(filter: Summary4Filter = {}): Observable<Summary4Response> {
+  private buildParams(filter: Summary4Filter = {}, includePagination = false): HttpParams {
     let params = new HttpParams();
-    
-    // Pagination & sorting
-    if (filter.page) params = params.set('page', String(filter.page));
-    if (filter.limit) params = params.set('limit', String(filter.limit));
+    if (!filter) return params;
+
+    if (includePagination) {
+      if (filter.page) params = params.set('page', String(filter.page));
+      if (filter.limit) params = params.set('limit', String(filter.limit));
+    }
+
     if (filter.sortBy) params = params.set('sortBy', filter.sortBy);
     if (filter.sortOrder) params = params.set('sortOrder', filter.sortOrder);
-    
-    // Agent filters
     if (filter.agentId) params = params.set('agentId', filter.agentId);
     if (filter.agentName) params = params.set('agentName', filter.agentName);
-    
-    // Date filters
     if (filter.startDate) params = params.set('startDate', filter.startDate);
     if (filter.endDate) params = params.set('endDate', filter.endDate);
-    
-    // Status filters
     if (filter.productionStatus) params = params.set('productionStatus', filter.productionStatus);
     if (filter.orderStatus) params = params.set('orderStatus', filter.orderStatus);
-    
-    // Product filters
     if (filter.productId) params = params.set('productId', filter.productId);
     if (filter.productName) params = params.set('productName', filter.productName);
-    
-    // Customer filter
     if (filter.customerName) params = params.set('customerName', filter.customerName);
-    
-    // Payment filter
     if (filter.paymentStatus && filter.paymentStatus !== 'all') {
       params = params.set('paymentStatus', filter.paymentStatus);
     }
-    
-    // Ad Group filter
     if (filter.adGroupId) params = params.set('adGroupId', filter.adGroupId);
-    
+    return params;
+  }
+
+  findAll(filter: Summary4Filter = {}): Observable<Summary4Response> {
+    const params = this.buildParams(filter, true);
     return this.http.get<Summary4Response>(this.apiUrl, { params, withCredentials: true });
   }
 
@@ -74,10 +67,21 @@ export class Summary4Service {
     });
   }
 
-  exportManualPaymentTemplate(): Observable<Blob> {
+  exportFilteredToExcel(filter: Summary4Filter = {}): Observable<Blob> {
+    const params = this.buildParams(filter, false);
+    return this.http.get(`${this.apiUrl}/export`, {
+      responseType: 'blob',
+      withCredentials: true,
+      params
+    });
+  }
+
+  exportManualPaymentTemplate(filter: Summary4Filter = {}): Observable<Blob> {
+    const params = this.buildParams(filter, false);
     return this.http.get(`${this.apiUrl}/export-manual-payment-template`, { 
       responseType: 'blob',
-      withCredentials: true
+      withCredentials: true,
+      params
     });
   }
 

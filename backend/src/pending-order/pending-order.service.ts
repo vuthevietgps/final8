@@ -18,7 +18,21 @@ export class PendingOrderService {
     @InjectConnection() private readonly conn: Connection,
   ) {}
 
-  create(dto: CreatePendingOrderDto) { return new this.model(dto).save(); }
+  async create(dto: CreatePendingOrderDto) {
+    const normalizedAdGroup = dto.adGroupId?.trim();
+    if (!normalizedAdGroup) {
+      const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid);
+      if (fallback) {
+        dto.adGroupId = fallback;
+      }
+    } else {
+      dto.adGroupId = normalizedAdGroup;
+    }
+
+    const saved = await new this.model(dto).save();
+    await this.syncConversationFromPending(saved);
+    return saved;
+  }
 
   /**
    * Lấy danh sách đại lý (user có thể gán cho đơn) – tái sử dụng logic tương tự test-order2.
@@ -53,8 +67,16 @@ export class PendingOrderService {
   }
 
   async update(id: string, dto: UpdatePendingOrderDto) {
+    if (dto.adGroupId) {
+      dto.adGroupId = dto.adGroupId.trim();
+    } else if (!dto.adGroupId && dto.fanpageId && dto.senderPsid) {
+      const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid);
+      if (fallback) dto.adGroupId = fallback;
+    }
+
     const doc = await this.model.findByIdAndUpdate(id, dto, { new: true }).lean();
     if (!doc) throw new NotFoundException('Pending order không tồn tại');
+    await this.syncConversationFromPending(doc as any);
     return doc as any;
   }
 
@@ -90,22 +112,63 @@ export class PendingOrderService {
       receiverPhone: pending.phone,
       receiverAddress: pending.address,
     } as any;
+    // Nếu có orderDate trong Pending, truyền xuống để tạo đơn theo ngày mong muốn
+    if ((pending as any).orderDate) {
+      (dto as any).orderDate = (pending as any).orderDate;
+    }
     // create order
     const order = await this.testOrder2Service.create(dto);
     pending.status = 'approved';
     await pending.save();
     // update conversation (best effort)
     try {
+      const update: Record<string, any> = {
+        orderId: (order as any)._id,
+        orderDraftStatus: 'approved',
+        orderCustomerName: pending.customerName,
+        orderPhone: pending.phone,
+      };
+      if (pending.adGroupId) {
+        update.lastAdGroupId = pending.adGroupId;
+      }
       await this.conn.collection('conversations').updateOne(
         { fanpageId: pending.fanpageId, senderPsid: pending.senderPsid },
-        { $set: { 
-          orderId: (order as any)._id, 
-          orderDraftStatus: 'approved',
-          orderCustomerName: pending.customerName,
-          orderPhone: pending.phone,
-        } }
+        { $set: update }
       );
     } catch {}
     return { order, pending };
+  }
+
+  private async lookupConversationAdGroup(fanpageId?: string, senderPsid?: string): Promise<string | undefined> {
+    if (!fanpageId || !senderPsid) return undefined;
+    const collection = this.conn.collection('conversations');
+    let conv: any = null;
+    if (Types.ObjectId.isValid(fanpageId)) {
+      conv = await collection.findOne({ fanpageId: new Types.ObjectId(fanpageId), senderPsid }, { projection: { lastAdGroupId: 1 } });
+    }
+    if (!conv) {
+      conv = await collection.findOne({ fanpageId, senderPsid }, { projection: { lastAdGroupId: 1 } });
+    }
+    const candidate = conv?.lastAdGroupId;
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+    return undefined;
+  }
+
+  private async syncConversationFromPending(pending: PendingOrder | PendingOrderDocument | (PendingOrder & { _id: any })) {
+    if (!pending) return;
+    try {
+      const update: Record<string, any> = {};
+      if ((pending as any).customerName) update.orderCustomerName = (pending as any).customerName;
+      if ((pending as any).phone) update.orderPhone = (pending as any).phone;
+      if ((pending as any).adGroupId) update.lastAdGroupId = (pending as any).adGroupId;
+      if (Object.keys(update).length === 0) return;
+
+      await this.conn.collection('conversations').updateOne(
+        { fanpageId: (pending as any).fanpageId, senderPsid: (pending as any).senderPsid },
+        { $set: update }
+      );
+    } catch {}
   }
 }

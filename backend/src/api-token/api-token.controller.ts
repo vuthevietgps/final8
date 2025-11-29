@@ -33,4 +33,15 @@ export class ApiTokenController {
   @Post('sync/from-fanpages') @RequirePermissions('api-tokens') syncFromFanpages(){
     return this.service.syncFromFanpages();
   }
+
+  // Test token với 1 tài khoản quảng cáo Facebook
+  @Post(':id/test-adaccount')
+  @RequirePermissions('api-tokens')
+  testAdAccount(
+    @Param('id') id: string,
+    @Body() body: { adAccountId: string }
+  ){
+    if(!body?.adAccountId) return { ok: false, error: 'Thiếu adAccountId' } as any;
+    return this.service.testAdAccountAccess(id, body.adAccountId);
+  }
 }

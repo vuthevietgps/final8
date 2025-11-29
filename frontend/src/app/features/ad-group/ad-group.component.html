@@ -2,7 +2,7 @@
 <div class="header-section">
   <div class="page-title">
     <h2><span class="icon">📢</span> Quản Lý Nhóm Quảng Cáo</h2>
-    <p class="subtitle">Tích hợp chatbot và webhook cho dịch vụ khách hàng tự động</p>
+    <p class="subtitle">Quản lý nhóm quảng cáo, sản phẩm và tự động kiểm soát chi phí</p>
   </div>
   <div class="header-actions">
     <button type="button" class="btn btn-primary" (click)="openModal()">
@@ -34,13 +34,7 @@
       <div class="stat-label">Đang hoạt động</div>
     </div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon">🤖</div>
-    <div class="stat-info">
-      <div class="stat-number">{{ getChatbotEnabledCount() }}</div>
-      <div class="stat-label">Có chatbot</div>
-    </div>
-  </div>
+  
   <div class="stat-card">
     <div class="stat-icon">🔗</div>
     <div class="stat-info">
@@ -78,7 +72,7 @@
         <th>Fanpage</th>
         <th>Danh mục SP</th>
         <th>Sản phẩm</th>
-        <th>AI Config</th>
+        
         <th>Webhook</th>
         <th>Trạng thái</th>
         <th class="actions-col">Hành động</th>
@@ -105,11 +99,7 @@
             {{ group.selectedProducts?.length || 0 }} sản phẩm
           </div>
         </td>
-        <td>
-          <span class="ai-status" [class.enabled]="group.openAIConfigId">
-            {{ group.openAIConfigId ? '🤖 Có AI' : '❌ Chưa cấu hình' }}
-          </span>
-        </td>
+        
         <td>
           <div class="webhook-controls">
             <label class="toggle-switch">
@@ -140,7 +130,7 @@
           <div class="empty-content">
             <div class="empty-icon">📢</div>
             <h3>Chưa có nhóm quảng cáo nào</h3>
-            <p>Tạo nhóm quảng cáo đầu tiên để bắt đầu quản lý chatbot</p>
+            <p>Tạo nhóm quảng cáo đầu tiên để bắt đầu quản lý chiến dịch</p>
             <button class="btn btn-primary" (click)="openModal()">Thêm nhóm đầu tiên</button>
           </div>
         </td>
@@ -232,6 +222,40 @@
             </div>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label for="agentId">Đại lý/Người phụ trách *</label>
+              <select id="agentId" class="form-control" formControlName="agentId">
+                <option value="">-- Chọn đại lý --</option>
+                <option *ngFor="let u of users()" [value]="u._id">{{ u.fullName || u.email }}</option>
+              </select>
+              <div *ngIf="adGroupForm.get('agentId')?.invalid && adGroupForm.get('agentId')?.touched" class="error-message">
+                Vui lòng chọn đại lý phụ trách
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="adAccountId">Tài khoản quảng cáo *</label>
+              <select id="adAccountId" class="form-control" formControlName="adAccountId">
+                <option value="">-- Chọn tài khoản quảng cáo --</option>
+                <option *ngFor="let aa of adAccounts()" [value]="aa._id">{{ aa.name }} ({{ aa.accountId }})</option>
+              </select>
+              <div *ngIf="adGroupForm.get('adAccountId')?.invalid && adGroupForm.get('adAccountId')?.touched" class="error-message">
+                Vui lòng chọn tài khoản quảng cáo
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="platform">Nền tảng *</label>
+              <select id="platform" class="form-control" formControlName="platform">
+                <option value="facebook">Facebook</option>
+                <option value="google">Google</option>
+                <option value="ticktock">TickTock</option>
+              </select>
+            </div>
+          </div>
+
           <!-- Product Selection -->
           <div class="form-group" *ngIf="availableProducts().length > 0">
             <label>Chọn sản phẩm (có thể chọn nhiều)</label>
@@ -253,96 +277,7 @@
           </div>
         </div>
 
-        <!-- AI Configuration Section -->
-        <div class="form-section">
-          <h4 class="section-title">
-            <span class="section-icon">🤖</span>
-            Cấu Hình AI Chatbot
-          </h4>
-          
-          <div class="form-group">
-            <label for="openAIConfigId">Cấu hình OpenAI</label>
-            <select id="openAIConfigId" formControlName="openAIConfigId" class="form-control">
-              <option value="">-- Không sử dụng AI --</option>
-              <option *ngFor="let config of openAIConfigs()" [value]="config._id">
-                {{ config.name }} ({{ config.model }})
-              </option>
-            </select>
-          </div>
-
-          <!-- Chat Script Configuration -->
-          <div class="chat-script-config" *ngIf="adGroupForm.get('openAIConfigId')?.value">
-            <h5>Kịch bản trò chuyện</h5>
-            <div formGroupName="chatScript" class="chat-script-form">
-              <div class="form-group">
-                <label for="greeting">Lời chào</label>
-                <textarea 
-                  id="greeting"
-                  formControlName="greeting" 
-                  class="form-control"
-                  rows="2"
-                  placeholder="VD: Xin chào! Cảm ơn bạn đã quan tâm đến sản phẩm của chúng tôi."></textarea>
-              </div>
-              <div class="form-group">
-                <label for="upsell">Gợi ý bán thêm</label>
-                <textarea 
-                  id="upsell"
-                  formControlName="upsell" 
-                  class="form-control"
-                  rows="3"
-                  placeholder="VD: Bạn có muốn xem thêm các sản phẩm khác không?"></textarea>
-              </div>
-              <div class="form-group">
-                <label for="closing">Lời kết thúc</label>
-                <textarea 
-                  id="closing"
-                  formControlName="closing" 
-                  class="form-control"
-                  rows="2"
-                  placeholder="VD: Cảm ơn bạn! Hãy liên hệ nếu cần hỗ trợ thêm."></textarea>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Discount Program Section -->
-        <div class="form-section">
-          <h4 class="section-title">
-            <span class="section-icon">💰</span>
-            Chương Trình Khuyến Mãi
-          </h4>
-          
-          <div formGroupName="discountProgram" class="discount-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="discountType">Loại giảm giá</label>
-                <select id="discountType" formControlName="discountType" class="form-control">
-                  <option value="">Không áp dụng</option>
-                  <option value="percentage">Theo phần trăm (%)</option>
-                  <option value="fixed">Số tiền cố định (VNĐ)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="discountValue">Giá trị giảm</label>
-                <input 
-                  id="discountValue"
-                  type="number" 
-                  formControlName="discountValue" 
-                  class="form-control"
-                  placeholder="VD: 15 hoặc 50000">
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="conditions">Điều kiện áp dụng</label>
-              <textarea 
-                id="conditions"
-                formControlName="conditions" 
-                class="form-control"
-                rows="2"
-                placeholder="VD: Áp dụng cho đơn hàng từ 500,000 VNĐ"></textarea>
-            </div>
-          </div>
-        </div>
+        
 
         <!-- Settings Section -->
         <div class="form-section">
@@ -360,14 +295,7 @@
               </label>
               <small class="help-text">Cho phép nhận tin nhắn từ fanpage</small>
             </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" formControlName="enableAIChat">
-                <span class="checkmark"></span>
-                Kích hoạt AI chat
-              </label>
-              <small class="help-text">Tự động trả lời tin nhắn bằng AI</small>
-            </div>
+            
           </div>
 
           <div class="form-group">
@@ -376,6 +304,37 @@
               <span class="checkmark"></span>
               Trạng thái hoạt động
             </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <h5>⏱️ Tự động kiểm soát chi phí/kết quả</h5>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" formControlName="autoControlEnabled">
+                <span class="checkmark"></span>
+                Bật auto-control
+              </label>
+              <small class="help-text">Tự động tạm dừng khi vượt ngưỡng</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="spendThresholdDaily">Ngưỡng chi tiêu/ngày (VND)</label>
+              <input id="spendThresholdDaily" type="number" class="form-control" formControlName="spendThresholdDaily" placeholder="VD: 200000" />
+            </div>
+            <div class="form-group">
+              <label for="cprThresholdDaily">Ngưỡng CPR/ngày (VND/ hội thoại)</label>
+              <input id="cprThresholdDaily" type="number" class="form-control" formControlName="cprThresholdDaily" placeholder="VD: 50000" />
+            </div>
+            <div class="form-group">
+              <label for="minConversations">Số hội thoại tối thiểu</label>
+              <input id="minConversations" type="number" class="form-control" formControlName="minConversations" placeholder="VD: 3" />
+            </div>
+          </div>
+          <div class="form-group" *ngIf="isEditing() && getEditingAutoPausedReason()">
+            <small class="help-text">Lý do tự dừng gần nhất: {{ getEditingAutoPausedReason() }}</small>
           </div>
         </div>
 

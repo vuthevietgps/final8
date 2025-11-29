@@ -1,4 +1,5 @@
 import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString } from 'class-validator';
 
 export class CreatePendingOrderDto {
   @IsOptional() @IsMongoId() fanpageId?: string;
@@ -12,4 +13,6 @@ export class CreatePendingOrderDto {
   @IsOptional() @IsNumber() quantity?: number;
   @IsOptional() @IsEnum(['draft','awaiting','approved','rejected']) status?: 'draft' | 'awaiting' | 'approved' | 'rejected';
   @IsOptional() @IsString() notes?: string;
+  // Cho phép client gửi ngày đặt hàng dạng ISO string (yyyy-MM-dd hoặc ISO)
+  @IsOptional() @IsDateString() orderDate?: string;
 }

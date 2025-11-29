@@ -28,6 +28,9 @@ import { AuthModule } from '../auth/auth.module';
   ],
   controllers: [UserController], // Đăng ký controller xử lý API endpoints
   providers: [UserService], // Đăng ký service xử lý business logic
-  exports: [UserService], // Export service để các module khác có thể inject
+  exports: [
+    UserService, // Export service để các module khác có thể inject
+    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]) // Export User model
+  ],
 })
 export class UserModule {}

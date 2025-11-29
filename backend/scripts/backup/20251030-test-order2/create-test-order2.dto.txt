@@ -1,0 +1,21 @@
+Snapshot of backend/src/test-order2/dto/create-test-order2.dto.ts (2025-10-30)
+
+Fields:
+- productId?: string
+- customerName: string
+- quantity?: number
+- agentId?: string
+- adGroupId?: string
+- isActive?: boolean
+- productionStatus?: string
+- orderStatus?: string
+- serviceDetails?: string
+- submitLink?: string
+- trackingNumber?: string
+- depositAmount?: number
+- codAmount?: number
+- manualPayment?: number
+- receiverName?: string
+- receiverPhone?: string
+- receiverAddress?: string
+- orderDate?: string (ISO)

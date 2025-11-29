@@ -8,6 +8,10 @@ import { Conversation, ConversationSchema } from './schemas/conversation.schema'
 import { Fanpage, FanpageSchema } from '../fanpage/schemas/fanpage.schema';
 import { OpenAIConfigModule } from '../openai-config/openai-config.module';
 import { ProductModule } from '../product/product.module';
+import { MediaModule } from '../media/media.module';
+
+import { MessengerWebhookService } from './messenger-webhook.service';
+import { ChatEventsService } from './chat-events.service';
 
 @Module({
   imports: [
@@ -18,9 +22,10 @@ import { ProductModule } from '../product/product.module';
     ]),
     OpenAIConfigModule,
     ProductModule,
+    MediaModule,
   ],
-  providers: [ChatMessageService],
+  providers: [ChatMessageService, MessengerWebhookService, ChatEventsService],
   controllers: [ChatMessageController, MessengerWebhookController],
-  exports: [ChatMessageService]
+  exports: [ChatMessageService, ChatEventsService]
 })
 export class ChatMessageModule {}

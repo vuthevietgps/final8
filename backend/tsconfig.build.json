@@ -5,5 +5,20 @@
     "outDir": "./dist"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*spec.ts",
+    // Dev/maintenance scripts (không build cùng app)
+    "src/backfill-order-phone.ts",
+    "src/check-conversations.ts",
+    "src/create-demo-conversation.ts",
+    "src/create-demo-users.ts",
+    "src/debug-token.ts",
+    "src/fix-token.ts",
+    "src/test-text-processing.js",
+    // Thư mục cũ/POC không dùng trong runtime chính
+    "src/summary5/**"
+  ]
 }

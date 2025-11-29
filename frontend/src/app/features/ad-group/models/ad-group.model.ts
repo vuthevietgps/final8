@@ -5,21 +5,6 @@
 
 export type AdPlatform = 'facebook' | 'google' | 'ticktock';
 
-// Chat script configuration for AI responses
-export interface ChatScript {
-  greeting: string;
-  upsell: string;
-  closing: string;
-  attributes: string[];
-}
-
-// Discount program configuration
-export interface DiscountProgram {
-  discountType: 'percentage' | 'fixed' | '';
-  discountValue: number;
-  conditions: string;
-}
-
 export interface AdGroup {
   _id?: string;
   name: string;         // Tên nhóm quảng cáo
@@ -35,11 +20,13 @@ export interface AdGroup {
   fanpageId?: string;           // Tham chiếu fanpage
   productCategoryId?: string;   // Tham chiếu danh mục sản phẩm
   selectedProducts?: string[];  // Danh sách sản phẩm được chọn
-  openAIConfigId?: string;      // Cấu hình OpenAI
-  chatScript?: ChatScript;      // Kịch bản trò chuyện
-  discountProgram?: DiscountProgram; // Chương trình khuyến mãi
   enableWebhook?: boolean;      // Kích hoạt webhook
-  enableAIChat?: boolean;       // Kích hoạt AI chat
+  // Auto control fields
+  autoControlEnabled?: boolean;
+  spendThresholdDaily?: number;      // VND/ngày
+  cprThresholdDaily?: number;        // VND/ cuộc hội thoại
+  minConversations?: number;         // số hội thoại tối thiểu để tính CPR
+  autoPausedReason?: string;         // backend ghi chú khi tự dừng
   
   isActive: boolean;    // Trạng thái (đang hoạt động / đã tạm dừng)
   notes?: string;       // Ghi chú (không bắt buộc)

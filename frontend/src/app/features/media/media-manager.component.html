@@ -23,11 +23,11 @@
 
   <div class="upload">
     <input id="fileInput" type="file" (change)="onFileChange($event)" />
-    <button (click)="upload()" [disabled]="!file">Tải lên</button>
+    <button (click)="upload()" [disabled]="!file || !alt.trim()">Tải lên</button>
 
     <input [(ngModel)]="importUrl" placeholder="Nhập URL ảnh" class="url-input" />
-    <button (click)="importByUrl()" [disabled]="!importUrl">Import URL</button>
-    <input [(ngModel)]="alt" placeholder="Mô tả (alt)" />
+    <button (click)="importByUrl()" [disabled]="!importUrl || !alt.trim()">Import URL</button>
+    <input [(ngModel)]="alt" placeholder="Mô tả (alt) - bắt buộc" />
     <select [(ngModel)]="sourceType">
       <option value="gallery">Gallery</option>
       <option value="feedback">Feedback</option>
@@ -52,9 +52,15 @@
       </select>
     </div>
     <button (click)="attachVisibleToVariation()" [disabled]="!attachProductId || !attachFanpageId || attaching || !anySelected()">Gắn ảnh đã chọn</button>
+    <button class="danger" (click)="bulkDelete()" [disabled]="!anySelected()">Xóa đã chọn</button>
   </div>
 
   <div class="grid">
+    <div class="card select-all" *ngIf="items().length">
+      <label class="select">
+        <input type="checkbox" [checked]="allOnPageSelected()" (change)="toggleSelectAll($any($event.target).checked)" /> Chọn tất cả ảnh trong trang này
+      </label>
+    </div>
     <div class="card" *ngFor="let m of items()">
       <div class="thumb" (click)="openPreview(m.url)" title="Xem lớn">
   <img [src]="m.url" [alt]="m.alt || m.filename" (error)="onImgError($event)" />

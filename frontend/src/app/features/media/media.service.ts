@@ -63,6 +63,10 @@ export class MediaService {
     return this.http.delete<{ deleted: boolean }>(`${this.base}/media/${id}`);
   }
 
+  bulkDelete(ids: string[]): Observable<{ success: boolean; data: { deleted: number; failed: number; errors: string[] } }> {
+    return this.http.post<{ success: boolean; data: { deleted: number; failed: number; errors: string[] } }>(`${this.base}/media/bulk-delete`, { ids });
+  }
+
   setProductVariationImages(productId: string, fanpageId: string, images: string[]): Observable<any> {
     return this.http.patch(`${this.base}/products/${productId}/fanpage-variation-images`, { fanpageId, images });
   }

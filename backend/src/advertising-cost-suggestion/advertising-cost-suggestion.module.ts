@@ -8,12 +8,23 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AdvertisingCostSuggestionService } from './advertising-cost-suggestion.service';
 import { AdvertisingCostSuggestionController } from './advertising-cost-suggestion.controller';
 import { AdvertisingCostSuggestion, AdvertisingCostSuggestionSchema } from './schemas/advertising-cost-suggestion.schema';
+import { OpenAIConfigModule } from '../openai-config/openai-config.module';
+
+import { AdGroupProfitModule } from '../ad-group-profit/ad-group-profit.module';
+import { DeliveryStatusModule } from '../delivery-status/delivery-status.module';
+import { QualityControlModule } from '../advertising-optimization/quality-control/quality-control.module';
+import { AIOptimizationModule } from '../advertising-optimization/ai-optimization/ai-optimization.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: AdvertisingCostSuggestion.name, schema: AdvertisingCostSuggestionSchema }
-    ])
+    ]),
+    OpenAIConfigModule,
+    AdGroupProfitModule,
+    DeliveryStatusModule,
+    QualityControlModule,
+    AIOptimizationModule
   ],
   controllers: [AdvertisingCostSuggestionController],
   providers: [AdvertisingCostSuggestionService],

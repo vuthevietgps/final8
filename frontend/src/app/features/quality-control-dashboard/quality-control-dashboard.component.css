@@ -1,0 +1,388 @@
+/* Quality Control Dashboard Styles */
+.quality-control-dashboard {
+  padding: 20px;
+  background: #f8f9fa;
+  min-height: 100vh;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.dashboard-header h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.8rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #545b62;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Overview Section */
+.overview-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.overview-section h3 {
+  margin: 0 0 20px 0;
+  color: #2c3e50;
+  font-size: 1.4rem;
+}
+
+.overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.metric-card {
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  border-left: 4px solid #007bff;
+  background: #f8f9fa;
+  transition: transform 0.3s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+}
+
+.metric-card.success {
+  border-left-color: #28a745;
+  background: #d4edda;
+}
+
+.metric-card.warning {
+  border-left-color: #ffc107;
+  background: #fff3cd;
+}
+
+.metric-card.danger {
+  border-left-color: #dc3545;
+  background: #f8d7da;
+}
+
+.metric-card.risk {
+  border-left-color: #dc3545;
+  background: #f8d7da;
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #2c3e50;
+  margin-bottom: 5px;
+}
+
+.metric-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Reports Section */
+.reports-section {
+  padding: 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.reports-section h3 {
+  margin: 0 0 20px 0;
+  color: #2c3e50;
+  font-size: 1.4rem;
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.ad-group-card {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 20px;
+  background: white;
+  transition: all 0.3s ease;
+}
+
+.ad-group-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.ad-group-card.low-risk {
+  border-left: 4px solid #28a745;
+}
+
+.ad-group-card.medium-risk {
+  border-left: 4px solid #ffc107;
+}
+
+.ad-group-card.high-risk {
+  border-left: 4px solid #dc3545;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.card-header h4 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.1rem;
+}
+
+.risk-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.risk-badge.low-risk {
+  background: #d4edda;
+  color: #155724;
+}
+
+.risk-badge.medium-risk {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.risk-badge.high-risk {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.card-metrics {
+  margin-bottom: 15px;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f8f9fa;
+}
+
+.metric-name {
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.metric-value {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.metric-value.success {
+  color: #28a745;
+}
+
+.metric-value.warning {
+  color: #ffc107;
+}
+
+.metric-value.danger {
+  color: #dc3545;
+}
+
+.safety-warnings {
+  margin-bottom: 15px;
+  padding: 10px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+}
+
+.safety-warnings h5 {
+  margin: 0 0 10px 0;
+  color: #856404;
+  font-size: 0.9rem;
+}
+
+.safety-warnings ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.safety-warnings li {
+  font-size: 0.85rem;
+  color: #856404;
+  margin-bottom: 5px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.btn-info {
+  background: #17a2b8;
+  color: white;
+}
+
+.btn-info:hover {
+  background: #138496;
+}
+
+.btn-warning {
+  background: #ffc107;
+  color: #212529;
+}
+
+.btn-warning:hover {
+  background: #e0a800;
+}
+
+.card-footer {
+  padding-top: 10px;
+  border-top: 1px solid #e9ecef;
+  text-align: right;
+}
+
+.card-footer small {
+  color: #6c757d;
+  font-size: 0.8rem;
+}
+
+/* Loading & Error States */
+.loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 20px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.error-message {
+  color: #dc3545;
+  margin-bottom: 20px;
+  font-size: 1.1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .quality-control-dashboard {
+    padding: 10px;
+  }
+  
+  .dashboard-header {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+  
+  .overview-cards {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+  }
+  
+  .reports-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+  
+  .metric-row {
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+  }
+  
+  .card-actions {
+    justify-content: center;
+  }
+}

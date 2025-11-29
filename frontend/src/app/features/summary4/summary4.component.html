@@ -2,33 +2,41 @@
   <div class="header">
     <h1>📊 Báo Cáo Tổng Hợp 4</h1>
     <div class="header-actions">
-      <button class="btn btn-secondary" (click)="toggleFilters()">
-        {{ showFilters() ? '🔼 Ẩn Bộ Lọc' : '🔽 Hiện Bộ Lọc' }}
-      </button>
-      <button class="btn btn-primary" (click)="syncData()" [disabled]="loading()">
-        {{ loading() ? 'Đang đồng bộ...' : '🔄 Đồng bộ dữ liệu' }}
-      </button>
-      <button class="btn btn-warning" (click)="exportUnpaidToExcel()" [disabled]="loading()">
-        {{ loading() ? 'Đang xuất...' : '📋 Chưa Thanh Toán' }}
-      </button>
-      <button class="btn btn-info" (click)="exportManualPaymentTemplate()" [disabled]="loading()">
-        {{ loading() ? 'Đang xuất...' : '📄 Tải Template' }}
-      </button>
-      <div class="manual-payment-upload">
-        <input type="file" 
-               id="manual-payment-file" 
-               accept=".xlsx,.xls" 
-               (change)="onFileSelected($event)"
-               style="display: none;">
-        <button class="btn btn-success" (click)="triggerFileInput()" [disabled]="loading()">
-          {{ loading() ? 'Đang xử lý...' : '📤 Thanh Toán Tay' }}
+      <!-- Hide filters and exports if disabled -->
+      <ng-container *ngIf="!disabled(); else disabledNotice">
+        <button class="btn btn-secondary" (click)="toggleFilters()">
+          {{ showFilters() ? '🔼 Ẩn Bộ Lọc' : '🔽 Hiện Bộ Lọc' }}
         </button>
-      </div>
+        <button class="btn btn-primary" (click)="syncData()" [disabled]="loading()">
+          {{ loading() ? 'Đang đồng bộ...' : '🔄 Đồng bộ dữ liệu' }}
+        </button>
+        <button class="btn btn-warning" (click)="exportUnpaidToExcel()" [disabled]="loading()">
+          {{ loading() ? 'Đang xuất...' : '� Xuất Excel (lọc hiện tại)' }}
+        </button>
+        <button class="btn btn-info" (click)="exportManualPaymentTemplate()" [disabled]="loading()">
+          {{ loading() ? 'Đang xuất...' : '📄 Tải Template' }}
+        </button>
+        <div class="manual-payment-upload">
+          <input type="file" 
+                 id="manual-payment-file" 
+                 accept=".xlsx,.xls" 
+                 (change)="onFileSelected($event)"
+                 style="display: none;">
+          <button class="btn btn-success" (click)="triggerFileInput()" [disabled]="loading()">
+            {{ loading() ? 'Đang xử lý...' : '📤 Thanh Toán Tay' }}
+          </button>
+        </div>
+      </ng-container>
+      <ng-template #disabledNotice>
+        <div class="alert alert-info" role="status">
+          {{ disabledMessage() || 'Chức năng danh sách Summary4 đang tạm thời tắt. Bạn vẫn có thể xem thống kê ở trên.' }}
+        </div>
+      </ng-template>
     </div>
   </div>
 
   <!-- Filter Panel -->
-  <div class="filter-panel" *ngIf="showFilters()">
+  <div class="filter-panel" *ngIf="showFilters() && !disabled()">
     <div class="filter-grid">
       <!-- Agent Filter -->
       <div class="filter-group">
@@ -143,7 +151,7 @@
   </div>
 
   <!-- Data Table -->
-  <div class="table-wrapper" *ngIf="!loading()">
+  <div class="table-wrapper" *ngIf="!loading() && !disabled()">
   <table class="data-table">
       <thead>
         <tr>
@@ -217,7 +225,7 @@
   </div>
 
   <!-- Pagination (Summary1-like) -->
-  <div class="pagination-wrapper" *ngIf="!loading() && totalRecords() > 0">
+  <div class="pagination-wrapper" *ngIf="!loading() && !disabled() && totalRecords() > 0">
     <div class="pagination-info">
       Hiển thị {{ displayFrom() }} - {{ displayTo() }} trong tổng số {{ totalRecords() }} kết quả
     </div>

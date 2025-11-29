@@ -1,53 +1,12 @@
 /**
  * File: ad-group/schemas/ad-group.schema.ts
- * Mục đích: Định nghĩa schema Mongoose cho Nhóm Quảng Cáo với tích hợp chatbot
- * Chức năng: Quản lý nhóm quảng cáo, sản phẩm, script chat và cấu hình AI
+ * Mục đích: Định nghĩa schema Mongoose cho Nhóm Quảng Cáo (tối giản, không AI/khuyến mại)
+ * Chức năng: Quản lý nhóm quảng cáo, sản phẩm và auto-control
  */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
 export type AdGroupDocument = AdGroup & Document;
-
-// Schema cho script chat
-@Schema({ _id: false })
-export class ChatScript {
-  @Prop({ trim: true })
-  greeting?: string; // Script chào hỏi
-
-  @Prop({ trim: true })
-  upsellHint?: string; // Gợi ý bán thêm
-
-  @Prop({ trim: true })
-  closing?: string; // Script kết thúc
-
-  @Prop({ trim: true })
-  attributes?: string; // Thuộc tính sản phẩm (nội trước, phẫy)
-}
-
-// Schema cho chương trình discount
-@Schema({ _id: false })
-export class DiscountProgram {
-  @Prop({ trim: true })
-  name?: string; // Tên chương trình
-
-  @Prop({ type: Number, min: 0, max: 100 })
-  percentage?: number; // Phần trăm giảm giá
-
-  @Prop({ type: Number, min: 0 })
-  fixedAmount?: number; // Số tiền giảm cố định
-
-  @Prop({ trim: true })
-  conditions?: string; // Điều kiện áp dụng
-
-  @Prop({ type: Date })
-  startDate?: Date; // Ngày bắt đầu
-
-  @Prop({ type: Date })
-  endDate?: Date; // Ngày kết thúc
-
-  @Prop({ default: true })
-  isActive?: boolean; // Trạng thái hoạt động
-}
 
 @Schema({ timestamps: true })
 export class AdGroup {
@@ -67,9 +26,6 @@ export class AdGroup {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Product' }], default: [] })
   selectedProducts: Types.ObjectId[]; // Danh sách sản phẩm được chọn
 
-  @Prop({ type: Types.ObjectId, ref: 'OpenAIConfig', index: true })
-  openAIConfigId?: Types.ObjectId; // Cấu hình OpenAI
-
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   agentId: Types.ObjectId; // Tham chiếu đại lý (user role: agent)
 
@@ -79,12 +35,6 @@ export class AdGroup {
   // Thông tin mô tả và nội dung
   @Prop({ trim: true })
   description?: string; // Mô tả nhóm quảng cáo
-
-  @Prop({ type: ChatScript })
-  chatScript?: ChatScript; // Các script chat
-
-  @Prop({ type: DiscountProgram })
-  discount?: DiscountProgram; // Chương trình giảm giá
 
   // Thông tin quảng cáo
   @Prop({ required: true, enum: ['facebook', 'google', 'ticktock'], index: true })
@@ -100,8 +50,24 @@ export class AdGroup {
   @Prop({ default: false })
   enableWebhook?: boolean; // Bật webhook cho nhóm này
 
+  // Tự động kiểm soát chi tiêu/hiệu quả
   @Prop({ default: false })
-  enableAIChat?: boolean; // Bật AI chat tự động
+  autoControlEnabled?: boolean; // Bật theo dõi tự động và tạm dừng nếu vượt ngưỡng
+
+  @Prop({ type: Number, min: 0 })
+  spendThresholdDaily?: number; // Ngưỡng chi tiêu/ngày (VND). Vượt sẽ tạm dừng
+
+  @Prop({ type: Number, min: 0 })
+  cprThresholdDaily?: number; // Ngưỡng chi phí trên mỗi hội thoại/ngày (VND)
+
+  @Prop({ type: Number, min: 0, default: 3 })
+  minConversations?: number; // Số hội thoại tối thiểu để tính CPR (tránh pause vì mẫu quá nhỏ)
+
+  @Prop({ type: Date })
+  lastAutoControlAt?: Date; // Lần cuối hệ thống tự động can thiệp
+
+  @Prop({ trim: true })
+  autoPausedReason?: string; // Lý do tự dừng gần nhất
 }
 
 export const AdGroupSchema = SchemaFactory.createForClass(AdGroup);
@@ -109,6 +75,5 @@ export const AdGroupSchema = SchemaFactory.createForClass(AdGroup);
 // Indexes phục vụ truy vấn phổ biến và chatbot
 AdGroupSchema.index({ createdAt: -1 });
 AdGroupSchema.index({ fanpageId: 1, isActive: 1 });
-AdGroupSchema.index({ productCategoryId: 1 });
-AdGroupSchema.index({ enableWebhook: 1, enableAIChat: 1 });
+AdGroupSchema.index({ enableWebhook: 1 });
 AdGroupSchema.index({ adGroupId: 1, fanpageId: 1 }); // Composite index cho webhook lookup

@@ -155,12 +155,11 @@ export class AdGroupController {
   @Patch(':id/webhook-status')
   async updateWebhookStatus(
     @Param('id') id: string,
-    @Body() body: { enableWebhook: boolean; enableAIChat?: boolean }
+    @Body() body: { enableWebhook: boolean }
   ) {
     try {
       const updated = await this.adGroupService.update(id, {
-        enableWebhook: body.enableWebhook,
-        ...(body.enableAIChat !== undefined && { enableAIChat: body.enableAIChat })
+        enableWebhook: body.enableWebhook
       });
 
       return {

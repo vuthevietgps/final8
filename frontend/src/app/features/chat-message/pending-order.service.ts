@@ -16,6 +16,8 @@ export interface PendingOrder {
   quantity?: number;
   status?: 'draft'|'awaiting'|'approved'|'rejected';
   notes?: string;
+  // Ngày đặt hàng (ISO string yyyy-MM-dd hoặc ISO)
+  orderDate?: string;
 }
 
 export interface AgentOption {

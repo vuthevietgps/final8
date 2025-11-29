@@ -200,4 +200,73 @@ export class FanpageService {
     if (!token || token.length < 8) return '****';
     return '*'.repeat(token.length - 4) + token.slice(-4);
   }
+
+  /**
+   * Validate access token của fanpage với Facebook Graph API
+   */
+  async validateAccessToken(id: string): Promise<{ valid: boolean; error?: string; pageInfo?: any }> {
+    const fanpage = await this.model.findById(id).lean();
+    if (!fanpage) throw new NotFoundException('Fanpage không tồn tại');
+
+    try {
+      const response = await fetch(`https://graph.facebook.com/v19.0/me?access_token=${encodeURIComponent(fanpage.accessToken)}`);
+      const result = await response.json();
+
+      if (result.error) {
+        return {
+          valid: false,
+          error: `${result.error.message} (Code: ${result.error.code})`
+        };
+      }
+
+      return {
+        valid: true,
+        pageInfo: {
+          id: result.id,
+          name: result.name,
+          category: result.category
+        }
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Refresh/cập nhật access token cho fanpage
+   */
+  async refreshAccessToken(id: string, newAccessToken: string): Promise<{ success: boolean; message: string }> {
+    if (!newAccessToken?.trim()) {
+      throw new BadRequestException('Access token không được để trống');
+    }
+
+    // Validate token mới trước khi lưu
+    try {
+      const response = await fetch(`https://graph.facebook.com/v19.0/me?access_token=${encodeURIComponent(newAccessToken)}`);
+      const result = await response.json();
+
+      if (result.error) {
+        throw new BadRequestException(`Token không hợp lệ: ${result.error.message}`);
+      }
+
+      // Cập nhật token mới
+      await this.model.findByIdAndUpdate(id, {
+        accessToken: newAccessToken,
+        lastRefreshAt: new Date()
+      });
+
+      return {
+        success: true,
+        message: `Access token đã được cập nhật thành công cho page: ${result.name}`
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(`Lỗi khi validate token: ${error.message}`);
+    }
+  }
 }

@@ -67,9 +67,14 @@ export class AuthService {
       throw new UnauthorizedException('Tài khoản đã bị vô hiệu hóa');
     }
 
-    // Giới hạn IP đăng nhập cho Manager/Employee
-    const restrictedRoles = ['manager', 'employee'];
-    if (restrictedRoles.includes(user.role)) {
+    // Tùy chọn: Bật kiểm tra IP qua biến môi trường AUTH_ENABLE_IP_RESTRICTION
+    // Mặc định: TẮT (không hạn chế IP cho bất kỳ vai trò nào)
+    const ipRestrictionEnabled = String(process.env.AUTH_ENABLE_IP_RESTRICTION || '').toLowerCase() === 'true';
+    // Giữ logic cũ nhưng chỉ chạy khi được bật rõ ràng qua ENV
+    if (ipRestrictionEnabled) {
+      // Giới hạn IP đăng nhập cho Manager/Employee
+      const restrictedRoles = ['manager', 'employee'];
+      if (restrictedRoles.includes(user.role)) {
       const allowed = Array.isArray(user.allowedLoginIps) ? user.allowedLoginIps : [];
       if (!allowed.length) {
         this.logger.warn(`IP restriction: user ${user.email} (${user.role}) has no allowedLoginIps configured`);
@@ -99,6 +104,7 @@ export class AuthService {
       // Tìm IP được phép đầu tiên để log
       const allowedIp = normalizedIps.find(ip => allowedNormalized.includes(ip));
       this.logger.log(`IP restriction: allowed login for ${user.email} from IP ${allowedIp}`);
+      }
     }
     
     const payload = { 
@@ -160,7 +166,7 @@ export class AuthService {
       'director': [
   'users', 'orders', 'products', 'product-categories',
         'delivery-status', 'production-status', 'order-status',
-  'ad-accounts', 'ad-groups', 'advertising-costs',
+  'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
   'labor-costs', 'other-costs', 'salary-config',
   // Newly explicit permissions
   'customers', 'purchase-costs',
@@ -168,15 +174,17 @@ export class AuthService {
       ],
       'manager': [
         'orders', // Đơn hàng
-        'ad-accounts', 'ad-groups', 'advertising-costs' // Quảng cáo
+        'pending-orders',
+        'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Quảng cáo + Media
+        'fanpages', 'openai-configs', 'api-tokens', 'chat-messages'
       ],
       'employee': [
-        'orders'
+        'orders', 'api-tokens'
       ],
-      'internal_agent': ['orders', 'delivery-status', 'products'],
-      'external_agent': ['orders', 'delivery-status'],
-      'internal_supplier': ['products', 'quotes'],
-      'external_supplier': ['quotes'],
+      'internal_agent': ['orders', 'pending-orders', 'delivery-status', 'products', 'api-tokens'],
+      'external_agent': ['orders', 'pending-orders', 'delivery-status', 'api-tokens'],
+      'internal_supplier': ['products', 'quotes', 'api-tokens'],
+      'external_supplier': ['quotes', 'api-tokens'],
     };
 
     const userPermissions = rolePermissions[userRole] || [];

@@ -1,14 +1,24 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthGuard } from '@nestjs/passport';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor() {
-    super();
+  constructor(private reflector: Reflector) { super(); }
+
+  canActivate(context: ExecutionContext) {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) {
+      return true;
+    }
+    return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
+  handleRequest(err: any, user: any) {
     if (err || !user) {
       throw err || new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
     }
@@ -44,14 +54,14 @@ export class RolesGuard implements CanActivate {
       'director': [
         'users','orders','pending-orders','products','product-categories',
         'delivery-status','production-status','order-status',
-        'ad-accounts','ad-groups','advertising-costs','api-tokens',
+        'ad-accounts','ad-groups','advertising-costs','media','api-tokens',
         'labor-costs','other-costs','salary-config',
         'customers','purchase-costs','fanpages','openai-configs',
         'quotes','reports','export','import','settings'
       ],
       'manager': [
         'orders','pending-orders',
-        'ad-accounts','ad-groups','advertising-costs','fanpages','openai-configs','api-tokens'
+        'ad-accounts','ad-groups','advertising-costs','media','fanpages','openai-configs','api-tokens'
       ],
       'employee': [
         'orders','pending-orders','api-tokens'

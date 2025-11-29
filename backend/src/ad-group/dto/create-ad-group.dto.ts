@@ -1,69 +1,8 @@
 /**
  * File: ad-group/dto/create-ad-group.dto.ts
- * Mục đích: DTO cho tạo mới Nhóm Quảng Cáo với tích hợp chatbot
- * Chức năng: Validation cho tạo ad group với fanpage, products, scripts và AI config
+ * Mục đích: DTO tạo mới Nhóm Quảng Cáo (tối giản, không AI/khuyến mại)
  */
-import { IsBoolean, IsEnum, IsMongoId, IsOptional, IsString, Length, IsArray, IsNumber, Min, Max, IsDateString, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
-
-// DTO cho script chat
-export class ChatScriptDto {
-  @IsOptional()
-  @IsString()
-  @Length(0, 1000)
-  greeting?: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(0, 1000)
-  upsellHint?: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(0, 1000)
-  closing?: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(0, 2000)
-  attributes?: string;
-}
-
-// DTO cho chương trình discount
-export class DiscountProgramDto {
-  @IsOptional()
-  @IsString()
-  @Length(0, 200)
-  name?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  percentage?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  fixedAmount?: number;
-
-  @IsOptional()
-  @IsString()
-  @Length(0, 500)
-  conditions?: string;
-
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-}
+import { IsBoolean, IsEnum, IsMongoId, IsOptional, IsString, Length, IsArray, IsNumber, Min } from 'class-validator';
 
 export class CreateAdGroupDto {
   @IsString()
@@ -86,10 +25,6 @@ export class CreateAdGroupDto {
   @IsMongoId({ each: true })
   selectedProducts?: string[];
 
-  @IsOptional()
-  @IsMongoId()
-  openAIConfigId?: string;
-
   @IsMongoId()
   agentId: string;
 
@@ -101,16 +36,6 @@ export class CreateAdGroupDto {
   @IsString()
   @Length(0, 2000)
   description?: string;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ChatScriptDto)
-  chatScript?: ChatScriptDto;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => DiscountProgramDto)
-  discount?: DiscountProgramDto;
 
   // Cấu hình quảng cáo
   @IsEnum(['facebook', 'google', 'ticktock'])
@@ -125,12 +50,21 @@ export class CreateAdGroupDto {
   @Length(0, 1000)
   notes?: string;
 
-  // Cấu hình webhook và AI
+  // Cấu hình webhook
   @IsOptional()
   @IsBoolean()
   enableWebhook?: boolean;
 
-  @IsOptional()
-  @IsBoolean()
-  enableAIChat?: boolean;
+  // Auto control (tự dừng theo ngưỡng)
+  @IsOptional() @IsBoolean()
+  autoControlEnabled?: boolean;
+
+  @IsOptional() @IsNumber() @Min(0)
+  spendThresholdDaily?: number; // VND
+
+  @IsOptional() @IsNumber() @Min(0)
+  cprThresholdDaily?: number; // VND / conversation
+
+  @IsOptional() @IsNumber() @Min(0)
+  minConversations?: number;
 }

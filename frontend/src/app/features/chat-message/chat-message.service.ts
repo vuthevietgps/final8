@@ -76,4 +76,38 @@ export class ChatMessageService {
   sendMessage(fanpageId: string, senderPsid: string, text: string){
     return this.http.post<{message: string; fb: any; saved: ChatMessage}>(`${this.baseUrl}/send`, { fanpageId, senderPsid, text });
   }
+
+  // Gửi ảnh trong hội thoại
+  sendImage(fanpageId: string, senderPsid: string, file: File, alt?: string){
+    const form = new FormData();
+    form.append('file', file);
+    if(alt) form.append('alt', alt);
+    return this.http.post<{ message: string; media: any; saved: ChatMessage }>(`${this.baseUrl}/send/image/${fanpageId}/${senderPsid}`, form);
+  }
+
+  // Gửi ảnh bằng URL có sẵn trên server media
+  sendImageByUrl(fanpageId: string, senderPsid: string, imageUrl: string){
+    return this.http.post<{ message: string; saved: ChatMessage }>(`${this.baseUrl}/send/image/url`, { fanpageId, senderPsid, imageUrl });
+  }
+
+  // --- Realtime (SSE) notifications for new messages ---
+  connectEvents(onEvent: (e: { type: string; fanpageId: string; senderPsid: string; direction: string; snippet?: string; createdAt?: string; }) => void): EventSource | null {
+    try {
+      const token = localStorage.getItem('access_token');
+      const url = new URL(`${this.baseUrl}/events`);
+      // For EventSource, add token as query param (Auth interceptor doesn't apply)
+      if (token) url.searchParams.set('access_token', token);
+      const es = new EventSource(url.toString());
+      es.onmessage = (ev) => {
+        try { const data = JSON.parse(ev.data); onEvent(data); } catch {}
+      };
+      es.onerror = () => {
+        // auto-close on error; caller may retry later
+        es.close();
+      };
+      return es;
+    } catch {
+      return null;
+    }
+  }
 }

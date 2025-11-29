@@ -27,4 +27,29 @@ export class CreateAdvertisingCostDto {
   @IsOptional()
   @IsNumber()
   cpc?: number;
+
+  // === NEW MESSAGING METRICS ===
+  @IsOptional()
+  @IsNumber()
+  impressions?: number;
+
+  @IsOptional()
+  @IsNumber()
+  clicks?: number;
+
+  @IsOptional()
+  @IsNumber()
+  reach?: number;
+
+  @IsOptional()
+  @IsNumber()
+  messagingConversationStarted7d?: number;
+
+  @IsOptional()
+  @IsNumber()
+  costPerMessagingConversation?: number;
+
+  @IsOptional()
+  @IsNumber()
+  messagingFirstReply?: number;
 }

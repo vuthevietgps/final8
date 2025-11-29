@@ -1,6 +1,6 @@
 /**
  * File: features/ad-group/ad-group.component.ts
- * Mục đích: Giao diện quản lý Nhóm Quảng Cáo với tích hợp chatbot - Modern Modal UI
+ * Mục đích: Giao diện quản lý Nhóm Quảng Cáo (tối giản, bỏ AI/khuyến mại) - Modern Modal UI
  */
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -8,6 +8,8 @@ import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } fr
 import { AdGroupService } from './ad-group.service';
 import { AdGroup, CreateAdGroup, AdPlatform } from './models/ad-group.model';
 import { ProductService } from '../product/product.service';
+import { FanpageService } from '../fanpage/fanpage.service';
+import { ProductCategoryService } from '../product-category/product-category.service';
 import { UserService } from '../user/user.service';
 import { AdAccountService } from '../ad-account/ad-account.service';
 import { Product } from '../product/models/product.interface';
@@ -31,13 +33,6 @@ interface ProductCategory {
   icon?: string;
 }
 
-interface OpenAIConfig {
-  _id: string;
-  name: string;
-  model: string;
-  apiKey?: string;
-  isActive: boolean;
-}
 
 @Component({
   selector: 'app-ad-group',
@@ -51,6 +46,8 @@ export class AdGroupComponent implements OnInit {
   private productService = inject(ProductService);
   private userService = inject(UserService);
   private adAccountService = inject(AdAccountService);
+  private fanpageService = inject(FanpageService);
+  private productCategoryService = inject(ProductCategoryService);
   private fb = inject(FormBuilder);
 
   // Data signals
@@ -60,7 +57,6 @@ export class AdGroupComponent implements OnInit {
   adAccounts = signal<AdAccount[]>([]);
   fanpages = signal<Fanpage[]>([]);
   productCategories = signal<ProductCategory[]>([]);
-  openAIConfigs = signal<OpenAIConfig[]>([]);
   availableProducts = signal<Product[]>([]);
 
   // UI state signals
@@ -88,21 +84,15 @@ export class AdGroupComponent implements OnInit {
       adGroupId: ['', Validators.required],
       fanpageId: ['', Validators.required],
       productCategoryId: ['', Validators.required],
+      agentId: ['', Validators.required],
+      adAccountId: ['', Validators.required],
+      platform: ['facebook', Validators.required],
       selectedProducts: [[]],
-      openAIConfigId: [''],
-      chatScript: this.fb.group({
-        greeting: [''],
-        upsell: [''],
-        closing: [''],
-        attributes: [[]]
-      }),
-      discountProgram: this.fb.group({
-        discountType: [''],
-        discountValue: [0],
-        conditions: ['']
-      }),
       enableWebhook: [false],
-      enableAIChat: [false],
+      autoControlEnabled: [false],
+      spendThresholdDaily: [0],
+      cprThresholdDaily: [0],
+      minConversations: [3],
       isActive: [true],
       notes: ['']
     });
@@ -117,7 +107,8 @@ export class AdGroupComponent implements OnInit {
       this.loadAdGroups(),
       this.loadFanpages(),
       this.loadProductCategories(),
-      this.loadOpenAIConfigs()
+      this.loadAgents(),
+      this.loadAdAccounts(),
     ]).then(() => {
       this.isLoading.set(false);
     }).catch((error) => {
@@ -139,31 +130,42 @@ export class AdGroupComponent implements OnInit {
   }
 
   private async loadFanpages(): Promise<void> {
-    // Mock fanpages for now - replace with actual service call
-    this.fanpages.set([
-      { _id: '1', name: 'Fanpage Demo 1', pageId: 'page_123', isActive: true },
-      { _id: '2', name: 'Fanpage Demo 2', pageId: 'page_456', isActive: true }
-    ]);
-    return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      this.fanpageService.list().subscribe({
+        next: (pages) => { this.fanpages.set(pages as any); resolve(); },
+        error: reject
+      });
+    });
   }
 
   private async loadProductCategories(): Promise<void> {
-    // Mock categories for now - replace with actual service call
-    this.productCategories.set([
-      { _id: '1', name: 'Điện tử', description: 'Thiết bị điện tử', color: '#007bff', icon: '📱' },
-      { _id: '2', name: 'Thời trang', description: 'Quần áo, phụ kiện', color: '#28a745', icon: '👕' }
-    ]);
-    return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      this.productCategoryService.getAll().subscribe({
+        next: (cats) => { this.productCategories.set(cats as any); resolve(); },
+        error: reject
+      });
+    });
   }
 
-  private async loadOpenAIConfigs(): Promise<void> {
-    // Mock AI configs for now - replace with actual service call
-    this.openAIConfigs.set([
-      { _id: '1', name: 'GPT-4 Standard', model: 'gpt-4', isActive: true },
-      { _id: '2', name: 'GPT-3.5 Turbo', model: 'gpt-3.5-turbo', isActive: true }
-    ]);
-    return Promise.resolve();
+  private async loadAgents(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.userService.getAgents().subscribe({
+        next: (agents) => { this.users.set(agents as any); resolve(); },
+        error: reject
+      });
+    });
   }
+
+  private async loadAdAccounts(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.adAccountService.getAdAccounts({ isActive: true }).subscribe({
+        next: (accs) => { this.adAccounts.set(accs as any); resolve(); },
+        error: reject
+      });
+    });
+  }
+
+  // removed AI config loader
 
   // Modal methods
   openModal(): void {
@@ -173,7 +175,6 @@ export class AdGroupComponent implements OnInit {
     this.adGroupForm.patchValue({
       isActive: true,
       enableWebhook: false,
-      enableAIChat: false,
       selectedProducts: []
     });
     this.showModal.set(true);
@@ -188,21 +189,15 @@ export class AdGroupComponent implements OnInit {
       adGroupId: group.adGroupId,
       fanpageId: group.fanpageId || '',
       productCategoryId: group.productCategoryId || '',
+      agentId: (group as any).agentId || '',
+      adAccountId: (group as any).adAccountId || '',
+      platform: (group as any).platform || 'facebook',
       selectedProducts: group.selectedProducts || [],
-      openAIConfigId: group.openAIConfigId || '',
-      chatScript: group.chatScript || {
-        greeting: '',
-        upsell: '',
-        closing: '',
-        attributes: []
-      },
-      discountProgram: group.discountProgram || {
-        discountType: '',
-        discountValue: 0,
-        conditions: ''
-      },
       enableWebhook: group.enableWebhook || false,
-      enableAIChat: group.enableAIChat || false,
+      autoControlEnabled: group.autoControlEnabled || false,
+      spendThresholdDaily: group.spendThresholdDaily || 0,
+      cprThresholdDaily: group.cprThresholdDaily || 0,
+      minConversations: group.minConversations || 3,
       isActive: group.isActive,
       notes: group.notes || ''
     });
@@ -243,7 +238,8 @@ export class AdGroupComponent implements OnInit {
             this.isSaving.set(false);
           },
           error: (error) => {
-            this.error.set('Lỗi cập nhật: ' + error.message);
+            const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật';
+            this.error.set('Lỗi cập nhật: ' + msg);
             this.isSaving.set(false);
           }
         });
@@ -255,7 +251,8 @@ export class AdGroupComponent implements OnInit {
             this.isSaving.set(false);
           },
           error: (error) => {
-            this.error.set('Lỗi tạo mới: ' + error.message);
+            const msg = (error && (error.error?.message || error.message)) || 'Lỗi tạo mới';
+            this.error.set('Lỗi tạo mới: ' + msg);
             this.isSaving.set(false);
           }
         });
@@ -289,22 +286,16 @@ export class AdGroupComponent implements OnInit {
   }
 
   private loadProductsByCategory(categoryId: string): void {
-    // Use simplified product interface for the available products
-    const mockProducts = [
-      { 
-        _id: '1', 
-        name: 'iPhone 15 Pro', 
-        price: 29000000, 
-        description: 'Điện thoại thông minh'
+    this.productService.getByCategory(categoryId).subscribe({
+      next: (products) => {
+        this.availableProducts.set(products as any);
       },
-      { 
-        _id: '2', 
-        name: 'Samsung Galaxy S24', 
-        price: 25000000, 
-        description: 'Điện thoại Android'
+      error: (error) => {
+        const msg = (error && (error.error?.message || error.message)) || 'Lỗi tải sản phẩm theo danh mục';
+        this.error.set(msg);
+        this.availableProducts.set([]);
       }
-    ];
-    this.availableProducts.set(mockProducts as any);
+    });
   }
 
   // Product selection methods
@@ -356,9 +347,7 @@ export class AdGroupComponent implements OnInit {
     return this.adGroups().filter(g => g.isActive).length;
   }
 
-  getChatbotEnabledCount(): number {
-    return this.adGroups().filter(g => g.enableAIChat).length;
-  }
+  // removed chatbot count (no AI)
 
   getWebhookEnabledCount(): number {
     return this.adGroups().filter(g => g.enableWebhook).length;
@@ -373,7 +362,8 @@ export class AdGroupComponent implements OnInit {
         );
       },
       error: (error) => {
-        this.error.set('Lỗi cập nhật trạng thái: ' + error.message);
+        const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật trạng thái';
+        this.error.set('Lỗi cập nhật trạng thái: ' + msg);
       }
     });
   }
@@ -387,7 +377,8 @@ export class AdGroupComponent implements OnInit {
         );
       },
       error: (error) => {
-        this.error.set('Lỗi cập nhật webhook: ' + error.message);
+        const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật webhook';
+        this.error.set('Lỗi cập nhật webhook: ' + msg);
         checkbox.checked = !checkbox.checked; // Revert checkbox
       }
     });
@@ -399,7 +390,10 @@ export class AdGroupComponent implements OnInit {
     if (query) {
       this.adGroupService.search({ q: query }).subscribe({
         next: (results) => this.adGroups.set(results),
-        error: (error) => this.error.set('Lỗi tìm kiếm: ' + error.message)
+        error: (error) => {
+          const msg = (error && (error.error?.message || error.message)) || 'Lỗi tìm kiếm';
+          this.error.set('Lỗi tìm kiếm: ' + msg);
+        }
       });
     } else {
       this.loadAdGroups();
@@ -414,5 +408,12 @@ export class AdGroupComponent implements OnInit {
   setSort(field: string): void {
     // Implement sorting if needed
     console.log('Sort by:', field);
+  }
+
+  // Helper to show last auto-paused reason for current editing item
+  getEditingAutoPausedReason(): string | null {
+    if (!this.editingId) return null;
+    const g = this.adGroups().find(x => x._id === this.editingId);
+    return g?.autoPausedReason || null;
   }
 }

@@ -31,6 +31,11 @@ export class MediaManagerComponent {
   // selection
   selected = signal<Record<string, boolean>>({});
   anySelected = computed(() => Object.values(this.selected()).some(v => v));
+  allOnPageSelected = computed(() => {
+    const sel = this.selected();
+    const ids = this.items().map(i => i._id);
+    return ids.length > 0 && ids.every(id => sel[id]);
+  });
 
   // Upload/import state
   file?: File;
@@ -87,6 +92,28 @@ export class MediaManagerComponent {
   remove(id: string) {
     if (!confirm('Xóa ảnh này?')) return;
     this.media.delete(id).subscribe(() => this.load());
+  }
+
+  toggleSelectAll(checked: boolean) {
+    const map: Record<string, boolean> = { ...this.selected() };
+    this.items().forEach(i => map[i._id] = checked);
+    this.selected.set(map);
+  }
+
+  bulkDelete() {
+    const ids = this.items().filter(i => this.selected()[i._id]).map(i => i._id);
+    if (ids.length === 0) { alert('Hãy chọn ít nhất 1 ảnh để xóa.'); return; }
+    if (!confirm(`Xóa ${ids.length} ảnh đã chọn?`)) return;
+    this.media.bulkDelete(ids).subscribe({
+      next: (res) => {
+        const r = res.data;
+        alert(`Đã xóa: ${r.deleted}\nLỗi: ${r.failed}${r.errors.length? `\nChi tiết: ${r.errors.join('\n')}`:''}`);
+        this.load();
+      },
+      error: (err) => {
+        alert('Lỗi xóa hàng loạt: ' + (err?.error?.message || err.message));
+      }
+    })
   }
 
   attachVisibleToVariation() {

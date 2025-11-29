@@ -18,6 +18,32 @@ export const routes: Routes = [
     canActivate: [GuestGuard]
   },
   {
+    path: 'purchases',
+    canActivate: [AuthGuard],
+    data: { permissions: ['purchase-costs'] },
+    children: [
+      { path: '', loadComponent: () => import('./features/purchase/purchase-list.component').then(m => m.PurchaseListComponent) },
+      { path: 'new', loadComponent: () => import('./features/purchase/purchase-form.component').then(m => m.PurchaseFormComponent) },
+      { path: ':id', loadComponent: () => import('./features/purchase/purchase-form.component').then(m => m.PurchaseFormComponent) },
+      { path: ':id/receive', loadComponent: () => import('./features/purchase/purchase-receive.component').then(m => m.PurchaseReceiveComponent) }
+    ]
+  },
+  {
+    path: 'inventory',
+    canActivate: [AuthGuard],
+    data: { permissions: ['purchase-costs'] }, // assumption: same permission group as purchases
+    children: [
+      { path: '', loadComponent: () => import('./features/inventory/inventory-list.component').then(m => m.InventoryListComponent) },
+      { path: ':productId', loadComponent: () => import('./features/inventory/inventory-detail.component').then(m => m.InventoryDetailComponent) }
+    ]
+  },
+  {
+    path: 'suppliers',
+    loadComponent: () => import('./features/supplier/supplier.component').then(m => m.SupplierComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['users'] }
+  },
+  {
     path: 'fanpages',
     loadComponent: () => import('./features/fanpage/fanpage.component').then(m => m.FanpageComponent),
     canActivate: [AuthGuard],
@@ -81,6 +107,7 @@ export const routes: Routes = [
     data: { permissions: ['orders'] },
     children: [
       { path: 'test2', loadComponent: () => import('./features/test-order2/test-order2.component').then(m => m.TestOrder2Component) },
+      { path: 'update', loadComponent: () => import('./features/order-update/order-update.component').then(m => m.OrderUpdateComponent) },
       { path: '', loadComponent: () => import('./features/order-status/order-status.component').then(m => m.OrderStatusComponent) }
     ]
   },
@@ -106,13 +133,13 @@ export const routes: Routes = [
     path: 'media',
     loadComponent: () => import('./features/media/media-manager.component').then(m => m.MediaManagerComponent),
     canActivate: [AuthGuard],
-    data: { permissions: ['products'] }
+    data: { permissions: ['media'] }
   },
   {
     path: 'media-report',
     loadComponent: () => Promise.resolve(MediaReportComponent),
     canActivate: [AuthGuard],
-    data: { permissions: ['products'] }
+    data: { permissions: ['media'] }
   },
   {
     path: 'customer',
@@ -156,17 +183,14 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     data: { permissions: ['advertising-costs'] }
   },
-  {
-    path: 'facebook-tokens',
-    loadComponent: () => import('./features/facebook-token/facebook-token.component').then(m => m.FacebookTokenComponent),
-    canActivate: [AuthGuard],
-    data: { permissions: ['advertising-costs'] }
-  },
+
   {
     path: 'costs',
     children: [
-      { path: 'advertising2', loadComponent: () => import('./features/advertising-cost2/advertising-cost2.component').then(m => m.AdvertisingCost2Component), canActivate: [AuthGuard], data: { permissions: ['advertising-costs'] } },
-      { path: 'facebook-sync', loadComponent: () => import('./features/facebook-ads-sync/facebook-ads-sync.component').then(m => m.FacebookAdsSyncComponent), canActivate: [AuthGuard], data: { permissions: ['advertising-costs'] } },
+      // Canonical route: /costs/advertising - Updated to use main AdvertisingCostComponent with Excel upload
+      { path: 'advertising', loadComponent: () => import('./features/advertising-cost/advertising-cost.component').then(m => m.AdvertisingCostComponent), canActivate: [AuthGuard], data: { permissions: ['advertising-costs'] } },
+      // Backward-compatible alias: redirect old path to the new one
+      { path: 'advertising2', redirectTo: 'advertising', pathMatch: 'full' },
       { path: 'labor1', loadComponent: () => import('./features/labor-cost1/labor-cost1.component').then(m => m.LaborCost1Component), canActivate: [AuthGuard], data: { permissions: ['labor-costs'] } },
   { path: 'purchase', loadComponent: () => import('./core/components/coming-soon.component').then(m => m.ComingSoonComponent), canActivate: [AuthGuard], data: { permissions: ['purchase-costs'] } },
       { path: 'other', loadComponent: () => import('./features/other-cost/other-cost.component').then(m => m.OtherCostComponent), canActivate: [AuthGuard], data: { permissions: ['other-costs'] } },

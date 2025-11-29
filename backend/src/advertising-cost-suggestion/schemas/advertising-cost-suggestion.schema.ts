@@ -36,6 +36,12 @@ export class AdvertisingCostSuggestion {
 
   @Prop()
   notes: string; // Ghi chú
+
+  @Prop()
+  lastOptimizedAt: Date; // Thời điểm tối ưu hóa cuối cùng
+
+  @Prop()
+  lastOptimizationReason: string; // Lý do tối ưu hóa cuối cùng
 }
 
 export const AdvertisingCostSuggestionSchema = SchemaFactory.createForClass(AdvertisingCostSuggestion);

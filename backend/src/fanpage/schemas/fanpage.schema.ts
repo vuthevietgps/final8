@@ -66,4 +66,4 @@ export class Fanpage {
 }
 
 export const FanpageSchema = SchemaFactory.createForClass(Fanpage);
-FanpageSchema.index({ pageId: 1 });
+// pageId already has unique + implicit index from @Prop; avoid duplicate index declaration

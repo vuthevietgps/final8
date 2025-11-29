@@ -7,18 +7,21 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # Prefer JSON inline if you have it. Otherwise use GOOGLE_APPLICATION_CREDENTIALS below.
+      # MongoDB connection string; uses Atlas by default, can override with MONGODB_URI env var
+      MONGODB_URI: ${MONGODB_URI:-mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system}
+      # If using Google credentials, prefer GOOGLE_CREDENTIALS_JSON env; file mounting removed during cleanup
       # GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON:-}
-      GOOGLE_APPLICATION_CREDENTIALS: /app/dongbodulieuweb-8de0c9a12896.json
       # Optional hint for our path resolver
       BACKEND_ROOT: /app
       MEDIA_DIR: /app/uploads/media
       MEDIA_PUBLIC_BASE: /media
+      # Optional: enable FB sending + absolute media origin for image attachments
+      FB_SENDING_ENABLED: "${FB_SENDING_ENABLED:-0}"
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:8080}"
+      MEDIA_ABSOLUTE_BASE: "${MEDIA_ABSOLUTE_BASE:-http://localhost:8080}"
     volumes:
       # Persist uploads across rebuilds
       - ./backend/uploads:/app/uploads
-      # Mount service account credentials (read-only). Adjust file name if yours is different.
-      - ./backend/dongbodulieuweb-8de0c9a12896.json:/app/dongbodulieuweb-8de0c9a12896.json:ro
       # Media shared storage
       - ./media:/app/uploads/media
     ports:
@@ -62,3 +65,4 @@ networks:
   default:
     name: final8-net
     driver: bridge
+

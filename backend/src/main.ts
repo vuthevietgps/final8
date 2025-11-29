@@ -51,25 +51,32 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads/',
   });
-  // Phục vụ static cho thư mục MEDIA_DIR tại prefix MEDIA_PUBLIC_BASE (hữu ích cho dev)
-  const mediaDir = process.env.MEDIA_DIR || join(process.cwd(), 'uploads', 'media');
-  // Ensure media directory exists so static serving doesn't fail in dev
-  try {
-    if (!fs.existsSync(mediaDir)) {
-      fs.mkdirSync(mediaDir, { recursive: true });
-    }
-  } catch {}
+  // Phục vụ static cho các thư mục MEDIA khả dĩ tại prefix MEDIA_PUBLIC_BASE
   const base = process.env.MEDIA_PUBLIC_BASE || '/media';
   const mediaPrefix = base.endsWith('/') ? base : base + '/';
-  try {
-    app.useStaticAssets(mediaDir, { prefix: mediaPrefix });
-    // Fallback: legacy path when previous builds saved to backend/uploads/media
-    const legacyMediaDir = join(process.cwd(), 'backend', 'uploads', 'media');
-    if (legacyMediaDir !== mediaDir) {
-      try { if (fs.existsSync(legacyMediaDir)) app.useStaticAssets(legacyMediaDir, { prefix: mediaPrefix }); } catch {}
-    }
-    console.log(`[media] static mounted`, { mediaDir, mediaPrefix });
-  } catch {}
+  const mediaCandidates = [
+    process.env.MEDIA_DIR,
+    join(process.cwd(), '..', 'media'),                 // repo root /media
+    join(process.cwd(), '..', 'uploads', 'media'),      // repo root /uploads/media
+    join(process.cwd(), 'uploads', 'media'),            // backend/uploads/media
+  ].filter(Boolean) as string[];
+  const mounted: string[] = [];
+  for (const dir of mediaCandidates) {
+    try {
+      if (fs.existsSync(dir)) {
+        app.useStaticAssets(dir, { prefix: mediaPrefix });
+        mounted.push(dir);
+      }
+    } catch {}
+  }
+  // Đảm bảo có ít nhất một mount để tránh 404 do chưa tạo thư mục
+  if (mounted.length === 0) {
+    const fallback = join(process.cwd(), 'uploads', 'media');
+    try { fs.mkdirSync(fallback, { recursive: true }); } catch {}
+    app.useStaticAssets(fallback, { prefix: mediaPrefix });
+    mounted.push(fallback);
+  }
+  console.log('[media] static mounts:', { prefix: mediaPrefix, mounted });
   
   // Cấu hình CORS để cho phép frontend kết nối
   app.enableCors({

@@ -21,19 +21,19 @@ export class AdGroupService {
     if (filter?.agentId) params = params.set('agentId', filter.agentId);
     if (filter?.adAccountId) params = params.set('adAccountId', filter.adAccountId);
     if (filter?.isActive !== undefined) params = params.set('isActive', String(filter.isActive));
-    return this.http.get<AdGroup[]>(this.apiUrl, { params });
+    return this.http.get<AdGroup[]>(this.apiUrl, { params, withCredentials: true });
   }
 
   create(data: CreateAdGroup): Observable<AdGroup> {
-    return this.http.post<AdGroup>(this.apiUrl, data);
+    return this.http.post<AdGroup>(this.apiUrl, data, { withCredentials: true });
   }
 
   update(id: string, data: UpdateAdGroup): Observable<AdGroup> {
-    return this.http.patch<AdGroup>(`${this.apiUrl}/${id}`, data);
+    return this.http.patch<AdGroup>(`${this.apiUrl}/${id}`, data, { withCredentials: true });
   }
 
   delete(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+    return this.http.delete<void>(`${this.apiUrl}/${id}`, { withCredentials: true });
   }
 
   search(filter: { q?: string; platform?: string; productId?: string; agentId?: string; adAccountId?: string; status?: 'all'|'active'|'inactive' }): Observable<AdGroup[]> {
@@ -44,7 +44,7 @@ export class AdGroupService {
     if (filter.agentId) params = params.set('agentId', filter.agentId);
     if (filter.adAccountId) params = params.set('adAccountId', filter.adAccountId);
     if (filter.status) params = params.set('status', filter.status);
-    return this.http.get<AdGroup[]>(`${this.apiUrl}/search`, { params });
+    return this.http.get<AdGroup[]>(`${this.apiUrl}/search`, { params, withCredentials: true });
   }
 
   getCountsByProduct(): Observable<Array<{ productId: string; active: number; inactive: number }>> {

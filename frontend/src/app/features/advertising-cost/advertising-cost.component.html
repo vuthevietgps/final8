@@ -2,16 +2,111 @@
   <h2>📢 Chi Phí Quảng Cáo</h2>
 
   <div class="toolbar">
-  <button (click)="addNew()">+ Thêm mới</button>
-    <select [value]="filterAdAccountId()" (change)="filterAdAccountId.set($any($event.target).value); onFilterChange()">
-      <option value="all">Tất cả TK QC</option>
-      <option *ngFor="let a of adAccounts()" [value]="a._id">{{ a.name }} ({{ a.accountId }})</option>
-    </select>
-    <div class="summary" *ngIf="summary() as s">
-      <span>Tổng chi: {{ s.totalSpent | number:'1.0-0' }}</span>
-      <span>Số bản ghi: {{ s.count }}</span>
-      <span>Avg CPM: {{ s.avgCPM | number:'1.0-2' }}</span>
-      <span>Avg CPC: {{ s.avgCPC | number:'1.0-2' }}</span>
+    <div class="action-buttons">
+      <button (click)="addNew()" class="btn-primary">+ Thêm mới</button>
+      <button (click)="toggleUploadSection()" [class.active]="showUploadSection()" class="btn-upload">
+        📊 Upload Excel FB
+      </button>
+    </div>
+    
+    <!-- Sync Facebook Controls - Prominent section -->
+    <div class="fb-sync-section">
+      <h3>🔄 Đồng bộ chi phí từ Facebook tự động</h3>
+      <div class="sync-controls">
+        <div class="sync-inputs">
+          <label>
+            Ngày bắt đầu:
+            <input type="date" [value]="syncDate()" (change)="syncDate.set($any($event.target).value)" />
+          </label>
+          <label>
+            Số ngày (tối đa 14):
+            <input type="number" min="1" max="14" [value]="syncDays()" (input)="syncDays.set(+($any($event.target).value || 1))" />
+          </label>
+        </div>
+        <button (click)="syncFacebook()" [disabled]="syncLoading()" class="btn-sync-fb">
+          {{ syncLoading() ? '🔄 Đang đồng bộ...' : '⚡ Đồng bộ ngay' }}
+        </button>
+      </div>
+      <p class="sync-note">
+        💡 Hệ thống tự động đồng bộ chi phí hàng ngày lúc 01:05 sáng. 
+        Dùng nút này để đồng bộ thủ công cho ngày/khoảng thời gian cụ thể.
+      </p>
+    </div>
+
+    <div class="filter-summary">
+      <select [value]="filterAdAccountId()" (change)="filterAdAccountId.set($any($event.target).value); onFilterChange()">
+        <option value="all">Tất cả TK QC</option>
+        <option *ngFor="let a of adAccounts()" [value]="a._id">{{ a.name }} ({{ a.accountId }})</option>
+      </select>
+      <div class="summary" *ngIf="summary() as s">
+        <span>Tổng chi: {{ s.totalSpent | number:'1.0-0' }}</span>
+        <span>Số bản ghi: {{ s.count }}</span>
+        <span>Avg CPM: {{ s.avgCPM | number:'1.0-2' }}</span>
+        <span>Avg CPC: {{ s.avgCPC | number:'1.0-2' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Excel Section -->
+  <div class="upload-section" *ngIf="showUploadSection()">
+    <h3>📊 Cập nhật chi phí quảng cáo Facebook từ file Excel</h3>
+    <div class="upload-info">
+      <p class="helper-link">
+        Truy cập
+        <a href="https://adsmanager.facebook.com/adsmanager/reporting/" target="_blank" rel="noopener">
+          https://adsmanager.facebook.com/adsmanager/reporting/
+        </a>
+        để xuất file Excel từ Ads Manager
+      </p>
+      <p><strong>Cấu trúc file Excel yêu cầu:</strong></p>
+      <ul>
+        <li><strong>Cột A:</strong> ID Nhóm quảng cáo</li>
+        <li><strong>Cột B:</strong> Ngày (định dạng YYYY-MM-DD)</li>
+        <li><strong>Cột D:</strong> Tần suất</li>
+        <li><strong>Cột F:</strong> Đã Chi (spentAmount)</li>
+        <li><strong>Cột G:</strong> CPC</li>
+        <li><strong>Cột H:</strong> CPM</li>
+      </ul>
+      <p><em>Ghi chú: Hệ thống sẽ tự động chuyển đổi định dạng ngày và lọc trùng lặp theo ID Nhóm quảng cáo + Ngày</em></p>
+    </div>
+    
+    <div class="upload-controls">
+      <div class="file-input-group">
+        <input 
+          type="file" 
+          id="excelFileInput"
+          accept=".xlsx,.xls" 
+          (change)="onFileSelected($event)"
+          class="file-input">
+        <label for="excelFileInput" class="file-label">
+          {{ selectedFile ? selectedFile.name : 'Chọn file Excel...' }}
+        </label>
+      </div>
+      
+      <button 
+        (click)="uploadExcel()" 
+        [disabled]="!selectedFile || uploadLoading()"
+        class="upload-btn">
+        {{ uploadLoading() ? 'Đang xử lý...' : 'Cập nhật' }}
+      </button>
+    </div>
+
+    <!-- Upload Progress -->
+    <div class="upload-result" *ngIf="uploadProgress() as progress">
+      <h4>Kết quả xử lý:</h4>
+      <div class="progress-stats">
+        <span class="stat-item success">✅ Đã xử lý: {{ progress.processed }}</span>
+        <span class="stat-item create">➕ Tạo mới: {{ progress.created }}</span>
+        <span class="stat-item update">🔄 Cập nhật: {{ progress.updated }}</span>
+        <span class="stat-item skip">⏭️ Bỏ qua: {{ progress.skipped }}</span>
+      </div>
+      
+      <div class="errors" *ngIf="progress.errors && progress.errors.length > 0">
+        <h5>Lỗi chi tiết:</h5>
+        <ul>
+          <li *ngFor="let error of progress.errors" class="error-item">{{ error }}</li>
+        </ul>
+      </div>
     </div>
   </div>
 
@@ -27,6 +122,14 @@
         <th>Đã chi</th>
         <th>CPM</th>
         <th>CPC</th>
+        <th>Hiển thị</th>
+        <th>Click</th>
+        <th>Tiếp cận</th>
+        <th>HT bắt đầu 7d</th>
+        <th>Chi phí/HT FB</th>
+        <th>Tổng chi phí</th>
+        <th>Chi phí/HT</th>
+        <th>Số HT</th>
         <th>Hành động</th>
       </tr>
     </thead>
@@ -36,9 +139,27 @@
         <td>{{ r.frequency || '-' }}</td>
         <td>{{ r.adGroupId }}</td>
         <td>{{ r.adAccountName ? (r.adAccountName + ' (' + r.adAccountAccountId + ')') : '-' }}</td>
-        <td>{{ r.spentAmount || 0 }}</td>
-        <td>{{ r.cpm || 0 }}</td>
-        <td>{{ r.cpc || 0 }}</td>
+        <td>{{ r.spentAmount || 0 | number:'1.0-0' }}</td>
+        <td>{{ r.cpm || 0 | number:'1.0-2' }}</td>
+        <td>{{ r.cpc || 0 | number:'1.0-2' }}</td>
+        <!-- New messaging metrics -->
+        <td>{{ r.impressions || 0 | number:'1.0-0' }}</td>
+        <td>{{ r.clicks || 0 | number:'1.0-0' }}</td>
+        <td>{{ r.reach || 0 | number:'1.0-0' }}</td>
+        <td>{{ r.messagingConversationStarted7d || 0 | number:'1.0-0' }}</td>
+        <td class="fb-conversation-cost">
+          <strong>{{ r.costPerMessagingConversation || 0 | number:'1.0-0' }}</strong>
+        </td>
+        <!-- Existing metrics -->
+        <td class="total-spent">
+          <strong>{{ totalSpentByGroup().get(r.adGroupId) || 0 | number:'1.0-0' }}</strong>
+        </td>
+        <td class="conversation-cost">
+          <strong>{{ conversationCostByGroup().get(r.adGroupId)?.costPerConversation || 0 | number:'1.0-0' }}</strong>
+        </td>
+        <td class="conversation-count">
+          {{ conversationCostByGroup().get(r.adGroupId)?.conversationCount || 0 }}
+        </td>
         <td>
           <button (click)="openEdit(r)">Sửa</button>
           <button (click)="remove(r._id!)">Xóa</button>

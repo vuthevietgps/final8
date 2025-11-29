@@ -25,6 +25,7 @@ import { AdGroupModule } from './ad-group/ad-group.module';
 import { AdvertisingCostModule } from './advertising-cost/advertising-cost.module';
 import { AdvertisingCostPublicModule } from './advertising-cost-public/advertising-cost-public.module';
 import { AdvertisingCostSuggestionModule } from './advertising-cost-suggestion/advertising-cost-suggestion.module';
+import { AdvertisingOptimizationModule } from './advertising-optimization/advertising-optimization.module';
 import { AuthModule } from './auth/auth.module';
 import { CustomerModule } from './customer/customer.module';
 import { DeliveryStatusModule } from './delivery-status/delivery-status.module';
@@ -42,6 +43,7 @@ import { ProductionStatusModule } from './production-status/production-status.mo
 import { QuoteModule } from './quote/quote.module';
 import { SalaryConfigModule } from './salary-config/salary-config.module';
 import { SessionLogModule } from './session-log/session-log.module';
+// Re-enable minimal endpoints for Summary4, Summary5, TestOrder2 (for compatibility with frontend)
 import { Summary4Module } from './summary4/summary4.module';
 import { Summary5Module } from './summary5/summary5.module';
 import { TestOrder2Module } from './test-order2/test-order2.module';
@@ -53,9 +55,12 @@ import { ApiTokenModule } from './api-token/api-token.module';
 import { ChatMessageModule } from './chat-message/chat-message.module';
 import { PendingOrderModule } from './pending-order/pending-order.module';
 import { ProfitForecastModule } from './profit-forecast/profit-forecast.module';
-import { FacebookAdsSyncModule } from './facebook-ads-sync/facebook-ads-sync.module';
-import { FacebookTokenModule } from './facebook-token/facebook-token.module';
+
 import { MediaModule } from './media/media.module';
+import { OrderUpdateModule } from './order-update/order-update.module';
+import { PurchaseOrderModule } from './purchase/purchase-order.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { AdReportModule } from './ad-report/ad-report.module';
 
 @Module({
   imports: [
@@ -83,8 +88,8 @@ import { MediaModule } from './media/media.module';
       },
     }),
 
-    // Kết nối MongoDB Atlas với connection string chứa credentials và UTF-8 config
-    MongooseModule.forRoot('mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system', {
+    // Kết nối MongoDB (ưu tiên MONGODB_URI từ môi trường; fallback với password gốc)
+    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system', {
       connectionFactory: (connection) => {
         connection.on('connected', () => {
           console.log('MongoDB connected with UTF-8 support');
@@ -132,16 +137,13 @@ import { MediaModule } from './media/media.module';
     AdAccountModule,
     // Import OtherCostModule để quản lý Chi Phí Khác
     OtherCostModule,
-    // Module Đơn Hàng Thử Nghiệm 2
-    TestOrder2Module,
     AdvertisingCostModule,
     // Module Public API cho Advertising Cost (không cần authentication)
     AdvertisingCostPublicModule,
     // Module Đề Xuất Chi Phí Quảng Cáo
     AdvertisingCostSuggestionModule,
+    AdvertisingOptimizationModule,
     SalaryConfigModule,
-    Summary4Module,
-    Summary5Module,
     LaborCost1Module,
     // Module đồng bộ Google Sheets định kỳ
     GoogleSyncModule,
@@ -161,12 +163,21 @@ import { MediaModule } from './media/media.module';
     ChatMessageModule,
     PendingOrderModule,
     ProfitForecastModule,
-    // Module đồng bộ chi phí từ Facebook Ads
-    FacebookAdsSyncModule,
-    // Module quản lý Facebook Access Tokens
-    FacebookTokenModule,
+
     // Media management module (server-side image storage)
     MediaModule,
+    // Module cập nhật thông tin đơn hàng từ Excel
+    OrderUpdateModule,
+    // Module quản lý nhập hàng (Purchase Orders)
+    PurchaseOrderModule,
+    // Module quản lý kho & WAC
+    InventoryModule,
+    // Module báo cáo hiệu quả quảng cáo (chi phí / đơn theo ad group)
+    AdReportModule,
+    // Compatibility modules (lightweight stubs)
+    Summary4Module,
+    Summary5Module,
+    TestOrder2Module,
   ],
   controllers: [], // Không có controllers ở level app, chỉ có ở modules con
   providers: [],   // Không có providers chung ở level app

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ##############
 # Build stage #
 ##############
@@ -9,13 +10,16 @@ RUN apk add --no-cache python3 make g++
 
 # Copy manifests and install deps (cacheable)
 COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci --legacy-peer-deps; else npm install --legacy-peer-deps; fi
+RUN --mount=type=cache,target=/root/.npm \
+  if [ -f package-lock.json ]; then npm ci --legacy-peer-deps --no-audit --no-fund; else npm install --legacy-peer-deps --no-audit --no-fund; fi
 
 # Copy source
 COPY . .
 
 # Build Angular app (production)
-RUN npm run build
+RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=cache,target=/app/.angular/cache \
+  npm run build -- --configuration production
 
 ###############
 # Runtime NGINX #

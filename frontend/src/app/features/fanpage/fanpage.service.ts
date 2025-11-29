@@ -71,4 +71,14 @@ export class FanpageService {
   update(id: string, body: UpdateFanpageRequest): Observable<Fanpage> { return this.http.patch<Fanpage>(`${this.baseUrl}/${id}`, body); }
   delete(id: string) { return this.http.delete(`${this.baseUrl}/${id}`); }
   createAIConfig(id: string) { return this.http.post(`${this.baseUrl}/${id}/create-ai-config`, {}); }
+
+  // Validate access token với Facebook Graph API
+  validateAccessToken(id: string): Observable<{valid: boolean, error?: string, pageInfo?: any}> {
+    return this.http.post<{valid: boolean, error?: string, pageInfo?: any}>(`${this.baseUrl}/debug/${id}/validate-token`, {});
+  }
+
+  // Refresh access token
+  refreshAccessToken(id: string, accessToken: string): Observable<{success: boolean, message: string}> {
+    return this.http.post<{success: boolean, message: string}>(`${this.baseUrl}/debug/${id}/refresh-token`, { accessToken });
+  }
 }

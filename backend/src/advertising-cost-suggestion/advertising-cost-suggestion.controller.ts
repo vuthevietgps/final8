@@ -42,6 +42,60 @@ export class AdvertisingCostSuggestionController {
     };
   }
 
+  /**
+   * 🔍 QUALITY CONTROL ENDPOINTS
+   */
+  @Get('quality-control/overview')
+  async getQualityOverview() {
+    const overview = await this.suggestionService.getSystemQualityOverview();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Lấy tổng quan chất lượng hệ thống thành công',
+      data: overview
+    };
+  }
+
+  @Get('quality-control/:adGroupId')
+  async getAdGroupQualityReport(@Param('adGroupId') adGroupId: string) {
+    const report = await this.suggestionService.getAdGroupQualityReport(adGroupId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Lấy báo cáo chất lượng nhóm quảng cáo thành công',
+      data: report
+    };
+  }
+
+  @Post('quality-control/validate')
+  async triggerValidation() {
+    await this.suggestionService.triggerValidation();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Kích hoạt validation thành công'
+    };
+  }
+
+  @Post('ai-optimization/manual-trigger')
+  async manualAIOptimization() {
+    await this.suggestionService.triggerAIOptimization();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Kích hoạt AI optimization thủ công thành công'
+    };
+  }
+
+  @Post('advanced-optimization/manual-trigger')
+  async manualAdvancedOptimization(@Body() body: { adGroupId?: string }) {
+    await this.suggestionService.triggerAdvancedOptimization(body.adGroupId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Kích hoạt Advanced Mathematical Optimization thành công',
+      data: {
+        targetAdGroup: body.adGroupId || 'all',
+        algorithmsUsed: ['Non-linear Regression', 'Random Forest', 'Bayesian Optimization', 'Ensemble Methods']
+      }
+    };
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const suggestion = await this.suggestionService.findOne(id);
@@ -88,6 +142,46 @@ export class AdvertisingCostSuggestionController {
     return {
       statusCode: HttpStatus.OK,
       message: 'Xóa đề xuất chi phí thành công'
+    };
+  }
+
+  // 🤖 AI OPTIMIZATION ENDPOINTS
+
+  @Post('ai/manual-trigger')
+  async triggerAIOptimization() {
+    await this.suggestionService.triggerAIOptimization();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'AI optimization đã được kích hoạt thành công'
+    };
+  }
+
+  @Post('auto-mode/:adGroupId')
+  async toggleAutoMode(@Param('adGroupId') adGroupId: string, @Body('enabled') enabled: boolean) {
+    // TODO: Implement auto mode toggle functionality
+    return {
+      statusCode: HttpStatus.OK,
+      message: `Auto mode toggle not implemented yet for ad group ${adGroupId}`
+    };
+  }
+
+  @Get('recommendations/pending')
+  async getPendingRecommendations() {
+    // TODO: Implement pending recommendations functionality
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Pending recommendations not implemented yet',
+      data: []
+    };
+  }
+
+  @Post('recommendations/:id/approve')
+  async approveRecommendation(@Param('id') id: string) {
+    // TODO: Implement recommendation approval functionality
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Recommendation approval not implemented yet',
+      data: { success: false }
     };
   }
 }

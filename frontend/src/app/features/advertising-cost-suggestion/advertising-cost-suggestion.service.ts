@@ -66,4 +66,26 @@ export class AdvertisingCostSuggestionService {
   getStatistics(): Observable<ApiResponse<AdvertisingCostSuggestionStatistics>> {
     return this.http.get<ApiResponse<AdvertisingCostSuggestionStatistics>>(`${this.apiUrl}/statistics`);
   }
+
+  // 🤖 AI OPTIMIZATION METHODS
+
+  // Kích hoạt AI optimization thủ công
+  triggerAIOptimization(): Observable<ApiResponse<void>> {
+    return this.http.post<ApiResponse<void>>(`${this.apiUrl}/ai/manual-trigger`, {});
+  }
+
+  // Bật/tắt chế độ tự động cho ad group
+  toggleAutoMode(adGroupId: string, enabled: boolean): Observable<ApiResponse<void>> {
+    return this.http.post<ApiResponse<void>>(`${this.apiUrl}/auto-mode/${adGroupId}`, { enabled });
+  }
+
+  // Lấy danh sách đề xuất đang chờ phê duyệt
+  getPendingRecommendations(): Observable<ApiResponse<any[]>> {
+    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/recommendations/pending`);
+  }
+
+  // Phê duyệt đề xuất
+  approveRecommendation(id: string): Observable<ApiResponse<{ success: boolean }>> {
+    return this.http.post<ApiResponse<{ success: boolean }>>(`${this.apiUrl}/recommendations/${id}/approve`, {});
+  }
 }

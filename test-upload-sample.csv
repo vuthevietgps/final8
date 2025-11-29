@@ -1,4 +1,0 @@
-_id,productId,customerName,quantity,agentId,adGroupId,productionStatus,orderStatus,codAmount,manualPayment,receiverName,receiverPhone,receiverAddress
-68bd9a21a29901740be7e65f,68b7835cf402c3931acd7b35,Khách hàng cập nhật qua CSV,3,68bb807af2503ad0be3ebc65,ADG_UPDATE_001,Đang làm,Đã có mã vận đơn,750000,100000,Nguyễn Văn A,0901234567,123 Đường ABC Quận 1 TP.HCM
-,68b7835cf402c3931acd7b35,Khách hàng mới từ CSV,2,68bd941ad1aa22269f3daf34,NEW_ORDER_001,Chưa làm,Chưa có mã vận đơn,500000,0,Trần Thị B,0902345678,456 Đường XYZ Quận 2 TP.HCM
-,68b7833df402c3931acd7b2e,Đơn hàng test import,1,68bb807af2503ad0be3ebc65,TEST_123,Đã trả kết quả,Giao thành công,300000,250000,Lê Văn C,0903456789,789 Đường DEF Quận 3 TP.HCM

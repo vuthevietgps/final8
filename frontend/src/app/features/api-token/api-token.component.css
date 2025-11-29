@@ -15,7 +15,9 @@
 .token-table td { padding:10px 10px; border-top:1px solid #334155; vertical-align:top; }
 .token-table tr:hover { background:#223146; }
 .sub { font-size:11px; color:#94a3b8; margin-top:2px; }
-.op-col { display:flex; gap:4px; }
+.op-col { display:flex; gap:4px; align-items:flex-start; }
+.inline-test { display:flex; gap:4px; align-items:center; margin-left:6px; }
+.inline-test input { width:130px; }
 .mini { background:#334155; border:1px solid #475569; color:#e2e8f0; padding:4px 6px; font-size:12px; border-radius:4px; cursor:pointer; }
 .mini:hover { background:#3d5068; }
 .mini.danger { background:#7f1d1d; border-color:#b91c1c; }

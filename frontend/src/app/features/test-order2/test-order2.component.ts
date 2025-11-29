@@ -8,6 +8,9 @@ import { ProductionStatusService } from '../production-status/production-status.
 import { UserService } from '../user/user.service';
 import { CreateTestOrder2, NamedItem, TestOrder2 } from './models';
 import { TestOrder2Service } from './test-order2.service';
+import { buildProductStyle, buildStatusStyle, getContrastTextColor, normalizeHex } from './style-utils';
+import { buildCsvFromObjects, downloadCsv } from './csv-utils';
+import { attachScrollSync } from './scroll-utils';
 
 @Component({
   selector: 'app-test-order2',
@@ -30,25 +33,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   isLoading = signal(false);
   error = signal<string | null>(null);
 
-  // Upload functionality
-  isUploadModalOpen = signal(false);
-  uploadFile = signal<File | null>(null);
-  isUploading = signal(false);
-  uploadResults = signal<{
-    success: number;
-    errors: Array<{ row: number; error: string; data?: any }>;
-    message: string;
-  } | null>(null);
-
-  // Delivery Status Update functionality
-  isDeliveryModalOpen = signal(false);
-  deliveryUploadFile = signal<File | null>(null);
-  isDeliveryUploading = signal(false);
-  deliveryUploadResults = signal<{
-    success: number;
-    errors: Array<{ row: number; error: string; data?: any }>;
-    message: string;
-  } | null>(null);
+  // Upload/Delivery features removed per requirements
 
   // Refs for measuring sticky offsets
   @ViewChild('dateHeader', { static: false }) dateHeader?: ElementRef<HTMLElement>;
@@ -106,20 +91,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     setTimeout(() => this.attachScrollSync(), 50);
   }
 
-  private attachScrollSync() {
-    const fixed = this.fixedPane?.nativeElement;
-    const scroll = this.scrollPane?.nativeElement;
-    if (!fixed || !scroll) return;
-    let syncing = false;
-    const syncFromFixed = () => {
-      if (syncing) return; syncing = true; scroll.scrollTop = fixed.scrollTop; syncing = false;
-    };
-    const syncFromScroll = () => {
-      if (syncing) return; syncing = true; fixed.scrollTop = scroll.scrollTop; syncing = false;
-    };
-    fixed.addEventListener('scroll', syncFromFixed, { passive: true });
-    scroll.addEventListener('scroll', syncFromScroll, { passive: true });
-  }
+  private attachScrollSync() { attachScrollSync(this.fixedPane?.nativeElement, this.scrollPane?.nativeElement); }
 
   onFixedScroll(evt: Event) { const scroll = this.scrollPane?.nativeElement; if (scroll) scroll.scrollTop = (evt.target as HTMLElement).scrollTop; }
   onScrollPane(evt: Event) { const fixed = this.fixedPane?.nativeElement; if (fixed) fixed.scrollTop = (evt.target as HTMLElement).scrollTop; }
@@ -177,6 +149,18 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
         this.totalItems.set(response.pagination?.total || 0);
         this.isLoading.set(false);
         this.error.set(null);
+        // Hợp nhất các giá trị orderStatus mới gặp phải vào danh sách để UI luôn hiển thị được
+        const existing = new Set(this.orderStatuses());
+        let changed = false;
+        for (const o of normalized) {
+          if (o.orderStatus && !existing.has(o.orderStatus)) {
+            existing.add(o.orderStatus);
+            changed = true;
+          }
+        }
+        if (changed) {
+          this.orderStatuses.set(Array.from(existing));
+        }
         // After data renders, recalc sticky offsets
         setTimeout(() => this.updateStickyOffsets(), 0);
       },
@@ -269,10 +253,41 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   onBlurUpdate(order: TestOrder2, field: keyof TestOrder2, value: any): void {
     const id = order._id;
-    const payload: any = { [field]: value };
+    // Normalize payload values by field type to match backend expectations
+    const normalizeValue = (f: keyof TestOrder2, v: any) => {
+      if (v === null || v === undefined) return v;
+      switch (f as string) {
+        case 'quantity':
+        case 'depositAmount':
+        case 'codAmount':
+        case 'manualPayment':
+          return typeof v === 'number' ? v : (parseFloat(String(v)) || 0);
+        case 'isActive':
+          if (typeof v === 'boolean') return v;
+          if (v === 'true' || v === '1') return true;
+          if (v === 'false' || v === '0') return false;
+          return !!v;
+        case 'productId':
+        case 'agentId':
+          return String(v).trim();
+        case 'adGroupId': {
+          const s = String(v ?? '').trim();
+          return s || '0';
+        }
+        default:
+          return typeof v === 'string' ? v.trim() : v;
+      }
+    };
+    const payload: any = { [field]: normalizeValue(field, value) };
     this.service.update(id, payload).subscribe({
       next: (updated) => {
-        this.orders.update(rows => rows.map(r => r._id === id ? updated : r));
+        // In case backend doesn't populate names, keep UI consistent
+        const normalized = {
+          ...updated,
+          productionStatus: updated.productionStatus || 'Chưa làm',
+          orderStatus: updated.orderStatus || 'Chưa có mã vận đơn',
+        } as TestOrder2;
+        this.orders.update(rows => rows.map(r => r._id === id ? normalized : r));
       },
       error: (e) => { console.error(e); }
     });
@@ -288,7 +303,12 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       const payload = { productId: value };
       this.service.update(order._id, payload).subscribe({
         next: (updated) => {
-          this.orders.update(rows => rows.map(r => r._id === order._id ? updated : r));
+          const normalized = {
+            ...updated,
+            productionStatus: updated.productionStatus || 'Chưa làm',
+            orderStatus: updated.orderStatus || 'Chưa có mã vận đơn',
+          } as TestOrder2;
+          this.orders.update(rows => rows.map(r => r._id === order._id ? normalized : r));
         },
         error: (e) => { console.error(e); }
       });
@@ -407,72 +427,32 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   downloadCSV(): void {
-    const data = this.orders(); // Sử dụng dữ liệu hiện tại (đã được filter ở backend)
-
-    if (data.length === 0) {
-      alert('Không có dữ liệu để tải xuống');
-      return;
-    }
-
-    // Định nghĩa headers CSV
+    const data = this.orders();
+    if (data.length === 0) { alert('Không có dữ liệu để tải xuống'); return; }
     const headers = [
-      'Ngày',
-      'Khách hàng',
-      'Sản phẩm',
-      'Số lượng',
-      'Đại lý',
-      'ID Nhóm QC',
-      'Kích hoạt',
-      'Chi tiết dịch vụ',
-      'Trạng thái sản xuất',
-      'Trạng thái vận đơn',
-      'Link nộp',
-      'Mã vận đơn',
-      'Đặt cọc',
-      'COD',
-      'Người nhận',
-      'SĐT nhận',
-      'Địa chỉ nhận'
+      'Ngày','Khách hàng','Sản phẩm','Số lượng','Đại lý','ID Nhóm QC','Kích hoạt','Chi tiết dịch vụ','Trạng thái sản xuất','Trạng thái vận đơn','Link nộp','Mã vận đơn','Đặt cọc','COD','Người nhận','SĐT nhận','Địa chỉ nhận'
     ];
-
-    // Chuyển đổi data thành CSV
-    const csvRows = [
-      headers.join(','), // Header row
-      ...data.map(order => [
-        `"${this.formatDate(order.createdAt)}"`,
-        `"${order.customerName || ''}"`,
-        `"${this.getNameById(order.productId, this.products())}"`,
-        order.quantity || 0,
-        `"${this.getNameById(order.agentId, this.agents())}"`,
-        `"${order.adGroupId || ''}"`,
-        order.isActive ? 'Có' : 'Không',
-        `"${order.serviceDetails || ''}"`,
-        `"${order.productionStatus || ''}"`,
-        `"${order.orderStatus || ''}"`,
-        `"${order.submitLink || ''}"`,
-        `"${order.trackingNumber || ''}"`,
-        order.depositAmount || 0,
-        order.codAmount || 0,
-        `"${order.receiverName || ''}"`,
-        `"${order.receiverPhone || ''}"`,
-        `"${order.receiverAddress || ''}"`
-      ].join(','))
-    ];
-
-    // Tạo file và tải xuống
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `don-hang-thu-nghiem-2-${new Date().toISOString().split('T')[0]}.csv`;
-    link.style.display = 'none';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    const rows = data.map(order => ({
+      'Ngày': this.formatDate(order.createdAt),
+      'Khách hàng': order.customerName || '',
+      'Sản phẩm': this.getNameById(order.productId, this.products()),
+      'Số lượng': order.quantity || 0,
+      'Đại lý': this.getNameById(order.agentId, this.agents()),
+      'ID Nhóm QC': order.adGroupId || '',
+      'Kích hoạt': order.isActive ? 'Có' : 'Không',
+      'Chi tiết dịch vụ': order.serviceDetails || '',
+      'Trạng thái sản xuất': order.productionStatus || '',
+      'Trạng thái vận đơn': order.orderStatus || '',
+      'Link nộp': order.submitLink || '',
+      'Mã vận đơn': order.trackingNumber || '',
+      'Đặt cọc': order.depositAmount || 0,
+      'COD': order.codAmount || 0,
+      'Người nhận': order.receiverName || '',
+      'SĐT nhận': order.receiverPhone || '',
+      'Địa chỉ nhận': order.receiverAddress || '',
+    }));
+    const csvContent = buildCsvFromObjects(headers, rows);
+    downloadCsv(`don-hang-thu-nghiem-2-${new Date().toISOString().split('T')[0]}.csv`, csvContent, true);
   }
 
   private getNameById(id: any, items: NamedItem[]): string {
@@ -482,48 +462,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   // Status and color helpers
-  private normalizeHex(hex?: string): string | undefined {
-    if (!hex) return undefined;
-    let h = hex.trim();
-    if (!h.startsWith('#')) h = '#' + h;
-    if (h.length === 4) {
-      // e.g. #abc -> #aabbcc
-      h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
-    }
-    return h;
-  }
-
-  private getContrastTextColor(hex?: string): string {
-    const h = this.normalizeHex(hex);
-    if (!h || h.length !== 7) return '#111827'; // default slate-900
-    const r = parseInt(h.substr(1, 2), 16);
-    const g = parseInt(h.substr(3, 2), 16);
-    const b = parseInt(h.substr(5, 2), 16);
-    // YIQ contrast
-    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-    return yiq >= 200 ? '#111827' : '#ffffff';
-  }
-
-  private getDarkerColor(hex: string): string {
-    const r = parseInt(hex.substr(1, 2), 16);
-    const g = parseInt(hex.substr(3, 2), 16);
-    const b = parseInt(hex.substr(5, 2), 16);
-    
-    // Calculate brightness to determine border approach
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    
-    if (brightness > 120) {
-      // For light/medium colors, make border darker
-      const factor = 0.7;
-      const newR = Math.floor(r * factor);
-      const newG = Math.floor(g * factor);
-      const newB = Math.floor(b * factor);
-      return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
-    } else {
-      // For dark colors, use a very subtle darker border or semi-transparent white
-      return 'rgba(255, 255, 255, 0.3)';
-    }
-  }
+  private normalizeHex = normalizeHex;
+  private getContrastTextColor = getContrastTextColor;
 
   getProductionColor(name?: string): string | undefined {
     if (!name) return undefined;
@@ -575,39 +515,12 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   private calculateProductStyle(productId: string): Record<string, string> {
     const product = this.products().find(p => p._id === productId);
     const productColor = product?.color || '#3B82F6';
-    
-    const bg = this.normalizeHex(productColor);
-    if (!bg) return {};
-    
-    const fg = this.getContrastTextColor(bg);
-    const borderColor = this.getDarkerColor(bg);
-    const borderWidth = borderColor.startsWith('rgba') ? '1px' : '2px';
-    
-    return {
-      'background-color': bg,
-      color: fg,
-      'border-color': borderColor,
-      'border-width': borderWidth,
-      'border-style': 'solid'
-    };
+    return buildProductStyle(productColor);
   }
 
   private calculateStatusStyle(kind: 'prod' | 'del', name: string): Record<string, string> {
     const color = kind === 'prod' ? this.getProductionColor(name) : this.getDeliveryColor(name);
-    const bg = this.normalizeHex(color);
-    if (!bg) return {};
-    
-    const fg = this.getContrastTextColor(bg);
-    const borderColor = this.getDarkerColor(bg);
-    const borderWidth = borderColor.startsWith('rgba') ? '1px' : '2px';
-    
-    return { 
-      'background-color': bg, 
-      color: fg, 
-      'border-color': borderColor,
-      'border-width': borderWidth,
-      'border-style': 'solid'
-    };
+    return buildStatusStyle(color);
   }
 
   statusSelectStyle(kind: 'prod' | 'del', name?: string): Record<string, string> {
@@ -666,290 +579,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     const fg = this.getContrastTextColor(bg);
     return { 'background-color': bg, color: fg };
   }
-
-  // Upload file methods
-  openUploadModal(): void {
-    this.isUploadModalOpen.set(true);
-    this.uploadFile.set(null);
-    this.uploadResults.set(null);
-  }
-
-  closeUploadModal(): void {
-    this.isUploadModalOpen.set(false);
-    this.uploadFile.set(null);
-    this.uploadResults.set(null);
-  }
-
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      const file = input.files[0];
-
-      // Validate file type
-      const allowedTypes = [
-        'text/csv',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      ];
-
-      if (!allowedTypes.includes(file.type)) {
-        this.error.set('Chỉ hỗ trợ file CSV và Excel (.xls, .xlsx)');
-        return;
-      }
-
-      // Validate file size (10MB max)
-      if (file.size > 10 * 1024 * 1024) {
-        this.error.set('File không được vượt quá 10MB');
-        return;
-      }
-
-      this.uploadFile.set(file);
-      this.error.set(null);
-    }
-  }
-
-  onFileDrop(event: DragEvent): void {
-    event.preventDefault();
-
-    if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-      const file = event.dataTransfer.files[0];
-
-      // Create a mock event for reuse of validation logic
-      const mockEvent = {
-        target: { files: [file] }
-      } as unknown as Event;
-
-      this.onFileSelected(mockEvent);
-    }
-  }
-
-  onDragOver(event: DragEvent): void {
-    event.preventDefault();
-  }
-
-  uploadImportFile(): void {
-    const file = this.uploadFile();
-    if (!file) {
-      this.error.set('Vui lòng chọn file để tải lên');
-      return;
-    }
-
-    this.isUploading.set(true);
-    this.error.set(null);
-
-    this.service.importFromFile(file).subscribe({
-      next: (result) => {
-        this.uploadResults.set(result);
-        this.isUploading.set(false);
-
-        // Refresh data if there were successful imports
-        if (result.success > 0) {
-          this.refresh();
-        }
-      },
-      error: (err) => {
-        this.error.set(err.error?.message || 'Lỗi khi tải lên file');
-        this.isUploading.set(false);
-      }
-    });
-  }
-
-  downloadTemplate(): void {
-    this.service.getTemplate().subscribe({
-      next: (template) => {
-        // Create CSV content
-        const headers = template.headers.join(',');
-        const sampleRow = template.sampleData[0];
-        const values = template.headers.map(header => {
-          const value = sampleRow[header];
-          if (typeof value === 'string' && value.includes(',')) {
-            return `"${value}"`;
-          }
-          return value;
-        }).join(',');
-
-        const csvContent = headers + '\n' + values;
-
-        // Download CSV file
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'test-order2-template.csv');
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      },
-      error: (err) => {
-        this.error.set(err.error?.message || 'Lỗi khi tải template');
-      }
-    });
-  }
-
-  // Delivery status update modal functions
-  openDeliveryModal(): void {
-    this.isDeliveryModalOpen.set(true);
-    this.deliveryUploadFile.set(null);
-    this.deliveryUploadResults.set(null);
-    this.error.set(null);
-  }
-
-  closeDeliveryModal(): void {
-    this.isDeliveryModalOpen.set(false);
-    this.deliveryUploadFile.set(null);
-    this.deliveryUploadResults.set(null);
-    this.error.set(null);
-  }
-
-  onDeliveryFileSelected(event: Event): void {
-    const target = event.target as HTMLInputElement;
-    if (target.files && target.files.length > 0) {
-      const file = target.files[0];
-
-      // Validate file type
-      const allowedTypes = [
-        'text/csv',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      ];
-
-      if (!allowedTypes.includes(file.type)) {
-        this.error.set('Chỉ hỗ trợ file CSV và Excel (.xls, .xlsx)');
-        return;
-      }
-
-      // Validate file size (10MB max)
-      if (file.size > 10 * 1024 * 1024) {
-        this.error.set('File không được vượt quá 10MB');
-        return;
-      }
-
-      this.deliveryUploadFile.set(file);
-      this.error.set(null);
-    }
-  }
-
-  onDeliveryFileDrop(event: DragEvent): void {
-    event.preventDefault();
-
-    if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-      const file = event.dataTransfer.files[0];
-
-      // Create a mock event for reuse of validation logic
-      const mockEvent = {
-        target: { files: [file] }
-      } as unknown as Event;
-
-      this.onDeliveryFileSelected(mockEvent);
-    }
-  }
-
-  uploadDeliveryStatusFile(): void {
-    const file = this.deliveryUploadFile();
-    if (!file) {
-      this.error.set('Vui lòng chọn file để tải lên');
-      return;
-    }
-
-    this.isDeliveryUploading.set(true);
-    this.error.set(null);
-
-    this.service.importDeliveryStatus(file).subscribe({
-      next: (result) => {
-        this.deliveryUploadResults.set(result);
-        this.isDeliveryUploading.set(false);
-
-        // Refresh data if there were successful imports
-        if (result.success > 0) {
-          this.refresh();
-        }
-      },
-      error: (err) => {
-        this.error.set(err.error?.message || 'Lỗi khi cập nhật trạng thái giao hàng');
-        this.isDeliveryUploading.set(false);
-      }
-    });
-  }
-
-  downloadDeliveryTemplate(): void {
-    this.service.getDeliveryTemplate().subscribe({
-      next: (template) => {
-        // Create CSV content
-        const headers = template.headers.join(',');
-        const csvRows = template.sampleData.map(row => 
-          template.headers.map(header => {
-            const value = row[header];
-            if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-              return `"${value.replace(/"/g, '""')}"`;
-            }
-            return value;
-          }).join(',')
-        );
-
-        const csvContent = headers + '\n' + csvRows.join('\n');
-
-        // Download CSV file với UTF-8 BOM để Excel đọc đúng
-        const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'cap-nhat-trang-thai-giao-hang.csv');
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      },
-      error: (err) => {
-        this.error.set(err.error?.message || 'Lỗi khi tải template trạng thái giao hàng');
-      }
-    });
-  }
-
-  downloadPendingDelivery(): void {
-    this.service.exportPendingDelivery().subscribe({
-      next: (result) => {
-        if (result.totalRecords === 0) {
-          alert('Không có đơn hàng nào chưa giao thành công!');
-          return;
-        }
-
-        // Tạo CSV content
-        const headers = result.headers.join(',');
-        const csvRows = result.data.map(row => 
-          result.headers.map(header => {
-            const value = row[header];
-            if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-              return `"${value.replace(/"/g, '""')}"`;
-            }
-            return value;
-          }).join(',')
-        );
-
-        const csvContent = headers + '\n' + csvRows.join('\n');
-
-        // Download CSV file với UTF-8 BOM để Excel đọc đúng
-        const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', result.fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Thông báo kết quả
-        alert(`Đã tải xuống ${result.totalRecords} đơn hàng chưa giao thành công!`);
-      },
-      error: (err: any) => {
-        this.error.set(err.error?.message || 'Lỗi khi tải danh sách đơn hàng chưa giao thành công');
-      }
-    });
-  }
-
+  
   getStatusOptionStyle(kind: 'prod' | 'del', name?: string): Record<string, string> {
     const color = kind === 'prod' ? this.getProductionColor(name) : this.getDeliveryColor(name);
     const bg = this.normalizeHex(color);

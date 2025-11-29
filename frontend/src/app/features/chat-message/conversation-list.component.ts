@@ -1,16 +1,21 @@
 /** Component: ConversationList - danh sách hội thoại fanpage */
 import { Component, signal, inject, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, NgIf, NgFor, NgForOf } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChatMessageService, ConversationSummary, ChatMessage } from './chat-message.service';
+import { findLastAdGroupFromMessages } from './utils/chat-message.utils';
 import { PendingOrderService, PendingOrder, AgentOption } from './pending-order.service';
 import { ProductService } from '../product/product.service';
+import { MediaPickerService, MediaItem } from './media-picker.service';
 import { Product } from '../product/models/product.interface';
+import { FanpageService, Fanpage } from '../fanpage/fanpage.service';
+import { AdvertisingCostService } from '../advertising-cost/advertising-cost.service';
 
 @Component({
   selector: 'app-conversations',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterModule, NgIf, NgFor, NgForOf],
   templateUrl: './conversation-list.component.html',
   styleUrls: ['./conversation-list.component.css']
 })
@@ -18,6 +23,9 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   private service = inject(ChatMessageService);
   private pendingSvc = inject(PendingOrderService);
   private productSvc = inject(ProductService);
+  private mediaSvc = inject(MediaPickerService);
+  private fanpageSvc = inject(FanpageService);
+  private adCostSvc = inject(AdvertisingCostService);
   loading = signal(false);
   error = signal<string|undefined>(undefined);
   page = signal(1);
@@ -33,6 +41,11 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   messages = signal<ChatMessage[]>([]);
   replyText = signal('');
   sending = signal(false);
+  imageSending = signal(false);
+  picking = signal(false);
+  mediaItems = signal<MediaItem[]>([]);
+  mediaPage = signal(1);
+  mediaTotal = signal(0);
   now = signal(Date.now());
   // Order draft form state
   orderExtractLoading = signal(false);
@@ -46,6 +59,12 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   createdOrderId = signal<string|undefined>(undefined); // ID đơn test-order2 được tạo sau approve
   // auto refresh time every 30s for time-ago display
   private interval?: any;
+  private es?: EventSource | null;
+  toasts = signal<{title: string; desc: string; meta?: string; at: number}[]>([]);
+  // Bản đồ id/pageId -> thông tin fanpage để hiển thị tên và pageId
+  fanpageInfoMap = signal<Record<string,{name:string; pageId:string}>>({});
+  // Bản đồ adGroupId -> tổng chi phí để hiển thị trong danh sách hội thoại
+  adGroupCostMap = signal<Map<string, number>>(new Map());
 
   timeAgo = (d?: string) => {
     if(!d) return '';
@@ -65,28 +84,85 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     // preload limited products (could enhance with pagination later)
     this.productSvc.getAll().subscribe({ next: list => this.products.set(list.slice(0,200)), error: _=>{} });
     // load agents list for assignment
-    this.pendingSvc.listAgents().subscribe({ next: list => { console.log('[Agents] loaded', list); this.agents.set(list); }, error: err=>{ console.warn('[Agents] load failed', err); } });
+  this.pendingSvc.listAgents().subscribe({ next: list => { this.agents.set(list); }, error: err=>{ console.warn('[Agents] load failed', err); } });
+
+    // Load danh sách fanpage để hiển thị tên + pageId trong header
+    this.fanpageSvc.list().subscribe({
+      next: (pages: Fanpage[]) => {
+        const map: Record<string,{name:string; pageId:string}> = {};
+        for(const p of pages){
+          map[p.pageId] = { name: p.name, pageId: p.pageId };
+          map[p._id] = { name: p.name, pageId: p.pageId };
+        }
+        this.fanpageInfoMap.set(map);
+      },
+      error: _ => {}
+    });
+
+    // Connect SSE for live notifications
+    this.es = this.service.connectEvents((ev) => {
+      // Show toast and optionally auto-refresh list if current filters match fanpage
+      const title = ev.direction === 'in' ? 'Tin nhắn mới' : 'Đã gửi';
+      const desc = `${ev.senderPsid} • ${ev.snippet || ''}`.trim();
+      this.toasts.update(arr => [{ title, desc, meta: this.timeAgo(String(ev.createdAt||'')), at: Date.now() }, ...arr].slice(0,5));
+      // Light auto-refresh: if on first page and not currently loading, reload to surface recent
+      if(this.page() === 1 && !this.loading()) {
+        setTimeout(() => this.load(), 250);
+      }
+      // Nếu đang mở đúng hội thoại, refresh detail + re-extract để cập nhật gợi ý (adGroupId mới nhất)
+      const cur = this.currentConv();
+      if (cur) {
+        const curFanId = this.getFanpageId(cur.fanpageId);
+        if (curFanId === ev.fanpageId && cur.senderPsid === ev.senderPsid) {
+          this.service.getConversation(curFanId, cur.senderPsid).subscribe({
+            next: r => {
+              this.currentConv.set(r.conversation);
+              this.messages.set(r.messages.slice().sort((a,b)=> new Date(a.createdAt||'').getTime() - new Date(b.createdAt||'').getTime()));
+              // chạy extract để auto-fill adGroupId nếu draft còn trống
+              setTimeout(() => this.extractOrder(), 100);
+              // Điền ngay Ad Group nếu conversation đã có lastAdGroupId mà ô đang trống
+              const draft = this.orderDraft();
+              const lastAdg: any = (r.conversation as any)?.lastAdGroupId;
+              if(draft && !draft.adGroupId && lastAdg){
+                this.orderDraft.set({ ...draft, adGroupId: lastAdg });
+              }
+            },
+            error: _ => {}
+          });
+        }
+      }
+    });
   }
 
   updateFilter<K extends keyof ReturnType<typeof this.filter>>(key: K, value: any){ this.filter.update(f=> ({...f,[key]: value})); }
   setPage(p: number){ if(p<1) return; this.page.set(p); this.load(); }
 
-  private getFanpageId(fanpageId: string | {pageId: string; name: string; _id: string}): string {
-    return typeof fanpageId === 'string' ? fanpageId : fanpageId._id;
+  private getFanpageId(fanpageId: string | {pageId?: string; name?: string; _id?: string} | null | undefined): string {
+    if(!fanpageId) return '';
+    if(typeof fanpageId === 'string') return fanpageId;
+    return (fanpageId as any)._id || (fanpageId as any).pageId || '';
   }
 
   // Helper methods for template
-  getFanpagePageId(fanpageId: string | {pageId: string; name: string; _id: string}): string {
+  getFanpagePageId(fanpageId: string | {pageId?: string; name?: string; _id?: string} | null | undefined): string {
     if(!fanpageId) return '';
-    return typeof fanpageId === 'string' ? fanpageId : (fanpageId.pageId || fanpageId._id || '');
+    if(typeof fanpageId === 'string'){
+      const info = this.fanpageInfoMap()[fanpageId];
+      return (info && info.pageId) || fanpageId;
+    }
+    return ((fanpageId as any).pageId || (fanpageId as any)._id || '');
   }
 
-  getFanpageName(fanpageId: string | {pageId: string; name: string; _id: string}): string | undefined {
-    if(!fanpageId || typeof fanpageId === 'string') return undefined;
+  getFanpageName(fanpageId: string | {pageId?: string; name?: string; _id?: string} | null | undefined): string | undefined {
+    if(!fanpageId) return undefined;
+    if(typeof fanpageId === 'string'){
+      const info = this.fanpageInfoMap()[fanpageId];
+      return info?.name;
+    }
     return (fanpageId as any).name;
   }
 
-  isFanpageObject(fanpageId: string | {pageId: string; name: string; _id: string}): boolean {
+  isFanpageObject(fanpageId: string | {pageId?: string; name?: string; _id?: string} | null | undefined): boolean {
     return !!fanpageId && typeof fanpageId === 'object';
   }
 
@@ -101,7 +177,29 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   if(f.orderCustomerName) q.orderCustomerName = f.orderCustomerName;
   if(f.orderPhone) q.orderPhone = f.orderPhone;
     this.service.listConversations(q).subscribe({
-      next: resp=>{ this.items.set(resp.items); this.total.set(resp.total); this.loading.set(false); },
+      next: resp=>{ 
+        this.items.set(resp.items); this.total.set(resp.total); this.loading.set(false);
+        
+
+        
+        // Thu thập thông tin fanpage từ dữ liệu list (nếu backend trả object)
+        const map = { ...this.fanpageInfoMap() } as Record<string,{name:string; pageId:string}>;
+        for(const it of resp.items){
+          const fp: any = it.fanpageId as any;
+          if(fp && typeof fp === 'object'){
+            const pid = fp.pageId || '';
+            const id = fp._id || '';
+            if((pid || id) && fp.name){
+              if(pid) map[pid] = { name: fp.name, pageId: pid };
+              if(id) map[id] = { name: fp.name, pageId: pid || id };
+            }
+          }
+        }
+        this.fanpageInfoMap.set(map);
+        
+        // Load chi phí quảng cáo cho các adGroupId có trong danh sách
+        this.loadAdvertisingCosts(resp.items);
+      },
       error: e=>{ this.error.set(e?.error?.message||'Lỗi tải hội thoại'); this.loading.set(false); }
     });
   }
@@ -115,8 +213,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     
     const fpId = this.getFanpageId(conv.fanpageId);
     
-    // Reset order panel state ngay - không cần chờ API
-    this.orderDraft.set({ fanpageId: fpId, senderPsid: conv.senderPsid, quantity:1 });
+  // Reset order panel state ngay - không cần chờ API (prefill Ad Group nếu đã có)
+  this.orderDraft.set({ fanpageId: fpId, senderPsid: conv.senderPsid, quantity:1, adGroupId: (conv.lastAdGroupId as any) });
   this.createdOrderId.set(undefined);
     
     // Chỉ load messages, không block modal
@@ -134,10 +232,30 @@ export class ConversationListComponent implements OnInit, OnDestroy {
           
           this.messages.set(sortedMessages);
           this.currentConv.set(d.conversation);
+          // Cập nhật thông tin fanpage nếu payload có object
+          const fp: any = d.conversation?.fanpageId as any;
+          if(fp && typeof fp === 'object' && (fp.pageId || fp._id) && fp.name){
+            const map = { ...this.fanpageInfoMap() } as Record<string,{name:string; pageId:string}>;
+            if(fp.pageId) map[fp.pageId] = { name: fp.name, pageId: fp.pageId };
+            if(fp._id) map[fp._id] = { name: fp.name, pageId: fp.pageId || fp._id };
+            this.fanpageInfoMap.set(map);
+          }
           this.detailLoading.set(false);
           
           // Extract order chạy nền, không block UI
           setTimeout(() => this.extractOrder(), 200);
+          // Nếu Ad Group vẫn trống, thử lấy từ messages vừa nạp
+          const draft = this.orderDraft();
+          if(draft && !draft.adGroupId){
+            const lastAdg = findLastAdGroupFromMessages(sortedMessages);
+            if(lastAdg){ this.orderDraft.set({ ...draft, adGroupId: lastAdg as any }); }
+          }
+          // Nếu conversation có lastAdGroupId mà vẫn trống, điền tiếp
+          const convLastAdg: any = (d.conversation as any)?.lastAdGroupId;
+          if(convLastAdg){
+            const cur = this.orderDraft();
+            if(cur && !cur.adGroupId){ this.orderDraft.set({ ...cur, adGroupId: convLastAdg }); }
+          }
         },
         error: e=>{
           this.error.set(e?.error?.message||'Lỗi tải hội thoại');
@@ -146,6 +264,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
       });
     }, 50); // Delay nhỏ để modal render trước
   }
+
+  
 
   resolve(){
     const c = this.currentConv(); if(!c) return;
@@ -191,6 +311,61 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   }
   onReplyKey(e: KeyboardEvent){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) this.sendReply(); }
 
+  onPickImage(evt: Event){
+    const input = evt.target as HTMLInputElement;
+    const file = input?.files && input.files[0];
+    // allow selecting same file again
+    if(input) input.value = '';
+    const c = this.currentConv();
+    if(!file || !c || this.imageSending()) return;
+    const fpId = this.getFanpageId(c.fanpageId);
+    this.imageSending.set(true);
+    this.service.sendImage(fpId, c.senderPsid, file, file.name).subscribe({
+      next: res => {
+        const m = res.saved as any;
+        this.messages.update(arr => [...arr, m]);
+        // reload conversation summary
+        this.service.getConversation(fpId, c.senderPsid).subscribe(r=>{
+          this.currentConv.set(r.conversation);
+          this.items.update(list=> list.map(x=> this.getFanpageId(x.fanpageId)===fpId && x.senderPsid===c.senderPsid ? r.conversation : x));
+        });
+        this.imageSending.set(false);
+      },
+      error: e => { this.error.set(e?.error?.message || 'Gửi ảnh thất bại'); this.imageSending.set(false); }
+    });
+  }
+
+  openMediaPicker(){
+    this.picking.set(true);
+    this.loadMedia(1);
+  }
+  loadMedia(page: number){
+    this.mediaPage.set(page);
+    this.mediaSvc.list({ page, limit: 20 }).subscribe({
+      next: res => { this.mediaItems.set(res.items); this.mediaTotal.set(res.total); },
+      error: _ => {}
+    });
+  }
+  sendMedia(item: MediaItem){
+    const c = this.currentConv(); if(!c) return;
+    const fpId = this.getFanpageId(c.fanpageId);
+    if(this.imageSending()) return; this.imageSending.set(true);
+    this.service.sendImageByUrl(fpId, c.senderPsid, item.url).subscribe({
+      next: (res: any) => {
+        const m = res.saved as any;
+        this.messages.update(arr => [...arr, m]);
+        // reload summary
+        this.service.getConversation(fpId, c.senderPsid).subscribe(r=>{
+          this.currentConv.set(r.conversation);
+          this.items.update(list=> list.map(x=> this.getFanpageId(x.fanpageId)===fpId && x.senderPsid===c.senderPsid ? r.conversation : x));
+        });
+        this.imageSending.set(false);
+        this.picking.set(false);
+      },
+      error: e => { this.error.set(e?.error?.message || 'Gửi ảnh thất bại'); this.imageSending.set(false); }
+    });
+  }
+
   extractOrder(){
     const c = this.currentConv(); if(!c) return; 
     
@@ -213,7 +388,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
             phone: current.phone || s.phone,
             address: current.address || s.address,
             quantity: current.quantity || s.quantity || 1,
-            adGroupId: current.adGroupId || s.adGroupId
+            // Ưu tiên gợi ý từ backend; nếu chưa có, fallback về lastAdGroupId của hội thoại
+            adGroupId: current.adGroupId || s.adGroupId || (this.currentConv()?.lastAdGroupId as any) || findLastAdGroupFromMessages(this.messages())
           });
           
           this.orderExtractLoading.set(false);
@@ -230,12 +406,19 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     const draft = this.orderDraft(); if(!draft) return;
     this.draftMsg.set(undefined);
     const body = this.buildPendingPayload(draft, { status });
+    if(!body.adGroupId || body.adGroupId === '0'){
+      const fallback = this.resolveAdGroupIdFallback();
+      if(fallback){
+        body.adGroupId = fallback;
+        this.orderDraft.set({ ...(draft||{} as any), adGroupId: fallback });
+      }
+    }
     // Đảm bảo quantity là số
     if(body.quantity) body.quantity = Number(body.quantity);
     this.draftSaving.set(true);
     const obs = draft._id ? this.pendingSvc.update(draft._id, body) : this.pendingSvc.create(body);
     obs.subscribe({
-      next: p=>{ console.log('[PendingOrder] saved', p); this.orderDraft.set(p); this.draftSaving.set(false); this.draftMsg.set(status==='draft' ? 'Đã lưu nháp ✅' : 'Đã gửi chờ duyệt ✅'); },
+  next: p=>{ this.orderDraft.set(p); this.draftSaving.set(false); this.draftMsg.set(status==='draft' ? 'Đã lưu nháp ✅' : 'Đã gửi chờ duyệt ✅'); },
       error: e=>{ console.warn('[PendingOrder] save failed', e); this.draftSaving.set(false); this.draftMsg.set(e?.error?.message || 'Lưu thất bại'); }
     });
   }
@@ -247,6 +430,13 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     this.draftMsg.set(undefined);
     // Validate required fields
     const required: (keyof PendingOrder)[] = ['productId','customerName','phone','address','adGroupId'];
+    if(!draft.adGroupId || draft.adGroupId === '0'){
+      const fallback = this.resolveAdGroupIdFallback();
+      if(fallback){
+        draft.adGroupId = fallback;
+        this.orderDraft.set({ ...(draft as any), adGroupId: fallback });
+      }
+    }
     const missing = required.filter(k => !(draft as any)[k]);
     if(missing.length){
       this.draftMsg.set('Thiếu: ' + missing.join(', '));
@@ -260,12 +450,12 @@ export class ConversationListComponent implements OnInit, OnDestroy {
       : this.pendingSvc.create({ ...payload, status: 'draft' });
     persist$.subscribe({
       next: saved => {
-        console.log('[PendingOrder] persisted before approve', saved);
+  // persisted successfully, proceed to approve
         this.orderDraft.set(saved);
         // Gọi approve
         this.pendingSvc.approve(saved._id!).subscribe({
           next: res => {
-            console.log('[PendingOrder] approved', res);
+            // approved successfully
             this.approveLoading.set(false);
             const cur = this.orderDraft();
             this.orderDraft.set(cur ? { ...cur, status: 'approved' } : cur);
@@ -302,12 +492,26 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     });
   }
 
+  private resolveAdGroupIdFallback(): string | undefined {
+    const draftVal = this.orderDraft();
+    if(draftVal && draftVal.adGroupId && String(draftVal.adGroupId).trim() && draftVal.adGroupId !== '0'){
+      return String(draftVal.adGroupId).trim();
+    }
+    const conv = this.currentConv();
+    if(conv && conv.lastAdGroupId && String(conv.lastAdGroupId).trim()){
+      return String(conv.lastAdGroupId).trim();
+    }
+    const fromMessages = findLastAdGroupFromMessages(this.messages());
+    if(fromMessages) return String(fromMessages).trim();
+    return undefined;
+  }
+
   /**
    * Chỉ chọn các field hợp lệ theo DTO để tránh ValidationPipe reject (whitelist + forbidNonWhitelisted).
    */
   private buildPendingPayload(src: PendingOrder, extra: Partial<PendingOrder> = {}): PendingOrder {
     const allowed: (keyof PendingOrder)[] = [
-      'fanpageId','senderPsid','productId','agentId','adGroupId','customerName','phone','address','quantity','status','notes'
+      'fanpageId','senderPsid','productId','agentId','adGroupId','customerName','phone','address','quantity','status','notes','orderDate'
     ];
     const out: any = {};
     for(const k of allowed){ if((src as any)[k] !== undefined) out[k] = (src as any)[k]; }
@@ -350,4 +554,53 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     };
     return statusMap[status as keyof typeof statusMap] || '❓ Không xác định';
   }
+
+  dismissToast(i: number){ this.toasts.update(arr => arr.filter((_,idx)=> idx!==i)); }
+
+  // UI helpers for list coloring
+  hasPhone(c: ConversationSummary): boolean {
+    // Only check orderPhone field - must have actual phone number stored
+    return !!(c.orderPhone && String(c.orderPhone).trim());
+  }
+  isUnanswered(c: ConversationSummary): boolean {
+    // Prefer backend flags if available; fallback to heuristic
+    if (typeof c.needsHuman === 'boolean') return !!c.needsHuman;
+    return (c.lastDirection === 'in' && (c.outboundCount || 0) === 0) || (c.awaitingCount || 0) > 0;
+  }
+
+  // Load chi phí quảng cáo cho các adGroupId có trong danh sách hội thoại
+  private loadAdvertisingCosts(conversations: ConversationSummary[]): void {
+    const uniqueAdGroupIds = Array.from(new Set(
+      conversations
+        .map(c => c.lastAdGroupId)
+        .filter(id => id && String(id).trim())
+    )) as string[];
+
+    if (uniqueAdGroupIds.length === 0) return;
+
+    const costMap = new Map<string, number>();
+    
+    // Load chi phí cho từng adGroupId
+    uniqueAdGroupIds.forEach(adGroupId => {
+      this.adCostSvc.getTotalSpentByAdGroup(adGroupId).subscribe({
+        next: (result) => {
+          costMap.set(adGroupId, result.totalSpent);
+          this.adGroupCostMap.set(new Map(costMap));
+        },
+        error: (err) => {
+          console.error(`Error loading cost for adGroupId ${adGroupId}:`, err);
+          costMap.set(adGroupId, 0);
+          this.adGroupCostMap.set(new Map(costMap));
+        }
+      });
+    });
+  }
+
+  // Helper để lấy chi phí theo adGroupId
+  getAdvertisingCost(adGroupId?: string | null): number {
+    if (!adGroupId) return 0;
+    return this.adGroupCostMap().get(String(adGroupId)) || 0;
+  }
+
+  // ---- helpers ----
 }

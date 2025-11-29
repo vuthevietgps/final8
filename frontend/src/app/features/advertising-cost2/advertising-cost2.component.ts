@@ -1,6 +1,6 @@
 /**
  * File: features/advertising-cost2/advertising-cost2.component.ts
- * Mục đích: Chi Phí Quảng Cáo 2 - bảng chỉnh sửa trực tiếp, thêm nhanh một hàng.
+ * Mục đích: Chi Phí Quảng Cáo - bảng chỉnh sửa trực tiếp, thêm nhanh một hàng.
  */
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -116,7 +116,7 @@ export class AdvertisingCost2Component implements OnInit {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'advertising-cost2.csv';
+  a.download = 'advertising-cost.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

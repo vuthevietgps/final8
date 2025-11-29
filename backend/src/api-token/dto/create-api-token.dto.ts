@@ -7,5 +7,8 @@ export class CreateApiTokenDto {
   @IsEnum(['facebook','zalo','other']) provider: 'facebook' | 'zalo' | 'other';
   @IsOptional() @IsEnum(['active','inactive']) status?: 'active' | 'inactive';
   @IsOptional() @IsMongoId() fanpageId?: string;
+  // Liên kết theo tài khoản quảng cáo (tuỳ chọn)
+  @IsOptional() @IsString() adAccountId?: string; // cho phép cả "123" hoặc "act_123"
+  @IsOptional() @IsString() adAccountName?: string;
   @IsOptional() @IsString() notes?: string;
 }

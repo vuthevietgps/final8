@@ -21,6 +21,7 @@
 .actions button { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
 .actions .danger { color: #b00020; border-color: #b00020; }
 .pagination { display: flex; gap: 8px; justify-content: center; padding: 12px; }
+.select-all { grid-column: 1 / -1; padding: 8px; background: #f8f9fa; border: 1px dashed #ced4da; border-radius: 6px; }
 
 /* Modal */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }

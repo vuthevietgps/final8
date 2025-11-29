@@ -6,6 +6,13 @@ export interface AdvertisingCost {
   spentAmount?: number;
   cpm?: number;
   cpc?: number;
+  // === NEW MESSAGING METRICS ===
+  impressions?: number;
+  clicks?: number;
+  reach?: number;
+  messagingConversationStarted7d?: number;
+  costPerMessagingConversation?: number;
+  messagingFirstReply?: number;
   createdAt?: string;
   // Enriched fields (backend join via ad group -> ad account)
   adAccountId?: string;

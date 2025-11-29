@@ -72,4 +72,35 @@ export class ApiTokenComponent implements OnInit {
   cancelRotate(){ this.rotating.set(undefined); }
   updateLocal(updated: ApiToken){ this.tokens.update(list=> list.map(i=> i._id===updated._id? updated:i)); }
   maskToken(t?: string){ if(!t) return ''; return t.length>8? t.slice(0,6)+'••••••':'••••'; }
+
+  // Test ad account access per row
+  testAdAccountId: Record<string,string> = {};
+  testResult: Record<string,string> = {};
+  testing: Record<string,boolean> = {};
+  // Lưu "tên" và "id" tài khoản quảng cáo đã test để hiển thị ở cột chính
+  adAccountNames: Record<string,string> = {};
+  adAccountIds: Record<string,string> = {};
+  setTestId(tok: ApiToken, v: string){ this.testAdAccountId[tok._id] = v; }
+  runTest(tok: ApiToken){
+    const id = this.testAdAccountId[tok._id];
+    if(!id){ this.error.set('Nhập adAccountId trước khi test'); return; }
+    this.testing[tok._id] = true;
+    this.service.testAdAccount(tok._id, id).subscribe({
+      next: (res) => {
+        if(res.ok){
+          const status = res.account?.account_status;
+          const name = res.account?.name || res.account?.id;
+          const scope = res.scopeOk? '✔ ads_management' : '⚠ scope chưa ghi nhận';
+          this.testResult[tok._id] = `OK: ${name} (status=${status}). ${scope}`;
+          // Ghi nhận để hiển thị lên bảng
+          this.adAccountNames[tok._id] = name || '';
+          this.adAccountIds[tok._id] = res.account?.id || (id.startsWith('act_')? id: 'act_'+id);
+        } else {
+          this.testResult[tok._id] = `Lỗi: ${res.error || 'Không truy cập được'}`;
+        }
+        this.testing[tok._id] = false;
+      },
+      error: (e) => { this.testResult[tok._id] = e?.error?.message || 'Test lỗi'; this.testing[tok._id] = false; }
+    });
+  }
 }

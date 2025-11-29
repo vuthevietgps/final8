@@ -33,4 +33,23 @@ export class FanpageController {
   @Post(':id/create-ai-config')
   @RequirePermissions('fanpages')
   createAIConfig(@Param('id') id: string) { return this.service.createAIConfigForExisting(id); }
+
+  @Post(':id/validate-token')
+  validateToken(@Param('id') id: string) { return this.service.validateAccessToken(id); }
+
+  @Post(':id/refresh-token')
+  refreshToken(@Param('id') id: string, @Body() dto: { accessToken: string }) { 
+    return this.service.refreshAccessToken(id, dto.accessToken); 
+  }
+
+  // Debug endpoints without auth
+  @Post('debug/:id/validate-token')
+  debugValidateToken(@Param('id') id: string) { 
+    return this.service.validateAccessToken(id); 
+  }
+
+  @Post('debug/:id/refresh-token')
+  debugRefreshToken(@Param('id') id: string, @Body() dto: { accessToken: string }) { 
+    return this.service.refreshAccessToken(id, dto.accessToken); 
+  }
 }

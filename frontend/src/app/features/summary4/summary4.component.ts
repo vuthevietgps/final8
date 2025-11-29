@@ -19,6 +19,8 @@ export class Summary4Component implements OnInit {
   agents = signal<AgentSummary[]>([]);
   loading = signal(false);
   error = signal<string | null>(null);
+  disabled = signal<boolean>(false);
+  disabledMessage = signal<string | null>(null);
   
   // Filter state
   filter = signal<Summary4Filter>({
@@ -77,6 +79,10 @@ export class Summary4Component implements OnInit {
           redirected: response.redirectedToPage ? `${response.requestedPage} -> ${response.redirectedToPage}` : null
         });
 
+        // Respect disabled flag from backend
+        this.disabled.set(!!response.disabled);
+        this.disabledMessage.set(response.message || null);
+
         // Handle server-side page redirect
         if (response.redirectedToPage && response.page !== this.filter().page) {
           console.log(`📄 Server redirected from page ${response.requestedPage} to ${response.page}`);
@@ -84,10 +90,10 @@ export class Summary4Component implements OnInit {
           this.filter.update(f => ({ ...f, page: response.page }));
         }
         
-        this.summary4Data.set(response.data);
-        this.totalRecords.set(response.total);
-        this.currentPage.set(response.page);
-        this.totalPages.set(response.totalPages);
+        this.summary4Data.set(response.data || []);
+        this.totalRecords.set(response.total || 0);
+        this.currentPage.set(response.page || 1);
+        this.totalPages.set(response.totalPages || 0);
         this.loading.set(false);
       },
       error: (err) => {
@@ -343,7 +349,8 @@ export class Summary4Component implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     
-    this.summary4Service.exportUnpaidToExcel().subscribe({
+    // Prefer filtered export if listing is enabled; fallback to unpaid-only if needed
+    this.summary4Service.exportFilteredToExcel(this.filter()).subscribe({
       next: (blob) => {
         // Tạo URL để download
         const url = window.URL.createObjectURL(blob);
@@ -354,7 +361,7 @@ export class Summary4Component implements OnInit {
         
         // Tạo tên file với timestamp
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        link.download = `summary4-chua-thanh-toan-${timestamp}.xlsx`;
+        link.download = `summary4-loc-hien-tai-${timestamp}.xlsx`;
         
         // Trigger download
         document.body.appendChild(link);
@@ -368,8 +375,26 @@ export class Summary4Component implements OnInit {
         console.log('Xuất Excel thành công');
       },
       error: (err) => {
-        this.error.set('Lỗi khi xuất Excel: ' + err.message);
-        this.loading.set(false);
+        console.warn('Filtered export failed, try unpaid export endpoint. Error:', err);
+        // Fallback to unpaid-only export if server disabled filtered export
+        this.summary4Service.exportUnpaidToExcel().subscribe({
+          next: (blob) => {
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            link.download = `summary4-chua-thanh-toan-${timestamp}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            this.loading.set(false);
+          },
+          error: (err2) => {
+            this.error.set('Lỗi khi xuất Excel: ' + (err2?.message || err?.message));
+            this.loading.set(false);
+          }
+        });
       }
     });
   }
@@ -379,7 +404,7 @@ export class Summary4Component implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     
-    this.summary4Service.exportManualPaymentTemplate().subscribe({
+    this.summary4Service.exportManualPaymentTemplate(this.filter()).subscribe({
       next: (blob) => {
         // Tạo URL để download
         const url = window.URL.createObjectURL(blob);
@@ -479,6 +504,9 @@ export class Summary4Component implements OnInit {
 
   // Utility methods
   formatCurrency(amount: number): string {
+    if (amount == null) {
+      return '0 ₫';
+    }
     return amount.toLocaleString('vi-VN') + ' ₫';
   }
 

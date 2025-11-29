@@ -31,8 +31,10 @@ export class ChatMessageService {
     const inc: any = { totalMessages: 1 };
     if (msg.direction === 'in') inc.inboundCount = 1; else inc.outboundCount = 1;
     if (msg.awaitingHuman) inc.awaitingCount = 1;
-  const createdAt: Date = (msg as any).createdAt || (msg as any).receivedAt || new Date();
-  const set: any = { lastMessageSnippet: (msg.content||'').slice(0,120), lastDirection: msg.direction, lastMessageAt: createdAt };
+    const createdAt: Date = (msg as any).createdAt || (msg as any).receivedAt || new Date();
+    const set: any = { lastMessageSnippet: (msg.content||'').slice(0,120), lastDirection: msg.direction, lastMessageAt: createdAt };
+    // Nếu message có adGroupId, cập nhật luôn vào conversation để UI thấy ngay
+    if ((msg as any).adGroupId) set.lastAdGroupId = (msg as any).adGroupId;
     if (msg.awaitingHuman) set.hasAwaitingHuman = true, set.needsHuman = true, set.firstAwaitingAt = set.firstAwaitingAt || new Date();
     await this.convModel.updateOne(base, { $setOnInsert: { ...base, autoAiEnabled: true }, $inc: inc, $set: set }, { upsert: true }).exec();
   }
@@ -44,11 +46,11 @@ export class ChatMessageService {
       return;
     }
     let inbound = 0, outbound = 0, awaiting = 0; let firstAwait: Date | undefined; let lastMsg = msgs[msgs.length-1];
-    let lastAdGroupId: string | undefined; // Find last message with adGroupId
+    let lastAdGroupId: string | undefined; // lấy adGroupId MỚI NHẤT
     for (const m of msgs) {
       if (m.direction === 'in') inbound++; else outbound++;
       if (m.awaitingHuman) { awaiting++; if (!firstAwait) firstAwait = (m as any).createdAt || (m as any).receivedAt; }
-      if (m.adGroupId && !lastAdGroupId) lastAdGroupId = m.adGroupId; // Get most recent adGroupId
+      if (m.adGroupId) lastAdGroupId = m.adGroupId; // ghi đè để giữ giá trị cuối cùng
     }
     const lastCreatedAt: Date = (lastMsg as any).createdAt || (lastMsg as any).receivedAt || new Date();
     await this.convModel.updateOne(
@@ -140,6 +142,7 @@ export class ChatMessageService {
   }
 
   async extractOrderDraft(fanpageId: string, senderPsid: string) {
+    // Lấy theo thời gian tăng dần để có thể lấy adGroupId cuối cùng (mới nhất)
     const messages = await this.model.find({ fanpageId, senderPsid }).sort({ createdAt: 1 }).lean();
     if(!messages.length) throw new NotFoundException('Không có tin nhắn để trích xuất');
     const textAll = messages.map(m=> m.content).join('\n');
@@ -152,8 +155,9 @@ export class ChatMessageService {
     const addressRegex = /(địa chỉ|add(?:ress)?)[^\n:]*[:\-]?\s*([^\n]{10,120})/i;
     const addrMatch = textAll.match(addressRegex);
     const address = addrMatch? addrMatch[2].trim(): undefined;
-    // adGroupId: pick first message that has adGroupId field set
-    const adGroupId = messages.find(m=> m.adGroupId)?.adGroupId;
+  // adGroupId: chọn GIÁ TRỊ MỚI NHẤT có trong luồng tin nhắn
+  let adGroupId: string | undefined;
+  for(const m of messages){ if(m.adGroupId) adGroupId = m.adGroupId; }
     // naive customer name: if first inbound contains tên ...
     let customerName: string | undefined;
     const firstInbound = messages.find(m=> m.direction==='in');
@@ -195,6 +199,37 @@ export class ChatMessageService {
     }).save();
     await this.upsertConversationForMessage(doc);
     // Clear awaiting flags on previous inbound messages for this conversation (simple heuristic v1)
+    await this.model.updateMany({ fanpageId: params.fanpageId, senderPsid: params.senderPsid, awaitingHuman: true }, { $set: { awaitingHuman: false } }).exec();
+    await this.recomputeConversation(params.fanpageId as any, params.senderPsid);
+    return doc;
+  }
+
+  /**
+   * Update an existing chat message (needed by webhook service)
+   */
+  async update(id: string, updateDto: Partial<UpdateChatMessageDto>) {
+    const doc = await this.model.findByIdAndUpdate(id, updateDto, { new: true }).exec();
+    if (!doc) {
+      throw new NotFoundException(`Chat message with ID ${id} not found`);
+    }
+    return doc;
+  }
+
+  /**
+   * Record an outbound image message (uploaded by agent in conversation UI)
+   */
+  async recordOutboundImage(params: { fanpageId: string; senderPsid: string; imageUrl: string; rawResponse?: any; }) {
+    const doc = await new this.model({
+      fanpageId: params.fanpageId,
+      senderPsid: params.senderPsid,
+      content: params.imageUrl,
+      messageType: 'image',
+      direction: 'out',
+      awaitingHuman: false,
+      raw: params.rawResponse,
+      receivedAt: new Date(),
+    }).save();
+    await this.upsertConversationForMessage(doc);
     await this.model.updateMany({ fanpageId: params.fanpageId, senderPsid: params.senderPsid, awaitingHuman: true }, { $set: { awaitingHuman: false } }).exec();
     await this.recomputeConversation(params.fanpageId as any, params.senderPsid);
     return doc;

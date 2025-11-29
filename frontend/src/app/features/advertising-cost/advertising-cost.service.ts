@@ -30,4 +30,38 @@ export class AdvertisingCostService {
   delete(id: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/${id}`);
   }
+
+  uploadFacebookExcel(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<any>(`${this.baseUrl}/upload-facebook-excel`, formData);
+  }
+
+  // Gọi API đồng bộ chi phí từ Facebook theo ngày hoặc khoảng N ngày
+  fetchFacebookCost(options?: { date?: string; days?: number }): Observable<any> {
+    let params = new HttpParams();
+    if (options?.date) params = params.set('date', options.date);
+    if (options?.days != null) params = params.set('days', String(options.days));
+    return this.http.post<any>(`${this.baseUrl}/fetch/facebook`, {}, { params });
+  }
+
+  // Lấy tổng chi phí theo adGroupId từ collection AdvertisingCost
+  getTotalSpentByAdGroup(adGroupId: string): Observable<{ totalSpent: number }> {
+    let params = new HttpParams().set('adGroupId', adGroupId);
+    return this.http.get<{ totalSpent: number }>(`${this.baseUrl}/stats/by-adgroup`, { params });
+  }
+
+  // Lấy chi phí trên mỗi hội thoại theo adGroupId
+  getConversationCostByAdGroup(adGroupId: string): Observable<{ 
+    totalSpent: number; 
+    conversationCount: number; 
+    costPerConversation: number 
+  }> {
+    let params = new HttpParams().set('adGroupId', adGroupId);
+    return this.http.get<{ 
+      totalSpent: number; 
+      conversationCount: number; 
+      costPerConversation: number 
+    }>(`${this.baseUrl}/stats/conversation-cost`, { params });
+  }
 }

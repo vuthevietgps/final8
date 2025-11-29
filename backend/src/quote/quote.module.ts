@@ -22,6 +22,11 @@ import { CreateSampleQuotes } from './create-sample-quotes.service';
   ],
   controllers: [QuoteController],
   providers: [QuoteService, CreateSampleQuotes],
-  exports: [QuoteService]
+  exports: [
+    QuoteService,
+    MongooseModule.forFeature([
+      { name: Quote.name, schema: QuoteSchema }
+    ])
+  ]
 })
 export class QuoteModule {}

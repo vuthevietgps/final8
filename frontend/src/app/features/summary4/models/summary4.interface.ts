@@ -94,6 +94,9 @@ export interface Summary4Response {
   totalPages: number;
   requestedPage?: number;
   redirectedToPage?: number;
+  // Backend may indicate that listing/search/export is disabled
+  disabled?: boolean;
+  message?: string;
 }
 
 export interface Summary4Stats {

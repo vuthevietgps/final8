@@ -312,5 +312,40 @@ export class ProductController {
     };
   }
 
-  
+  /**
+   * 🧹 CLEANUP & SYNCHRONIZATION ENDPOINTS
+   * Làm sạch và đồng bộ hóa dữ liệu ảnh sản phẩm
+   */
+  @Post('cleanup-images')
+  async cleanupProductImages() {
+    const results = await this.productService.cleanupAndValidateImages();
+    return {
+      success: true,
+      message: 'Đã thực hiện làm sạch và đồng bộ hóa ảnh sản phẩm',
+      data: results
+    };
+  }
+
+  @Post('reset-fanpage-images')
+  async resetFanpageImages(
+    @Body('fanpageId') fanpageId?: string,
+    @Body('removeInvalidOnly') removeInvalidOnly?: boolean
+  ) {
+    const results = await this.productService.resetFanpageImages(fanpageId, removeInvalidOnly);
+    return {
+      success: true, 
+      message: 'Đã reset ảnh fanpage thành công',
+      data: results
+    };
+  }
+
+  @Get('validate-images-report')
+  async validateImagesReport(@Query('fanpageId') fanpageId?: string) {
+    const report = await this.productService.generateImageValidationReport(fanpageId);
+    return {
+      success: true,
+      data: report
+    };
+  }
+
 }

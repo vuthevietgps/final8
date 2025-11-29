@@ -419,11 +419,17 @@
 .ai-config-col { font-size: 13px; color: #374151; }
 .token-col { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .token-status { padding: 2px 8px; border-radius: 999px; display: inline-block; }
-.status-valid { background: #d1fae5; color: #065f46; }
-.status-expired { background: #fee2e2; color: #991b1b; }
-.status-invalid { background: #fee2e2; color: #b91c1c; }
-.status-unknown { background: #f3f4f6; color: #6b7280; }
+.status-valid, .valid { background: #d1fae5; color: #065f46; }
+.status-expired, .expired { background: #fee2e2; color: #991b1b; }
+.status-invalid, .invalid { background: #fee2e2; color: #b91c1c; }
+.status-unknown, .unknown { background: #f3f4f6; color: #6b7280; }
+.testing { background: #dbeafe; color: #1d4ed8; animation: pulse 1.5s infinite; }
 .muted { color: #6b7280; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
 /* Token Actions */
 .token-actions {

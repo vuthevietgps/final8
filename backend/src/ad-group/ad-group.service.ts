@@ -39,13 +39,11 @@ export class AdGroupService {
     if (query?.agentId) filter.agentId = query.agentId;
     if (query?.adAccountId) filter.adAccountId = query.adAccountId;
     if (query?.isActive !== undefined) filter.isActive = query.isActive === 'true';
-    if (query?.enableAIChat !== undefined) filter.enableAIChat = query.enableAIChat === 'true';
 
     return this.adGroupModel.find(filter)
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description color icon')
       .populate('selectedProducts', 'name description price')
-      .populate('openAIConfigId', 'name model systemPrompt')
       .populate('agentId', 'fullName name')
       .populate('adAccountId', 'name accountId')
       .sort({ createdAt: -1 })
@@ -73,7 +71,6 @@ export class AdGroupService {
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description color icon')
       .populate('selectedProducts', 'name description price')
-      .populate('openAIConfigId', 'name model')
       .populate('agentId', 'fullName name')
       .populate('adAccountId', 'name accountId')
       .sort({ createdAt: -1 })
@@ -90,7 +87,6 @@ export class AdGroupService {
       .populate('fanpageId', 'name pageId avatarUrl')
       .populate('productCategoryId', 'name description color icon')
       .populate('selectedProducts', 'name description price images')
-      .populate('openAIConfigId', 'name model systemPrompt temperature maxTokens')
       .populate('agentId', 'fullName name')
       .populate('adAccountId', 'name accountId')
       .exec();
@@ -105,14 +101,12 @@ export class AdGroupService {
   async findByAdGroupIdAndFanpage(adGroupId: string, fanpageId: string): Promise<AdGroup | null> {
     return this.adGroupModel.findOne({ 
       adGroupId, 
-      fanpageId, 
-      isActive: true,
-      enableAIChat: true 
+      fanpageId,
+      isActive: true
     })
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description')
       .populate('selectedProducts', 'name description price images')
-      .populate('openAIConfigId', 'name model systemPrompt temperature maxTokens apiKey')
       .exec();
   }
 
@@ -121,7 +115,6 @@ export class AdGroupService {
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description color icon')
       .populate('selectedProducts', 'name description price')
-      .populate('openAIConfigId', 'name model')
       .populate('agentId', 'fullName name')
       .populate('adAccountId', 'name accountId')
       .exec();

@@ -9,6 +9,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product, ProductDocument } from './schemas/product.schema';
 import { Media, MediaDocument } from '../media/schemas/media.schema';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class ProductService {
@@ -457,11 +459,70 @@ export class ProductService {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map(x => x.url);
-
     if (ranked.length) return ranked;
     const imgs = ((product as any).images || []).map((i: any) => i.url).filter(Boolean);
     return imgs.slice(0, limit);
   }
+
+  /**
+   * Like chooseBestImages but returns metadata with alt text when available.
+   */
+  async chooseBestImagesWithAlts(params: { productId: string; fanpageId?: string; limit?: number }): Promise<Array<{ url: string; alt?: string }>> {
+    const { productId } = params;
+    const limit = Math.min(10, Math.max(1, params.limit || 4));
+    const product = await this.productModel.findById(productId).lean();
+    if (!product) return [];
+
+    let custom: string[] | undefined;
+    let policy: any | undefined;
+    if (params.fanpageId) {
+      const fpId = new Types.ObjectId(params.fanpageId);
+      const v = (product as any).fanpageVariations?.find((x: any) => x.fanpageId?.toString() === fpId.toString() && x.isActive !== false);
+      if (v) {
+        custom = v.customImages && v.customImages.length ? v.customImages : undefined;
+        policy = v.imagePolicy;
+      }
+    }
+    if (custom && custom.length) {
+      const list = custom.slice(0, limit);
+      const mediaDocs = await this.mediaModel.find({ url: { $in: list } }).select('url alt').lean();
+      const altMap = new Map(mediaDocs.map((m: any) => [m.url, m.alt]));
+      return list.map((url) => ({ url, alt: altMap.get(url) }));
+    }
+
+    const medias = await this.mediaModel.find({ productId: product._id }).lean();
+    if (!medias || !medias.length) {
+      const imgs = ((product as any).images || []).map((i: any) => i.url).filter(Boolean).slice(0, limit);
+      return imgs.map((url: string) => ({ url }));
+    }
+
+    const desiredAspect = policy?.aspectRatio && policy.aspectRatio !== 'any' ? policy.aspectRatio : undefined;
+    const priorityTags: string[] = policy?.priorityTags || [];
+    const forbiddenTags: string[] = policy?.forbiddenTags || [];
+
+    const scoreOf = (m: any): number => {
+      let s = 0;
+      if (m.isMainImage) s += 5;
+      if (desiredAspect && m.aspectRatio === desiredAspect) s += 3;
+      const tags: string[] = m.tags || [];
+      for (const t of priorityTags) if (tags.includes(t)) s += 2;
+      for (const t of forbiddenTags) if (tags.includes(t)) s -= 100;
+      const st = m.sourceType || 'gallery';
+      if (st === 'gallery') s += 1; else if (st === 'feedback') s += 0.5;
+      const pixels = (m.width || 0) * (m.height || 0);
+      s += Math.min(3, Math.floor(pixels / (800 * 800)));
+      return s;
+    };
+
+    const ranked = medias
+      .filter(m => !(m.tags || []).some((t: string) => forbiddenTags.includes(t)))
+      .map(m => ({ url: m.url, alt: m.alt, score: scoreOf(m) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(x => ({ url: x.url, alt: x.alt }));
+    return ranked;
+  }
+  
 
   /**
    * Report: products with fanpage variation customImages
@@ -530,5 +591,277 @@ export class ProductService {
 
     const res = await this.productModel.aggregate(pipeline).exec();
     return res[0] || { items: [], total: 0, page, limit, totalPages: 0 };
+  }
+
+  /**
+   * 🧹 CLEANUP & VALIDATION METHODS
+   * Làm sạch và đồng bộ hóa ảnh sản phẩm
+   */
+
+  async cleanupAndValidateImages() {
+    const results = {
+      totalProducts: 0,
+      mainImagesChecked: 0,
+      fanpageVariationsChecked: 0,
+      invalidImagesRemoved: 0,
+      productsUpdated: 0,
+      orphanedFilesFound: 0,
+      errors: [] as string[]
+    };
+
+    try {
+      const products = await this.productModel.find({}).exec();
+      results.totalProducts = products.length;
+
+      for (const product of products) {
+        let hasChanges = false;
+
+        // Validate main product images
+        if (product.images && product.images.length > 0) {
+          results.mainImagesChecked += product.images.length;
+          const validImages = [];
+          
+          for (const imageObj of product.images) {
+            if (this.isValidImageUrl(imageObj.url)) {
+              validImages.push(imageObj);
+            } else {
+              results.invalidImagesRemoved++;
+              hasChanges = true;
+            }
+          }
+          
+          if (validImages.length !== product.images.length) {
+            product.images = validImages;
+          }
+        }
+
+        // Validate fanpage variation images (customImages can be string or string[])
+        if (product.fanpageVariations && product.fanpageVariations.length > 0) {
+          for (const variation of product.fanpageVariations) {
+            const imgs = variation.customImages;
+            if (!imgs) continue;
+
+            // When stored as a single string
+            if (typeof imgs === 'string') {
+              results.fanpageVariationsChecked += 1;
+              if (!this.isValidImageUrl(imgs)) {
+                // Normalize to empty array for consistency with schema
+                variation.customImages = [] as any;
+                results.invalidImagesRemoved++;
+                hasChanges = true;
+              }
+              continue;
+            }
+
+            // When stored as an array
+            if (Array.isArray(imgs) && imgs.length > 0) {
+              results.fanpageVariationsChecked += imgs.length;
+              const validCustomImages: string[] = [];
+              for (const imageUrl of imgs) {
+                if (this.isValidImageUrl(imageUrl)) {
+                  validCustomImages.push(imageUrl);
+                } else {
+                  results.invalidImagesRemoved++;
+                  hasChanges = true;
+                }
+              }
+              if (validCustomImages.length !== imgs.length) {
+                variation.customImages = validCustomImages as any;
+              }
+            }
+          }
+        }
+
+        if (hasChanges) {
+          await product.save();
+          results.productsUpdated++;
+        }
+      }
+
+    } catch (error) {
+      results.errors.push(`Cleanup failed: ${error.message}`);
+    }
+
+    return results;
+  }
+
+  async resetFanpageImages(fanpageId?: string, removeInvalidOnly = true) {
+    const results = {
+      affectedProducts: 0,
+      totalImagesRemoved: 0,
+      variationsUpdated: 0,
+      errors: [] as string[]
+    };
+
+    try {
+      const query: any = {};
+      if (fanpageId) {
+        query['fanpageVariations.fanpageId'] = new Types.ObjectId(fanpageId);
+      }
+
+      const products = await this.productModel.find(query).exec();
+      results.affectedProducts = products.length;
+
+      for (const product of products) {
+        let hasChanges = false;
+
+        if (product.fanpageVariations && product.fanpageVariations.length > 0) {
+          for (const variation of product.fanpageVariations) {
+            // Skip if fanpageId filter is specified and doesn't match
+            if (fanpageId && variation.fanpageId.toString() !== fanpageId) {
+              continue;
+            }
+
+            if (variation.customImages && variation.customImages.length > 0) {
+              const originalCount = variation.customImages.length;
+              
+              if (removeInvalidOnly) {
+                // Only remove invalid images
+                const validImages = [];
+                for (const imageUrl of variation.customImages) {
+                  if (this.isValidImageUrl(imageUrl)) {
+                    validImages.push(imageUrl);
+                  }
+                }
+                variation.customImages = validImages;
+              } else {
+                // Remove all custom images for this fanpage
+                variation.customImages = [];
+              }
+
+              const removedCount = originalCount - variation.customImages.length;
+              if (removedCount > 0) {
+                results.totalImagesRemoved += removedCount;
+                results.variationsUpdated++;
+                hasChanges = true;
+              }
+            }
+          }
+        }
+
+        if (hasChanges) {
+          await product.save();
+        }
+      }
+
+    } catch (error) {
+      results.errors.push(`Reset failed: ${error.message}`);
+    }
+
+    return results;
+  }
+
+  async generateImageValidationReport(fanpageId?: string) {
+    const report = {
+      totalProducts: 0,
+      productsWithImages: 0,
+      productsWithFanpageImages: 0,
+      validMainImages: 0,
+      invalidMainImages: 0,
+      validFanpageImages: 0,
+      invalidFanpageImages: 0,
+      fanpageBreakdown: {} as Record<string, { valid: number; invalid: number; total: number }>,
+      invalidImagesList: [] as { productId: string; productName: string; imageUrl: string; imageType: 'main' | 'fanpage' }[]
+    };
+
+    try {
+      // Simple query first to avoid population issues
+      const products = await this.productModel.find({}).limit(100).exec();
+      
+      report.totalProducts = products.length;
+
+      for (const product of products) {
+        let hasMainImages = false;
+        let hasFanpageImages = false;
+
+        // Check main images
+        if (product.images && product.images.length > 0) {
+          hasMainImages = true;
+          for (const imageObj of product.images) {
+            const isValid = this.isValidImageUrl(imageObj.url);
+            if (isValid) {
+              report.validMainImages++;
+            } else {
+              report.invalidMainImages++;
+              report.invalidImagesList.push({
+                productId: product._id.toString(),
+                productName: product.name,
+                imageUrl: imageObj.url,
+                imageType: 'main'
+              });
+            }
+          }
+        }
+
+        // Check fanpage variation images
+        if (product.fanpageVariations && product.fanpageVariations.length > 0) {
+          for (const variation of product.fanpageVariations) {
+            // Skip if fanpageId filter specified and doesn't match
+            if (fanpageId && variation.fanpageId.toString() !== fanpageId) {
+              continue;
+            }
+
+            if (variation.customImages && variation.customImages.length > 0) {
+              hasFanpageImages = true;
+              const fanpageName = variation.fanpageId.toString();
+              
+              if (!report.fanpageBreakdown[fanpageName]) {
+                report.fanpageBreakdown[fanpageName] = { valid: 0, invalid: 0, total: 0 };
+              }
+
+              for (const imageUrl of variation.customImages) {
+                report.fanpageBreakdown[fanpageName].total++;
+                
+                const isValid = this.isValidImageUrl(imageUrl);
+                if (isValid) {
+                  report.validFanpageImages++;
+                  report.fanpageBreakdown[fanpageName].valid++;
+                } else {
+                  report.invalidFanpageImages++;
+                  report.fanpageBreakdown[fanpageName].invalid++;
+                  report.invalidImagesList.push({
+                    productId: product._id.toString(),
+                    productName: product.name,
+                    imageUrl: imageUrl,
+                    imageType: 'fanpage'
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        if (hasMainImages) report.productsWithImages++;
+        if (hasFanpageImages) report.productsWithFanpageImages++;
+      }
+
+    } catch (error) {
+      console.error('Image validation report failed:', error);
+      throw error; // Re-throw to see the actual error
+    }
+
+    return report;
+  }
+
+  private isValidImageUrl(imageUrl: string): boolean {
+    if (!imageUrl) return false;
+    
+    // External URLs are considered valid (we can't easily check them)
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return !imageUrl.includes('/media/'); // Only validate internal media URLs
+    }
+
+    // Internal media URLs - check if file exists
+    if (imageUrl.startsWith('/media/')) {
+      try {
+        const MEDIA_DIR = process.env.MEDIA_DIR || path.join(process.cwd(), 'uploads', 'media');
+        const filePath = path.join(MEDIA_DIR, imageUrl.replace('/media/', ''));
+        return fs.existsSync(filePath);
+      } catch (error) {
+        return false;
+      }
+    }
+
+    return true; // Other URL formats are considered valid
   }
 }

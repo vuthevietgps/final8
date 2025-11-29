@@ -21,6 +21,9 @@ export class ApiToken {
   @Prop({ enum: ['facebook','zalo','other'], default: 'facebook', index: true }) provider: 'facebook' | 'zalo' | 'other';
   @Prop({ enum: ['active','inactive'], default: 'active' }) status: 'active' | 'inactive';
   @Prop({ type: Types.ObjectId, ref: 'Fanpage' }) fanpageId?: Types.ObjectId;
+  // Liên kết theo tài khoản quảng cáo (ưu tiên hiển thị, không bắt buộc)
+  @Prop({ trim: true, index: true }) adAccountId?: string; // ví dụ: act_123 hoặc 123
+  @Prop({ trim: true }) adAccountName?: string;
   @Prop({ trim: true }) notes?: string;
   // New fields
   @Prop({ default: false, index: true }) isPrimary: boolean; // token chính cho fanpage
@@ -39,3 +42,4 @@ export const ApiTokenSchema = SchemaFactory.createForClass(ApiToken);
 ApiTokenSchema.index({ provider: 1, status: 1 });
 ApiTokenSchema.index({ fanpageId: 1, isPrimary: 1 });
 ApiTokenSchema.index({ nextCheckAt: 1 });
+ApiTokenSchema.index({ adAccountId: 1, provider: 1 });
