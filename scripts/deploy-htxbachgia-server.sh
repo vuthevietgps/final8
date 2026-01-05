@@ -3,8 +3,8 @@
 # Deploy script for htxbachgia.shop using vutheviet/final8new images
 # Usage:
 #   ./deploy-htxbachgia.sh                 # uses default tag (current tested)
-#   ./deploy-htxbachgia.sh version12.0       # positional tag
-#   ./deploy-htxbachgia.sh --tag version12.0 # explicit tag
+#   ./deploy-htxbachgia.sh version13.0       # positional tag
+#   ./deploy-htxbachgia.sh --tag version13.0 # explicit tag
 #   ./deploy-htxbachgia.sh --use-latest    # use :latest tags
 #
 # Notes:
@@ -18,7 +18,7 @@ CONTAINER_NAME=$(echo $DOMAIN | sed 's/\./-/g')
 BACKEND_IMAGE_BASE="vutheviet/final8new"
 FRONTEND_IMAGE_BASE="vutheviet/final8new"
 
-# Accept optional tag argument, default to version12.0 (current tested version)
+# Accept optional tag argument, default to version13.0 (current tested version)
 # Also supports flags: --tag/-t <tag>, --use-latest
 TAG_IN=""
 EXPECT_BACKEND_DIGEST=""
@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ -z "$TAG_IN" ]; then TAG_IN="version12.0"; fi
+if [ -z "$TAG_IN" ]; then TAG_IN="version13.0"; fi
 BACKEND_TAG="$TAG_IN"
 FRONTEND_TAG="$TAG_IN"
 
@@ -50,7 +50,9 @@ echo "🏷️  Using image tags: backend=$BACKEND_TAG, frontend=$FRONTEND_TAG"
 
 // Auto-set expected digests from the latest Desktop build & push when not provided
 if [ -z "$EXPECT_BACKEND_DIGEST" ] && [ -z "$EXPECT_FRONTEND_DIGEST" ]; then
-  if [ "$TAG_IN" = "version12.0" ]; then
+  if [ "$TAG_IN" = "version13.0" ]; then
+    echo "🔒 No predefined digests for version13.0; please verify manually or pass --expect-* flags"
+  elif [ "$TAG_IN" = "version12.0" ]; then
     EXPECT_BACKEND_DIGEST="sha256:4d050bdaa8ad2532537b58c1e8f5030c25f6f52de3e2ca96e4d1fa32caed8e78"
     EXPECT_FRONTEND_DIGEST="sha256:5205aedac00b8f28fa0a612fd91ccae521aa800aa433d275ffc50ee19efc3d81"
     echo "🔒 Auto-set expected digests for version12.0 to:" 
@@ -78,7 +80,11 @@ if [ -z "$EXPECT_BACKEND_DIGEST" ] && [ -z "$EXPECT_FRONTEND_DIGEST" ]; then
 fi
 
 echo "🚀 Complete deployment for $DOMAIN on port $PORT..."
-if [ "$TAG_IN" = "version12.0" ]; then
+if [ "$TAG_IN" = "version13.0" ]; then
+  echo "📝 Changes in this deployment (v13.0):"
+  echo "  - Bump UI badge to version13.0"
+  echo "  - Build/Deploy: images rebuilt --no-cache and tagged :backend-version13.0, :frontend-version13.0"
+elif [ "$TAG_IN" = "version12.0" ]; then
   echo "📝 Changes in this deployment (v12.0):"
   echo "  - Bump UI badge to version12.0"
   echo "  - Build/Deploy: images rebuilt --no-cache and tagged :backend-version12.0, :frontend-version12.0"
