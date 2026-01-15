@@ -115,8 +115,8 @@ export class AdGroupProfitComponent implements OnInit {
       'Ngày Tháng',
       'Nhóm Quảng Cáo',
       'ID Nhóm',
-      'Chi Phí QC (QC2)',
-      'Lợi Nhuận (Summary2)'
+      'Chi Phí QC (Summary5)',
+      'Lợi Nhuận (Summary5)'
     ];
 
     const csvContent = [

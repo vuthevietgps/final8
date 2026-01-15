@@ -6,6 +6,11 @@
       <option value="all">Tất cả TK QC</option>
       <option *ngFor="let a of adAccounts()" [value]="a._id">{{ a.name }} ({{ a.accountId }})</option>
     </select>
+    <div class="channel-tabs">
+      <button class="btn" [class.active]="filterChannel()==='all'" (click)="setChannel('all')">Tất cả</button>
+      <button class="btn" [class.active]="filterChannel()==='facebook'" (click)="setChannel('facebook')">Facebook</button>
+      <button class="btn" [class.active]="filterChannel()==='google'" (click)="setChannel('google')">Google</button>
+    </div>
   <button class="btn" (click)="downloadCsv()">⬇️ Tải xuống CSV</button>
   <label class="btn" for="csvInput">⬆️ Tải lên CSV</label>
   <input id="csvInput" type="file" accept=".csv,text/csv" (change)="onFileSelected($event)" style="display:none" />
@@ -19,6 +24,7 @@
         <th>Ngày (dd/MM/yyyy)</th>
   <th>ID Nhóm quảng cáo</th>
   <th>Tài khoản QC</th>
+        <th>Kênh</th>
         <th>Đã chi</th>
         <th>CPM</th>
         <th>CPC</th>
@@ -35,6 +41,7 @@
           <input type="text" [ngModel]="r.adGroupId" (keydown)="onEnter(r, 'adGroupId', $event)" (blur)="onBlur(r, 'adGroupId', $event)" />
         </td>
         <td>{{ r.adAccountName ? (r.adAccountName + ' (' + r.adAccountAccountId + ')') : '-' }}</td>
+        <td>{{ r.channel || 'facebook' }}</td>
         <td>
           <input type="number" step="0.01" [ngModel]="r.spentAmount" (keydown)="onEnter(r, 'spentAmount', $event)" (blur)="onBlur(r, 'spentAmount', $event)" />
         </td>

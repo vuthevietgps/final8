@@ -1,0 +1,47 @@
+<div class="loan-detail" *ngIf="loan(); else loadingTpl">
+  <div class="header">
+    <div>
+      <h2>📄 {{ loan()?.name }}</h2>
+      <p class="subtitle">Người cho vay: {{ loan()?.lenderName }}</p>
+    </div>
+    <a routerLink="/loans" class="back">← Danh sách</a>
+  </div>
+
+  <div class="info-grid">
+    <div class="card"><div class="label">Gốc</div><div class="value">{{ formatCurrency(loan()?.principal) }} đ</div></div>
+    <div class="card"><div class="label">Dư nợ còn lại</div><div class="value">{{ formatCurrency(loan()?.principalRemaining) }} đ</div></div>
+    <div class="card"><div class="label">Lãi suất</div><div class="value">{{ loan()?.interestRate || 0 }} %</div></div>
+    <div class="card"><div class="label">Kỳ trả</div><div class="value">{{ loan()?.repaymentCycle || '-' }}</div></div>
+    <div class="card"><div class="label">Trạng thái</div><div class="value">{{ loan()?.status || 'active' }}</div></div>
+    <div class="card"><div class="label">Thời gian</div><div class="value">{{ loan()?.startDate | date:'yyyy-MM-dd' }} → {{ loan()?.endDate | date:'yyyy-MM-dd' }}</div></div>
+  </div>
+
+  <h3>📅 Lịch trả</h3>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Ngày đến hạn</th>
+        <th>Gốc</th>
+        <th>Lãi</th>
+        <th>Tổng</th>
+        <th>Trạng thái</th>
+        <th>Thanh toán</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngIf="repayments().length === 0"><td colspan="6" class="empty">Chưa có lịch trả</td></tr>
+      <tr *ngFor="let r of repayments()">
+        <td>{{ r.dueDate | date:'yyyy-MM-dd' }}</td>
+        <td class="num">{{ formatCurrency(r.amountPrincipal) }}</td>
+        <td class="num">{{ formatCurrency(r.amountInterest) }}</td>
+        <td class="num">{{ formatCurrency((r.amountPrincipal||0)+(r.amountInterest||0)) }}</td>
+        <td><span class="badge" [class.paid]="r.paid">{{ r.paid ? 'Đã trả' : 'Chưa trả' }}</span></td>
+        <td>{{ r.paidDate ? (r.paidDate | date:'yyyy-MM-dd') : '-' }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<ng-template #loadingTpl>
+  <div class="loading">Đang tải khoản vay...</div>
+</ng-template>

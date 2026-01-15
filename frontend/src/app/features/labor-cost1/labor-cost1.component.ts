@@ -31,12 +31,15 @@ import { User } from '../user/user.model';
           <tr>
             <th>Ngày</th>
             <th>Nhân công</th>
+            <th>Quản lý</th>
+            <th>Phiên</th>
             <th>Giờ đến</th>
             <th>Giờ về</th>
             <th>Giờ làm</th>
             <th>Lương/giờ</th>
             <th>Chi phí chi tiết</th>
             <th>Ghi chú</th>
+            <th>Thanh toán</th>
             <th></th>
           </tr>
         </thead>
@@ -49,13 +52,10 @@ import { User } from '../user/user.model';
                 placeholder="dd/MM/yyyy">
             </td>
             <td>
-              <select class="form-control input-inline"
-                [value]="getUserId(r.userId)"
-                (change)="saveInline(r, { userId: $any($event.target).value })">
-                <option value="">-- Chọn user --</option>
-                <option *ngFor="let u of users()" [value]="u._id">{{ u.fullName }}</option>
-              </select>
+              <span>{{ displayUser(r.userId) }}</span>
             </td>
+            <td>{{ getManagerName(r.userId) }}</td>
+            <td>{{ r.sessionCount || 1 }}</td>
             <td>
               <input class="form-control input-inline" [value]="r.startTime"
                 (blur)="saveInline(r, { startTime: $any($event.target).value })"
@@ -73,6 +73,13 @@ import { User } from '../user/user.model';
               <input class="form-control input-inline" [value]="r.notes || ''"
                 (blur)="saveInline(r, { notes: $any($event.target).value })"
                 (keydown.enter)="onEnter($event)">
+            </td>
+            <td>
+              <button class="btn btn-sm" [class.btn-success]="r.paid" [class.btn-warning]="!r.paid"
+                (click)="markPaid(r)" [disabled]="r.paid">
+                {{ r.paid ? 'Đã chi' : 'Xác nhận chi' }}
+              </button>
+              <div class="paid-at" *ngIf="r.paidAt">{{ r.paidAt | date:'dd/MM HH:mm' }}</div>
             </td>
             <td><button class="btn btn-sm btn-danger" (click)="remove(r._id!)">Xóa</button></td>
           </tr>
@@ -196,6 +203,14 @@ export class LaborCost1Component implements OnInit {
     this.laborSvc.remove(id).subscribe({ next: _ => { this.rows.set(this.rows().filter(x => x._id !== id)); this.cdr.detectChanges(); } });
   }
 
+  getManagerName(userRef: any): string {
+    const userId = this.getUserId(userRef);
+    const u = this.users().find(x => x._id === userId);
+    if (!u?.managerId) return '';
+    const manager = this.users().find(x => x._id === u.managerId);
+    return manager?.fullName || '';
+  }
+
   generateFromSessions(): void {
     this.generating.set(true);
     this.error.set(null);
@@ -219,6 +234,19 @@ export class LaborCost1Component implements OnInit {
         console.error('Generate error:', err);
         this.error.set(`Lỗi khi tạo từ session logs: ${err.message || err}`);
       }
+    });
+  }
+
+  markPaid(row: LaborCost1): void {
+    if (!row._id || row.paid) return;
+    if (!confirm('Xác nhận đã chi khoản lương này?')) return;
+    this.laborSvc.markPaid(row._id).subscribe({
+      next: updated => {
+        const newRows = this.rows().map(r => r._id === updated._id ? updated : r);
+        this.rows.set(newRows);
+        this.cdr.detectChanges();
+      },
+      error: err => { console.error(err); alert('Không đánh dấu thanh toán được'); }
     });
   }
 

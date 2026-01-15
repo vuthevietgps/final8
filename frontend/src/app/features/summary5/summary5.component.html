@@ -111,6 +111,7 @@
         <th>Chi phí khác</th>
         <th>Doanh thu</th>
         <th>Lợi nhuận</th>
+        <th>Thu tiền</th>
       </tr>
     </thead>
     <tbody>
@@ -126,6 +127,17 @@
         <td class="num">{{ formatCurrency(row.otherCost) }}</td>
         <td class="num">{{ formatCurrency(row.revenue) }}</td>
         <td class="num profit">{{ formatCurrency(row.profit) }}</td>
+        <td>
+          <span class="badge" [ngClass]="{
+            'success': row.collectionStatus === 'collected',
+            'warning': row.collectionStatus === 'partial',
+            'neutral': !row.collectionStatus || row.collectionStatus === 'receivable'
+          }">
+            {{ row.collectionStatus === 'collected' ? 'Đã thu' : row.collectionStatus === 'partial' ? 'Thu một phần' : 'Phải thu' }}
+          </span>
+          <div class="muted">Đã thu: {{ formatCurrency(row.collectedAmount || 0) }}</div>
+          <div class="muted">Phải thu: {{ formatCurrency(row.receivableAmount || 0) }}</div>
+        </td>
       </tr>
     </tbody>
   </table>

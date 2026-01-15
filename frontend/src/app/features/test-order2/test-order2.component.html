@@ -61,7 +61,7 @@
           <tr>
             <th class="col-date">Ngày</th>
             <th class="col-customer">KH</th>
-            <th class="col-product">SP</th>
+            <th class="col-product">SP / Nguồn</th>
           </tr>
         </thead>
         <tbody>
@@ -75,6 +75,11 @@
                       [ngStyle]="productSelectStyle(o.productId)" class="status-dropdown">
                 <option *ngFor="let p of products()" [value]="p._id" [ngStyle]="getProductOptionStyle(p._id)">{{ p.name }}</option>
               </select>
+              <div class="source-row">
+                <select class="source-select" [ngModel]="getSourceSelection(o)" (change)="onSourceSelect(o, $event)">
+                  <option *ngFor="let opt of sourceOptionsFor(o)" [value]="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
             </td>
           </tr>
           <tr *ngIf="orders().length===0">
@@ -113,6 +118,9 @@
               <select [ngModel]="getId(o.agentId)" (change)="onSelectUpdate(o, 'agentId', $event)">
                 <option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
               </select>
+            </td>
+            <td class="col-wide source-inline" *ngIf="false">
+              <!-- placeholder if we decide to mirror source on scroll side -->
             </td>
             <td class="col-wide">
               <input type="text" [ngModel]="o.adGroupId" (ngModelChange)="o.adGroupId=$event" list="adGroupOptions" (blur)="onAdGroupIdBlur(o, $event)" placeholder="Nhập hoặc dán ID nhóm QC" />

@@ -140,9 +140,17 @@ export class UserFormComponent implements OnInit {
             this.router.navigate(['/users']);
           },
           error: (error) => {
-            this.error = 'Failed to update user';
-            this.loading = false;
             console.error('Error updating user:', error);
+            // Hiển thị message từ backend nếu có
+            if (error?.error?.message) {
+              this.error = error.error.message;
+            } else if (error?.message) {
+              this.error = error.message;
+            } else {
+              this.error = 'Không thể cập nhật người dùng';
+            }
+            this.loading = false;
+            this.cdr.detectChanges();
           }
         });
       } else {
@@ -152,9 +160,17 @@ export class UserFormComponent implements OnInit {
             this.router.navigate(['/users']);
           },
           error: (error) => {
-            this.error = 'Failed to create user';
-            this.loading = false;
             console.error('Error creating user:', error);
+            // Hiển thị message từ backend nếu có
+            if (error?.error?.message) {
+              this.error = error.error.message;
+            } else if (error?.message) {
+              this.error = error.message;
+            } else {
+              this.error = 'Không thể tạo người dùng';
+            }
+            this.loading = false;
+            this.cdr.detectChanges();
           }
         });
       }
@@ -182,7 +198,9 @@ export class UserFormComponent implements OnInit {
       [UserRole.INTERNAL_AGENT]: 'Đại Lý Nội Bộ',
       [UserRole.EXTERNAL_AGENT]: 'Đại Lý Ngoài',
       [UserRole.INTERNAL_SUPPLIER]: 'Nhà Cung Cấp Nội Bộ',
-      [UserRole.EXTERNAL_SUPPLIER]: 'Nhà Cung Cấp Ngoài'
+      [UserRole.EXTERNAL_SUPPLIER]: 'Nhà Cung Cấp Ngoài',
+      [UserRole.INVESTOR]: 'Nhà Đầu Tư',
+      [UserRole.LENDER]: 'Người Cho Vay'
     };
     return roleNames[role] || role;
   }

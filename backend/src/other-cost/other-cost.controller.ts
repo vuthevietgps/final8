@@ -109,6 +109,15 @@ export class OtherCostController {
   }
 
   /**
+   * Xác nhận đã chi
+   */
+  @Patch(':id/confirm')
+  @RequirePermissions('other-costs')
+  confirm(@Param('id') id: string) {
+    return this.otherCostService.confirm(id);
+  }
+
+  /**
    * Xóa chi phí
    */
   @Delete(':id')

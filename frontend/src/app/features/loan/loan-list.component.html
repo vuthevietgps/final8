@@ -1,0 +1,66 @@
+<div class="loan-page">
+  <div class="page-header">
+    <div>
+      <h2>📑 Khoản vay</h2>
+      <p class="subtitle">Theo dõi danh sách khoản vay và dư nợ</p>
+    </div>
+    <div class="actions">
+      <select #statusSel (change)="onFilterChange(statusSel.value)">
+        <option value="">Tất cả trạng thái</option>
+        <option value="active">Đang hoạt động</option>
+        <option value="draft">Nháp</option>
+        <option value="closed">Đã tất toán</option>
+      </select>
+      <button class="refresh" (click)="load()" [disabled]="loading()">🔄 Tải lại</button>
+      <a class="primary" routerLink="/loans/new">➕ Thêm khoản vay</a>
+    </div>
+  </div>
+
+  <div *ngIf="error()" class="alert">{{ error() }}</div>
+  <div *ngIf="loading()" class="loading">Đang tải...</div>
+
+  <div class="stats" *ngIf="!loading()">
+    <div class="stat">
+      <div class="label">Tổng gốc</div>
+      <div class="value">{{ formatCurrency(totalPrincipal()) }} đ</div>
+    </div>
+    <div class="stat">
+      <div class="label">Dư nợ còn lại</div>
+      <div class="value">{{ formatCurrency(totalRemaining()) }} đ</div>
+    </div>
+  </div>
+
+  <table class="data-table" *ngIf="!loading()">
+    <thead>
+      <tr>
+        <th>Tên khoản vay</th>
+        <th>Người cho vay</th>
+        <th>Gốc</th>
+        <th>Dư nợ</th>
+        <th>Lãi suất (%)</th>
+        <th>Kỳ trả</th>
+        <th>Trạng thái</th>
+        <th>Bắt đầu</th>
+        <th>Kết thúc</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngIf="loans().length === 0">
+        <td colspan="10" class="empty">Chưa có khoản vay</td>
+      </tr>
+      <tr *ngFor="let loan of loans()">
+        <td>{{ loan.name }}</td>
+        <td>{{ loan.lenderName }}</td>
+        <td class="num">{{ formatCurrency(loan.principal) }}</td>
+        <td class="num">{{ formatCurrency(loan.principalRemaining) }}</td>
+        <td class="num">{{ loan.interestRate || 0 }}</td>
+        <td>{{ loan.repaymentCycle || '-' }}</td>
+        <td><span class="badge" [class.active]="loan.status==='active'" [class.closed]="loan.status==='closed'">{{ loan.status || 'active' }}</span></td>
+        <td>{{ loan.startDate | date:'yyyy-MM-dd' }}</td>
+        <td>{{ loan.endDate | date:'yyyy-MM-dd' }}</td>
+        <td><a [routerLink]="['/loans', loan._id]">Chi tiết</a></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

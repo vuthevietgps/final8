@@ -6,6 +6,7 @@ import { CreateLaborCost1Dto } from './dto/create-labor-cost1.dto';
 import { UpdateLaborCost1Dto } from './dto/update-labor-cost1.dto';
 import { SalaryConfig, SalaryConfigDocument } from '../salary-config/schemas/salary-config.schema';
 import { SessionLog, SessionLogDocument } from '../session-log/session-log.schema';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class LaborCost1Service {
@@ -13,6 +14,7 @@ export class LaborCost1Service {
     @InjectModel(LaborCost1.name) private model: Model<LaborCost1Document>,
     @InjectModel(SalaryConfig.name) private salaryModel: Model<SalaryConfigDocument>,
     @InjectModel(SessionLog.name) private sessionLogModel: Model<SessionLogDocument>,
+    private financeService: FinanceService,
   ) {}
 
   private parseTimeToHours(time: string): number {
@@ -54,6 +56,7 @@ export class LaborCost1Service {
       hourlyRate,
       cost,
       notes: dto.notes,
+      sessionCount: 1,
     });
     return doc;
   }
@@ -61,9 +64,9 @@ export class LaborCost1Service {
   async findAll(): Promise<any[]> {
     return this.model
       .find()
-      .populate('userId', 'fullName email role')
+      .populate('userId', 'fullName email role managerId')
       .sort({ date: -1, createdAt: -1 })
-      .exec();
+      .lean();
   }
 
   async update(id: string, dto: UpdateLaborCost1Dto): Promise<LaborCost1> {
@@ -98,11 +101,16 @@ export class LaborCost1Service {
 
   /**
    * Tạo labor-cost1 records từ session logs
-   * Nhóm các session trong cùng ngày để tính workHours tổng
+   * Mỗi phiên đăng nhập/đăng xuất tạo 1 bản ghi riêng
    */
   async generateFromSessionLogs(userId?: string, date?: string): Promise<any> {
     const filter: any = {};
-    if (userId) filter.userId = new Types.ObjectId(userId);
+    if (userId) {
+      filter.userId = new Types.ObjectId(userId);
+    } else {
+      // Bỏ qua session logs không gắn user
+      filter.userId = { $exists: true, $ne: null } as any;
+    }
     
     // Lọc theo ngày nếu có
     if (date) {
@@ -123,97 +131,92 @@ export class LaborCost1Service {
       return { message: 'Không tìm thấy session logs hoàn chình để tạo labor cost', created: 0 };
     }
 
-    // Nhóm sessions theo userId và ngày
-    const groupedSessions = new Map<string, any[]>();
-    
-    for (const session of sessions) {
-      const loginDate = this.startOfDay(session.loginAt);
-      const userInfo = session.userId as any; // Cast vì populate
-      const key = `${userInfo._id}_${loginDate.toISOString()}`;
-      
-      if (!groupedSessions.has(key)) {
-        groupedSessions.set(key, []);
-      }
-      groupedSessions.get(key)!.push(session);
-    }
-
     const results = [];
     let created = 0;
 
-    for (const [key, dailySessions] of groupedSessions) {
-      const [userIdStr, dateStr] = key.split('_');
-      const workDate = new Date(dateStr);
-      const userId = new Types.ObjectId(userIdStr);
-      
-      // Kiểm tra đã tồn tại labor-cost1 cho user này trong ngày này chưa
-      const existing = await this.model.findOne({
-        userId,
-        date: workDate
-      }).exec();
-
-      if (existing) {
-        results.push({
-          userId: userIdStr,
-          date: workDate,
-          status: 'skipped',
-          reason: 'Đã tồn tại labor-cost1 cho ngày này'
+    // Tạo 1 bản ghi cho mỗi session
+    for (const session of sessions) {
+      const userInfo = session.userId as any;
+      if (!userInfo?._id) {
+        results.push({ 
+          status: 'skipped', 
+          reason: 'Session thiếu userId', 
+          sessionId: session._id 
         });
         continue;
       }
 
-      // Tính toán startTime, endTime và workHours từ tất cả sessions trong ngày
-      const firstLogin = dailySessions[0].loginAt;
-      const lastLogout = dailySessions[dailySessions.length - 1].logoutAt;
+      const userId = new Types.ObjectId(userInfo._id);
+      const loginDate = this.startOfDay(session.loginAt);
+      const startTime = this.formatTime(session.loginAt);
+      const endTime = this.formatTime(session.logoutAt);
       
-      const startTime = this.formatTime(firstLogin);
-      const endTime = this.formatTime(lastLogout);
-      
-      // Tính tổng thời gian làm việc từ tất cả sessions
-      let totalWorkHours = 0;
-      for (const session of dailySessions) {
-        const sessionStart = session.loginAt;
-        const sessionEnd = session.logoutAt;
-        const sessionHours = (sessionEnd.getTime() - sessionStart.getTime()) / (1000 * 60 * 60);
-        totalWorkHours += sessionHours;
+      // Tính workHours từ thời gian thực tế của session
+      const workHours = Number(
+        ((session.logoutAt.getTime() - session.loginAt.getTime()) / (1000 * 60 * 60)).toFixed(2)
+      );
+
+      // Kiểm tra đã tồn tại labor-cost1 cho session này chưa
+      // Tránh tạo trùng bằng cách check theo loginAt và userId
+      const existing = await this.model.findOne({
+        userId,
+        date: loginDate,
+        startTime,
+        endTime
+      }).exec();
+
+      if (existing) {
+        results.push({
+          sessionId: session._id,
+          userId: userInfo._id,
+          userName: userInfo.fullName,
+          date: loginDate,
+          startTime,
+          endTime,
+          status: 'skipped',
+          reason: 'Đã tồn tại labor-cost1 cho phiên này'
+        });
+        continue;
       }
-      totalWorkHours = Number(totalWorkHours.toFixed(2));
 
       // Lấy hourly rate từ salary config
       const salary = await this.salaryModel.findOne({ userId }).exec();
       const hourlyRate = salary?.hourlyRate ?? 0;
-      const cost = Number((totalWorkHours * hourlyRate).toFixed(2));
+      const cost = Number((workHours * hourlyRate).toFixed(2));
 
-      // Tạo labor-cost1 record
+      // Tạo labor-cost1 record cho phiên này
       try {
         const laborCost = await this.model.create({
-          date: workDate,
+          date: loginDate,
           userId,
           startTime,
           endTime,
-          workHours: totalWorkHours,
+          workHours,
           hourlyRate,
           cost,
-          notes: `Tự động tạo từ ${dailySessions.length} session(s)`
+          notes: `Tự động từ session ${session._id}`,
+          sessionCount: 1,
         });
 
         results.push({
-          userId: userIdStr,
-          userName: (dailySessions[0].userId as any).fullName,
-          date: workDate,
+          sessionId: session._id,
+          userId: userInfo._id,
+          userName: userInfo.fullName,
+          date: loginDate,
           startTime,
           endTime,
-          workHours: totalWorkHours,
+          workHours,
           hourlyRate,
           cost,
-          sessionsCount: dailySessions.length,
           status: 'created',
           id: laborCost._id
         });
         created++;
       } catch (error) {
         results.push({
-          userId: userIdStr,
-          date: workDate,
+          sessionId: session._id,
+          userId: userInfo._id,
+          date: loginDate,
           status: 'error',
           error: error.message
         });
@@ -221,11 +224,32 @@ export class LaborCost1Service {
     }
 
     return {
-      message: `Đã tạo ${created} labor-cost1 records từ session logs`,
+      message: `Đã tạo ${created}/${sessions.length} labor-cost1 records từ session logs`,
       created,
-      total: results.length,
+      total: sessions.length,
       results
     };
+  }
+
+  async markPaid(id: string) {
+    const doc = await this.model.findById(id);
+    if (!doc) throw new NotFoundException('Bản ghi không tồn tại');
+    if (doc.paid) return doc;
+
+    // Ghi nhận chi ra quỹ lương
+    await this.financeService.createCashflow({
+      direction: 'out',
+      sourceType: 'other',
+      amount: doc.cost,
+      category: 'salary',
+      referenceId: String(doc._id),
+      description: `Thanh toán lương ${doc.workHours}h`,
+    } as any);
+
+    doc.paid = true;
+    doc.paidAt = new Date();
+    await doc.save();
+    return doc.toObject();
   }
 
   private formatTime(date: Date): string {

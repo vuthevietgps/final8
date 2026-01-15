@@ -11,6 +11,8 @@ import { AdAccount, AdAccountSchema } from '../ad-account/schemas/ad-account.sch
 import { ChatMessage, ChatMessageSchema } from '../chat-message/schemas/chat-message.schema';
 import { AdvertisingCostService } from './advertising-cost.service';
 import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-sync.service';
+import { AdvertisingCostGoogleSyncService } from './advertising-cost.google-sync.service';
+import { AdvertisingCostTiktokSyncService } from './advertising-cost.tiktok-sync.service';
 import { ApiToken, ApiTokenSchema } from '../api-token/schemas/api-token.schema';
 import { AdvertisingCostController } from './advertising-cost.controller';
 import { forwardRef } from '@nestjs/common';
@@ -29,7 +31,7 @@ import { forwardRef } from '@nestjs/common';
     }),
   ],
   controllers: [AdvertisingCostController],
-  providers: [AdvertisingCostService, AdvertisingCostFacebookSyncService],
-  exports: [AdvertisingCostService, AdvertisingCostFacebookSyncService] // Export service để dùng ở module khác
+  providers: [AdvertisingCostService, AdvertisingCostFacebookSyncService, AdvertisingCostGoogleSyncService, AdvertisingCostTiktokSyncService],
+  exports: [AdvertisingCostService, AdvertisingCostFacebookSyncService, AdvertisingCostGoogleSyncService, AdvertisingCostTiktokSyncService] // Export service để dùng ở module khác
 })
 export class AdvertisingCostModule {}

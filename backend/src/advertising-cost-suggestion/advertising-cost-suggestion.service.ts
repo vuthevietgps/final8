@@ -48,8 +48,26 @@ export class AdvertisingCostSuggestionService {
   }
 
   async update(id: string, updateDto: UpdateAdvertisingCostSuggestionDto): Promise<AdvertisingCostSuggestionDocument> {
+    const current = await this.suggestionModel.findById(id).exec();
+    if (!current) {
+      throw new NotFoundException(`Không tìm thấy đề xuất chi phí với ID ${id}`);
+    }
+
+    const updateData: any = { ...updateDto };
+
+    // Kẹp thay đổi ngân sách đề xuất trong biên độ ±20% so với giá trị hiện tại
+    if (typeof updateDto.suggestedCost === 'number') {
+      const base = current.suggestedCost || current.dailyCost || updateDto.suggestedCost;
+      if (base > 0) {
+        const maxUp = base * 1.2;
+        const maxDown = base * 0.8;
+        const clamped = Math.max(maxDown, Math.min(maxUp, updateDto.suggestedCost));
+        updateData.suggestedCost = Math.round(clamped);
+      }
+    }
+
     const updatedSuggestion = await this.suggestionModel
-      .findByIdAndUpdate(id, updateDto, { new: true })
+      .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
     
     if (!updatedSuggestion) {

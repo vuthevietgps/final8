@@ -8,6 +8,12 @@
     <button type="button" class="btn btn-primary" (click)="openModal()">
       ➕ Thêm Nhóm Quảng Cáo
     </button>
+    <button type="button" class="btn btn-secondary" (click)="loadRecommendationsAI()" [disabled]="loadingRecommend()">
+      🤖 Tính đề xuất AI
+    </button>
+    <button type="button" class="btn btn-success" (click)="applyAutoAI()" [disabled]="applyingAuto()">
+      ⚡ Áp dụng Auto AI
+    </button>
   </div>
 </div>
 
@@ -57,6 +63,12 @@
     </div>
     <button class="btn btn-primary" (click)="onSearch()">Tìm kiếm</button>
     <button class="btn btn-secondary" (click)="resetFilters()">Đặt lại</button>
+    <div class="platform-tabs">
+      <button class="btn" [class.active]="filterPlatform()==='all'" (click)="setPlatformFilter('all')">Tất cả</button>
+      <button class="btn" [class.active]="filterPlatform()==='facebook'" (click)="setPlatformFilter('facebook')">Facebook</button>
+      <button class="btn" [class.active]="filterPlatform()==='google'" (click)="setPlatformFilter('google')">Google</button>
+      <button class="btn" [class.active]="filterPlatform()==='tiktok'" (click)="setPlatformFilter('tiktok')">TikTok</button>
+    </div>
   </div>
 </div>
 
@@ -72,6 +84,10 @@
         <th>Fanpage</th>
         <th>Danh mục SP</th>
         <th>Sản phẩm</th>
+        <th>Nền tảng</th>
+        <th>Budget hiện tại</th>
+        <th>Chi Phí Đề Xuất AI</th>
+        <th>Auto AI</th>
         
         <th>Webhook</th>
         <th>Trạng thái</th>
@@ -98,6 +114,28 @@
           <div class="product-count">
             {{ group.selectedProducts?.length || 0 }} sản phẩm
           </div>
+        </td>
+        <td>
+          <span class="platform-pill" [attr.data-platform]="group.platform || 'facebook'">{{ group.platform || 'facebook' }}</span>
+        </td>
+        <td>{{ (group.dailyBudget || 0) | number:'1.0-0' }}</td>
+        <td>
+          <div class="cell-content">
+            <div class="cell-main">
+              <ng-container *ngIf="(getAiSuggested(group) ?? group.aiSuggestedBudget) !== undefined; else noAi">
+                {{ (getAiSuggested(group) ?? group.aiSuggestedBudget) | number:'1.0-0' }}
+              </ng-container>
+              <ng-template #noAi>—</ng-template>
+            </div>
+            <div class="cell-sub" *ngIf="group.aiChangePercent !== undefined">Δ {{ group.aiChangePercent }}%</div>
+            <div class="cell-sub" *ngIf="group.aiReason">{{ group.aiReason }}</div>
+          </div>
+        </td>
+        <td>
+          <label class="toggle-switch">
+            <input type="checkbox" (change)="toggleAutoApply(group, $any($event.target).checked)">
+            <span class="slider"></span>
+          </label>
         </td>
         
         <td>
@@ -251,7 +289,7 @@
               <select id="platform" class="form-control" formControlName="platform">
                 <option value="facebook">Facebook</option>
                 <option value="google">Google</option>
-                <option value="ticktock">TickTock</option>
+                <option value="tiktok">TikTok</option>
               </select>
             </div>
           </div>

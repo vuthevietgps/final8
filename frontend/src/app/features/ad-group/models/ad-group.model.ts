@@ -3,7 +3,7 @@
  * Mục đích: Khai báo interface/kiểu dữ liệu cho Nhóm Quảng Cáo (frontend).
  */
 
-export type AdPlatform = 'facebook' | 'google' | 'ticktock';
+export type AdPlatform = 'facebook' | 'google' | 'tiktok';
 
 export interface AdGroup {
   _id?: string;
@@ -15,6 +15,7 @@ export interface AdGroup {
   agentId?: string;      // Tham chiếu user (đại lý) (deprecated)
   adAccountId?: string;  // Tham chiếu tài khoản quảng cáo (deprecated)
   platform?: AdPlatform; // Nền tảng quảng cáo (deprecated)
+  dailyBudget?: number;  // Ngân sách/ngày hiện tại
   
   // New chatbot integration fields
   fanpageId?: string;           // Tham chiếu fanpage
@@ -36,6 +37,11 @@ export interface AdGroup {
   agentName?: string;
   adAccountName?: string;
   adAccountAccountId?: string;
+
+  // AI đề xuất ngân sách
+  aiSuggestedBudget?: number;
+  aiChangePercent?: number;
+  aiReason?: string;
   
   createdAt?: Date;
   updatedAt?: Date;
@@ -43,3 +49,13 @@ export interface AdGroup {
 
 export type CreateAdGroup = Omit<AdGroup, '_id' | 'createdAt' | 'updatedAt'>;
 export type UpdateAdGroup = Partial<CreateAdGroup>;
+
+export interface AdGroupRecommendation {
+  adGroupId: string;
+  name: string;
+  platform: string;
+  currentBudget: number;
+  suggestedBudget: number;
+  changePercent: number;
+  reason: string;
+}

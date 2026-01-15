@@ -168,7 +168,14 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
-.table-wrapper { overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; }
+.table-wrapper { overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; width: 100%; }
+.data-table { min-width: 1600px; } /* giữ bảng rộng để xuất hiện thanh trượt ngang */
+.badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.badge.success { background: #dcfce7; color: #166534; }
+.badge.warning { background: #fef3c7; color: #92400e; }
+.badge.neutral { background: #e5e7eb; color: #374151; }
+.flex-col { display: flex; flex-direction: column; gap: 6px; }
+.mt-4 { margin-top: 4px; }
 
 /* Stats-panel items */
 .stats-grid .stat-item { display:flex; gap:8px; align-items:center; }

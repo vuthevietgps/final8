@@ -61,6 +61,9 @@ import { OrderUpdateModule } from './order-update/order-update.module';
 import { PurchaseOrderModule } from './purchase/purchase-order.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { AdReportModule } from './ad-report/ad-report.module';
+import { ReturnReportModule } from './return-report/return-report.module';
+import { SupplierPayableModule } from './supplier-payable/supplier-payable.module';
+import { FinanceModule } from './finance/finance.module';
 
 @Module({
   imports: [
@@ -88,8 +91,8 @@ import { AdReportModule } from './ad-report/ad-report.module';
       },
     }),
 
-    // Kết nối MongoDB (ưu tiên MONGODB_URI từ môi trường; fallback với password gốc)
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system', {
+    // Kết nối MongoDB (ưu tiên MONGODB_URI từ môi trường; fallback atlas smarterp-dev)
+    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev', {
       connectionFactory: (connection) => {
         connection.on('connected', () => {
           console.log('MongoDB connected with UTF-8 support');
@@ -170,10 +173,15 @@ import { AdReportModule } from './ad-report/ad-report.module';
     OrderUpdateModule,
     // Module quản lý nhập hàng (Purchase Orders)
     PurchaseOrderModule,
+    // Module công nợ nhà cung cấp
+    SupplierPayableModule,
     // Module quản lý kho & WAC
     InventoryModule,
     // Module báo cáo hiệu quả quảng cáo (chi phí / đơn theo ad group)
     AdReportModule,
+    // Module báo cáo hàng hoàn (ad group / sản phẩm)
+    ReturnReportModule,
+    FinanceModule,
     // Compatibility modules (lightweight stubs)
     Summary4Module,
     Summary5Module,

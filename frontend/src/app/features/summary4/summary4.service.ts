@@ -52,6 +52,10 @@ export class Summary4Service {
     return this.http.patch<Summary4>(`${this.apiUrl}/${id}/manual-payment`, data, { withCredentials: true });
   }
 
+  updateCollection(id: string, data: { status?: string; collectedAmount?: number; receivableAmount?: number }): Observable<Summary4> {
+    return this.http.patch<Summary4>(`${this.apiUrl}/${id}/collection`, data, { withCredentials: true });
+  }
+
   getStats(): Observable<Summary4Stats> {
     return this.http.get<Summary4Stats>(`${this.apiUrl}/stats`, { withCredentials: true });
   }

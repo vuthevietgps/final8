@@ -1,0 +1,67 @@
+<div class="return-report">
+  <div class="header">
+    <h2>🔁 Báo cáo hàng hoàn</h2>
+    <div class="tabs">
+      <button [class.active]="type() === 'adGroup'" (click)="setType('adGroup')">Theo nhóm quảng cáo</button>
+      <button [class.active]="type() === 'product'" (click)="setType('product')">Theo sản phẩm</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <label>From: <input type="date" [ngModel]="filter().fromDate" (ngModelChange)="setFromDate($event)" /></label>
+    <label>To: <input type="date" [ngModel]="filter().toDate" (ngModelChange)="setToDate($event)" /></label>
+    <button (click)="refresh()">Tải lại</button>
+  </div>
+
+  <div *ngIf="loading()" class="loading">Đang tải...</div>
+  <div *ngIf="error()" class="error">{{ error() }}</div>
+
+  <ng-container *ngIf="summary() as s">
+    <div class="summary">
+      <div>Đơn: {{ s.totalOrders | number }} | Hoàn: {{ s.returnOrders | number }} ({{ formatPercent(s.returnOrders / (s.totalOrders || 1)) }})</div>
+      <div>SL: {{ s.totalQty | number }} | Hoàn: {{ s.returnQty | number }}</div>
+      <div>Doanh thu: {{ formatCurrency(s.revenue) }} | Hoàn: {{ formatCurrency(s.returnRevenue) }}</div>
+      <div>Cost: {{ formatCurrency(s.cost) }} | Hoàn: {{ formatCurrency(s.returnCost) }}</div>
+      <div>COD: {{ formatCurrency(s.cod) }} | Hoàn: {{ formatCurrency(s.returnCod) }}</div>
+    </div>
+  </ng-container>
+
+  <div class="table-wrapper" *ngIf="rows().length">
+    <table>
+      <thead>
+        <tr>
+          <th>{{ type() === 'adGroup' ? 'Nhóm quảng cáo' : 'Sản phẩm' }}</th>
+          <th>Đơn</th>
+          <th>Hoàn</th>
+          <th>Tỷ lệ hoàn</th>
+          <th>SL</th>
+          <th>SL hoàn</th>
+          <th>Doanh thu</th>
+          <th>Doanh thu hoàn</th>
+          <th>Cost</th>
+          <th>Cost hoàn</th>
+          <th>COD</th>
+          <th>COD hoàn</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of rows()">
+          <td>{{ r.name || r.key }}</td>
+          <td>{{ r.totalOrders | number }}</td>
+          <td>{{ r.returnOrders | number }}</td>
+          <td>{{ formatPercent(r.returnRate) }}</td>
+          <td>{{ r.totalQty | number }}</td>
+          <td>{{ r.returnQty | number }}</td>
+          <td>{{ formatCurrency(r.revenue) }}</td>
+          <td>{{ formatCurrency(r.returnRevenue) }}</td>
+          <td>{{ formatCurrency(r.cost) }}</td>
+          <td>{{ formatCurrency(r.returnCost) }}</td>
+          <td>{{ formatCurrency(r.cod) }}</td>
+          <td>{{ formatCurrency(r.returnCod) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div *ngIf="!loading() && !error() && !rows().length" class="empty">Không có dữ liệu</div>
+</div>

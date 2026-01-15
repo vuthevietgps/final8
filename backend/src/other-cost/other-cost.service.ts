@@ -23,8 +23,10 @@ export class OtherCostService {
     const payload: Partial<OtherCost> = {
       date: new Date(dto.date),
       amount: dto.amount,
-  notes: dto.notes?.trim() || undefined,
-  documentLink: dto.documentLink?.trim() || undefined,
+      notes: dto.notes?.trim() || undefined,
+      documentLink: dto.documentLink?.trim() || undefined,
+      isConfirmed: dto.isConfirmed ?? false,
+      confirmedAt: dto.isConfirmed ? new Date() : undefined,
     };
     const created = new this.otherCostModel(payload);
     return created.save();
@@ -63,10 +65,25 @@ export class OtherCostService {
     if (dto.documentLink !== undefined) {
       update.documentLink = dto.documentLink?.trim() || undefined;
     }
+    if (dto.isConfirmed !== undefined) {
+      update.isConfirmed = dto.isConfirmed;
+      update.confirmedAt = dto.isConfirmed ? new Date() : undefined;
+    }
     const updated = await this.otherCostModel
       .findByIdAndUpdate(id, update, { new: true })
       .exec();
     if (!updated) throw new NotFoundException('Không tìm thấy chi phí để cập nhật');
+    return updated;
+  }
+
+  /**
+   * Xác nhận đã chi
+   */
+  async confirm(id: string): Promise<OtherCost> {
+    const updated = await this.otherCostModel
+      .findByIdAndUpdate(id, { isConfirmed: true, confirmedAt: new Date() }, { new: true })
+      .exec();
+    if (!updated) throw new NotFoundException('Không tìm thấy chi phí để xác nhận');
     return updated;
   }
 

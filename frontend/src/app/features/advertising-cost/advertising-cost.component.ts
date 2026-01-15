@@ -40,6 +40,7 @@ export class AdvertisingCostComponent implements OnInit {
 
   // Filters
   filterAdAccountId = signal('all');
+  filterChannel = signal<'all' | 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other'>('all');
 
   // UI
   showModal = signal(false);
@@ -50,6 +51,11 @@ export class AdvertisingCostComponent implements OnInit {
   selectedFile: File | null = null;
   uploadProgress = signal<any | null>(null);
   uploadLoading = signal(false);
+
+  // Google Ads sync
+  syncGoogleLoading = signal(false);
+  syncGoogleDate = signal<string>('');
+  syncGoogleDays = signal<number>(1);
 
   form = this.fb.group({
     // Ngày: UI nhập theo mm/dd/yyyy nhưng lưu ISO yyyy-mm-dd
@@ -69,6 +75,8 @@ export class AdvertisingCostComponent implements OnInit {
     const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().slice(0,10);
     this.syncDate.set(yesterday);
     this.syncDays.set(1);
+    this.syncGoogleDate.set(yesterday);
+    this.syncGoogleDays.set(1);
     this.loadAdAccounts();
     this.loadData();
   }
@@ -109,11 +117,17 @@ export class AdvertisingCostComponent implements OnInit {
 
   loadData() {
     this.loading.set(true);
-    const filter = this.filterAdAccountId() !== 'all' ? { adAccountId: this.filterAdAccountId() } : undefined;
+    const filter: any = {};
+    if (this.filterAdAccountId() !== 'all') filter.adAccountId = this.filterAdAccountId();
+    if (this.filterChannel() !== 'all') filter.channel = this.filterChannel();
     this.service.getAll(filter).subscribe({
       next: (data) => {
         // chuẩn hoá hiển thị ngày theo mm/dd/yyyy
-        const normalized = data.map(d => ({ ...d, date: this.toMmDdYyyy(d.date?.slice(0,10) || new Date().toISOString().slice(0,10)) } as AdvertisingCost));
+        const normalized = data.map(d => ({
+          ...d,
+          channel: d.channel || 'facebook',
+          date: this.toMmDdYyyy(d.date?.slice(0,10) || new Date().toISOString().slice(0,10))
+        } as AdvertisingCost));
         this.items.set(normalized);
         
         // Load total spent for each unique adGroupId
@@ -128,7 +142,7 @@ export class AdvertisingCostComponent implements OnInit {
       },
     });
 
-    this.service.getSummary().subscribe({
+    this.service.getSummary(this.filterChannel()).subscribe({
       next: (sum) => this.summary.set(sum),
       error: () => this.summary.set({ totalSpent: 0, count: 0, avgCPM: 0, avgCPC: 0 }),
     });
@@ -173,6 +187,11 @@ export class AdvertisingCostComponent implements OnInit {
     this.loadData();
   }
 
+  setChannelFilter(channel: 'all' | 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other') {
+    this.filterChannel.set(channel);
+    this.onFilterChange();
+  }
+
   openCreate() {
     this.editingId = null;
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -185,6 +204,7 @@ export class AdvertisingCostComponent implements OnInit {
     const todayIso = new Date().toISOString().slice(0, 10);
     const payload: CreateAdvertisingCost = {
       date: todayIso,
+      channel: this.filterChannel() === 'all' ? 'facebook' : (this.filterChannel() as any),
       frequency: null as any,
       adGroupId: '0',
       spentAmount: 0,
@@ -336,6 +356,24 @@ export class AdvertisingCostComponent implements OnInit {
         console.error('Sync FB cost error', err);
         this.syncLoading.set(false);
         this.error.set(err?.error?.message || 'Không thể đồng bộ chi phí từ Facebook');
+      }
+    });
+  }
+
+  // ===== Manual Google sync =====
+  syncGoogle() {
+    this.syncGoogleLoading.set(true);
+    const date = this.syncGoogleDate();
+    const days = this.syncGoogleDays();
+    this.service.fetchGoogleCost({ date, days }).subscribe({
+      next: () => {
+        this.syncGoogleLoading.set(false);
+        this.setChannelFilter('google');
+      },
+      error: (err) => {
+        console.error('Sync Google Ads cost error', err);
+        this.syncGoogleLoading.set(false);
+        this.error.set(err?.error?.message || 'Không thể đồng bộ chi phí từ Google Ads');
       }
     });
   }

@@ -19,6 +19,9 @@ export class LaborCost1 {
   @Prop({ type: Number, required: true, min: 0 })
   workHours: number; // Số giờ làm (end - start)
 
+  @Prop({ type: Number, default: 0 })
+  sessionCount?: number; // Số phiên được gộp trong ngày
+
   @Prop({ type: Number, required: true, min: 0 })
   hourlyRate: number; // Cấu hình lương tại thời điểm ghi nhận (snapshot)
 
@@ -27,6 +30,12 @@ export class LaborCost1 {
 
   @Prop({ type: String })
   notes?: string;
+
+  @Prop({ type: Boolean, default: false })
+  paid?: boolean;
+
+  @Prop({ type: Date })
+  paidAt?: Date;
 }
 
 export type LaborCost1Document = HydratedDocument<LaborCost1>;

@@ -1,6 +1,12 @@
 <div class="container">
   <h2>📢 Chi Phí Quảng Cáo</h2>
 
+  <div class="channel-tabs">
+    <button (click)="setChannelFilter('all')" [class.active]="filterChannel()==='all'">Tất cả</button>
+    <button (click)="setChannelFilter('facebook')" [class.active]="filterChannel()==='facebook'">Facebook</button>
+    <button (click)="setChannelFilter('google')" [class.active]="filterChannel()==='google'">Google Ads</button>
+  </div>
+
   <div class="toolbar">
     <div class="action-buttons">
       <button (click)="addNew()" class="btn-primary">+ Thêm mới</button>
@@ -30,6 +36,28 @@
       <p class="sync-note">
         💡 Hệ thống tự động đồng bộ chi phí hàng ngày lúc 01:05 sáng. 
         Dùng nút này để đồng bộ thủ công cho ngày/khoảng thời gian cụ thể.
+      </p>
+    </div>
+
+    <div class="fb-sync-section google">
+      <h3>🔍 Đồng bộ chi phí Google Ads</h3>
+      <div class="sync-controls">
+        <div class="sync-inputs">
+          <label>
+            Ngày bắt đầu:
+            <input type="date" [value]="syncGoogleDate()" (change)="syncGoogleDate.set($any($event.target).value)" />
+          </label>
+          <label>
+            Số ngày (tối đa 14):
+            <input type="number" min="1" max="14" [value]="syncGoogleDays()" (input)="syncGoogleDays.set(+($any($event.target).value || 1))" />
+          </label>
+        </div>
+        <button (click)="syncGoogle()" [disabled]="syncGoogleLoading()" class="btn-sync-fb">
+          {{ syncGoogleLoading() ? '🔄 Đang đồng bộ Google...' : '⚡ Đồng bộ Google' }}
+        </button>
+      </div>
+      <p class="sync-note">
+        💡 Kênh Google sẽ được gắn nhãn channel="google" trong bảng chi phí. Chọn tab Google để xem nhanh.
       </p>
     </div>
 
@@ -116,6 +144,7 @@
     <thead>
       <tr>
         <th>Ngày (MM/DD/YYYY)</th>
+        <th>Kênh</th>
         <th>Tần suất</th>
         <th>ID Nhóm QC</th>
         <th>Tài khoản QC</th>
@@ -136,6 +165,7 @@
     <tbody>
       <tr *ngFor="let r of items()">
         <td>{{ r.date }}</td>
+        <td>{{ r.channel || 'facebook' }}</td>
         <td>{{ r.frequency || '-' }}</td>
         <td>{{ r.adGroupId }}</td>
         <td>{{ r.adAccountName ? (r.adAccountName + ' (' + r.adAccountAccountId + ')') : '-' }}</td>

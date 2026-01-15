@@ -38,6 +38,34 @@ export interface ProductProfitReport {
   };
 }
 
+// Weekly/Monthly aggregate view
+export interface ProductPeriodicalRow {
+  productName: string;
+  periodKey: string; // YYYY-WW or YYYY-MM
+  periodLabel: string;
+  revenue: number;
+  adCost: number;
+  profit: number;
+  netCash: number;
+  orders: number;
+  weekStart?: string;
+  weekEnd?: string;
+  year?: number;
+  month?: number;
+}
+
+export interface ProductPeriodicalResponse {
+  period: { from: string | null; to: string | null };
+  summary: {
+    revenue: number;
+    adCost: number;
+    profit: number;
+    netCash: number;
+    orders: number;
+  };
+  items: ProductPeriodicalRow[];
+}
+
 export interface ChartDataPoint {
   date: string;
   profit: number;

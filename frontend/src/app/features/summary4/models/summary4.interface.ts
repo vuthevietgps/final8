@@ -22,6 +22,9 @@ export interface Summary4 {
   paidToCompany: number;
   manualPayment: number;
   needToPay: number;
+  collectionStatus?: 'collected' | 'receivable' | 'partial' | string;
+  collectedAmount?: number;
+  receivableAmount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,6 +108,8 @@ export interface Summary4Stats {
   totalPaidToCompany: number;
   totalManualPayment: number;
   totalNeedToPay: number;
+  totalCollected?: number;
+  totalReceivable?: number;
   timestamp: string;
 }
 

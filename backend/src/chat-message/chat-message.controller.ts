@@ -27,6 +27,15 @@ export class ChatMessageController {
     private chatEvents: ChatEventsService,
   ) {}
 
+  // Ensure media URL is absolute by prefixing configured public origin if needed
+  private ensureAbsolute(url: string) {
+    if (!url) return url;
+    if (/^https?:\/\//i.test(url)) return url;
+    const origin = process.env.MEDIA_ABSOLUTE_BASE || process.env.PUBLIC_ORIGIN || process.env.APP_PUBLIC_ORIGIN || '';
+    if (!origin) return url;
+    return (origin.replace(/\/$/, '') + url).replace(/\s/g, '');
+  }
+
   // Individual message CRUD removed - use conversation-level operations instead
 
   // Conversation endpoints
@@ -204,10 +213,20 @@ export class ChatMessageController {
       if (keywords.length) {
         // Use ProductService search (by first keyword), then refine by all keywords if possible
         const initial = await this.productService.findAll({ search: keywords[0] });
-        const products = (initial || []).filter((p: any) => {
-          const name = (p?.name || '').toLowerCase();
-          return keywords.some(k => name.includes(k.toLowerCase()));
-        }).slice(0, 3);
+        // Ưu tiên sản phẩm đã được gán variation cho fanpage hiện tại
+        const fanpageIdStr = fanpage?._id ? String(fanpage._id) : '';
+        const products = (initial || [])
+          .filter((p: any) => {
+            const name = (p?.name || '').toLowerCase();
+            return keywords.some(k => name.includes(k.toLowerCase()));
+          })
+          .sort((a: any, b: any) => {
+            const aHasVar = (a?.fanpageVariations || []).some((v: any) => String(v.fanpageId) === fanpageIdStr && v.isActive !== false);
+            const bHasVar = (b?.fanpageVariations || []).some((v: any) => String(v.fanpageId) === fanpageIdStr && v.isActive !== false);
+            if (aHasVar === bHasVar) return 0;
+            return aHasVar ? -1 : 1; // đưa sản phẩm có variation của fanpage lên trước
+          })
+          .slice(0, 3);
         if (products?.length) {
           const p = products[0];
           // Try fanpage-specific price first
@@ -226,6 +245,36 @@ export class ChatMessageController {
 
           let reply = `Anh/chị đang quan tâm: ${p.name}.\n- Giá hiện tại: ${priceText}.\n- Thời gian giao/nhận: ${deliveryText}.${notes}${resource}\n\nĐể tư vấn và chốt giá nhanh nhất, anh/chị cho em xin số điện thoại liên hệ được không ạ?`;
           reply = stripEmojis(reply);
+
+          // Gửi kèm nhiều ảnh: lấy ảnh chung của sản phẩm trước, sau đó đến customImages của fanpage (không ưu tiên variation nữa)
+          const pickImages = (): string[] => {
+            const seen = new Set<string>();
+            const out: string[] = [];
+            const pushList = (arr?: string[]) => {
+              for (const url of arr || []) {
+                if (!url || seen.has(url)) continue;
+                seen.add(url);
+                out.push(url);
+              }
+            };
+            // 1) Ảnh chung của sản phẩm
+            if ((p as any).images?.length) pushList((p as any).images.map((img: any) => img?.url || img).filter(Boolean));
+            // 2) Ảnh custom của fanpage (nếu có)
+            if (fpVar?.customImages?.length) pushList(fpVar.customImages);
+            return out;
+          };
+          const imageList = pickImages()
+            .map(u => this.ensureAbsolute(u))
+            .filter(u => /^https?:\/\//i.test(u))
+            .slice(0, 5); // gửi tối đa 5 ảnh để tránh spam
+          for (const img of imageList) {
+            try {
+              await this.sendImageByUrl({ fanpageId: body.fanpageId, senderPsid: body.senderPsid, imageUrl: img, alt: p.name });
+            } catch (err) {
+              const pid = (p as any)?._id || (p as any)?.id || '(unknown)';
+              console.warn('[AI-send-image] failed to send image for product', pid, err?.message || err);
+            }
+          }
 
           if (body.previewOnly) {
             return { preview: reply, source: 'immediate-product', productId: String((p as any)._id || '') };

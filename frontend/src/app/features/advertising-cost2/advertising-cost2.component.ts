@@ -24,6 +24,7 @@ export class AdvertisingCost2Component implements OnInit {
   loading = signal(false);
   error = signal<string | null>(null);
   filterAdAccountId = signal('all');
+  filterChannel = signal<'all' | 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other'>('all');
 
   constructor(private service: AdvertisingCostService, private adAccountService: AdAccountService) {}
 
@@ -54,11 +55,14 @@ export class AdvertisingCost2Component implements OnInit {
   load(): void {
     this.loading.set(true);
     this.error.set(null);
-    const filter = this.filterAdAccountId() !== 'all' ? { adAccountId: this.filterAdAccountId() } : undefined;
+    const filter: any = {};
+    if (this.filterAdAccountId() !== 'all') filter.adAccountId = this.filterAdAccountId();
+    if (this.filterChannel() !== 'all') filter.channel = this.filterChannel();
     this.service.getAll(filter).subscribe({
       next: rows => {
         const normalized = (rows || []).map(r => ({
           ...r,
+          channel: r.channel || 'facebook',
           date: this.toDdMmYyyy((r as any).date?.slice(0,10) || new Date().toISOString().slice(0,10))
         } as AdvertisingCost));
         this.items.set(normalized);
@@ -70,11 +74,17 @@ export class AdvertisingCost2Component implements OnInit {
 
   onFilterChange(): void { this.load(); }
 
+  setChannel(channel: 'all' | 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other') {
+    this.filterChannel.set(channel);
+    this.load();
+  }
+
   addNew(): void {
     const todayIso = new Date().toISOString().slice(0,10);
     this.loading.set(true);
     this.service.create({
       date: todayIso,
+      channel: this.filterChannel() === 'all' ? 'facebook' : (this.filterChannel() as any),
       adGroupId: '0',
       frequency: null as any,
       spentAmount: 0,

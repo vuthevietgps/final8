@@ -15,7 +15,7 @@ import { SessionLogModule } from '../session-log/session-log.module';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-here',
-      signOptions: { expiresIn: '24h' },
+      signOptions: { expiresIn: '4h' },
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
   SessionLogModule,

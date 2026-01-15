@@ -21,6 +21,12 @@ export class OtherCost {
   @Prop({ type: String, trim: true })
   documentLink?: string; // Link chứng từ (text)
 
+  @Prop({ type: Boolean, default: false })
+  isConfirmed?: boolean; // Đánh dấu đã chi
+
+  @Prop({ type: Date })
+  confirmedAt?: Date; // Thời điểm xác nhận chi
+
   // Các trường timestamps do Mongoose thêm khi bật { timestamps: true }
   @Prop()
   createdAt?: Date;
@@ -32,3 +38,4 @@ export class OtherCost {
 export const OtherCostSchema = SchemaFactory.createForClass(OtherCost);
 OtherCostSchema.index({ date: -1 });
 OtherCostSchema.index({ createdAt: -1 });
+OtherCostSchema.index({ isConfirmed: 1, date: -1 });

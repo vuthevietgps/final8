@@ -1,6 +1,9 @@
+export type AdChannel = 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other';
+
 export interface AdvertisingCost {
   _id?: string;
   date: string; // ISO string yyyy-mm-dd (UI hiển thị mm/dd/yyyy)
+  channel?: AdChannel;
   frequency?: number;
   adGroupId: string;
   spentAmount?: number;

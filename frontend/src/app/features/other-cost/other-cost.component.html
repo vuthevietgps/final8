@@ -41,6 +41,7 @@
           <th class="right">Chi phí</th>
           <th>Ghi chú</th>
           <th>Link chứng từ</th>
+          <th>Trạng thái</th>
           <th class="center">Hành động</th>
         </tr>
       </thead>
@@ -52,13 +53,21 @@
           <td>
             <a *ngIf="c.documentLink" [href]="c.documentLink" target="_blank" rel="noopener">Mở link</a>
           </td>
+          <td>
+            <span *ngIf="c.isConfirmed" class="badge success">Đã chi</span>
+            <span *ngIf="!c.isConfirmed" class="badge warning">Chưa chi</span>
+            <div class="muted" *ngIf="c.confirmedAt">{{ c.confirmedAt | date:'yyyy-MM-dd HH:mm' }}</div>
+          </td>
           <td class="center">
             <button class="btn btn-sm" (click)="openEdit(c)">Sửa</button>
             <button class="btn btn-sm btn-danger" (click)="remove(c._id!)">Xóa</button>
+            <button class="btn btn-sm btn-secondary" [disabled]="c.isConfirmed" (click)="confirm(c._id!)">
+              ✅ Xác nhận đã chi
+            </button>
           </td>
         </tr>
         <tr *ngIf="costs().length === 0">
-          <td colspan="5" class="center muted">Chưa có dữ liệu</td>
+          <td colspan="6" class="center muted">Chưa có dữ liệu</td>
         </tr>
       </tbody>
     </table>

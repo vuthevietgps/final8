@@ -2,9 +2,13 @@
  * File: advertising-cost/dto/create-advertising-cost.dto.ts
  * Mục đích: DTO tạo mới Chi Phí Quảng Cáo với validate.
  */
-import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateAdvertisingCostDto {
+  @IsOptional()
+  @IsIn(['facebook', 'google', 'tiktok', 'zalo', 'other'])
+  channel?: 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other';
+
   @IsOptional()
   @IsDateString()
   date?: string; // Định dạng ISO, frontend sẽ nhập mm/dd/yyyy rồi convert

@@ -1,6 +1,10 @@
 export interface TestOrder2 {
   _id: string;
   productId: { _id: string; name?: string; color?: string } | string;
+  productSource?: 'inventory' | 'supplier';
+  supplierId?: string | { _id: string };
+  supplierPriceLevel?: number;
+  supplierAppliedPrice?: number;
   customerName: string;
   quantity: number;
   agentId: { _id: string; name?: string; fullName?: string } | string;
@@ -25,3 +29,16 @@ export type CreateTestOrder2 = Omit<TestOrder2, '_id' | 'createdAt' | 'updatedAt
 export type UpdateTestOrder2 = Partial<CreateTestOrder2>;
 
 export interface NamedItem { _id: string; name: string; color?: string; }
+
+export interface ProductWithSuppliers extends NamedItem {
+  suppliers?: Array<{
+    supplierId?: string;
+    price1?: number;
+    price2?: number;
+    price3?: number;
+    appliedLevel?: number;
+    appliedPrice?: number;
+    priority?: number;
+    isDefault?: boolean;
+  }>;
+}

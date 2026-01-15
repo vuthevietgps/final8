@@ -3,6 +3,7 @@
  * Mục đích: DTO tạo Chi Phí Khác.
  */
 import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean } from 'class-validator';
 
 export class CreateOtherCostDto {
   @IsDateString()
@@ -19,4 +20,8 @@ export class CreateOtherCostDto {
   @IsOptional()
   @IsString()
   documentLink?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isConfirmed?: boolean;
 }

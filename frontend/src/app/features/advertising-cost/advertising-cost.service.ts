@@ -9,14 +9,17 @@ export class AdvertisingCostService {
   private http = inject(HttpClient);
   private baseUrl = `${environment.apiUrl}/advertising-cost`;
 
-  getAll(filter?: { adAccountId?: string }): Observable<AdvertisingCost[]> {
+  getAll(filter?: { adAccountId?: string; channel?: string }): Observable<AdvertisingCost[]> {
     let params = new HttpParams();
     if (filter?.adAccountId) params = params.set('adAccountId', filter.adAccountId);
+    if (filter?.channel && filter.channel !== 'all') params = params.set('channel', filter.channel);
     return this.http.get<AdvertisingCost[]>(this.baseUrl, { params });
   }
 
-  getSummary(): Observable<AdvertisingCostSummary> {
-    return this.http.get<AdvertisingCostSummary>(this.baseUrl + '/stats/summary');
+  getSummary(channel?: string): Observable<AdvertisingCostSummary> {
+    let params = new HttpParams();
+    if (channel && channel !== 'all') params = params.set('channel', channel);
+    return this.http.get<AdvertisingCostSummary>(this.baseUrl + '/stats/summary', { params });
   }
 
   create(data: CreateAdvertisingCost): Observable<AdvertisingCost> {
@@ -43,6 +46,17 @@ export class AdvertisingCostService {
     if (options?.date) params = params.set('date', options.date);
     if (options?.days != null) params = params.set('days', String(options.days));
     return this.http.post<any>(`${this.baseUrl}/fetch/facebook`, {}, { params });
+  }
+
+  // Đồng bộ chi phí Google Ads (theo ngày hoặc khoảng ngày)
+  fetchGoogleCost(options?: { date?: string; days?: number; customerIds?: string[] }): Observable<any> {
+    let params = new HttpParams();
+    if (options?.date) params = params.set('date', options.date);
+    if (options?.days != null) params = params.set('days', String(options.days));
+    if (options?.customerIds && options.customerIds.length) {
+      params = params.set('customerIds', options.customerIds.join(','));
+    }
+    return this.http.post<any>(`${this.baseUrl}/fetch/google`, {}, { params });
   }
 
   // Lấy tổng chi phí theo adGroupId từ collection AdvertisingCost

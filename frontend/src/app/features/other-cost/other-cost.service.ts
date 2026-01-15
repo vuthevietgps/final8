@@ -36,6 +36,10 @@ export class OtherCostService {
     return this.http.patch<OtherCost>(`${this.baseUrl}/${id}`, data);
     }
 
+  confirm(id: string): Observable<OtherCost> {
+    return this.http.patch<OtherCost>(`${this.baseUrl}/${id}/confirm`, {});
+  }
+
   delete(id: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/${id}`);
   }

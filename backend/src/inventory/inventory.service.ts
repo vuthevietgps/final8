@@ -42,7 +42,7 @@ export class InventoryService {
         purchaseOrderId: new Types.ObjectId(poId),
         supplierId: supplierId ? new Types.ObjectId(supplierId) : undefined,
         occurredAt: new Date(),
-        notes: 'Receive from PO',
+        notes: 'Nhập từ đơn nhập hàng',
       });
     }
     if (txs.length) await this.txModel.insertMany(txs);

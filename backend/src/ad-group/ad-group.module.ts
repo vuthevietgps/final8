@@ -11,6 +11,8 @@ import { Product, ProductSchema } from '../product/schemas/product.schema';
 import { AdvertisingCostModule } from '../advertising-cost/advertising-cost.module';
 import { ApiTokenModule } from '../api-token/api-token.module';
 import { AdGroupAutoControlService } from './ad-group.auto-control.service';
+import { AdGroupSyncService } from './ad-group.sync.service';
+import { AdGroupRecommendationService } from './ad-group.recommendation.service';
 import { AdAccount, AdAccountSchema } from '../ad-account/schemas/ad-account.schema';
 
 @Module({
@@ -24,6 +26,6 @@ import { AdAccount, AdAccountSchema } from '../ad-account/schemas/ad-account.sch
     ApiTokenModule
   ],
   controllers: [AdGroupController],
-  providers: [AdGroupService, AdGroupAutoControlService],
+  providers: [AdGroupService, AdGroupAutoControlService, AdGroupSyncService, AdGroupRecommendationService],
 })
 export class AdGroupModule {}

@@ -15,12 +15,14 @@ import { UpdateAdGroupDto } from './dto/update-ad-group.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Product, ProductDocument } from '../product/schemas/product.schema';
+import { AdGroupRecommendationService } from './ad-group.recommendation.service';
 
 @Controller('ad-groups')
 export class AdGroupController {
   constructor(
     private readonly adGroupService: AdGroupService,
-    @InjectModel(Product.name) private productModel: Model<ProductDocument>
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    private readonly recommendationService: AdGroupRecommendationService,
   ) {}
 
   @Post()
@@ -57,6 +59,17 @@ export class AdGroupController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.adGroupService.remove(id);
+  }
+
+  // Đề xuất chi phí quảng cáo (AI gợi ý)
+  @Get('recommendations')
+  async getRecommendations() {
+    return this.recommendationService.computeRecommendations();
+  }
+
+  @Post('recommendations/apply')
+  async applyRecommendations(@Body() body: { ids: string[] }) {
+    return this.recommendationService.applyRecommendations(body?.ids || []);
   }
 
   /**

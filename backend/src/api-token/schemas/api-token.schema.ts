@@ -18,7 +18,7 @@ export class ApiToken {
   @Prop({ required: true, trim: true }) token: string; // raw bearer token (encrypt later)
   @Prop({ trim: true, required: false }) tokenEnc?: string; // token mã hóa (AES-GCM)
   @Prop({ trim: true, index: true }) tokenHash?: string; // SHA-256 hash để phát hiện thay đổi
-  @Prop({ enum: ['facebook','zalo','other'], default: 'facebook', index: true }) provider: 'facebook' | 'zalo' | 'other';
+  @Prop({ enum: ['facebook','zalo','google','tiktok','other'], default: 'facebook', index: true }) provider: 'facebook' | 'zalo' | 'google' | 'tiktok' | 'other';
   @Prop({ enum: ['active','inactive'], default: 'active' }) status: 'active' | 'inactive';
   @Prop({ type: Types.ObjectId, ref: 'Fanpage' }) fanpageId?: Types.ObjectId;
   // Liên kết theo tài khoản quảng cáo (ưu tiên hiển thị, không bắt buộc)

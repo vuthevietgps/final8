@@ -28,24 +28,34 @@ class FacebookValidator implements ProviderValidator {
       
       if (response.ok && data.id) {
         // Token is valid, get permissions
+        let scopes: string[] = [];
         try {
           const permResponse = await fetch(`https://graph.facebook.com/me/permissions?access_token=${encodeURIComponent(rawToken)}`);
           const permData = await permResponse.json();
-          const scopes = permResponse.ok && permData.data ? 
+          scopes = permResponse.ok && permData.data ? 
             permData.data.filter((p: any) => p.status === 'granted').map((p: any) => p.permission) : [];
-          
-          return { 
-            status: 'valid', 
-            message: `Token hợp lệ cho ${data.name || data.id}`, 
-            scopes 
-          };
-        } catch {
-          return { 
-            status: 'valid', 
-            message: `Token hợp lệ cho ${data.name || data.id}`, 
-            scopes: [] 
-          };
+        } catch {}
+
+        // Thử lấy expireAt qua debug_token nếu có app token
+        let expireAt: Date | undefined;
+        const appToken = process.env.FB_APP_ACCESS_TOKEN || process.env.FACEBOOK_APP_TOKEN;
+        if (appToken) {
+          try {
+            const dbg = await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(rawToken)}&access_token=${encodeURIComponent(appToken)}`)
+              .then(r => r.json());
+            const ts = dbg?.data?.expires_at;
+            if (ts && Number.isFinite(ts)) {
+              expireAt = new Date(ts * 1000);
+            }
+          } catch {}
         }
+
+        return { 
+          status: 'valid', 
+          message: `Token hợp lệ cho ${data.name || data.id}`, 
+          scopes,
+          expireAt
+        };
       } else if (data.error) {
         const errorCode = data.error.code;
         const errorMessage = data.error.message;
@@ -162,9 +172,14 @@ export class ApiTokenService {
   if(result.status==='valid') token.consecutiveFail = 0; else token.consecutiveFail = (token.consecutiveFail||0)+1;
     if(result.scopes) token.scopes = result.scopes;
     if(result.expireAt) token.expireAt = result.expireAt;
+    if(token.consecutiveFail && token.consecutiveFail >= 3){
+      token.degraded = true;
+      token.isPrimary = false;
+      token.lastCheckMessage = `${token.lastCheckMessage||''} [DEGRADED after ${token.consecutiveFail} fails]`.trim();
+    }
   // Random 27-30 minutes for next check
-  const minMs = 27 * 60 * 1000;
-    const maxMs = 30 * 60 * 1000;
+  const minMs = 60 * 60 * 1000; // 60 phút
+    const maxMs = 90 * 60 * 1000; // 90 phút
     const delta = Math.floor(minMs + Math.random() * (maxMs - minMs));
     token.nextCheckAt = new Date(Date.now() + delta);
     await token.save();

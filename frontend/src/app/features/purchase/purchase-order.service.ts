@@ -16,6 +16,7 @@ export interface PurchaseItem {
 
 export interface PurchaseOrder {
   _id: string;
+  poNumber?: string;
   supplierId: string;
   supplierNameSnap?: string;
   status: 'draft'|'ordered'|'partially_received'|'received'|'cancelled';

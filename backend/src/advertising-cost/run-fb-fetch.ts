@@ -15,7 +15,7 @@ import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-
 
 try { require('dotenv').config(); } catch {}
 
-const DEFAULT_CONN = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const DEFAULT_CONN = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev';
 
 async function main(){
   const argv = process.argv.slice(2);

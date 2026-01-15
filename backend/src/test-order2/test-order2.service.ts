@@ -32,6 +32,10 @@ export class TestOrder2Service {
       receiverPhone: dto.receiverPhone,
       receiverAddress: dto.receiverAddress,
       orderDate: dto.orderDate ? new Date(dto.orderDate) : undefined,
+      productSource: dto.productSource || 'inventory',
+      supplierId: dto.supplierId ? new Types.ObjectId(dto.supplierId) : undefined,
+      supplierPriceLevel: dto.supplierPriceLevel,
+      supplierAppliedPrice: dto.supplierAppliedPrice,
     };
     const created = new this.model(doc);
     const saved = await created.save();

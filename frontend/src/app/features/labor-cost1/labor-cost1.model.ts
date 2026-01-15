@@ -9,9 +9,12 @@ export interface LaborCost1 {
   startTime: string; // HH:mm
   endTime: string; // HH:mm
   workHours: number;
+  sessionCount?: number;
   hourlyRate: number;
   cost: number;
   notes?: string;
+  paid?: boolean;
+  paidAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }

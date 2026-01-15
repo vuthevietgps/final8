@@ -24,6 +24,8 @@ export enum UserRole {
   EXTERNAL_AGENT = 'external_agent',       // Đại lý bên ngoài
   INTERNAL_SUPPLIER = 'internal_supplier', // Nhà cung cấp nội bộ
   EXTERNAL_SUPPLIER = 'external_supplier', // Nhà cung cấp bên ngoài
+  INVESTOR = 'investor',                   // Nhà đầu tư
+  LENDER = 'lender',                       // Người cho vay
 }
 
 /**

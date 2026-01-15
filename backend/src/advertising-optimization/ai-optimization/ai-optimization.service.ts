@@ -11,9 +11,10 @@ import { OpenAIConfigService } from '../../openai-config/openai-config.service';
 import { AdGroupProfitService } from '../../ad-group-profit/ad-group-profit.service';
 import { QualityControlService } from '../quality-control/quality-control.service';
 import { AdvertisingCostSuggestion, AdvertisingCostSuggestionDocument } from '../../advertising-cost-suggestion/schemas/advertising-cost-suggestion.schema';
-import { AIAnalysisResult, OptimizationRecommendation } from '../shared/interfaces/quality-control.interface';
+import { AIAnalysisResult } from '../shared/interfaces/quality-control.interface';
 import { AdvancedAnalyticsService } from '../advanced-analytics/advanced-analytics.service';
 import { MLOptimizationService } from '../advanced-analytics/ml-optimization.service';
+import { BudgetApplyService } from './budget-apply.service';
 
 @Injectable()
 export class AIOptimizationService {
@@ -22,6 +23,7 @@ export class AIOptimizationService {
   constructor(
     @InjectModel(AdvertisingCostSuggestion.name) 
     private suggestionModel: Model<AdvertisingCostSuggestionDocument>,
+    private budgetApplyService: BudgetApplyService,
     private openAIConfigService: OpenAIConfigService,
     private adGroupProfitService: AdGroupProfitService,
     private qualityControlService: QualityControlService,
@@ -39,13 +41,17 @@ export class AIOptimizationService {
       
       const suggestions = adGroupId 
         ? await this.suggestionModel.findOne({ adGroupId }).exec()
-        ? [await this.suggestionModel.findOne({ adGroupId }).exec()]
-        : []
+          ? [await this.suggestionModel.findOne({ adGroupId }).exec()]
+          : []
         : await this.suggestionModel.find({ isActive: { $ne: false } }).exec();
       
       let optimizedCount = 0;
       
       for (const suggestion of suggestions.filter(s => s !== null)) {
+        if (!suggestion.adGroupId || suggestion.adGroupId === '0') {
+          this.logger.warn(`Skipping suggestion without valid adGroupId: ${suggestion._id}`);
+          continue;
+        }
         try {
           this.logger.log(`🎯 Analyzing ${suggestion.adGroupId} with advanced algorithms`);
           
@@ -137,6 +143,10 @@ export class AIOptimizationService {
       let pausedCount = 0;
 
       for (const suggestion of suggestions) {
+        if (!suggestion.adGroupId || suggestion.adGroupId === '0') {
+          this.logger.warn(`Skipping suggestion without valid adGroupId: ${suggestion._id}`);
+          continue;
+        }
         try {
           // QUALITY CONTROL: Safety check trước khi analyze
           const safetyCheck = await this.qualityControlService.performSafetyCheck(suggestion.adGroupId);
@@ -255,16 +265,29 @@ Respond in JSON format:
 }
 `;
 
-      // Gọi OpenAI API
+      // Gọi OpenAI API (mock) + tính optimal cost phi tuyến
       const openAIConfig = await this.openAIConfigService.pickConfig({});
       if (!openAIConfig) {
         throw new Error('No active OpenAI configuration found');
       }
 
-      // Simplified OpenAI call - trong thực tế sẽ gọi API
+      // 1) Mock AI heuristic
       const mockResponse = this.generateMockAIResponse(roi, profitMargin, avgDailySpend, suggestion.suggestedCost || 0);
-      
-      return mockResponse;
+
+      // 2) Non-linear optimal cost
+      const optimal = await this.advancedAnalyticsService.findOptimalCost(suggestion.adGroupId, 30);
+
+      // 3) Kết hợp: ưu tiên suggestedBudget từ optimal cost, giữ action từ AI mock
+      const combined: AIAnalysisResult = {
+        ...mockResponse,
+        suggestedBudget: optimal.optimalCost || mockResponse.suggestedBudget,
+        confidence: Math.max(mockResponse.confidence || 0, optimal.confidence || 0),
+        expectedProfit: optimal.predictedProfit ?? mockResponse.expectedProfit,
+        reasoning: `Optimal cost (${optimal.model}, R²→conf ${optimal.confidence.toFixed(0)}%, marginal ROI ${optimal.marginalROI.toFixed(2)}). ${mockResponse.reasoning}`,
+        marketConditions: `marginalROI=${optimal.marginalROI.toFixed(2)}`
+      };
+
+      return combined;
 
     } catch (error) {
       this.logger.error('AI analysis failed:', error);
@@ -286,21 +309,18 @@ Respond in JSON format:
     analysis: AIAnalysisResult
   ): Promise<boolean> {
     try {
-      // Safety limits
-      const currentBudget = suggestion.suggestedCost || 0;
-      const maxDailyChange = Math.max(currentBudget * 0.2, 50000); // Max 20% hoặc 50k
+      const ctx = await this.budgetApplyService.resolveContext(suggestion.adGroupId);
+      const currentBudget = this.budgetApplyService.pickCurrentBudget(suggestion, ctx?.adGroup);
+      const maxDailyChange = currentBudget > 0 ? currentBudget * 0.2 : 0;
       
       let newBudget = analysis.suggestedBudget;
       const budgetChange = Math.abs(newBudget - currentBudget);
       
-      // Apply safety limits
-      if (budgetChange > maxDailyChange) {
-        if (newBudget > currentBudget) {
-          newBudget = currentBudget + maxDailyChange;
-        } else {
-          newBudget = currentBudget - maxDailyChange;
-        }
-        this.logger.log(`🛡️ Applied safety limit: ${analysis.suggestedBudget} → ${newBudget}`);
+      if (maxDailyChange > 0 && budgetChange > maxDailyChange) {
+        newBudget = newBudget > currentBudget
+          ? currentBudget + maxDailyChange
+          : currentBudget - maxDailyChange;
+        this.logger.log(`🛡️ Applied safety limit (20%/day): ${analysis.suggestedBudget} → ${newBudget}`);
       }
 
       // Check cooldown period (24 hours)
@@ -325,6 +345,10 @@ Respond in JSON format:
           lastOptimizedAt: new Date(),
           lastOptimizationReason: `AI: ${analysis.reasoning} (Quality: ${analysis.confidence}%)`
         });
+
+        if (ctx?.adGroup) {
+          await this.budgetApplyService.applyBudgetToProvider(ctx.adGroup, ctx.adAccount || null, newBudget);
+        }
       }
 
       return success;
@@ -379,8 +403,6 @@ Respond in JSON format:
         }
       });
 
-      // Note: Facebook integration removed
-
       this.logger.log(`✅ Executed optimization for ${suggestion.adGroupId}: ${analysis.recommendedAction} (${analysis.suggestedBudget})`);
       return true;
 
@@ -430,4 +452,5 @@ Respond in JSON format:
       riskFactors: roi < 100 ? ['Low ROI risk'] : []
     };
   }
+
 }

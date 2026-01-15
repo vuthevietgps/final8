@@ -129,4 +129,20 @@ export class Summary4Controller {
 
     return { message: 'Manual payment updated successfully', updatedRecord };
   }
+
+  @Patch(':id/collection')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async updateCollection(
+    @Param('id') id: string,
+    @Body('status') status?: string,
+    @Body('collectedAmount') collectedAmount?: number,
+    @Body('receivableAmount') receivableAmount?: number,
+  ) {
+    const updatedRecord: any = await this.summary4Service.updateCollection(id, {
+      status,
+      collectedAmount,
+      receivableAmount,
+    });
+    return { message: 'Collection updated successfully', updatedRecord };
+  }
 }

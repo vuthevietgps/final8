@@ -23,6 +23,15 @@ export class MediaController {
   ) {}
   private readonly logger = new Logger(MediaController.name);
 
+  // Build absolute URL if needed for reporting/download links
+  private ensureAbsolute(url: string) {
+    if (!url) return url;
+    if (/^https?:\/\//i.test(url)) return url;
+    const origin = process.env.MEDIA_ABSOLUTE_BASE || process.env.PUBLIC_ORIGIN || process.env.APP_PUBLIC_ORIGIN || '';
+    if (!origin) return url;
+    return (origin.replace(/\/$/, '') + url).replace(/\s/g, '');
+  }
+
   @Get()
   @RequirePermissions('media')
   async list(@Query() q: any) {
@@ -87,7 +96,6 @@ export class MediaController {
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @Body('productId') productId?: string,
-    @Body('fanpageId') fanpageId?: string,
     @Body('alt') alt?: string,
     @Body('tags') tags?: string,
     @Body('isMainImage') isMainImage?: string,
@@ -103,7 +111,6 @@ export class MediaController {
       mime: file.mimetype,
       ext: (file.originalname.split('.').pop()||'').toLowerCase(),
       productId,
-      fanpageId,
       alt,
       tags: tagList,
       isMainImage: isMainImage === 'true',
@@ -144,7 +151,6 @@ export class MediaController {
   async importByUrl(
     @Body('url') url: string,
     @Body('productId') productId?: string,
-    @Body('fanpageId') fanpageId?: string,
     @Body('alt') alt?: string,
     @Body('tags') tags?: string,
     @Body('isMainImage') isMainImage?: boolean,
@@ -154,7 +160,37 @@ export class MediaController {
       return { success: false, message: 'Thiếu mô tả (alt). Vui lòng nhập mô tả ảnh trước khi import.' };
     }
     const tagList = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [];
-    return this.mediaService.importFromUrl(url, { productId, fanpageId, alt, tags: tagList, isMainImage, sourceType });
+    return this.mediaService.importFromUrl(url, { productId, alt, tags: tagList, isMainImage, sourceType });
+  }
+
+  // Báo cáo nhanh ảnh theo sản phẩm với link đầy đủ (absolute URL)
+  @Get('product-report/:productId')
+  @RequirePermissions('media')
+  async productImageReport(@Param('productId') productId: string) {
+    const product = await this.productService.findOne(productId);
+    if (!product) return { productId, images: [], total: 0 };
+    const images: any[] = [];
+    const push = (url: string, meta: any) => {
+      if (!url) return;
+      images.push({ url, absoluteUrl: this.ensureAbsolute(url), ...meta });
+    };
+    // 1) Ảnh chung của sản phẩm
+    (product as any).images?.forEach((img: any) => {
+      const url = img?.url || img;
+      push(url, { source: 'product', description: img?.description, isMainImage: img?.isMainImage === true });
+    });
+    // 2) Ảnh custom theo fanpage (nếu có)
+    (product as any).fanpageVariations?.forEach((v: any) => {
+      (v?.customImages || []).forEach((url: string) => {
+        push(url, { source: 'fanpageVariation', fanpageId: v?.fanpageId, variationPriority: v?.priority ?? 0 });
+      });
+    });
+    return {
+      productId,
+      productName: (product as any).name,
+      total: images.length,
+      images,
+    };
   }
 
   // Note: removed duplicate DELETE(':id') route; use deleteMedia above

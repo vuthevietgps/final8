@@ -9,6 +9,15 @@ export class SessionLog {
   userId: string;
 
   @Prop()
+  userEmail?: string;
+
+  @Prop()
+  userName?: string;
+
+  @Prop()
+  userRole?: string;
+
+  @Prop()
   loginAt: Date;
 
   @Prop()

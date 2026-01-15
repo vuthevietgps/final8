@@ -1,0 +1,173 @@
+<div class="page">
+  <div class="header">
+    <div>
+      <h2>🏦 Nguồn Vốn Khả Dụng</h2>
+      <p class="subtitle">Tính toán tiền rảnh sau khi trừ nghĩa vụ bắt buộc</p>
+    </div>
+    <button (click)="loadCurrent()" [disabled]="loading()">🔄 Tính lại</button>
+  </div>
+
+  <div *ngIf="error()" class="alert">{{ error() }}</div>
+  <div *ngIf="loading()" class="loading">Đang xử lý...</div>
+
+  <!-- Thông báo khi chưa có dữ liệu -->
+  <div *ngIf="current() && current()!.collectedRevenue === 0 && current()!.loanAvailable === 0" class="alert info">
+    ⚠️ Chưa có dữ liệu orders hoặc loans. Số liệu sẽ được cập nhật tự động khi có giao dịch.
+  </div>
+
+  <div class="stats" *ngIf="current()">
+    <div class="stat highlight" [class.negative]="(current()?.available ?? 0) < 0">
+      <div class="label">💰 Vốn khả dụng</div>
+      <div class="value focus">{{ formatWithSign(current()?.available) }} đ</div>
+      <div class="hint">= Thu đã thu + Room vay - Đã chi - Dành ra</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat positive">
+        <div class="label">✅ Thu đã thu</div>
+        <div class="value">+{{ format(current()?.collectedRevenue) }} đ</div>
+        <div class="hint">Auto: {{ format(auto()?.collectedRevenue) }} đ</div>
+      </div>
+      <div class="stat positive">
+        <div class="label">🏦 Room vay còn lại</div>
+        <div class="value">+{{ format(current()?.loanAvailable) }} đ</div>
+        <div class="hint">Auto: {{ format(auto()?.loanAvailable) }} đ</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat negative">
+        <div class="label">💸 Đã chi trong ngày</div>
+        <div class="value">{{ formatWithSign(-(current()?.actualSpent ?? 0)) }} đ</div>
+        <div class="hint">Auto: {{ formatWithSign(-(auto()?.actualSpent ?? 0)) }} đ</div>
+      </div>
+      <div class="stat negative">
+        <div class="label">🔒 Tiền bị đặt chỗ</div>
+        <div class="value">{{ formatWithSign(-reservedTotal()) }} đ</div>
+        <div class="hint">Lương + Lãi + NCC + Đại lý + Khác</div>
+      </div>
+    </div>
+    <details class="details-section">
+      <summary>Chi tiết tiền đặt chỗ</summary>
+      <div class="stat-row">
+        <div class="stat small">
+          <div class="label">Dành lương</div>
+          <div class="value">{{ formatWithSign(-(current()?.reservedPayroll ?? 0)) }} đ</div>
+        </div>
+        <div class="stat small">
+          <div class="label">Dành lãi</div>
+          <div class="value">{{ formatWithSign(-(current()?.reservedInterest ?? 0)) }} đ</div>
+        </div>
+        <div class="stat small">
+          <div class="label">Dành NCC</div>
+          <div class="value">{{ formatWithSign(-(current()?.reservedSuppliers ?? current()?.reservedPayables ?? 0)) }} đ</div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat small">
+          <div class="label">Dành đại lý</div>
+          <div class="value">{{ formatWithSign(-(current()?.reservedAgents ?? 0)) }} đ</div>
+        </div>
+        <div class="stat small">
+          <div class="label">Dành khác</div>
+          <div class="value">{{ formatWithSign(-(current()?.reservedOther ?? 0)) }} đ</div>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <form [formGroup]="form" class="form" (ngSubmit)="capture()">
+    <label>
+      Doanh thu đã thu (đ)
+      <div class="hint-line">Auto: {{ format(auto()?.collectedRevenue) }} | Đang dùng: {{ format(appliedValue('collectedRevenue')) }}</div>
+      <input type="number" formControlName="collectedRevenue" />
+    </label>
+    <label>
+      Room vay còn lại (đ)
+      <div class="hint-line">Auto: {{ format(auto()?.loanAvailable) }} | Đang dùng: {{ format(appliedValue('loanAvailable')) }}</div>
+      <input type="number" formControlName="loanAvailable" />
+    </label>
+    <label>
+      Đã chi trong ngày (đ)
+      <div class="hint-line">Auto: {{ format(auto()?.actualSpent) }} | Đang dùng: {{ format(appliedValue('actualSpent')) }}</div>
+      <input type="number" formControlName="actualSpent" />
+    </label>
+    <label>
+      Dành cho lương (đ)
+      <div class="hint-line">Đang dùng: {{ format(appliedValue('reservedPayroll')) }}</div>
+      <input type="number" formControlName="reservedPayroll" />
+    </label>
+    <label>
+      Dành cho lãi (đ)
+      <div class="hint-line">Đang dùng: {{ format(appliedValue('reservedInterest')) }}</div>
+      <input type="number" formControlName="reservedInterest" />
+    </label>
+    <label>
+      Dành cho công nợ phải trả (đ)
+      <div class="hint-line">Đang dùng: {{ format(appliedValue('reservedPayables')) }}</div>
+      <input type="number" formControlName="reservedPayables" />
+    </label>
+    <label>
+      Dành cho nhà cung cấp (đ)
+      <div class="hint-line">Đang dùng: {{ format(appliedValue('reservedSuppliers')) }}</div>
+      <input type="number" formControlName="reservedSuppliers" />
+    </label>
+    <label>
+      Dành cho đại lý (đ)
+      <div class="hint-line">Đang dùng: {{ format(appliedValue('reservedAgents')) }}</div>
+      <input type="number" formControlName="reservedAgents" />
+    </label>
+    <label>
+      Dành cho khác (đ)
+      <div class="hint-line">Đang dùng: {{ format(appliedValue('reservedOther')) }}</div>
+      <input type="number" formControlName="reservedOther" />
+    </label>
+    <label class="full">
+      Ghi chú
+      <input type="text" formControlName="note" />
+    </label>
+    <div class="actions full">
+      <button type="button" (click)="loadCurrent()" [disabled]="loading()">Tính nhanh (không lưu)</button>
+      <button type="submit" [disabled]="loading()">Lưu snapshot</button>
+    </div>
+  </form>
+
+  <div class="history">
+    <h3>Lịch sử snapshot</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Vốn khả dụng</th>
+          <th>Thu đã thu</th>
+          <th>Room vay</th>
+          <th>Đã chi</th>
+          <th>Dành lương</th>
+          <th>Dành lãi</th>
+          <th>Dành công nợ</th>
+          <th>Dành NCC</th>
+          <th>Dành đại lý</th>
+          <th>Dành khác</th>
+          <th>Ghi chú</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="snapshots().length === 0">
+          <td colspan="12" class="empty">Chưa có snapshot</td>
+        </tr>
+        <tr *ngFor="let s of snapshots()">
+          <td>{{ s.capturedAt | date:'yyyy-MM-dd HH:mm' }}</td>
+          <td>{{ format(s.available) }} đ</td>
+          <td>{{ format(s.collectedRevenue) }} đ</td>
+          <td>{{ format(s.loanAvailable) }} đ</td>
+          <td>{{ format(s.actualSpent) }} đ</td>
+          <td>{{ format(s.reservedPayroll) }} đ</td>
+          <td>{{ format(s.reservedInterest) }} đ</td>
+          <td>{{ format(s.reservedPayables) }} đ</td>
+          <td>{{ format(s.reservedSuppliers || s.reservedPayables) }} đ</td>
+          <td>{{ format(s.reservedAgents) }} đ</td>
+          <td>{{ format(s.reservedOther) }} đ</td>
+          <td>{{ s.note }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

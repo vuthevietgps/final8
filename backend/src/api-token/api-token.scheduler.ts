@@ -19,8 +19,8 @@ export class ApiTokenScheduler {
     private tokenService: ApiTokenService
   ){}
 
-  // Mỗi 5 phút: pick tokens đến hạn nextCheckAt, fallback cho token chưa có lịch dùng cutoff 30'
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  // Mỗi 10 phút: pick tokens đến hạn nextCheckAt, fallback cho token chưa có lịch dùng cutoff 30'
+  @Cron('0 */10 * * * *')
   async periodicValidate(){
     // Ensure ApiTokens are created from Fanpage accessToken (idempotent)
     try { await this.tokenService.syncFromFanpages(); } catch {}
@@ -40,7 +40,7 @@ export class ApiTokenScheduler {
           { nextCheckAt: { $exists: true, $ne: null, $lte: now } }
         ]}
       ]
-    }).limit(50);
+    }).limit(30);
     for(const c of candidates){
       try { await this.tokenService.validate(c._id.toString(), { force: true }); } catch(e){ this.logger.warn(`Validate fail ${c._id}: ${(e as any).message}`); }
     }

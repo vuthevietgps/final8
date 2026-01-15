@@ -30,7 +30,8 @@ export class AdReportService {
       dateMatch.$lte = new Date(to);
     }
 
-    const matchStage: any = { platform: 'facebook' };
+    // advertising-cost schema hiện không lưu trường platform; chỉ lọc theo adGroupId và ngày
+    const matchStage: any = {};
     if (adGroupId) {
       matchStage.adGroupId = adGroupId;
     }
@@ -47,7 +48,8 @@ export class AdReportService {
               adGroupId: '$adGroupId',
               date: '$date',
             },
-            totalSpent: { $sum: '$spend' },
+            // advertising-cost schema lưu ở field spentAmount
+            totalSpent: { $sum: '$spentAmount' },
             impressions: { $sum: '$impressions' },
             clicks: { $sum: '$clicks' },
           },

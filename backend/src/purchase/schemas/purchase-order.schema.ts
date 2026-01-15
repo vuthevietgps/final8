@@ -32,6 +32,9 @@ const PurchaseItemSchema = SchemaFactory.createForClass(PurchaseItem);
 
 @Schema({ timestamps: true })
 export class PurchaseOrder {
+  @Prop({ unique: true, sparse: true })
+  poNumber?: string; // Số PO (PO-001, PO-002, ...)
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   supplierId!: Types.ObjectId;
 
@@ -71,6 +74,18 @@ export class PurchaseOrder {
 }
 
 export const PurchaseOrderSchema = SchemaFactory.createForClass(PurchaseOrder);
+
+// Auto-generate poNumber before saving
+PurchaseOrderSchema.pre('save', async function() {
+  if (!this.poNumber) {
+    const count = await (this.constructor as any).countDocuments();
+    this.poNumber = `PO-${String(count + 1).padStart(4, '0')}`;
+  }
+});
+
 // Indexes
 PurchaseOrderSchema.index({ supplierId: 1, createdAt: -1 });
 PurchaseOrderSchema.index({ status: 1, createdAt: -1 });
+PurchaseOrderSchema.index({ poNumber: 1 });
+PurchaseOrderSchema.index({ receivedDate: -1 });
+PurchaseOrderSchema.index({ supplierId: 1, receivedDate: -1 });

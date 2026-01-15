@@ -8,6 +8,10 @@ import { Observable } from 'rxjs';
 import { 
   AdGroupDailyReport,
   AdGroupDailyFilter,
+  AdGroupDailyCostProfitRow,
+  AdGroupOptimalSpendRow,
+  Profit30dResponse,
+  HorizontalScaleResponse,
 } from './models/ad-group-profit-report.model';
 import { environment } from '../../../environments/environment';
 
@@ -32,6 +36,32 @@ export class AdGroupProfitReportService {
     if (query.toDate) params = params.set('toDate', query.toDate);
     if (query.adGroupId) params = params.set('adGroupId', query.adGroupId);
     return this.http.get<AdGroupDailyReport>(this.apiUrl, { params });
+  }
+
+  // Bảng 1: daily cost & profit (Summary5-based)
+  getDailyCostProfit(params: { from?: string; to?: string; adGroupId?: string }): Observable<AdGroupDailyCostProfitRow[]> {
+    let p = new HttpParams();
+    if (params.from) p = p.set('from', params.from);
+    if (params.to) p = p.set('to', params.to);
+    if (params.adGroupId) p = p.set('adGroupId', params.adGroupId);
+    return this.http.get<AdGroupDailyCostProfitRow[]>(`${this.apiUrl}/daily`, { params: p });
+  }
+
+  // Bảng 2: optimal spend suggestions
+  getOptimalSpend(): Observable<AdGroupOptimalSpendRow[]> {
+    return this.http.get<AdGroupOptimalSpendRow[]>(`${this.apiUrl}/optimal-spend`);
+  }
+
+  // Bảng 3: profit 30 ngày pivot
+  getProfit30d(params: { adGroupId?: string }): Observable<Profit30dResponse> {
+    let p = new HttpParams();
+    if (params.adGroupId) p = p.set('adGroupId', params.adGroupId);
+    return this.http.get<Profit30dResponse>(`${this.apiUrl}/profit-30d`, { params: p });
+  }
+
+  // Scale ads theo chiều ngang
+  getHorizontalScale(): Observable<HorizontalScaleResponse> {
+    return this.http.get<HorizontalScaleResponse>(`${this.apiUrl}/horizontal-scale`);
   }
 
   /**

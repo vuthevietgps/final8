@@ -18,12 +18,33 @@ export const routes: Routes = [
     canActivate: [GuestGuard]
   },
   {
+    path: 'loans',
+    canActivate: [AuthGuard],
+    // Tạm thời mở cho tất cả; sẽ phân quyền sau
+    children: [
+      { path: '', loadComponent: () => import('./features/loan/loan-list.component').then(m => m.LoanListComponent) },
+      { path: 'upcoming', loadComponent: () => import('./features/loan/loan-upcoming.component').then(m => m.LoanUpcomingComponent) },
+      { path: 'new', loadComponent: () => import('./features/loan/loan-form.component').then(m => m.LoanFormComponent) },
+      { path: ':id', loadComponent: () => import('./features/loan/loan-detail.component').then(m => m.LoanDetailComponent) },
+    ]
+  },
+  {
+    path: 'finance',
+    canActivate: [AuthGuard],
+    children: [
+      { path: 'available-funds', loadComponent: () => import('./features/finance/available-funds.component').then(m => m.AvailableFundsComponent) },
+      { path: 'budget-allocation', loadComponent: () => import('./features/finance/budget-allocation.component').then(m => m.BudgetAllocationComponent) },
+    ]
+  },
+  {
     path: 'purchases',
     canActivate: [AuthGuard],
     data: { permissions: ['purchase-costs'] },
     children: [
       { path: '', loadComponent: () => import('./features/purchase/purchase-list.component').then(m => m.PurchaseListComponent) },
       { path: 'new', loadComponent: () => import('./features/purchase/purchase-form.component').then(m => m.PurchaseFormComponent) },
+      { path: 'payables', loadComponent: () => import('./features/supplier-payable/supplier-payable.component').then(m => m.SupplierPayableComponent) },
+      { path: 'supplier-product-report', loadComponent: () => import('./features/purchase/purchase-supplier-report.component').then(m => m.PurchaseSupplierReportComponent) },
       { path: ':id', loadComponent: () => import('./features/purchase/purchase-form.component').then(m => m.PurchaseFormComponent) },
       { path: ':id/receive', loadComponent: () => import('./features/purchase/purchase-receive.component').then(m => m.PurchaseReceiveComponent) }
     ]
@@ -220,6 +241,7 @@ export const routes: Routes = [
     children: [
       { path: 'ad-group-profit', loadComponent: () => import('./features/ad-group-profit/ad-group-profit.component').then(m => m.AdGroupProfitComponent) },
       { path: 'ad-group-profit-report', loadComponent: () => import('./features/ad-group-profit-report/ad-group-profit-report.component').then(m => m.AdGroupProfitReportComponent) },
+      { path: 'return-report', loadComponent: () => import('./features/return-report/return-report.component').then(m => m.ReturnReportComponent) },
       { path: 'profit-forecast', loadComponent: () => import('./features/profit-forecast/profit-forecast.component').then(m => m.ProfitForecastComponent) },
       // Summary1 & Summary2 removed - replaced by Summary4 & Summary5
       { path: 'summary4', loadComponent: () => import('./features/summary4/summary4.component').then(m => m.Summary4Component) },

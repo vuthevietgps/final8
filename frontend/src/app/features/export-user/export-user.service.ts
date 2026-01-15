@@ -183,7 +183,9 @@ export class ExportUserService {
       [UserRole.INTERNAL_AGENT]: 'Dai_Ly_Noi_Bo',
       [UserRole.EXTERNAL_AGENT]: 'Dai_Ly_Ben_Ngoai',
       [UserRole.INTERNAL_SUPPLIER]: 'Nha_Cung_Cap_Noi_Bo',
-      [UserRole.EXTERNAL_SUPPLIER]: 'Nha_Cung_Cap_Ben_Ngoai'
+      [UserRole.EXTERNAL_SUPPLIER]: 'Nha_Cung_Cap_Ben_Ngoai',
+      [UserRole.INVESTOR]: 'Nha_Dau_Tu',
+      [UserRole.LENDER]: 'Nguoi_Cho_Vay'
     };
     
     return roleNames[role] || role;
@@ -218,7 +220,9 @@ export class ExportUserService {
       [UserRole.INTERNAL_AGENT]: 'Đại Lý Nội Bộ',
       [UserRole.EXTERNAL_AGENT]: 'Đại Lý Bên Ngoài',
       [UserRole.INTERNAL_SUPPLIER]: 'Nhà Cung Cấp Nội Bộ',
-      [UserRole.EXTERNAL_SUPPLIER]: 'Nhà Cung Cấp Bên Ngoài'
+      [UserRole.EXTERNAL_SUPPLIER]: 'Nhà Cung Cấp Bên Ngoài',
+      [UserRole.INVESTOR]: 'Nhà Đầu Tư',
+      [UserRole.LENDER]: 'Người Cho Vay'
     };
     
     return roleNames[role] || role;

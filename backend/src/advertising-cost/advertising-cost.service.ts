@@ -23,6 +23,16 @@ export class AdvertisingCostService {
     return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   }
 
+  // Xác định kênh từ adGroup nếu chưa có (fallback facebook)
+  private async inferChannel(adGroupId?: string, incoming?: string): Promise<'facebook' | 'google' | 'tiktok' | 'zalo' | 'other'> {
+    if (incoming) return incoming as any;
+    if (adGroupId) {
+      const grp = await this.adGroupModel.findOne({ adGroupId }).select('platform').lean();
+      if (grp?.platform) return grp.platform as any;
+    }
+    return 'facebook';
+  }
+
   constructor(
     @InjectModel(AdvertisingCost.name)
     private readonly model: Model<AdvertisingCostDocument>,
@@ -35,8 +45,10 @@ export class AdvertisingCostService {
   ) {}
 
   async create(dto: CreateAdvertisingCostDto): Promise<AdvertisingCost> {
+    const channel = await this.inferChannel(dto.adGroupId, dto.channel as any);
     const payload: Partial<AdvertisingCost> = {
       adGroupId: dto.adGroupId.trim(),
+      channel,
       frequency: dto.frequency,
       spentAmount: dto.spentAmount ?? 0,
       cpm: dto.cpm ?? 0,
@@ -66,6 +78,7 @@ export class AdvertisingCostService {
 
     const findCond: any = {};
     if (adGroupIdFilter) findCond.adGroupId = { $in: adGroupIdFilter };
+    if (query?.channel && query.channel !== 'all') findCond.channel = query.channel;
 
     const costs = await this.model.find(findCond).sort({ date: -1, createdAt: -1 }).lean();
 
@@ -87,6 +100,7 @@ export class AdvertisingCostService {
       const acc: any = grp ? adAccountMap.get(String(grp.adAccountId)) : null;
       return {
         ...c,
+        channel: c.channel || (grp?.platform as any) || 'facebook',
         adAccountId: grp?.adAccountId ? String(grp.adAccountId) : undefined,
         adAccountName: acc?.name,
         adAccountAccountId: acc?.accountId,
@@ -102,6 +116,7 @@ export class AdvertisingCostService {
 
   async update(id: string, dto: UpdateAdvertisingCostDto): Promise<AdvertisingCost> {
     const update: Partial<AdvertisingCost> = { ...dto } as any;
+    if (dto.channel) (update as any).channel = dto.channel;
     if (dto.date) (update as any).date = this.toUtcStartOfDay(dto.date);
     const doc = await this.model.findByIdAndUpdate(id, update, { new: true }).lean();
     if (!doc) throw new NotFoundException('Không tìm thấy chi phí quảng cáo');
@@ -113,18 +128,23 @@ export class AdvertisingCostService {
     if (!res) throw new NotFoundException('Không tìm thấy chi phí quảng cáo');
   }
 
-  async summary() {
-    const agg = await this.model.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalSpent: { $sum: { $ifNull: ['$spentAmount', 0] } },
-          count: { $count: {} },
-          avgCPM: { $avg: { $ifNull: ['$cpm', 0] } },
-          avgCPC: { $avg: { $ifNull: ['$cpc', 0] } },
-        },
+  async summary(filter?: { channel?: string }) {
+    const match: any = {};
+    if (filter?.channel && filter.channel !== 'all') match.channel = filter.channel;
+
+    const pipeline: any[] = [];
+    if (Object.keys(match).length) pipeline.push({ $match: match });
+    pipeline.push({
+      $group: {
+        _id: null,
+        totalSpent: { $sum: { $ifNull: ['$spentAmount', 0] } },
+        count: { $count: {} },
+        avgCPM: { $avg: { $ifNull: ['$cpm', 0] } },
+        avgCPC: { $avg: { $ifNull: ['$cpc', 0] } },
       },
-    ]);
+    });
+
+    const agg = await this.model.aggregate(pipeline);
     return agg[0] || { totalSpent: 0, count: 0, avgCPM: 0, avgCPC: 0 };
   }
 
@@ -352,7 +372,7 @@ export class AdvertisingCostService {
 
           // Chuẩn hoá ngày về UTC 00:00 để tránh trùng lặp theo múi giờ
           const date = this.toUtcStartOfDay(dateParsed);
-          const updateDoc = { adGroupId, date, frequency, spentAmount, cpc, cpm } as Partial<AdvertisingCost>;
+          const updateDoc = { adGroupId, date, frequency, spentAmount, cpc, cpm, channel: 'facebook' } as Partial<AdvertisingCost>;
           const res = await this.model.updateOne(
             { adGroupId, date },
             { $set: updateDoc },

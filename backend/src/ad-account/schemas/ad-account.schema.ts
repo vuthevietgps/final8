@@ -26,6 +26,37 @@ export class AdAccount {
 
   @Prop({ trim: true })
   description?: string; // Mô tả tài khoản
+
+  // Metadata đồng bộ từ provider
+  @Prop({ trim: true })
+  currency?: string;
+
+  @Prop({ trim: true })
+  timezoneId?: string;
+
+  @Prop({ trim: true })
+  businessName?: string;
+
+  @Prop({ type: Number })
+  spendCap?: number;
+
+  @Prop({ type: Number })
+  amountSpent?: number;
+
+  @Prop({ type: Number })
+  accountStatus?: number; // Facebook account_status code
+
+  // Nhật ký đồng bộ
+  @Prop() lastSyncAt?: Date;
+
+  @Prop({ trim: true }) lastSyncStatus?: 'ok' | 'error';
+
+  @Prop({ trim: true }) lastSyncError?: string;
+
+  @Prop({ type: Number }) lastSyncDurationMs?: number;
+
+  // Google Ads: login customer ID (manager) để thực thi API
+  @Prop({ trim: true }) loginCustomerId?: string;
 }
 
 export const AdAccountSchema = SchemaFactory.createForClass(AdAccount);

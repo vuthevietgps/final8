@@ -12,7 +12,7 @@
  * - Tách biệt logic nghiệp vụ khỏi controller
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './user.schema';
@@ -30,8 +30,17 @@ export class UserService {
    * @returns Promise<User> - User vừa được tạo
    */
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const createdUser = new this.userModel(createUserDto);
-    return createdUser.save();
+    try {
+      const createdUser = new this.userModel(createUserDto);
+      return await createdUser.save();
+    } catch (error: any) {
+      // Xử lý lỗi duplicate email (MongoDB error code 11000)
+      if (error.code === 11000 && error.keyPattern?.email) {
+        throw new ConflictException(`Email "${error.keyValue.email}" đã được sử dụng bởi người dùng khác`);
+      }
+      // Lỗi khác
+      throw new BadRequestException(error.message || 'Không thể tạo người dùng');
+    }
   }
 
   /**
@@ -58,7 +67,15 @@ export class UserService {
    * @returns Promise<User> - User sau khi update
    */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    return this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true }).exec();
+    try {
+      return await this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true }).exec();
+    } catch (error: any) {
+      // Xử lý lỗi duplicate email khi update
+      if (error.code === 11000 && error.keyPattern?.email) {
+        throw new ConflictException(`Email "${error.keyValue.email}" đã được sử dụng bởi người dùng khác`);
+      }
+      throw new BadRequestException(error.message || 'Không thể cập nhật người dùng');
+    }
   }
 
   /**

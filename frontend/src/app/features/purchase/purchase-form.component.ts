@@ -22,6 +22,18 @@ import { ProductService } from '../product/product.service';
       </label>
 
       <div class="items">
+        <div class="header-row">
+          <h3>Chi tiết sản phẩm</h3>
+          <a class="link-add-product" href="/product" target="_blank" title="Mở trang Sản phẩm trong tab mới để thêm sản phẩm">
+            ➕ Tạo sản phẩm mới
+          </a>
+        </div>
+        <div class="table-header">
+          <div class="col-product">Sản phẩm</div>
+          <div class="col-quantity">Số lượng</div>
+          <div class="col-price">Đơn giá</div>
+          <div class="col-action">Hành động</div>
+        </div>
         <div class="item" *ngFor="let it of items; let i = index">
           <select [(ngModel)]="it.productId" (change)="onSelectProduct(i)">
             <option value="">-- Sản phẩm --</option>
@@ -44,10 +56,22 @@ import { ProductService } from '../product/product.service';
   styles: [`
     .page{padding:12px}
     .form{display:flex;flex-direction:column;gap:12px;max-width:900px}
-    .items{display:flex;flex-direction:column;gap:8px}
-    .item{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center}
-    .btn{background:#2563eb;color:#fff;padding:6px 10px;border-radius:6px;text-decoration:none;border:none}
+    .items{display:flex;flex-direction:column;gap:0}
+    .header-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .header-row h3{margin:0;font-size:16px;font-weight:600}
+    .link-add-product{color:#2563eb;text-decoration:none;font-size:14px;padding:4px 8px;border-radius:4px;border:1px solid #2563eb;background:#eff6ff}
+    .link-add-product:hover{background:#dbeafe}
+    .table-header{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px;background:#f3f4f6;border-radius:6px 6px 0 0;font-weight:600;font-size:13px;color:#374151}
+    .item{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #e5e7eb}
+    .item:last-of-type{border-bottom:1px solid #e5e7eb;border-radius:0 0 6px 6px}
+    .item select, .item input{padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:14px}
+    .item button{padding:6px 10px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+    .item button:hover{background:#dc2626}
+    .btn{background:#2563eb;color:#fff;padding:6px 10px;border-radius:6px;text-decoration:none;border:none;cursor:pointer}
+    .btn:hover{background:#1d4ed8}
+    .btn:disabled{background:#9ca3af;cursor:not-allowed}
     .btn.secondary{background:#6b7280}
+    .btn.secondary:hover{background:#4b5563}
   `]
 })
 export class PurchaseFormComponent implements OnInit {

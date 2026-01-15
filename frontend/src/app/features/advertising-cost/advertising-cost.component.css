@@ -362,3 +362,29 @@ button.active {
   color: #7b1fa2;
   text-align: center;
 }
+
+.channel-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.channel-tabs button {
+  padding: 8px 14px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.channel-tabs button.active {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+
+.fb-sync-section.google {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}

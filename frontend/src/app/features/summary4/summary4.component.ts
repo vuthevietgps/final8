@@ -40,6 +40,9 @@ export class Summary4Component implements OnInit {
   editingPayment = signal<string | null>(null);
   editPaymentValue = signal<number>(0);
 
+  // Thu tiền
+  collectionUpdating = signal<string | null>(null);
+
   // UI state for filters
   showFilters = signal(false);
   
@@ -310,6 +313,81 @@ export class Summary4Component implements OnInit {
         this.error.set('Lỗi khi cập nhật thanh toán: ' + err.message);
       }
     });
+  }
+
+  // Thu tiền: cập nhật trạng thái và số tiền đã thu
+  onBlurCollected(id: string, event: Event) {
+    const target = event.target as HTMLInputElement;
+    const value = Number(target?.value ?? 0);
+    if (Number.isNaN(value)) return;
+
+    const items = this.summary4Data();
+    const idx = items.findIndex(i => i._id === id);
+    if (idx === -1) return;
+
+    const current = items[idx].collectedAmount || 0;
+    if (current === value) return;
+
+    this.collectionUpdating.set(id);
+    this.summary4Service.updateCollection(id, { status: 'partial', collectedAmount: value }).subscribe({
+      next: (updated) => {
+        items[idx] = updated;
+        this.summary4Data.set([...items]);
+        this.collectionUpdating.set(null);
+        this.loadStats();
+      },
+      error: (err) => {
+        this.collectionUpdating.set(null);
+        this.error.set('Lỗi khi cập nhật thu tiền: ' + err.message);
+      }
+    });
+  }
+
+  markCollectedFull(item: Summary4) {
+    const amount = item.mustPayToCompany || 0;
+    this.collectionUpdating.set(item._id);
+    this.summary4Service.updateCollection(item._id, {
+      status: 'collected',
+      collectedAmount: amount,
+      receivableAmount: 0,
+    }).subscribe({
+      next: (updated) => {
+        this.summary4Data.set(this.summary4Data().map(i => i._id === updated._id ? updated : i));
+        this.collectionUpdating.set(null);
+        this.loadStats();
+      },
+      error: (err) => {
+        this.collectionUpdating.set(null);
+        this.error.set('Lỗi khi cập nhật thu tiền: ' + err.message);
+      }
+    });
+  }
+
+  markReceivable(item: Summary4) {
+    const receivable = (item.mustPayToCompany || 0) - (item.collectedAmount || 0);
+    this.collectionUpdating.set(item._id);
+    this.summary4Service.updateCollection(item._id, {
+      status: 'receivable',
+      receivableAmount: receivable < 0 ? 0 : receivable,
+    }).subscribe({
+      next: (updated) => {
+        this.summary4Data.set(this.summary4Data().map(i => i._id === updated._id ? updated : i));
+        this.collectionUpdating.set(null);
+        this.loadStats();
+      },
+      error: (err) => {
+        this.collectionUpdating.set(null);
+        this.error.set('Lỗi khi cập nhật phải thu: ' + err.message);
+      }
+    });
+  }
+
+  collectionClass(status?: string): string {
+    switch (status) {
+      case 'collected': return 'badge success';
+      case 'partial': return 'badge warning';
+      default: return 'badge neutral';
+    }
   }
 
   // Pagination display helpers for template

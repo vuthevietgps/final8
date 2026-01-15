@@ -2,92 +2,115 @@
 <div class="product-profit-report">
   <!-- Header -->
   <div class="header">
-    <h2>� Báo Cáo Lợi Nhuận Quảng Cáo Theo Ngày</h2>
+    <h2>📈 Báo Cáo Lợi Nhuận Quảng Cáo Theo Ngày</h2>
     <p class="description">Dựa trên dữ liệu từ Tổng hợp 5 (Summary5), hiển thị lợi nhuận và chi phí quảng cáo theo từng nhóm quảng cáo theo ngày</p>
   </div>
 
   <!-- Filter Panel -->
-  <div class="filter-panel">
-    <div class="filter-grid">
-      <!-- Period Filter -->
-      <div class="filter-group">
-        <label>Khoảng thời gian:</label>
-        <select [ngModel]="query.period" (ngModelChange)="onPeriodChange($event)">
-          <option *ngFor="let option of periodOptions" [value]="option.value">{{ option.label }}</option>
-        </select>
-      </div>
+  <!-- ROI and weekly cashflow cards removed per request -->
 
-      <!-- Custom Date Range -->
-      <div class="filter-group" *ngIf="isCustomPeriod()">
-        <label>Từ ngày:</label>
-        <input type="date" [ngModel]="query.fromDate" (ngModelChange)="setFromDate($event)" />
-      </div>
-      <div class="filter-group" *ngIf="isCustomPeriod()">
-        <label>Đến ngày:</label>
-        <input type="date" [ngModel]="query.toDate" (ngModelChange)="setToDate($event)" />
-      </div>
-
-      <!-- Ad Group Filter -->
-      <div class="filter-group">
-        <label>Nhóm quảng cáo:</label>
-        <select [ngModel]="query.adGroupId" (ngModelChange)="onAdGroupChange($event)">
-          <option value="">Tất cả</option>
-          <option *ngFor="let adGroup of adGroups()" [value]="adGroup.adGroupId">{{ adGroup.name }}</option>
-        </select>
-      </div>
-
-      <!-- Date window sliders -->
-      <div class="filter-group" *ngIf="hasData()">
-        <label>Số ngày hiển thị:</label>
-        <input type="range" min="7" max="120" [ngModel]="windowSize()" (ngModelChange)="setWindowSize($event)" />
-      </div>
-      <div class="filter-group" *ngIf="hasData()">
-        <label>Dịch sang phải/trái:</label>
-        <input type="range" [min]="0" [max]="maxStartIndex()" [ngModel]="startIndex()" (ngModelChange)="setStartIndex($event)" />
-      </div>
-
-      <!-- Actions -->
-      <div class="filter-actions">
-        <button class="btn-reset" (click)="resetFilters()">🔄 Đặt lại</button>
-        <button class="btn-export" (click)="exportToCSV()" [disabled]="!hasData()">📊 Xuất CSV</button>
+  <!-- Bảng 1: Chi phí & lợi nhuận theo ngày -->
+  <div class="section">
+    <div class="section-header">
+      <h3>📅 Chi phí & lợi nhuận theo ngày</h3>
+      <div class="section-actions">
+        <button class="btn btn-secondary" (click)="loadDaily()" [disabled]="dailyLoading()">↻ Tải lại</button>
       </div>
     </div>
+    <p class="section-subtitle">Theo bộ lọc hiện tại, hiển thị tổng hợp chi phí, doanh thu và lợi nhuận của từng nhóm quảng cáo theo ngày.</p>
+    <div *ngIf="dailyLoading()" class="loading inline"><div class="spinner"></div> Đang tải...</div>
+    <div *ngIf="dailyError()" class="error">{{ dailyError() }}</div>
+    <div class="table-wrapper" *ngIf="!dailyLoading() && !dailyError() && dailyRows().length">
+      <table class="simple-table">
+        <thead>
+          <tr>
+            <th>Ngày</th>
+            <th>Nhóm QC</th>
+            <th>Chi phí</th>
+            <th>Doanh thu</th>
+            <th>Lợi nhuận</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of dailyRows()">
+            <td class="cell-date">{{ r.date }}</td>
+            <td class="cell-name">{{ r.adGroupName }}</td>
+            <td class="cell-number">{{ formatCurrency(r.adCost) }}</td>
+            <td class="cell-number">{{ formatCurrency(r.revenue) }}</td>
+            <td class="cell-number" [class]="getProfitClass(r.profit)">{{ formatCurrency(r.profit) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!dailyLoading() && !dailyError() && !dailyRows().length" class="empty">Chưa có dữ liệu</div>
   </div>
 
-  <!-- Loading State -->
-  <div *ngIf="loading()" class="loading">
-    <div class="spinner"></div>
-    <p>Đang tải dữ liệu...</p>
-  </div>
-
-  <!-- Error State -->
-  <div *ngIf="error()" class="error">
-    <p>❌ {{ error() }}</p>
-    <button (click)="loadReport()">Thử lại</button>
-  </div>
-
-  <!-- Summary -->
-  <div *ngIf="hasData() && report()?.summary" class="summary-panel">
-    <div class="summary-grid">
-      <div class="summary-card">
-        <span class="summary-label">Tổng lợi nhuận</span>
-        <span class="summary-value profit" [class]="getProfitClass(report()!.summary.totalProfit)">
-          {{ formatCurrency(report()!.summary.totalProfit) }}
-        </span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Tổng doanh thu</span>
-        <span class="summary-value revenue">{{ formatCurrency(report()!.summary.totalRevenue) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Tổng chi phí</span>
-        <span class="summary-value cost">{{ formatCurrency(report()!.summary.totalCost) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Tổng đơn</span>
-        <span class="summary-value quantity">{{ report()!.summary.totalOrders | number }}</span>
+  <!-- Bảng 2: Chi phí ads tối ưu -->
+  <div class="section">
+    <div class="section-header">
+      <h3>🧭 Chi phí ads tối ưu</h3>
+      <div class="section-actions">
+        <button class="btn btn-secondary" (click)="loadOptimal()" [disabled]="optimalLoading()">↻ Tải lại</button>
       </div>
     </div>
+    <p class="section-subtitle">Gợi ý mức chi tiêu đề xuất dựa trên hiệu quả gần nhất.</p>
+    <div *ngIf="optimalLoading()" class="loading inline"><div class="spinner"></div> Đang tính...</div>
+    <div *ngIf="optimalError()" class="error">{{ optimalError() }}</div>
+    <div class="table-wrapper" *ngIf="!optimalLoading() && !optimalError() && optimalRows().length">
+      <table class="simple-table">
+        <thead>
+          <tr>
+            <th>Nhóm QC</th>
+            <th>Chi phí gần nhất</th>
+            <th>Lợi nhuận gần nhất</th>
+            <th>Chi phí tối ưu</th>
+            <th>Chi phí áp dụng</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of optimalRows()">
+            <td class="cell-name">{{ r.adGroupName }}</td>
+            <td class="cell-number">{{ formatCurrency(r.lastSpend) }}</td>
+            <td class="cell-number" [class]="getProfitClass(r.lastProfit)">{{ formatCurrency(r.lastProfit) }}</td>
+            <td class="cell-number">{{ formatCurrency(r.optimalSpend) }}</td>
+            <td class="cell-number">{{ formatCurrency(r.appliedSpend) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!optimalLoading() && !optimalError() && !optimalRows().length" class="empty">Chưa có dữ liệu</div>
+  </div>
+
+  <!-- Bảng 3: Lợi nhuận 30 ngày (pivot) -->
+  <div class="section">
+    <div class="section-header">
+      <h3>📊 Lợi nhuận 30 ngày gần nhất</h3>
+      <div class="section-actions">
+        <button class="btn btn-secondary" (click)="loadProfit30d()" [disabled]="profit30dLoading()">↻ Tải lại</button>
+      </div>
+    </div>
+    <p class="section-subtitle">Pivot lợi nhuận 30 ngày cho từng nhóm quảng cáo.</p>
+    <div *ngIf="profit30dLoading()" class="loading inline"><div class="spinner"></div> Đang tải...</div>
+    <div *ngIf="profit30dError()" class="error">{{ profit30dError() }}</div>
+    <div class="table-wrapper" *ngIf="!profit30dLoading() && !profit30dError() && profit30d()?.data?.length">
+      <table class="pivot-table">
+        <thead>
+          <tr>
+            <th>Nhóm QC</th>
+            <th *ngFor="let d of profit30d()?.dates">{{ d }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of profit30d()?.data">
+            <td class="cell-name">{{ row.adGroupName }}</td>
+            <td *ngFor="let d of profit30d()?.dates" class="cell-number" [class]="getProfitClass(row.dailyProfits[d])">
+              {{ formatCurrency(row.dailyProfits[d]) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!profit30dLoading() && !profit30dError() && !(profit30d()?.data?.length)" class="empty">Chưa có dữ liệu</div>
   </div>
 
   <!-- Data Table -->

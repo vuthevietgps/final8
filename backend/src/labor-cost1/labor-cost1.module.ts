@@ -5,6 +5,7 @@ import { SalaryConfig, SalaryConfigSchema } from '../salary-config/schemas/salar
 import { SessionLog, SessionLogSchema } from '../session-log/session-log.schema';
 import { LaborCost1Service } from './labor-cost1.service';
 import { LaborCost1Controller } from './labor-cost1.controller';
+import { FinanceModule } from '../finance/finance.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { LaborCost1Controller } from './labor-cost1.controller';
       { name: SalaryConfig.name, schema: SalaryConfigSchema },
       { name: SessionLog.name, schema: SessionLogSchema },
     ]),
+    FinanceModule,
   ],
   controllers: [LaborCost1Controller],
   providers: [LaborCost1Service],

@@ -5,6 +5,7 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { AdAccountService } from './ad-account.service';
 import { 
   AdAccount, 
@@ -54,7 +55,7 @@ export class AdAccountComponent implements OnInit {
     this.error.set(null);
     try {
       const filter = this.searchFilter();
-      const accounts = await this.adAccountService.searchAdAccounts(filter).toPromise();
+      const accounts = await firstValueFrom(this.adAccountService.searchAdAccounts(filter));
       this.adAccounts.set(accounts || []);
     } catch (error: any) {
       this.error.set('Có lỗi xảy ra khi tải dữ liệu');
@@ -66,7 +67,7 @@ export class AdAccountComponent implements OnInit {
 
   async loadStats() {
     try {
-      const stats = await this.adAccountService.getStatsByType().toPromise();
+      const stats = await firstValueFrom(this.adAccountService.getStatsByType());
       this.stats.set(stats || []);
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -101,6 +102,7 @@ export class AdAccountComponent implements OnInit {
       isActive: true,
       notes: '',
       description: '',
+      loginCustomerId: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -125,10 +127,11 @@ export class AdAccountComponent implements OnInit {
         accountType: account.accountType,
         isActive: account.isActive,
         notes: account.notes || '',
-        description: account.description || ''
+        description: account.description || '',
+        loginCustomerId: account.loginCustomerId || ''
       };
 
-      const savedAccount = await this.adAccountService.createAdAccount(createData).toPromise();
+      const savedAccount = await firstValueFrom(this.adAccountService.createAdAccount(createData));
       
       // Replace temp account with saved account
       this.adAccounts.update(accounts => 
@@ -171,7 +174,7 @@ export class AdAccountComponent implements OnInit {
 
     try {
       const updateData = { [field]: value };
-      await this.adAccountService.updateAdAccount(account._id, updateData).toPromise();
+      await firstValueFrom(this.adAccountService.updateAdAccount(account._id, updateData));
       
       // Update local state
       this.adAccounts.update(accounts => 
@@ -193,7 +196,7 @@ export class AdAccountComponent implements OnInit {
     }
 
     try {
-      await this.adAccountService.deleteAdAccount(account._id).toPromise();
+      await firstValueFrom(this.adAccountService.deleteAdAccount(account._id));
       this.loadAdAccounts();
       this.loadStats();
     } catch (error: any) {

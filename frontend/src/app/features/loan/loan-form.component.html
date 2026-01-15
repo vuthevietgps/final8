@@ -1,0 +1,66 @@
+<div class="loan-form-page">
+  <div class="header">
+    <div>
+      <h2>➕ Tạo khoản vay</h2>
+      <p class="subtitle">Nhập thông tin khoản vay mới</p>
+    </div>
+    <a routerLink="/loans" class="back">← Danh sách</a>
+  </div>
+
+  <div *ngIf="error()" class="alert">{{ error() }}</div>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="form-grid">
+    <label>
+      Tên khoản vay *
+      <input type="text" formControlName="name" />
+    </label>
+    <label>
+      Người cho vay *
+      <select formControlName="lenderName">
+        <option value="">-- Chọn người cho vay --</option>
+        <option *ngFor="let lender of lenders()" [value]="lender.fullName">
+          {{ lender.fullName }} - {{ lender.phone }}
+        </option>
+      </select>
+    </label>
+    <label>
+      Gốc (VND) *
+      <input type="number" formControlName="principal" />
+    </label>
+    <label>
+      Lãi suất (%/năm)
+      <input type="number" formControlName="interestRate" />
+    </label>
+    <label>
+      Kỳ trả (vd: monthly)
+      <input type="text" formControlName="repaymentCycle" />
+    </label>
+    <label>
+      Ngày bắt đầu
+      <input type="date" formControlName="startDate" />
+    </label>
+    <label>
+      Ngày kết thúc
+      <input type="date" formControlName="endDate" />
+    </label>
+    <label>
+      Trạng thái
+      <select formControlName="status">
+        <option value="active">Đang hoạt động</option>
+        <option value="draft">Nháp</option>
+        <option value="closed">Đã tất toán</option>
+      </select>
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" formControlName="restricted" />
+      Nguồn vốn có giới hạn sử dụng
+    </label>
+    <label class="full">
+      Ghi chú
+      <textarea rows="3" formControlName="notes"></textarea>
+    </label>
+    <div class="actions full">
+      <button type="submit" [disabled]="loading()">Lưu</button>
+    </div>
+  </form>
+</div>

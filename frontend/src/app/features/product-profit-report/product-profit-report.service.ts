@@ -5,7 +5,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { ProductProfitFilter, ProductProfitReport } from './models/product-profit.interface';
+import { ProductProfitFilter, ProductProfitReport, ProductPeriodicalResponse } from './models/product-profit.interface';
 import { environment } from '../../../environments/environment';
 
 @Injectable({
@@ -38,6 +38,34 @@ export class ProductProfitReportService {
     }
 
     return this.http.get<ProductProfitReport>(this.baseUrl, { params });
+  }
+
+  /**
+   * Lấy báo cáo tuần theo sản phẩm
+   */
+  getProductProfitWeekly(filter: ProductProfitFilter): Observable<ProductPeriodicalResponse> {
+    let params = new HttpParams();
+    const range = this.convertPeriodToDateRange(filter.period, filter.year);
+    const fromDate = filter.fromDate || range.from;
+    const toDate = filter.toDate || range.to;
+    if (fromDate) params = params.set('from', fromDate);
+    if (toDate) params = params.set('to', toDate);
+    if (filter.productName) params = params.set('productName', filter.productName);
+    return this.http.get<ProductPeriodicalResponse>(`${this.baseUrl}/weekly`, { params });
+  }
+
+  /**
+   * Lấy báo cáo tháng theo sản phẩm
+   */
+  getProductProfitMonthly(filter: ProductProfitFilter): Observable<ProductPeriodicalResponse> {
+    let params = new HttpParams();
+    const range = this.convertPeriodToDateRange(filter.period, filter.year);
+    const fromDate = filter.fromDate || range.from;
+    const toDate = filter.toDate || range.to;
+    if (fromDate) params = params.set('from', fromDate);
+    if (toDate) params = params.set('to', toDate);
+    if (filter.productName) params = params.set('productName', filter.productName);
+    return this.http.get<ProductPeriodicalResponse>(`${this.baseUrl}/monthly`, { params });
   }
 
   /**

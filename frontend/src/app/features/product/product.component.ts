@@ -9,6 +9,7 @@ import { ProductService } from './product.service';
 import { ProductCategoryService } from '../product-category/product-category.service';
 import { Product, CreateProductDto, UpdateProductDto, ProductStats } from './models/product.interface';
 import { ProductCategory } from '../product-category/models/product-category.interface';
+import { SupplierService, Supplier } from '../supplier/supplier.service';
 
 @Component({
   selector: 'app-product',
@@ -32,6 +33,8 @@ export class ProductComponent implements OnInit {
   
   isLoading = signal(false);
   error = signal<string | null>(null);
+
+  suppliers = signal<Supplier[]>([]);
   
   // Modal state
   isAddModalOpen = signal(false);
@@ -52,7 +55,8 @@ export class ProductComponent implements OnInit {
     status: 'Hoạt động',
     color: '#3B82F6',
     notes: '',
-    resourceLink: ''
+    resourceLink: '',
+    suppliers: []
   });
 
   // Search and filter
@@ -80,7 +84,7 @@ export class ProductComponent implements OnInit {
 
     const category = this.selectedCategory();
     if (category !== 'all') {
-      filtered = filtered.filter(product => product.categoryId._id === category);
+      filtered = filtered.filter(product => product.categoryId && product.categoryId._id === category);
     }
 
     return filtered;
@@ -88,13 +92,15 @@ export class ProductComponent implements OnInit {
 
   constructor(
     private productService: ProductService,
-    private categoryService: ProductCategoryService
+    private categoryService: ProductCategoryService,
+    private supplierService: SupplierService,
   ) {}
 
   ngOnInit(): void {
     this.loadProducts();
     this.loadStats();
     this.loadCategories();
+    this.loadSuppliers();
   }
 
   loadProducts(): void {
@@ -136,6 +142,13 @@ export class ProductComponent implements OnInit {
     });
   }
 
+  loadSuppliers(): void {
+    this.supplierService.list({ active: true, minimal: true }).subscribe({
+      next: (suppliers) => this.suppliers.set(suppliers),
+      error: (err) => console.error('Error loading suppliers:', err)
+    });
+  }
+
   openAddModal(): void {
     this.formData.set({
       name: '',
@@ -150,7 +163,8 @@ export class ProductComponent implements OnInit {
       status: 'Hoạt động',
       color: '#3B82F6',
       notes: '',
-      resourceLink: ''
+      resourceLink: '',
+      suppliers: []
     });
     this.isAddModalOpen.set(true);
   }
@@ -163,7 +177,7 @@ export class ProductComponent implements OnInit {
     this.selectedProduct.set(product);
     this.formData.set({
       name: product.name,
-      categoryId: product.categoryId._id,
+      categoryId: product.categoryId?._id || '',
       importPrice: product.importPrice,
       shippingCost: product.shippingCost,
       packagingCost: product.packagingCost,
@@ -174,7 +188,8 @@ export class ProductComponent implements OnInit {
       status: product.status,
       color: product.color || '#3B82F6',
       notes: product.notes || '',
-      resourceLink: product.resourceLink || ''
+      resourceLink: product.resourceLink || '',
+      suppliers: this.cloneSuppliers(product.suppliers)
     });
     this.isEditModalOpen.set(true);
   }
@@ -190,8 +205,10 @@ export class ProductComponent implements OnInit {
       return;
     }
 
+    const payload = { ...this.formData(), suppliers: this.cloneSuppliers(this.formData().suppliers) } as CreateProductDto;
+
     this.isLoading.set(true);
-    this.productService.create(this.formData()).subscribe({
+    this.productService.create(payload).subscribe({
       next: (product) => {
         this.products.update(products => [...products, product]);
         this.loadStats();
@@ -216,7 +233,8 @@ export class ProductComponent implements OnInit {
     }
 
     this.isLoading.set(true);
-    this.productService.update(product._id, this.formData()).subscribe({
+    const payload = { ...this.formData(), suppliers: this.cloneSuppliers(this.formData().suppliers) } as UpdateProductDto;
+    this.productService.update(product._id, payload).subscribe({
       next: (updatedProduct) => {
         this.products.update(products => 
           products.map(p => p._id === product._id ? updatedProduct : p)
@@ -306,6 +324,81 @@ export class ProductComponent implements OnInit {
     this.updateFormField(field, value);
   }
 
+  addSupplierRow(): void {
+    const emptyRow = {
+      supplierId: '',
+      price1: 0,
+      price2: 0,
+      price3: 0,
+      appliedLevel: 1,
+      appliedPrice: 0
+    };
+
+    this.formData.update(current => ({
+      ...current,
+      suppliers: [...(current.suppliers || []), emptyRow]
+    }));
+  }
+
+  removeSupplierRow(index: number): void {
+    this.formData.update(current => ({
+      ...current,
+      suppliers: (current.suppliers || []).filter((_, i) => i !== index)
+    }));
+  }
+
+  onSupplierFieldChange(
+    index: number,
+    field: 'supplierId' | 'price1' | 'price2' | 'price3',
+    value: any
+  ): void {
+    this.formData.update(current => {
+      const suppliers = this.cloneSuppliers(current.suppliers);
+      if (!suppliers[index]) return current;
+
+      const row = { ...suppliers[index] };
+      const numericFields = ['price1', 'price2', 'price3'];
+      (row as any)[field] = numericFields.includes(field) ? parseFloat(value) || 0 : value;
+      row.appliedPrice = this.computeAppliedPrice(row);
+
+      suppliers[index] = row;
+      return { ...current, suppliers };
+    });
+  }
+
+  onSupplierApplyLevel(index: number, level: number): void {
+    this.formData.update(current => {
+      const suppliers = this.cloneSuppliers(current.suppliers);
+      if (!suppliers[index]) return current;
+
+      const row = { ...suppliers[index], appliedLevel: Number(level) || 1 };
+      row.appliedPrice = this.computeAppliedPrice(row);
+      suppliers[index] = row;
+
+      return { ...current, suppliers };
+    });
+  }
+
+  onSupplierApply(index: number): void {
+    this.formData.update(current => {
+      const suppliers = this.cloneSuppliers(current.suppliers);
+      if (!suppliers[index]) return current;
+
+      const row = { ...suppliers[index] };
+      row.appliedPrice = this.computeAppliedPrice(row);
+      suppliers[index] = row;
+
+      return { ...current, suppliers };
+    });
+  }
+
+  private computeAppliedPrice(row: Partial<NonNullable<CreateProductDto['suppliers']>[number]>): number {
+    const level = row.appliedLevel || 1;
+    if (level === 2) return row.price2 || 0;
+    if (level === 3) return row.price3 || 0;
+    return row.price1 || 0;
+  }
+
   onSearchChange(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.searchTerm.set(target.value);
@@ -319,6 +412,12 @@ export class ProductComponent implements OnInit {
   onCategoryFilterChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     this.selectedCategory.set(target.value || 'all');
+  }
+
+  private cloneSuppliers(
+    list?: Product['suppliers'] | CreateProductDto['suppliers']
+  ): NonNullable<CreateProductDto['suppliers']> {
+    return (list || []).map(s => ({ ...s }));
   }
 
   clearError(): void {

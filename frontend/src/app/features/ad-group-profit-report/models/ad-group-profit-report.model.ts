@@ -13,30 +13,25 @@ export interface AdGroupDailyFilter {
   adGroupId?: string;
 }
 
-export interface AdGroupRef { id: string; name: string; }
-
 export interface AdGroupDailyRow {
   adGroupId: string;
   adGroupName: string;
-  dailyProfits: { [date: string]: number };
-  dailyCosts?: { [date: string]: number };
+  dailyProfits: Record<string, number>;
+  dailyCosts?: Record<string, number>;
   totalProfit: number;
-  totalRevenue: number;
-  totalCost: number;
-  totalOrders: number;
 }
 
 export interface AdGroupDailyReport {
-  adGroups: AdGroupRef[];
   dates: string[];
   data: AdGroupDailyRow[];
-  summary: {
-    totalProfit: number;
-    totalRevenue: number;
-    totalCost: number;
-    totalOrders: number;
+  summary?: {
+    totalRevenue?: number;
+    totalCost?: number;
+    totalOrders?: number;
   };
 }
+
+// ROI and cashflow interfaces removed per request
 
 export interface ChartDataPoint {
   date: string;
@@ -52,3 +47,51 @@ export interface AdGroupChartData {
 }
 
 export interface PeriodOption { value: PeriodOptionValue; label: string; }
+
+// Daily cost/profit (Bảng 1)
+export interface AdGroupDailyCostProfitRow {
+  date: string;
+  adGroupId: string;
+  adGroupName: string;
+  adCost: number;
+  revenue: number;
+  profit: number;
+}
+
+// Optimal spend suggestion (Bảng 2)
+export interface AdGroupOptimalSpendRow {
+  adGroupId: string;
+  adGroupName: string;
+  lastSpend: number;
+  lastProfit: number;
+  optimalSpend: number;
+  appliedSpend: number;
+}
+
+// Profit 30d pivot (Bảng 3)
+export interface Profit30dResponse {
+  dates: string[];
+  data: Array<{ adGroupId: string; adGroupName: string; dailyProfits: Record<string, number> }>;
+}
+
+// Horizontal scale suggestion (scale ads theo chiều ngang)
+export interface HorizontalScaleSuggestion {
+  adGroupId: string;
+  adGroupName: string;
+  lastSpend: number;
+  lastProfit: number;
+  optimalSpend: number;
+  appliedSpend: number;
+  overflow: number;
+  recommendedGroups: number;
+  recommendedBudgetPerGroup: number;
+  recommendedTotal: number;
+  availableFundsCapped: number | null;
+  reason: string;
+}
+
+export interface HorizontalScaleResponse {
+  availableFunds: number;
+  count: number;
+  data: HorizontalScaleSuggestion[];
+}

@@ -52,4 +52,13 @@ export class PurchaseService {
   receive(id: string, items: ReceiveItemDto[], receivedAt: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/${id}/receive`, { items, receivedAt }, { withCredentials: true });
   }
+
+  supplierProductReport(params: { from?: string; to?: string; supplierId?: string; productId?: string }) {
+    let hp = new HttpParams();
+    if (params.from) hp = hp.set('from', params.from);
+    if (params.to) hp = hp.set('to', params.to);
+    if (params.supplierId) hp = hp.set('supplierId', params.supplierId);
+    if (params.productId) hp = hp.set('productId', params.productId);
+    return this.http.get<any[]>(`${this.baseUrl}/supplier-product-report`, { params: hp, withCredentials: true });
+  }
 }

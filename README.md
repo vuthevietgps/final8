@@ -2,6 +2,8 @@
 
 ## 📋 Tổng Quan Hệ Thống
 
+- Tài liệu hướng dẫn quảng cáo: xem `docs/advertising-guide.md` (quy trình tài khoản quảng cáo, nhóm quảng cáo, chi phí, token BM, đồng bộ Facebook).
+
 Hệ thống quản lý toàn diện với NestJS backend + MongoDB và Angular frontend, đã được phát triển hoàn chỉnh và đẩy lên repository mới.
 
 ## 🔥 Quick Setup

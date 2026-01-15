@@ -5,7 +5,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { AdGroup, CreateAdGroup, UpdateAdGroup } from './models/ad-group.model';
+import { AdGroup, CreateAdGroup, UpdateAdGroup, AdGroupRecommendation } from './models/ad-group.model';
 import { environment } from '../../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
@@ -34,6 +34,14 @@ export class AdGroupService {
 
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/${id}`, { withCredentials: true });
+  }
+
+  getRecommendations(): Observable<AdGroupRecommendation[]> {
+    return this.http.get<AdGroupRecommendation[]>(`${this.apiUrl}/recommendations`, { withCredentials: true });
+  }
+
+  applyRecommendations(ids: string[]): Observable<{ applied: any[]; failed: any[] }> {
+    return this.http.post<{ applied: any[]; failed: any[] }>(`${this.apiUrl}/recommendations/apply`, { ids }, { withCredentials: true });
   }
 
   search(filter: { q?: string; platform?: string; productId?: string; agentId?: string; adAccountId?: string; status?: 'all'|'active'|'inactive' }): Observable<AdGroup[]> {

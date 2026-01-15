@@ -37,8 +37,8 @@ export class AdGroup {
   description?: string; // Mô tả nhóm quảng cáo
 
   // Thông tin quảng cáo
-  @Prop({ required: true, enum: ['facebook', 'google', 'ticktock'], index: true })
-  platform: 'facebook' | 'google' | 'ticktock'; // Nền tảng quảng cáo
+  @Prop({ required: true, enum: ['facebook', 'google', 'tiktok'], index: true })
+  platform: 'facebook' | 'google' | 'tiktok'; // Nền tảng quảng cáo
 
   @Prop({ default: true, index: true })
   isActive: boolean; // Trạng thái hoạt động
@@ -68,6 +68,31 @@ export class AdGroup {
 
   @Prop({ trim: true })
   autoPausedReason?: string; // Lý do tự dừng gần nhất
+
+  // Metadata đồng bộ từ provider
+  @Prop({ trim: true })
+  remoteStatus?: string;
+
+  @Prop({ trim: true })
+  effectiveStatus?: string;
+
+  @Prop({ type: Number })
+  dailyBudget?: number;
+
+  @Prop({ type: Number })
+  bidAmount?: number;
+
+  @Prop({ trim: true })
+  campaignId?: string;
+
+  // Nhật ký đồng bộ
+  @Prop() lastSyncAt?: Date;
+
+  @Prop({ trim: true }) lastSyncStatus?: 'ok' | 'error';
+
+  @Prop({ trim: true }) lastSyncError?: string;
+
+  @Prop({ type: Number }) lastSyncDurationMs?: number;
 }
 
 export const AdGroupSchema = SchemaFactory.createForClass(AdGroup);

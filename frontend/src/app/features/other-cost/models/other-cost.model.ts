@@ -7,6 +7,8 @@ export interface OtherCost {
   amount: number;
   notes?: string;
   documentLink?: string;
+  isConfirmed?: boolean;
+  confirmedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }

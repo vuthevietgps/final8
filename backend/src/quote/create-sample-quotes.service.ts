@@ -10,6 +10,10 @@ export class CreateSampleQuotes implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // Tạm tắt tự động tạo sample quotes vì schema đã thay đổi
+    // Nếu cần, có thể tạo thủ công qua API hoặc cập nhật lại sample data
+    return;
+    
     // Kiểm tra xem đã có quotes chưa
     const count = await this.quoteModel.countDocuments().exec();
     console.log(`Current quotes count: ${count}`);

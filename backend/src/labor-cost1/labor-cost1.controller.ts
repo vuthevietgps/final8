@@ -42,4 +42,10 @@ export class LaborCost1Controller {
   ) {
     return this.service.generateFromSessionLogs(userId, date);
   }
+
+  @Patch(':id/pay')
+  @RequirePermissions('labor-costs')
+  markPaid(@Param('id') id: string) {
+    return this.service.markPaid(id);
+  }
 }

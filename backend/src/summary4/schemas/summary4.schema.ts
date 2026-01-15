@@ -18,6 +18,19 @@ export class Summary4 {
   @Prop({ type: Types.ObjectId, ref: 'Product' })
   productId?: Types.ObjectId;
 
+  // Unit cost applied for this order (can come from supplier/FIFO), and total cost = unit × quantity
+  @Prop({ type: Number })
+  productCost?: number;
+
+  @Prop({ type: Number })
+  productCostTotal?: number;
+
+  @Prop({ type: Types.ObjectId, ref: 'Supplier' })
+  supplierId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  costSource?: string; // product|supplier|inventory
+
   @Prop({ type: Number })
   approvedQuotePrice: number;
 
@@ -32,6 +45,16 @@ export class Summary4 {
 
   @Prop({ type: Number })
   needToPayAmount: number;
+
+  // Thu tiền: doanh thu đã thu vs còn phải thu
+  @Prop({ type: String, enum: ['collected', 'receivable', 'partial'], default: 'receivable' })
+  collectionStatus?: string;
+
+  @Prop({ type: Number, default: 0 })
+  collectedAmount?: number; // số đã thu được
+
+  @Prop({ type: Number, default: 0 })
+  receivableAmount?: number; // số còn phải thu (công nợ)
 
   // Order related fields
   @Prop()

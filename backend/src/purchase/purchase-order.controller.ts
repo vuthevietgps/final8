@@ -29,6 +29,27 @@ export class PurchaseOrderController {
     return this.service.findAll({ supplierId, status, page: Number(page || 1), limit: Number(limit || 20) });
   }
 
+  @Get('supplier-report')
+  @RequirePermissions('purchase-costs')
+  supplierReport(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('supplierId') supplierId?: string,
+  ) {
+    return this.service.supplierReport({ from, to, supplierId });
+  }
+
+  @Get('supplier-product-report')
+  @RequirePermissions('purchase-costs')
+  supplierProductReport(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('productId') productId?: string,
+  ) {
+    return this.service.supplierProductReport({ from, to, supplierId, productId });
+  }
+
   @Get(':id')
   @RequirePermissions('purchase-costs')
   findOne(@Param('id') id: string) {

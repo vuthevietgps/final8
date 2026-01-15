@@ -21,6 +21,17 @@ export interface Product {
   totalCost: number;
   createdAt: string;
   updatedAt: string;
+  suppliers?: Array<{
+    supplierId?: string;
+    price1?: number;
+    price2?: number;
+    price3?: number;
+    appliedLevel?: number;
+    appliedPrice?: number;
+    appliedAt?: string;
+    priority?: number;
+    isDefault?: boolean;
+  }>;
 }
 
 export interface ProductCategoryRef {
@@ -45,6 +56,16 @@ export interface CreateProductDto {
   color?: string;
   notes?: string;
   resourceLink?: string;
+  suppliers?: Array<{
+    supplierId?: string;
+    price1?: number;
+    price2?: number;
+    price3?: number;
+    appliedLevel?: number;
+    appliedPrice?: number;
+    priority?: number;
+    isDefault?: boolean;
+  }>;
 }
 
 export interface UpdateProductDto extends Partial<CreateProductDto> {}

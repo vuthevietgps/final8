@@ -19,6 +19,8 @@ export interface Summary4Stats {
   totalPaidToCompany: number;
   totalManualPayment: number;
   totalNeedToPay: number;
+  totalCollected: number;
+  totalReceivable: number;
   timestamp: string;
 }
 
@@ -110,6 +112,9 @@ export class Summary4Service {
       paidToCompany: d.paidToCompany ?? d.paidToCompanyAmount ?? 0,
       manualPayment: d.manualPayment ?? d.manualPaymentAmount ?? 0,
       needToPay: d.needToPay ?? d.needToPayAmount ?? 0,
+      collectionStatus: d.collectionStatus || 'receivable',
+      collectedAmount: d.collectedAmount ?? 0,
+      receivableAmount: d.receivableAmount ?? 0,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
     };
@@ -126,6 +131,8 @@ export class Summary4Service {
           totalPaidToCompany: { $sum: { $ifNull: ['$paidToCompanyAmount', 0] } },
           totalManualPayment: { $sum: { $ifNull: ['$manualPaymentAmount', 0] } },
           totalNeedToPay: { $sum: { $ifNull: ['$needToPayAmount', 0] } },
+          totalCollected: { $sum: { $ifNull: ['$collectedAmount', 0] } },
+          totalReceivable: { $sum: { $ifNull: ['$receivableAmount', 0] } },
         },
       },
     ];
@@ -137,12 +144,33 @@ export class Summary4Service {
       totalPaidToCompany: 0,
       totalManualPayment: 0,
       totalNeedToPay: 0,
+      totalCollected: 0,
+      totalReceivable: 0,
     };
 
     return {
       ...stats,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  async updateCollection(id: string, payload: { status?: string; collectedAmount?: number; receivableAmount?: number }) {
+    const update: any = {};
+    if (payload.status) update.collectionStatus = payload.status;
+    if (payload.collectedAmount !== undefined) update.collectedAmount = payload.collectedAmount;
+    if (payload.receivableAmount !== undefined) update.receivableAmount = payload.receivableAmount;
+
+    const updatedDoc = await this.model.findByIdAndUpdate(id, { $set: update }, { new: true });
+    if (!updatedDoc) {
+      throw new Error('Record not found or update failed');
+    }
+    const doc = await this.model
+      .findById(updatedDoc._id)
+      .populate('agentId', 'fullName email role')
+      .populate('productId', 'name sku')
+      .lean()
+      .exec();
+    return this.mapToClientDto(doc);
   }
 
   async getAgents() {

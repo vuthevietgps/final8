@@ -27,6 +27,34 @@ export class ProductProfitReportController {
   }
 
   /**
+   * Báo cáo lợi nhuận sản phẩm theo tuần (ISO week)
+   * GET /product-profit-report/weekly
+   */
+  @Get('weekly')
+  @RequirePermissions('reports')
+  async getProductProfitWeekly(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('productName') productName?: string,
+  ) {
+    return this.productProfitReportService.getProductProfitWeekly({ from, to, productName });
+  }
+
+  /**
+   * Báo cáo lợi nhuận sản phẩm theo tháng
+   * GET /product-profit-report/monthly
+   */
+  @Get('monthly')
+  @RequirePermissions('reports')
+  async getProductProfitMonthly(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('productName') productName?: string,
+  ) {
+    return this.productProfitReportService.getProductProfitMonthly({ from, to, productName });
+  }
+
+  /**
    * API lấy danh sách năm có dữ liệu
    * GET /product-profit-report/years
    */

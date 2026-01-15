@@ -29,6 +29,9 @@ export interface Summary5 {
   costOfGoods: number;
   revenue: number;
   profit: number;
+  collectionStatus?: 'collected' | 'receivable' | 'partial' | string;
+  collectedAmount?: number;
+  receivableAmount?: number;
 }
 
 export interface Summary5Filter {

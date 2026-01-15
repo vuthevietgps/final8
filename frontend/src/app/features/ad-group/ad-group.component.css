@@ -423,6 +423,32 @@ input:checked + .slider:before {
   transform: scale(1.1);
 }
 
+.platform-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.platform-tabs .btn.active {
+  background: #111827;
+  color: #fff;
+}
+
+.platform-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.platform-pill[data-platform='google'] { background: #e8f0fe; color: #174ea6; }
+.platform-pill[data-platform='facebook'] { background: #e7f3ff; color: #0a66c2; }
+.platform-pill[data-platform='tiktok'] { background: #fdf2f8; color: #be185d; }
+
 /* Empty state */
 .empty-state {
   padding: 60px 20px;

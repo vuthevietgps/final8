@@ -76,7 +76,9 @@ export class UserListComponent implements OnInit {
       [UserRole.INTERNAL_AGENT]: 'Đại Lý Nội Bộ',
       [UserRole.EXTERNAL_AGENT]: 'Đại Lý Ngoài',
       [UserRole.INTERNAL_SUPPLIER]: 'Nhà Cung Cấp Nội Bộ',
-      [UserRole.EXTERNAL_SUPPLIER]: 'Nhà Cung Cấp Ngoài'
+      [UserRole.EXTERNAL_SUPPLIER]: 'Nhà Cung Cấp Ngoài',
+      [UserRole.INVESTOR]: 'Nhà Đầu Tư',
+      [UserRole.LENDER]: 'Người Cho Vay'
     };
     return roleNames[role] || role;
   }

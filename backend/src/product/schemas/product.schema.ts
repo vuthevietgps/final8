@@ -131,6 +131,29 @@ export class Product {
 
   @Prop({ default: 0 })
   totalCost: number; // Tổng chi phí (tự động tính)
+
+  @Prop([{ 
+    supplierId: { type: Types.ObjectId, ref: 'Supplier' },
+    price1: { type: Number, default: 0 },
+    price2: { type: Number, default: 0 },
+    price3: { type: Number, default: 0 },
+    appliedLevel: { type: Number, enum: [1,2,3], default: 1 },
+    appliedPrice: { type: Number, default: 0 },
+    appliedAt: { type: Date },
+    priority: { type: Number, default: 0 },
+    isDefault: { type: Boolean, default: false }
+  }])
+  suppliers: Array<{
+    supplierId?: Types.ObjectId;
+    price1?: number;
+    price2?: number;
+    price3?: number;
+    appliedLevel?: number;
+    appliedPrice?: number;
+    appliedAt?: Date;
+    priority?: number;
+    isDefault?: boolean;
+  }>;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

@@ -7,7 +7,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, takeUntil, finalize } from 'rxjs';
 import { AdGroupProfitReportService } from './ad-group-profit-report.service';
-import { AdGroupDailyReport, AdGroupDailyRow, AdGroupDailyFilter, PeriodOption } from './models/ad-group-profit-report.model';
+import { AdGroupDailyReport, AdGroupDailyRow, AdGroupDailyFilter, PeriodOption, AdGroupDailyCostProfitRow, AdGroupOptimalSpendRow, Profit30dResponse } from './models/ad-group-profit-report.model';
 import { AdGroupService } from '../ad-group/ad-group.service';
 import { ProductService } from '../product/product.service';
 import { UserService } from '../user/user.service';
@@ -27,6 +27,17 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
   summary = signal<any>({});
   loading = signal<boolean>(false);
   error = signal<string>('');
+
+  // New tables (Bảng 1, 2, 3)
+  dailyRows = signal<AdGroupDailyCostProfitRow[]>([]);
+  optimalRows = signal<AdGroupOptimalSpendRow[]>([]);
+  profit30d = signal<Profit30dResponse | null>(null);
+  dailyLoading = signal(false);
+  optimalLoading = signal(false);
+  profit30dLoading = signal(false);
+  dailyError = signal('');
+  optimalError = signal('');
+  profit30dError = signal('');
 
   // Filter options
   adGroups = signal<any[]>([]);
@@ -80,6 +91,11 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadFilterOptions();
     this.loadReport();
+    // ROI section removed
+    // Cashflow weekly section removed
+    this.loadDaily();
+    this.loadOptimal();
+    this.loadProfit30d();
   }
 
   ngOnDestroy(): void {
@@ -140,6 +156,57 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
       });
   }
 
+  // Bảng 1: daily cost & profit
+  loadDaily(): void {
+    this.dailyLoading.set(true);
+    this.dailyError.set('');
+    this.profitReportService.getDailyCostProfit({
+      from: this.query.fromDate,
+      to: this.query.toDate,
+      adGroupId: this.query.adGroupId,
+    }).pipe(takeUntil(this.destroy$), finalize(() => this.dailyLoading.set(false))).subscribe({
+      next: (rows) => this.dailyRows.set(rows),
+      error: (err) => {
+        console.error(err);
+        this.dailyError.set('Không tải được Bảng chi phí & lợi nhuận theo ngày');
+      }
+    });
+  }
+
+  // Bảng 2: optimal spend
+  loadOptimal(): void {
+    this.optimalLoading.set(true);
+    this.optimalError.set('');
+    this.profitReportService.getOptimalSpend().pipe(takeUntil(this.destroy$), finalize(() => this.optimalLoading.set(false))).subscribe({
+      next: (rows) => this.optimalRows.set(rows),
+      error: (err) => {
+        console.error(err);
+        this.optimalError.set('Không tải được Bảng chi phí tối ưu');
+      }
+    });
+  }
+
+  // Bảng 3: profit 30d pivot
+  loadProfit30d(): void {
+    this.profit30dLoading.set(true);
+    this.profit30dError.set('');
+    this.profitReportService.getProfit30d({ adGroupId: this.query.adGroupId }).pipe(takeUntil(this.destroy$), finalize(() => this.profit30dLoading.set(false))).subscribe({
+      next: (res) => this.profit30d.set(res),
+      error: (err) => {
+        console.error(err);
+        this.profit30dError.set('Không tải được Bảng lợi nhuận 30 ngày');
+      }
+    });
+  }
+
+  // Filter change triggers all tables
+  onFilterChanged() {
+    this.loadReport();
+    this.loadDaily();
+    this.loadOptimal();
+    this.loadProfit30d();
+  }
+
   /**
    * Handle period change
    */
@@ -151,6 +218,9 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
       this.query.toDate = undefined;
     }
     this.loadReport();
+    this.loadDaily();
+    this.loadOptimal();
+    this.loadProfit30d();
   }
 
   /**
@@ -159,6 +229,9 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
   onAdGroupChange(value: string): void {
     this.query.adGroupId = value || undefined;
     this.loadReport();
+    this.loadDaily();
+    this.loadOptimal();
+    this.loadProfit30d();
   }
 
   /**
@@ -167,13 +240,23 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
   setFromDate(value: string): void {
     this.query.fromDate = value || undefined;
     if (this.query.period !== 'custom') this.query.period = 'custom';
-    if (this.query.fromDate && this.query.toDate) this.loadReport();
+    if (this.query.fromDate && this.query.toDate) {
+      this.loadReport();
+      this.loadDaily();
+      this.loadOptimal();
+      this.loadProfit30d();
+    }
   }
 
   setToDate(value: string): void {
     this.query.toDate = value || undefined;
     if (this.query.period !== 'custom') this.query.period = 'custom';
-    if (this.query.fromDate && this.query.toDate) this.loadReport();
+    if (this.query.fromDate && this.query.toDate) {
+      this.loadReport();
+      this.loadDaily();
+      this.loadOptimal();
+      this.loadProfit30d();
+    }
   }
 
   /**
@@ -201,8 +284,20 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
    * Reset all filters
    */
   resetFilters(): void {
-  this.query = { period: '30days' };
+    this.query = { period: '30days' };
     this.loadReport();
+    this.loadDaily();
+    this.loadOptimal();
+    this.loadProfit30d();
+  }
+
+  formatPercent(value: number | null): string {
+    if (value === null || Number.isNaN(value)) return 'N/A';
+    return (value * 100).toFixed(1) + '%';
+  }
+
+  formatChangePct(value: number): string {
+    return `${(value * 100).toFixed(0)}%`;
   }
 
   /**
@@ -378,7 +473,9 @@ export class AdGroupProfitReportComponent implements OnInit, OnDestroy {
       ...r.dates.map(d => row.dailyProfits[d] || 0),
       row.totalProfit
     ]);
-    const csv = [headers, ...rows].map(line => line.map(x => `"${x}"`).join(',')).join('\n');
+    const csv = [headers, ...rows]
+      .map(line => line.map((x: string | number) => `"${x}"`).join(','))
+      .join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

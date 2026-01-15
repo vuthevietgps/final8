@@ -10,9 +10,39 @@ import {
   Min, 
   IsEnum,
   IsMongoId,
-  Matches 
+  Matches,
+  IsArray,
+  ValidateNested,
+  IsIn
 } from 'class-validator';
 import { Types } from 'mongoose';
+import { Type } from 'class-transformer';
+
+class SupplierPriceDto {
+  @IsMongoId()
+  supplierId: Types.ObjectId;
+
+  @IsOptional() @IsNumber() @Min(0)
+  price1?: number;
+
+  @IsOptional() @IsNumber() @Min(0)
+  price2?: number;
+
+  @IsOptional() @IsNumber() @Min(0)
+  price3?: number;
+
+  @IsOptional() @IsIn([1,2,3])
+  appliedLevel?: number;
+
+  @IsOptional() @IsNumber() @Min(0)
+  appliedPrice?: number;
+
+  @IsOptional() @IsNumber()
+  priority?: number;
+
+  @IsOptional()
+  isDefault?: boolean;
+}
 
 export class CreateProductDto {
   @IsString()
@@ -47,12 +77,12 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(1)
+  @Min(0)
   estimatedDeliveryDays?: number;
 
   @IsOptional()
   @IsNumber()
-  @Min(1)
+  @Min(0)
   usageDurationMonths?: number;
 
   @IsOptional()
@@ -72,4 +102,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   resourceLink?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SupplierPriceDto)
+  suppliers?: SupplierPriceDto[];
 }

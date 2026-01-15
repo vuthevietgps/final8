@@ -38,8 +38,8 @@ export class CreateAdGroupDto {
   description?: string;
 
   // Cấu hình quảng cáo
-  @IsEnum(['facebook', 'google', 'ticktock'])
-  platform: 'facebook' | 'google' | 'ticktock';
+  @IsEnum(['facebook', 'google', 'tiktok'])
+  platform: 'facebook' | 'google' | 'tiktok';
 
   @IsOptional()
   @IsBoolean()

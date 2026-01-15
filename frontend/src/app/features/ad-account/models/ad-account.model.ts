@@ -11,6 +11,7 @@ export interface AdAccount {
   isActive: boolean; // Trạng thái hoạt động
   notes?: string; // Ghi chú
   description?: string; // Mô tả tài khoản
+  loginCustomerId?: string; // Google Ads login customer ID (MCC)
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +23,7 @@ export interface CreateAdAccountRequest {
   isActive?: boolean;
   notes?: string;
   description?: string;
+  loginCustomerId?: string;
 }
 
 export interface UpdateAdAccountRequest extends Partial<CreateAdAccountRequest> {}

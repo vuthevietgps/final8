@@ -27,18 +27,18 @@ import { ProductService } from '../product/product.service';
           <th>Loại</th>
           <th>SL</th>
           <th>Đơn giá</th>
-          <th>PO</th>
+          <th>Số PO</th>
           <th>Ghi chú</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let t of txs()">
           <td>{{ t.occurredAt | date:'short' }}</td>
-          <td>{{ t.type }}</td>
+          <td>{{ getTransactionType(t.type) }}</td>
           <td [class.outbound]="t.quantity<0">{{ t.quantity | number:'1.0-4' }}</td>
           <td>{{ t.unitCost ?? '-' }}</td>
           <td>{{ t.purchaseOrderId || '-' }}</td>
-          <td>{{ t.notes || '' }}</td>
+          <td>{{ getNoteVi(t.notes) }}</td>
         </tr>
       </tbody>
     </table>
@@ -97,15 +97,32 @@ export class InventoryDetailComponent implements OnInit {
     let unitCost: number | undefined = undefined;
     if (qty>0) {
       const costStr = prompt('Đơn giá (chỉ cần khi điều chỉnh dương, dùng để cập nhật WAC):', '0');
-      if (costStr===null) return; // user cancelled
+      if (costStr===null) return; 
       const c = Number(costStr);
       if (!Number.isFinite(c) || c<0) { alert('Đơn giá không hợp lệ'); return; }
       unitCost = c;
     }
-    const notes = prompt('Ghi chú (tuỳ chọn):', '');
+    const notes = prompt('Ghi chú (tùy chọn):', '');
     this.api.adjust({ productId: this.productId, quantity: qty, unitCost, notes: notes||undefined }).subscribe({
-      next: _ => { alert('Điều chỉnh thành công'); this.load(); },
-      error: err => alert('Điều chỉnh thất bại: ' + (err?.error?.message || err?.message || 'Lỗi không xác định'))
+      next: () => { alert('Điều chỉnh thành công'); this.load(); },
+      error: (err: any) => alert('Điều chỉnh thất bại: ' + (err?.error?.message || err?.message || 'Lỗi không xác định'))
     });
+  }
+
+  getTransactionType(type: string): string {
+    const typeMap: { [key: string]: string } = {
+      'receive': 'Nhập hàng',
+      'adjust': 'Điều chỉnh',
+      'sale': 'Bán hàng',
+      'return': 'Trả hàng'
+    };
+    return typeMap[type] || type;
+  }
+
+  // Hiển thị ghi chú tiếng Việt cho các bản ghi cũ còn tiếng Anh
+  getNoteVi(note?: string): string {
+    if (!note) return '';
+    if (note === 'Receive from PO') return 'Nhập từ đơn nhập hàng';
+    return note;
   }
 }

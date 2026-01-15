@@ -122,15 +122,15 @@
       </thead>
       <tbody>
         <tr *ngFor="let product of filteredProducts()" class="product-row">
-          <td class="sku-cell">{{ product.sku }}</td>
+          <td class="sku-cell">{{ product.sku || '-' }}</td>
           <td class="name-cell">
             <div class="product-name">{{ product.name }}</div>
             <div *ngIf="product.notes" class="product-notes">{{ product.notes }}</div>
           </td>
           <td class="category-cell">
-            <div class="category-badge" [style.background-color]="product.categoryId.color">
-              <span class="category-icon">{{ product.categoryId.icon }}</span>
-              <span class="category-name">{{ product.categoryId.name }}</span>
+            <div class="category-badge" [style.background-color]="$any(product).categoryId?.color || '#e5e7eb'">
+              <span class="category-icon">{{ $any(product).categoryId?.icon || '🏷️' }}</span>
+              <span class="category-name">{{ $any(product).categoryId?.name || 'Chưa phân loại' }}</span>
             </div>
           </td>
           <td class="color-cell">
@@ -139,7 +139,7 @@
               <span class="color-code">{{ product.color || '#3B82F6' }}</span>
             </div>
           </td>
-          <td class="price-cell">{{ formatCurrency(product.importPrice) }}</td>
+          <td class="price-cell">{{ formatCurrency(product.importPrice || 0) }}</td>
           <td class="usage-duration-cell">
             <div class="usage-duration">
               <span class="duration-value">{{ product.usageDurationMonths || 12 }}</span>
@@ -156,7 +156,7 @@
           </td>
           <td class="status-cell">
             <span class="status-badge" [class]="product.status === 'Hoạt động' ? 'active' : 'inactive'">
-              {{ product.status }}
+              {{ product.status || 'Hoạt động' }}
             </span>
           </td>
           <td class="actions-cell">
@@ -258,6 +258,84 @@
             (input)="onInputChange('packagingCost', $event)"
             placeholder="0"
           />
+        </div>
+
+        <!-- Suppliers block -->
+        <div class="form-group full-width suppliers-block">
+          <div class="suppliers-header">
+            <div>
+              <strong>Nhà cung cấp & Giá</strong>
+              <small class="muted">Chọn NCC và 3 mức giá; bấm Áp dụng để chọn mức hiện hành</small>
+            </div>
+            <button type="button" class="btn btn-secondary" (click)="addSupplierRow()">➕ Thêm NCC</button>
+          </div>
+          <div class="supplier-rows" *ngIf="formData().suppliers?.length; else noSupplierAdd">
+            <div class="supplier-row" *ngFor="let s of formData().suppliers; let i = index">
+              <div class="supplier-col">
+                <label>Nhà cung cấp</label>
+                <select
+                  [(ngModel)]="s.supplierId"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'supplierId', $event)"
+                >
+                  <option [ngValue]="''">Chọn NCC</option>
+                  <option *ngFor="let sup of suppliers()" [ngValue]="sup._id">{{ sup.fullName || sup.email || sup._id }}</option>
+                </select>
+              </div>
+              <div class="supplier-col">
+                <label>Giá 1</label>
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="s.price1"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'price1', $event)"
+                />
+              </div>
+              <div class="supplier-col">
+                <label>Giá 2</label>
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="s.price2"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'price2', $event)"
+                />
+              </div>
+              <div class="supplier-col">
+                <label>Giá 3</label>
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="s.price3"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'price3', $event)"
+                />
+              </div>
+              <div class="supplier-col applied-col">
+                <label>Áp dụng</label>
+                <div class="applied-actions">
+                  <select
+                    [(ngModel)]="s.appliedLevel"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onSupplierApplyLevel(i, $event)"
+                  >
+                    <option [ngValue]="1">Giá 1</option>
+                    <option [ngValue]="2">Giá 2</option>
+                    <option [ngValue]="3">Giá 3</option>
+                  </select>
+                  <button type="button" class="btn btn-sm" (click)="onSupplierApply(i)">Áp dụng</button>
+                  <div class="applied-price muted">Đang áp dụng: {{ s.appliedPrice || 0 | number }} đ</div>
+                </div>
+              </div>
+              <div class="supplier-col action-col">
+                <button type="button" class="btn btn-sm btn-danger" (click)="removeSupplierRow(i)">🗑️</button>
+              </div>
+            </div>
+          </div>
+          <ng-template #noSupplierAdd>
+            <div class="muted">Chưa có nhà cung cấp. Bấm “Thêm NCC”.</div>
+          </ng-template>
         </div>
 
         <div class="form-group">
@@ -452,6 +530,84 @@
             (input)="onInputChange('packagingCost', $event)"
             placeholder="0"
           />
+        </div>
+
+        <!-- Suppliers block (edit) -->
+        <div class="form-group full-width suppliers-block">
+          <div class="suppliers-header">
+            <div>
+              <strong>Nhà cung cấp & Giá</strong>
+              <small class="muted">Chọn NCC và 3 mức giá; bấm Áp dụng để chọn mức hiện hành</small>
+            </div>
+            <button type="button" class="btn btn-secondary" (click)="addSupplierRow()">➕ Thêm NCC</button>
+          </div>
+          <div class="supplier-rows" *ngIf="formData().suppliers?.length; else noSupplierEdit">
+            <div class="supplier-row" *ngFor="let s of formData().suppliers; let i = index">
+              <div class="supplier-col">
+                <label>Nhà cung cấp</label>
+                <select
+                  [(ngModel)]="s.supplierId"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'supplierId', $event)"
+                >
+                  <option [ngValue]="''">Chọn NCC</option>
+                  <option *ngFor="let sup of suppliers()" [ngValue]="sup._id">{{ sup.fullName || sup.email || sup._id }}</option>
+                </select>
+              </div>
+              <div class="supplier-col">
+                <label>Giá 1</label>
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="s.price1"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'price1', $event)"
+                />
+              </div>
+              <div class="supplier-col">
+                <label>Giá 2</label>
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="s.price2"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'price2', $event)"
+                />
+              </div>
+              <div class="supplier-col">
+                <label>Giá 3</label>
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="s.price3"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onSupplierFieldChange(i, 'price3', $event)"
+                />
+              </div>
+              <div class="supplier-col applied-col">
+                <label>Áp dụng</label>
+                <div class="applied-actions">
+                  <select
+                    [(ngModel)]="s.appliedLevel"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onSupplierApplyLevel(i, $event)"
+                  >
+                    <option [ngValue]="1">Giá 1</option>
+                    <option [ngValue]="2">Giá 2</option>
+                    <option [ngValue]="3">Giá 3</option>
+                  </select>
+                  <button type="button" class="btn btn-sm" (click)="onSupplierApply(i)">Áp dụng</button>
+                  <div class="applied-price muted">Đang áp dụng: {{ s.appliedPrice || 0 | number }} đ</div>
+                </div>
+              </div>
+              <div class="supplier-col action-col">
+                <button type="button" class="btn btn-sm btn-danger" (click)="removeSupplierRow(i)">🗑️</button>
+              </div>
+            </div>
+          </div>
+          <ng-template #noSupplierEdit>
+            <div class="muted">Chưa có nhà cung cấp. Bấm “Thêm NCC”.</div>
+          </ng-template>
         </div>
 
         <div class="form-group">

@@ -134,6 +134,14 @@
         <div class="stat-label">Tổng cần thanh toán:</div>
         <div class="stat-value">{{ formatCurrency(stats()?.totalNeedToPay || 0) }}</div>
       </div>
+      <div class="stat-item">
+        <div class="stat-label">Đã thu:</div>
+        <div class="stat-value">{{ formatCurrency(stats()?.totalCollected || 0) }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Phải thu:</div>
+        <div class="stat-value">{{ formatCurrency(stats()?.totalReceivable || 0) }}</div>
+      </div>
     </div>
   </div>
 
@@ -180,6 +188,7 @@
           <th>Đã Trả công ty<br/><span class="muted">Tổng: {{ (stats()?.totalPaidToCompany || 0) | number:'1.0-0' }}</span></th>
           <th>Cần thanh toán<br/><span class="muted">Tổng: {{ (stats()?.totalNeedToPay || 0) | number:'1.0-0' }}</span></th>
           <th>Thanh toán tay</th>
+          <th>Thu tiền</th>
         </tr>
       </thead>
       <tbody>
@@ -218,6 +227,32 @@
               [ngModel]="item.manualPayment || 0"
               (blur)="onBlurManual(item._id, $event)"
               (keydown.enter)="$event.target.blur()" />
+          </td>
+          <td>
+            <div class="flex-col">
+              <div>
+                <span [class]="collectionClass(item.collectionStatus)">
+                  {{ item.collectionStatus === 'collected' ? 'Đã thu' : item.collectionStatus === 'partial' ? 'Thu một phần' : 'Phải thu' }}
+                </span>
+              </div>
+              <div class="mt-4">
+                <label>Số đã thu</label>
+                <input class="input" type="number" step="1000"
+                  [ngModel]="item.collectedAmount || 0"
+                  [disabled]="collectionUpdating() === item._id"
+                  (blur)="onBlurCollected(item._id, $event)"
+                  (keydown.enter)="$event.target.blur()" />
+              </div>
+              <div class="mt-4">
+                <button class="btn btn-sm btn-success" (click)="markCollectedFull(item)" [disabled]="collectionUpdating() === item._id">
+                  ✔️ Đã thu hết
+                </button>
+                <button class="btn btn-sm" (click)="markReceivable(item)" [disabled]="collectionUpdating() === item._id">
+                  📌 Đánh dấu phải thu
+                </button>
+              </div>
+              <div class="muted" *ngIf="item.receivableAmount !== undefined">Còn phải thu: {{ formatCurrency(item.receivableAmount || 0) }}</div>
+            </div>
           </td>
         </tr>
       </tbody>

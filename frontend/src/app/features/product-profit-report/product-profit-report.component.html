@@ -9,6 +9,16 @@
   <!-- Filter Panel -->
   <div class="filter-panel">
     <div class="filter-grid">
+      <!-- View mode -->
+      <div class="filter-group">
+        <label>Chế độ xem:</label>
+        <select [value]="viewMode()" (change)="setViewMode($any($event.target).value)">
+          <option value="daily">Theo ngày</option>
+          <option value="weekly">Theo tuần</option>
+          <option value="monthly">Theo tháng</option>
+        </select>
+      </div>
+
       <!-- Year Filter -->
       <div class="filter-group">
         <label>Năm:</label>
@@ -62,7 +72,7 @@
       <!-- Action Buttons -->
       <div class="filter-actions">
         <button class="btn-reset" (click)="resetFilter()">🔄 Đặt lại</button>
-        <button class="btn-export" (click)="exportToCSV()" [disabled]="!hasData()">
+        <button class="btn-export" (click)="exportToCSV()" [disabled]="!hasData() || viewMode() !== 'daily'">
           📊 Xuất CSV
         </button>
       </div>
@@ -82,7 +92,7 @@
   </div>
 
   <!-- Summary Statistics -->
-  <div *ngIf="hasData() && report()?.summary" class="summary-panel">
+  <div *ngIf="hasData() && viewMode() === 'daily' && report()?.summary" class="summary-panel">
     <div class="summary-grid">
       <div class="summary-card">
         <span class="summary-label">Tổng lợi nhuận</span>
@@ -111,8 +121,37 @@
     </div>
   </div>
 
+  <div *ngIf="hasData() && viewMode() !== 'daily' && periodReport()?.summary" class="summary-panel">
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-label">Doanh thu</span>
+        <span class="summary-value revenue">{{ formatCurrency(periodReport()!.summary.revenue) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Chi phí ads</span>
+        <span class="summary-value cost">{{ formatCurrency(periodReport()!.summary.adCost) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Lợi nhuận</span>
+        <span class="summary-value profit" [class]="getProfitClass(periodReport()!.summary.profit)">
+          {{ formatCurrency(periodReport()!.summary.profit) }}
+        </span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Net cash</span>
+        <span class="summary-value" [class]="getProfitClass(periodReport()!.summary.netCash)">
+          {{ formatCurrency(periodReport()!.summary.netCash) }}
+        </span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Đơn</span>
+        <span class="summary-value quantity">{{ periodReport()!.summary.orders | number }}</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Data Table -->
-  <div *ngIf="hasData()" class="table-container">
+  <div *ngIf="hasData() && viewMode() === 'daily'" class="table-container">
     <table class="profit-table">
       <thead>
         <tr>
@@ -140,6 +179,34 @@
           <td class="total-cell" [class]="getProfitClass(row.totalProfit)">
             {{ formatCurrency(row.totalProfit) }}
           </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Weekly/Monthly Table -->
+  <div *ngIf="hasData() && viewMode() !== 'daily'" class="table-container">
+    <table class="profit-table">
+      <thead>
+        <tr>
+          <th class="product-column">Sản phẩm</th>
+          <th>Chu kỳ</th>
+          <th>Doanh thu</th>
+          <th>Chi phí ads</th>
+          <th>Lợi nhuận</th>
+          <th>Net cash</th>
+          <th>Đơn</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of periodReport()!.items">
+          <td class="product-name">{{ row.productName }}</td>
+          <td>{{ row.periodLabel }}</td>
+          <td>{{ formatCurrency(row.revenue) }}</td>
+          <td>{{ formatCurrency(row.adCost) }}</td>
+          <td [class]="getProfitClass(row.profit)">{{ formatCurrency(row.profit) }}</td>
+          <td [class]="getProfitClass(row.netCash)">{{ formatCurrency(row.netCash) }}</td>
+          <td>{{ row.orders | number }}</td>
         </tr>
       </tbody>
     </table>

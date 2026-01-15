@@ -135,4 +135,17 @@ export class OtherCostComponent implements OnInit {
       },
     });
   }
+
+  confirm(id: string) {
+    if (!confirm('Xác nhận đã chi khoản này?')) return;
+    this.loading.set(true);
+    this.service.confirm(id).subscribe({
+      next: () => this.loadData(),
+      error: (err) => {
+        console.error(err);
+        this.error.set('Lỗi khi xác nhận');
+        this.loading.set(false);
+      },
+    });
+  }
 }

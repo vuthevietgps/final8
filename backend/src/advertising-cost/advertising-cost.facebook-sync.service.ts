@@ -50,6 +50,7 @@ export class AdvertisingCostFacebookSyncService {
     const date = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()));
     const payload: Partial<AdvertisingCost> = {
       adGroupId,
+      channel: 'facebook',
       date,
       spentAmount: Number(doc.spentAmount || 0),
       cpm: Number(doc.cpm || 0),

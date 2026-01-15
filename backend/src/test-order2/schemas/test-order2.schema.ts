@@ -45,6 +45,19 @@ export class TestOrder2 {
   @Prop({ type: Number, default: 0 })
   manualPayment?: number;
 
+  // Source and supplier cost selection
+  @Prop({ type: String, enum: ['inventory', 'supplier'], default: 'inventory' })
+  productSource?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Supplier' })
+  supplierId?: Types.ObjectId;
+
+  @Prop({ type: Number, enum: [1,2,3], default: 1 })
+  supplierPriceLevel?: number;
+
+  @Prop({ type: Number, default: 0 })
+  supplierAppliedPrice?: number;
+
   @Prop({ type: String })
   receiverName?: string;
 

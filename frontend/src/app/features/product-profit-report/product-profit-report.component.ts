@@ -13,7 +13,8 @@ import {
   ProductProfitRow,
   Product,
   ProductChartData,
-  ChartDataPoint
+  ChartDataPoint,
+  ProductPeriodicalResponse,
 } from './models/product-profit.interface';
 import { ProductProfitReportService } from './product-profit-report.service';
 
@@ -28,6 +29,7 @@ export class ProductProfitReportComponent implements OnInit, AfterViewInit {
   @ViewChild('chartCanvas', { static: false }) chartCanvas!: ElementRef<HTMLCanvasElement>;
   // Signals cho reactive state
   report = signal<ProductProfitReport | null>(null);
+  periodReport = signal<ProductPeriodicalResponse | null>(null);
   loading = signal(false);
   error = signal<string | null>(null);
   availableYears = signal<number[]>([]);
@@ -42,6 +44,9 @@ export class ProductProfitReportComponent implements OnInit, AfterViewInit {
     period: '30days'
   });
 
+  // View mode: daily / weekly / monthly
+  viewMode = signal<'daily' | 'weekly' | 'monthly'>('daily');
+
   // Period options
   periodOptions = [
     { value: 'week', label: 'Tuần gần nhất' },
@@ -54,7 +59,10 @@ export class ProductProfitReportComponent implements OnInit, AfterViewInit {
 
   // Computed values
   isCustomPeriod = computed(() => this.filter().period === 'custom');
-  hasData = computed(() => (this.report()?.data?.length || 0) > 0);
+  hasData = computed(() => {
+    if (this.viewMode() === 'daily') return (this.report()?.data?.length || 0) > 0;
+    return (this.periodReport()?.items?.length || 0) > 0;
+  });
   
   constructor(
     private productProfitService: ProductProfitReportService,
@@ -91,10 +99,25 @@ export class ProductProfitReportComponent implements OnInit, AfterViewInit {
     this.error.set(null);
 
     try {
-      const reportData = await firstValueFrom(
-        this.productProfitService.getProductProfitReport(this.filter())
-      );
-      this.report.set(reportData);
+      if (this.viewMode() === 'daily') {
+        const reportData = await firstValueFrom(
+          this.productProfitService.getProductProfitReport(this.filter())
+        );
+        this.report.set(reportData);
+        this.periodReport.set(null);
+      } else if (this.viewMode() === 'weekly') {
+        const weeklyData = await firstValueFrom(
+          this.productProfitService.getProductProfitWeekly(this.filter())
+        );
+        this.periodReport.set(weeklyData);
+        this.report.set(null);
+      } else {
+        const monthlyData = await firstValueFrom(
+          this.productProfitService.getProductProfitMonthly(this.filter())
+        );
+        this.periodReport.set(monthlyData);
+        this.report.set(null);
+      }
     } catch (error) {
       this.error.set('Có lỗi xảy ra khi tải dữ liệu báo cáo');
       console.error('Error loading report:', error);
@@ -159,6 +182,11 @@ export class ProductProfitReportComponent implements OnInit, AfterViewInit {
     this.filter.set({
       period: '30days'
     });
+    this.loadReport();
+  }
+
+  setViewMode(mode: 'daily' | 'weekly' | 'monthly') {
+    this.viewMode.set(mode);
     this.loadReport();
   }
 

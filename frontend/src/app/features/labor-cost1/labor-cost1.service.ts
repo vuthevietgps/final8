@@ -17,6 +17,7 @@ export class LaborCost1Service {
   create(dto: CreateLaborCost1Dto): Observable<LaborCost1> { return this.http.post<LaborCost1>(this.apiUrl, dto); }
   update(id: string, dto: UpdateLaborCost1Dto): Observable<LaborCost1> { return this.http.patch<LaborCost1>(`${this.apiUrl}/${id}`, dto); }
   remove(id: string): Observable<void> { return this.http.delete<void>(`${this.apiUrl}/${id}`); }
+  markPaid(id: string): Observable<LaborCost1> { return this.http.patch<LaborCost1>(`${this.apiUrl}/${id}/pay`, {}); }
   
   generateFromSessionLogs(userId?: string, date?: string): Observable<any> {
     const params = new URLSearchParams();

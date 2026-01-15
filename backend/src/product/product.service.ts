@@ -72,6 +72,14 @@ export class ProductService {
   }
 
   async update(id: string, updateProductDto: UpdateProductDto): Promise<Product> {
+    // Ensure totalCost stays correct when updating (pre-save hook won't run)
+    if (updateProductDto.importPrice !== undefined || updateProductDto.shippingCost !== undefined || updateProductDto.packagingCost !== undefined) {
+      const importPrice = updateProductDto.importPrice ?? 0;
+      const shippingCost = updateProductDto.shippingCost ?? 0;
+      const packagingCost = updateProductDto.packagingCost ?? 0;
+      (updateProductDto as any).totalCost = importPrice + shippingCost + packagingCost;
+    }
+
     const updatedProduct = await this.productModel
       .findByIdAndUpdate(id, updateProductDto, { new: true })
       .populate('categoryId', 'name code icon color')
@@ -125,41 +133,44 @@ export class ProductService {
 
   // Get products statistics
   async getStats() {
-    const total = await this.productModel.countDocuments();
-    const active = await this.productModel.countDocuments({ status: 'Hoạt động' });
-    const inactive = await this.productModel.countDocuments({ status: 'Tạm dừng' });
-    
-    // Calculate average costs
-    const avgCosts = await this.productModel.aggregate([
+    // Totals & averages
+    const summary = await this.productModel.aggregate([
       {
         $group: {
           _id: null,
-          avgImportPrice: { $avg: '$importPrice' },
-          avgShippingCost: { $avg: '$shippingCost' },
-          avgPackagingCost: { $avg: '$packagingCost' },
-          avgTotalCost: { $avg: '$totalCost' },
-          avgDeliveryDays: { $avg: '$estimatedDeliveryDays' }
+          totalProducts: { $sum: 1 },
+          totalValue: {
+            $sum: {
+              $ifNull: [
+                '$totalCost',
+                { $add: ['$importPrice', '$shippingCost', '$packagingCost'] }
+              ]
+            }
+          },
+          avgImportPrice: { $avg: '$importPrice' }
         }
       }
     ]);
 
-    const averages = avgCosts[0] || {
-      avgImportPrice: 0,
-      avgShippingCost: 0,
-      avgPackagingCost: 0,
-      avgTotalCost: 0,
-      avgDeliveryDays: 0
-    };
+    const s = summary[0] || { totalProducts: 0, totalValue: 0, avgImportPrice: 0 };
 
+    // Category distribution
+    const categoryAgg = await this.productModel.aggregate([
+      { $group: { _id: '$categoryId', count: { $sum: 1 } } }
+    ]);
+    const categoryDistribution: Record<string, number> = {};
+    for (const c of categoryAgg) {
+      categoryDistribution[c._id?.toString?.() || 'unknown'] = c.count || 0;
+    }
+
+    // TODO: Khi có tồn kho thực tế, tính lowStockCount / outOfStockCount. Hiện tại đặt 0 để tránh NaN.
     return {
-      total,
-      active,
-      inactive,
-      averageImportPrice: Math.round(averages.avgImportPrice || 0),
-      averageShippingCost: Math.round(averages.avgShippingCost || 0),
-      averagePackagingCost: Math.round(averages.avgPackagingCost || 0),
-      averageTotalCost: Math.round(averages.avgTotalCost || 0),
-      averageDeliveryDays: Math.round(averages.avgDeliveryDays || 0)
+      totalProducts: s.totalProducts || 0,
+      totalValue: s.totalValue || 0,
+      averageImportPrice: Math.round(s.avgImportPrice || 0),
+      lowStockCount: 0,
+      outOfStockCount: 0,
+      categoryDistribution
     };
   }
 

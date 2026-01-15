@@ -10,6 +10,8 @@ import { UpdateAdvertisingCostDto } from './dto/update-advertising-cost.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-sync.service';
+import { AdvertisingCostGoogleSyncService } from './advertising-cost.google-sync.service';
+import { AdvertisingCostTiktokSyncService } from './advertising-cost.tiktok-sync.service';
 
 @Controller('advertising-cost')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -17,6 +19,8 @@ export class AdvertisingCostController {
   constructor(
     private readonly service: AdvertisingCostService,
     private readonly fbSync: AdvertisingCostFacebookSyncService,
+    private readonly ggSync: AdvertisingCostGoogleSyncService,
+    private readonly tkSync: AdvertisingCostTiktokSyncService,
   ) {}
 
   @Post()
@@ -33,8 +37,8 @@ export class AdvertisingCostController {
 
   @Get('stats/summary')
   @RequirePermissions('advertising-costs')
-  stats() {
-    return this.service.summary();
+  stats(@Query('channel') channel?: string) {
+    return this.service.summary({ channel });
   }
 
   @Get('stats/by-adgroup')
@@ -90,6 +94,42 @@ export class AdvertisingCostController {
   async fetchFacebook(@Query('date') date?: string, @Query('days') days?: string) {
     const n = days ? parseInt(days, 10) : undefined;
     return this.fbSync.syncRange({ date, days: n });
+  }
+
+  // Manual trigger: đồng bộ chi phí Google Ads theo ngày hoặc khoảng N ngày
+  @Post('fetch/google')
+  @RequirePermissions('advertising-costs')
+  async fetchGoogle(
+    @Query('date') date?: string,
+    @Query('days') days?: string,
+    @Query('customerIds') customerIds?: string,
+  ) {
+    const n = days ? parseInt(days, 10) : undefined;
+    const ids = customerIds
+      ? String(customerIds)
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+      : undefined;
+    return this.ggSync.syncRange({ date, days: n, customerIds: ids });
+  }
+
+  // Manual trigger: đồng bộ chi phí TikTok theo ngày hoặc khoảng N ngày
+  @Post('fetch/tiktok')
+  @RequirePermissions('advertising-costs')
+  async fetchTiktok(
+    @Query('date') date?: string,
+    @Query('days') days?: string,
+    @Query('advertiserIds') advertiserIds?: string,
+  ) {
+    const n = days ? parseInt(days, 10) : undefined;
+    const ids = advertiserIds
+      ? String(advertiserIds)
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+      : undefined;
+    return this.tkSync.syncRange({ date, days: n, advertiserIds: ids });
   }
 
   // Manual trigger: đồng bộ theo DANH SÁCH tài khoản quảng cáo

@@ -6,7 +6,9 @@ import { DeliveryStatusService } from '../delivery-status/delivery-status.servic
 import { ProductService } from '../product/product.service';
 import { ProductionStatusService } from '../production-status/production-status.service';
 import { UserService } from '../user/user.service';
-import { CreateTestOrder2, NamedItem, TestOrder2 } from './models';
+import { SupplierService, Supplier } from '../supplier/supplier.service';
+import { InventoryApi } from '../inventory/inventory.service';
+import { CreateTestOrder2, NamedItem, ProductWithSuppliers, TestOrder2 } from './models';
 import { TestOrder2Service } from './test-order2.service';
 import { buildProductStyle, buildStatusStyle, getContrastTextColor, normalizeHex } from './style-utils';
 import { buildCsvFromObjects, downloadCsv } from './csv-utils';
@@ -21,9 +23,11 @@ import { attachScrollSync } from './scroll-utils';
 })
 export class TestOrder2Component implements OnInit, AfterViewInit {
   orders = signal<TestOrder2[]>([]);
-  products = signal<NamedItem[]>([]);
+  products = signal<ProductWithSuppliers[]>([]);
   agents = signal<NamedItem[]>([]);
   adGroups = signal<NamedItem[]>([]);
+  suppliers = signal<Supplier[]>([]);
+  inventoryOnHand = signal<Record<string, number>>({});
   productionStatuses = signal<string[]>([]);
   orderStatuses = signal<string[]>([]);
   // name -> color maps
@@ -78,6 +82,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     private adGroupService: AdGroupService,
     private productionStatusService: ProductionStatusService,
     private deliveryStatusService: DeliveryStatusService,
+    private supplierService: SupplierService,
+    private inventoryApi: InventoryApi,
   ) { }
 
   ngOnInit(): void {
@@ -174,6 +180,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   loadDropdowns(): void {
     this.loadProducts();
+    this.loadSuppliers();
+    this.loadInventoryOnHand();
     this.userService.getAgents().subscribe({
       next: (items: any) => this.agents.set(items.map((u: any) => ({ _id: u._id, name: u.fullName || u.email }))),
       error: (e: any) => console.error(e)
@@ -218,9 +226,30 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   loadProducts(): void {
     this.productService.getAll().subscribe({
       next: (items) => {
-        this.products.set(items.map((i: any) => ({ _id: i._id, name: i.name, color: i.color })));
+        // keep suppliers info for source selection
+        this.products.set(items as any);
         // Precompute styles after products are loaded
         this.precomputeStyles();
+      },
+      error: (e) => console.error(e)
+    });
+  }
+
+  loadSuppliers(): void {
+    this.supplierService.list({ active: true, minimal: true }).subscribe({
+      next: (items) => this.suppliers.set(items),
+      error: (e) => console.error(e)
+    });
+  }
+
+  loadInventoryOnHand(): void {
+    this.inventoryApi.summary({ limit: 1000 }).subscribe({
+      next: (res) => {
+        const map: Record<string, number> = {};
+        for (const row of res.data || []) {
+          if (row.productId) map[row.productId] = row.onHand || 0;
+        }
+        this.inventoryOnHand.set(map);
       },
       error: (e) => console.error(e)
     });
@@ -229,6 +258,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   addNew(): void {
     const data: CreateTestOrder2 = {
       productId: typeof this.products()[0]?._id === 'string' ? this.products()[0]._id : '',
+      productSource: 'inventory',
       customerName: 'Khách hàng mới',
       quantity: 1,
       agentId: typeof this.agents()[0]?._id === 'string' ? this.agents()[0]._id : '',
@@ -298,9 +328,46 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     let value = (target.value ?? '').toString().trim();
     
     if (field === 'adGroupId' && !value) value = '0';
-    
+
+    // Early handle source/supplier fields to avoid narrowing conflicts
+    if (field === 'productSource') {
+      order.productSource = value as any;
+      if (value !== 'supplier') {
+        order.supplierId = undefined;
+        order.supplierAppliedPrice = undefined;
+      }
+      this.service.update(order._id, {
+        productSource: order.productSource,
+        supplierId: order.supplierId,
+        supplierAppliedPrice: order.supplierAppliedPrice,
+      }).subscribe({
+        next: () => {},
+        error: (e) => { this.error.set('Không thể cập nhật'); console.error(e); }
+      });
+      return;
+    }
+
+    if (field === 'supplierId') {
+      order.supplierId = value || undefined;
+      // Selecting a supplier should automatically switch source to supplier
+      if (order.supplierId) {
+        order.productSource = 'supplier' as any;
+      }
+      this.service.update(order._id, {
+        supplierId: order.supplierId,
+        productSource: order.productSource,
+      }).subscribe({
+        next: () => {},
+        error: (e) => { this.error.set('Không thể cập nhật'); console.error(e); }
+      });
+      return;
+    }
+
     if (field === 'productId' && value && value !== '0' && value !== '') {
-      const payload = { productId: value };
+      const payload: any = { productId: value };
+      // Preserve source/supplier selections when changing product
+      if (order.productSource) payload.productSource = order.productSource;
+      if (order.supplierId) payload.supplierId = order.supplierId;
       this.service.update(order._id, payload).subscribe({
         next: (updated) => {
           const normalized = {
@@ -315,6 +382,63 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     } else {
       this.onBlurUpdate(order, field, value);
     }
+  }
+
+  // Unified source selector (Kho + suppliers of the selected product)
+  onSourceSelect(order: TestOrder2, event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const value = (target.value ?? '').toString();
+
+    if (value === 'inventory') {
+      order.productSource = 'inventory' as any;
+      order.supplierId = undefined;
+      order.supplierAppliedPrice = undefined;
+    } else {
+      order.productSource = 'supplier' as any;
+      order.supplierId = value || undefined;
+    }
+
+    this.service.update(order._id, {
+      productSource: order.productSource,
+      supplierId: order.supplierId,
+      supplierAppliedPrice: order.supplierAppliedPrice,
+    }).subscribe({
+      next: () => {},
+      error: (e) => { this.error.set('Không thể cập nhật'); console.error(e); }
+    });
+  }
+
+  sourceOptionsFor(order: TestOrder2): Array<{ value: string; label: string }> {
+    const productId = this.getId(order.productId);
+    const onHand = this.inventoryOnHand()[productId] || 0;
+    const options: Array<{ value: string; label: string }> = [
+      { value: 'inventory', label: `Kho (${onHand})` }
+    ];
+
+    const product = this.products().find(p => p._id === productId) as ProductWithSuppliers | undefined;
+    const ids = new Set<string>();
+    if (product?.suppliers?.length) {
+      for (const s of product.suppliers) {
+        if (s?.supplierId) ids.add(s.supplierId);
+      }
+    }
+    for (const id of ids) {
+      options.push({ value: id, label: this.getSupplierName(id) });
+    }
+
+    return options;
+  }
+
+  getSourceSelection(order: TestOrder2): string {
+    if ((order.productSource || 'inventory') === 'supplier' && order.supplierId) {
+      return this.getId(order.supplierId);
+    }
+    return 'inventory';
+  }
+
+  private getSupplierName(id: string): string {
+    const sup = this.suppliers().find(s => s._id === id);
+    return sup?.fullName || sup?.email || id;
   }
 
   // Autocomplete (datalist) support for adGroupId input

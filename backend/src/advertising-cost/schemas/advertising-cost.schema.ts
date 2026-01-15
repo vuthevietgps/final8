@@ -9,6 +9,15 @@ export type AdvertisingCostDocument = AdvertisingCost & Document;
 
 @Schema({ timestamps: true })
 export class AdvertisingCost {
+  // Kênh quảng cáo (facebook/google/tiktok/other)
+  @Prop({
+    type: String,
+    enum: ['facebook', 'google', 'tiktok', 'zalo', 'other'],
+    default: 'facebook',
+    index: true,
+  })
+  channel: 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other';
+
   // Ngày (mặc định: hôm nay)
   @Prop({ type: Date, required: true, default: () => new Date() })
   date: Date;
@@ -66,3 +75,4 @@ AdvertisingCostSchema.index({ createdAt: -1 });
 // Đảm bảo một bản ghi duy nhất cho mỗi cặp (adGroupId, date)
 // Lưu ý: date nên được chuẩn hoá về 00:00:00 UTC trước khi lưu để tránh trùng lặp theo múi giờ
 AdvertisingCostSchema.index({ adGroupId: 1, date: 1 }, { unique: true, name: 'uniq_adGroupId_date' });
+AdvertisingCostSchema.index({ channel: 1, date: -1 });

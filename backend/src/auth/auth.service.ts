@@ -128,7 +128,11 @@ export class AuthService {
   };
 
   // Ghi log đăng nhập
-  await this.sessionLogService.logLogin(String(user._id), clientIp);
+  await this.sessionLogService.logLogin(String(user._id), clientIp, {
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role,
+  });
 
   return tokenPayload;
   }
@@ -185,6 +189,10 @@ export class AuthService {
       'external_agent': ['orders', 'pending-orders', 'delivery-status', 'api-tokens'],
       'internal_supplier': ['products', 'quotes', 'api-tokens'],
       'external_supplier': ['quotes', 'api-tokens'],
+      // Nhà đầu tư: chỉ xem báo cáo/finance (cấu hình chi tiết sau)
+      'investor': ['finance', 'reports'],
+      // Người cho vay: xem finance, hợp đồng vay
+      'lender': ['finance'],
     };
 
     const userPermissions = rolePermissions[userRole] || [];

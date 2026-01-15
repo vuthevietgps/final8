@@ -71,4 +71,20 @@ export class CreateTestOrder2Dto {
   @IsOptional()
   @IsDateString()
   orderDate?: string;
+
+  @IsOptional()
+  @IsString()
+  productSource?: string; // inventory|supplier
+
+  @IsOptional()
+  @IsString()
+  supplierId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  supplierPriceLevel?: number;
+
+  @IsOptional()
+  @IsNumber()
+  supplierAppliedPrice?: number;
 }

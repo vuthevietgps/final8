@@ -31,4 +31,9 @@ export class CreateAdAccountDto {
   @IsString()
   @Length(0, 500)
   description?: string; // Mô tả tài khoản
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  loginCustomerId?: string; // Google Ads manager CID (nếu dùng MCC)
 }

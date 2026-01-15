@@ -96,6 +96,7 @@
             <th class="col-icon">Loại</th>
             <th class="col-name">Tên Tài Khoản</th>
             <th class="col-account-id">ID Tài Khoản</th>
+            <th class="col-account-id">Login CID (Google)</th>
             <th class="col-description">Mô Tả</th>
             <th class="col-status">Trạng Thái</th>
             <th class="col-notes">Ghi Chú</th>
@@ -147,6 +148,17 @@
                 [placeholder]="account._id.startsWith('temp_') ? 'Nhập ID tài khoản...' : ''"
                 class="inline-input code-text"
                 [class.required]="account._id.startsWith('temp_') && !account.accountId">
+            </td>
+
+            <!-- Login customer ID (Google MCC) -->
+            <td class="col-account-id">
+              <input
+                type="text"
+                [value]="account.loginCustomerId || ''"
+                (blur)="updateField(account, 'loginCustomerId', $any($event.target).value)"
+                (keyup.enter)="updateField(account, 'loginCustomerId', $any($event.target).value)"
+                placeholder="CID đăng nhập (nếu Google)"
+                class="inline-input code-text">
             </td>
 
             <!-- Description (editable) -->

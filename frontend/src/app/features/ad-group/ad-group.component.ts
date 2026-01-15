@@ -6,7 +6,7 @@ import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { AdGroupService } from './ad-group.service';
-import { AdGroup, CreateAdGroup, AdPlatform } from './models/ad-group.model';
+import { AdGroup, CreateAdGroup, AdPlatform, AdGroupRecommendation } from './models/ad-group.model';
 import { ProductService } from '../product/product.service';
 import { FanpageService } from '../fanpage/fanpage.service';
 import { ProductCategoryService } from '../product-category/product-category.service';
@@ -65,9 +65,16 @@ export class AdGroupComponent implements OnInit {
   showModal = signal(false);
   isEditing = signal(false);
   isSaving = signal(false);
+  loadingRecommend = signal(false);
+  applyingAuto = signal(false);
   
   // Filter signals
   searchQuery = signal('');
+  filterPlatform = signal<'all' | 'facebook' | 'google' | 'tiktok'>('all');
+
+  // AI đề xuất chi phí
+  recommendations = signal<Record<string, AdGroupRecommendation>>({});
+  autoApply = signal<Record<string, boolean>>({});
   
   // Form
   adGroupForm!: FormGroup;
@@ -119,14 +126,87 @@ export class AdGroupComponent implements OnInit {
 
   private async loadAdGroups(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.adGroupService.getAll().subscribe({
+      const filter = this.filterPlatform() === 'all' ? undefined : { platform: this.filterPlatform() };
+      this.adGroupService.getAll(filter).subscribe({
         next: (groups) => {
-          this.adGroups.set(groups);
+            this.adGroups.set(groups);
           resolve();
         },
         error: reject
       });
     });
+  }
+
+  // AI: tải đề xuất chi phí
+  loadRecommendationsAI(): void {
+    this.loadingRecommend.set(true);
+    this.adGroupService.getRecommendations().subscribe({
+      next: (recs) => {
+        const map: Record<string, AdGroupRecommendation> = {};
+        recs.forEach(r => { map[r.adGroupId] = r; });
+        this.recommendations.set(map);
+
+        // Gán đề xuất vào rows để hiển thị nhanh
+        this.adGroups.update(rows => rows.map(r => {
+          const rec = map[this.getGroupId(r)];
+          return rec ? { ...r, aiSuggestedBudget: rec.suggestedBudget, aiChangePercent: rec.changePercent, aiReason: rec.reason } : r;
+        }));
+
+        this.loadingRecommend.set(false);
+      },
+      error: (err) => {
+        console.error(err);
+        this.error.set('Không tính được đề xuất AI');
+        this.loadingRecommend.set(false);
+      }
+    });
+  }
+
+  // AI: áp dụng cho các dòng đã bật Auto AI
+  applyAutoAI(): void {
+    const selectedIds = Object.entries(this.autoApply()).filter(([_, v]) => v).map(([id]) => id);
+    if (!selectedIds.length) {
+      alert('Chọn ít nhất 1 nhóm để áp dụng Auto AI');
+      return;
+    }
+    this.applyingAuto.set(true);
+    this.adGroupService.applyRecommendations(selectedIds).subscribe({
+      next: res => {
+        this.applyingAuto.set(false);
+        // Cập nhật dailyBudget cho các nhóm đã áp dụng
+        const appliedMap = new Map((res.applied || []).map(a => [a.adGroupId, a.suggestedBudget]));
+        this.adGroups.update(rows => rows.map(r => {
+          const id = this.getGroupId(r);
+          if (appliedMap.has(id)) {
+            return { ...r, dailyBudget: appliedMap.get(id) };
+          }
+          return r;
+        }));
+        const failedCount = (res.failed || []).length;
+        alert(`Đã áp dụng ${res.applied?.length || 0} nhóm${failedCount ? `, lỗi ${failedCount}` : ''}`);
+      },
+      error: err => {
+        console.error(err);
+        this.applyingAuto.set(false);
+        alert('Áp dụng Auto AI thất bại');
+      }
+    });
+  }
+
+  getGroupId(group: AdGroup): string {
+    return (group as any)._id || group.adGroupId;
+  }
+
+  getAiSuggested(group: AdGroup): number | undefined {
+    const rec = this.recommendations()[this.getGroupId(group)];
+    return rec?.suggestedBudget;
+  }
+
+  toggleAutoApply(group: AdGroup, checked: boolean): void {
+    const id = this.getGroupId(group);
+    const next = { ...this.autoApply() } as Record<string, boolean>;
+    next[id] = checked;
+    this.autoApply.set(next);
   }
 
   private async loadFanpages(): Promise<void> {
@@ -402,6 +482,12 @@ export class AdGroupComponent implements OnInit {
 
   resetFilters(): void {
     this.searchQuery.set('');
+    this.filterPlatform.set('all');
+    this.loadAdGroups();
+  }
+
+  setPlatformFilter(p: 'all' | 'facebook' | 'google' | 'tiktok') {
+    this.filterPlatform.set(p);
     this.loadAdGroups();
   }
 
