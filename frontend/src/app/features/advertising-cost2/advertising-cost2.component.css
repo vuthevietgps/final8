@@ -1,0 +1,13 @@
+.cost2-page { padding: 16px; }
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border: 1px solid #eee; padding: 6px 8px; }
+.table thead th { background: #f8f8f8; text-align: left; }
+.input { width: 100%; }
+.center { text-align: center; }
+.muted { color: #888; }
+.btn { padding: 6px 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+.btn-primary { background: #1976d2; color: #fff; border-color: #1976d2; }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+.btn-danger { background: #e53935; color: #fff; border-color: #e53935; }
+.error { color: #c62828; margin-bottom: 8px; }

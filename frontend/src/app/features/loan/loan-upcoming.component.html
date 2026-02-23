@@ -1,0 +1,38 @@
+<div class="upcoming">
+  <div class="page-header">
+    <div>
+      <h2>⏰ Lịch trả sắp đến hạn</h2>
+      <p class="subtitle">Trong 14 ngày tới</p>
+    </div>
+    <button class="refresh" (click)="load()" [disabled]="loading()">🔄 Tải lại</button>
+  </div>
+
+  <div *ngIf="error()" class="alert">{{ error() }}</div>
+  <div *ngIf="loading()" class="loading">Đang tải...</div>
+
+  <table class="data-table" *ngIf="!loading()">
+    <thead>
+      <tr>
+        <th>Khoản vay</th>
+        <th>Gốc</th>
+        <th>Lãi</th>
+        <th>Tổng</th>
+        <th>Ngày đến hạn</th>
+        <th>Trạng thái</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngIf="repayments().length === 0"><td colspan="7" class="empty">Không có kỳ đến hạn</td></tr>
+      <tr *ngFor="let r of repayments()">
+        <td>{{ r.loanId }}</td>
+        <td class="num">{{ formatCurrency(r.amountPrincipal) }}</td>
+        <td class="num">{{ formatCurrency(r.amountInterest) }}</td>
+        <td class="num">{{ formatCurrency((r.amountPrincipal||0)+(r.amountInterest||0)) }}</td>
+        <td>{{ r.dueDate | date:'yyyy-MM-dd' }}</td>
+        <td><span class="badge">Chưa trả</span></td>
+        <td><a [routerLink]="['/loans', r.loanId]">Xem khoản vay</a></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

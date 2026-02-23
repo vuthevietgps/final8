@@ -1,0 +1,403 @@
+<!-- Header với backdrop glassmorphism -->
+<div class="header-section">
+  <div class="page-title">
+    <h2><span class="icon">📢</span> Quản Lý Nhóm Quảng Cáo</h2>
+    <p class="subtitle">Quản lý nhóm quảng cáo, sản phẩm và tự động kiểm soát chi phí</p>
+  </div>
+  <div class="header-actions">
+    <button type="button" class="btn btn-primary" (click)="openModal()">
+      ➕ Thêm Nhóm Quảng Cáo
+    </button>
+    <button type="button" class="btn btn-secondary" (click)="loadRecommendationsAI()" [disabled]="loadingRecommend()">
+      🤖 Tính đề xuất AI
+    </button>
+    <button type="button" class="btn btn-success" (click)="applyAutoAI()" [disabled]="applyingAuto()">
+      ⚡ Áp dụng Auto AI
+    </button>
+  </div>
+</div>
+
+<!-- Error/Loading states -->
+<div *ngIf="error()" class="alert alert-danger">⚠️ {{ error() }}</div>
+<div *ngIf="isLoading()" class="loading-spinner">
+  <div class="spinner"></div>
+  <span>Đang tải dữ liệu...</span>
+</div>
+
+<!-- Stats cards -->
+<div class="stats-grid" *ngIf="!isLoading()">
+  <div class="stat-card">
+    <div class="stat-icon">📢</div>
+    <div class="stat-info">
+      <div class="stat-number">{{ adGroups().length }}</div>
+      <div class="stat-label">Tổng nhóm QC</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🟢</div>
+    <div class="stat-info">
+      <div class="stat-number">{{ getActiveCount() }}</div>
+      <div class="stat-label">Đang hoạt động</div>
+    </div>
+  </div>
+  
+  <div class="stat-card">
+    <div class="stat-icon">🔗</div>
+    <div class="stat-info">
+      <div class="stat-number">{{ getWebhookEnabledCount() }}</div>
+      <div class="stat-label">Webhook hoạt động</div>
+    </div>
+  </div>
+</div>
+
+<!-- Search and filters -->
+<div class="toolbar" *ngIf="!isLoading()">
+  <div class="toolbar-left">
+    <div class="search-input">
+      <span class="search-icon">🔎</span>
+      <input 
+        type="text" 
+        [value]="searchQuery()" 
+        (input)="searchQuery.set($any($event.target).value)" 
+        placeholder="Tìm tên nhóm, ID, fanpage...">
+    </div>
+    <button class="btn btn-primary" (click)="onSearch()">Tìm kiếm</button>
+    <button class="btn btn-secondary" (click)="resetFilters()">Đặt lại</button>
+    <div class="platform-tabs">
+      <button class="btn" [class.active]="filterPlatform()==='all'" (click)="setPlatformFilter('all')">Tất cả</button>
+      <button class="btn" [class.active]="filterPlatform()==='facebook'" (click)="setPlatformFilter('facebook')">Facebook</button>
+      <button class="btn" [class.active]="filterPlatform()==='google'" (click)="setPlatformFilter('google')">Google</button>
+      <button class="btn" [class.active]="filterPlatform()==='tiktok'" (click)="setPlatformFilter('tiktok')">TikTok</button>
+    </div>
+  </div>
+</div>
+
+<!-- Data table -->
+<div class="table-container" *ngIf="!isLoading()">
+  <table class="modern-table">
+    <thead>
+      <tr>
+        <th (click)="setSort('name')" class="sortable">
+          <span>Tên Nhóm</span>
+          <span class="sort-icon">↕️</span>
+        </th>
+        <th>Fanpage</th>
+        <th>Danh mục SP</th>
+        <th>Sản phẩm</th>
+        <th>Nền tảng</th>
+        <th>Budget hiện tại</th>
+        <th>Chi Phí Đề Xuất AI</th>
+        <th>Auto AI</th>
+        
+        <th>Webhook</th>
+        <th>Trạng thái</th>
+        <th class="actions-col">Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let group of adGroups()" class="data-row">
+        <td>
+          <div class="cell-content">
+            <div class="cell-main">{{ group.name }}</div>
+            <div class="cell-sub">{{ group.adGroupId }}</div>
+          </div>
+        </td>
+        <td>
+          <div class="fanpage-info">
+            <span class="fanpage-name">{{ getFanpageName(group.fanpageId) }}</span>
+          </div>
+        </td>
+        <td>
+          <span class="category-badge">{{ getCategoryName(group.productCategoryId) }}</span>
+        </td>
+        <td>
+          <div class="product-count">
+            {{ group.selectedProducts?.length || 0 }} sản phẩm
+          </div>
+        </td>
+        <td>
+          <span class="platform-pill" [attr.data-platform]="group.platform || 'facebook'">{{ group.platform || 'facebook' }}</span>
+        </td>
+        <td>{{ (group.dailyBudget || 0) | number:'1.0-0' }}</td>
+        <td>
+          <div class="cell-content">
+            <div class="cell-main">
+              <ng-container *ngIf="(getAiSuggested(group) ?? group.aiSuggestedBudget) !== undefined; else noAi">
+                {{ (getAiSuggested(group) ?? group.aiSuggestedBudget) | number:'1.0-0' }}
+              </ng-container>
+              <ng-template #noAi>—</ng-template>
+            </div>
+            <div class="cell-sub" *ngIf="group.aiChangePercent !== undefined">Δ {{ group.aiChangePercent }}%</div>
+            <div class="cell-sub" *ngIf="group.aiReason">{{ group.aiReason }}</div>
+          </div>
+        </td>
+        <td>
+          <label class="toggle-switch">
+            <input type="checkbox" (change)="toggleAutoApply(group, $any($event.target).checked)">
+            <span class="slider"></span>
+          </label>
+        </td>
+        
+        <td>
+          <div class="webhook-controls">
+            <label class="toggle-switch">
+              <input 
+                type="checkbox" 
+                [checked]="group.enableWebhook"
+                (change)="toggleWebhook(group, $event)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </td>
+        <td>
+          <span class="status-badge" [class.active]="group.isActive" (click)="toggleActive(group)">
+            {{ group.isActive ? 'Hoạt động' : 'Tạm dừng' }}
+          </span>
+        </td>
+        <td class="actions-cell">
+          <button class="action-btn edit" (click)="editItem(group)" title="Chỉnh sửa">
+            ✏️
+          </button>
+          <button class="action-btn delete" (click)="deleteItem(group)" title="Xóa">
+            🗑️
+          </button>
+        </td>
+      </tr>
+      <tr *ngIf="adGroups().length === 0">
+        <td colspan="8" class="empty-state">
+          <div class="empty-content">
+            <div class="empty-icon">📢</div>
+            <h3>Chưa có nhóm quảng cáo nào</h3>
+            <p>Tạo nhóm quảng cáo đầu tiên để bắt đầu quản lý chiến dịch</p>
+            <button class="btn btn-primary" (click)="openModal()">Thêm nhóm đầu tiên</button>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal for Create/Edit -->
+<div *ngIf="showModal()" class="modal-backdrop" (click)="closeModalIfOutside($event)">
+  <div class="modal-container" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ isEditing() ? 'Chỉnh Sửa Nhóm Quảng Cáo' : 'Thêm Nhóm Quảng Cáo Mới' }}</h3>
+      <button class="close-btn" (click)="closeModal()">×</button>
+    </div>
+
+    <form [formGroup]="adGroupForm" (ngSubmit)="saveItem()" class="modal-form">
+      <div class="modal-body">
+        <!-- Basic Information Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <span class="section-icon">ℹ️</span>
+            Thông Tin Cơ Bản
+          </h4>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="name">Tên nhóm quảng cáo *</label>
+              <input 
+                id="name"
+                type="text" 
+                formControlName="name" 
+                class="form-control"
+                placeholder="VD: Giày thể thao Nike - Target 18-35">
+              <div *ngIf="adGroupForm.get('name')?.invalid && adGroupForm.get('name')?.touched" class="error-message">
+                Tên nhóm là bắt buộc
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="adGroupId">ID nhóm quảng cáo *</label>
+              <input 
+                id="adGroupId"
+                type="text" 
+                formControlName="adGroupId" 
+                class="form-control"
+                placeholder="VD: 23851234567890123">
+              <div *ngIf="adGroupForm.get('adGroupId')?.invalid && adGroupForm.get('adGroupId')?.touched" class="error-message">
+                ID nhóm quảng cáo là bắt buộc
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fanpage & Product Selection -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <span class="section-icon">📄</span>
+            Fanpage và Sản Phẩm
+          </h4>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="fanpageId">Fanpage *</label>
+              <select id="fanpageId" formControlName="fanpageId" class="form-control">
+                <option value="">-- Chọn fanpage --</option>
+                <option *ngFor="let fanpage of fanpages()" [value]="fanpage._id">
+                  {{ fanpage.name }}
+                </option>
+              </select>
+              <div *ngIf="adGroupForm.get('fanpageId')?.invalid && adGroupForm.get('fanpageId')?.touched" class="error-message">
+                Vui lòng chọn fanpage
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="productCategoryId">Danh mục sản phẩm *</label>
+              <select 
+                id="productCategoryId" 
+                formControlName="productCategoryId" 
+                class="form-control"
+                (change)="onCategoryChange($event)">
+                <option value="">-- Chọn danh mục --</option>
+                <option *ngFor="let category of productCategories()" [value]="category._id">
+                  {{ category.name }}
+                </option>
+              </select>
+              <div *ngIf="adGroupForm.get('productCategoryId')?.invalid && adGroupForm.get('productCategoryId')?.touched" class="error-message">
+                Vui lòng chọn danh mục sản phẩm
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="agentId">Đại lý/Người phụ trách *</label>
+              <select id="agentId" class="form-control" formControlName="agentId">
+                <option value="">-- Chọn đại lý --</option>
+                <option *ngFor="let u of users()" [value]="u._id">{{ u.fullName || u.email }}</option>
+              </select>
+              <div *ngIf="adGroupForm.get('agentId')?.invalid && adGroupForm.get('agentId')?.touched" class="error-message">
+                Vui lòng chọn đại lý phụ trách
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="adAccountId">Tài khoản quảng cáo *</label>
+              <select id="adAccountId" class="form-control" formControlName="adAccountId">
+                <option value="">-- Chọn tài khoản quảng cáo --</option>
+                <option *ngFor="let aa of adAccounts()" [value]="aa._id">{{ aa.name }} ({{ aa.accountId }})</option>
+              </select>
+              <div *ngIf="adGroupForm.get('adAccountId')?.invalid && adGroupForm.get('adAccountId')?.touched" class="error-message">
+                Vui lòng chọn tài khoản quảng cáo
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="platform">Nền tảng *</label>
+              <select id="platform" class="form-control" formControlName="platform">
+                <option value="facebook">Facebook</option>
+                <option value="google">Google</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Product Selection -->
+          <div class="form-group" *ngIf="availableProducts().length > 0">
+            <label>Chọn sản phẩm (có thể chọn nhiều)</label>
+            <div class="product-grid">
+              <div *ngFor="let product of availableProducts()" class="product-card">
+                <label class="product-checkbox">
+                  <input 
+                    type="checkbox" 
+                    [value]="product._id"
+                    [checked]="isProductSelected(product._id)"
+                    (change)="toggleProductSelection(product._id, $event)">
+                  <div class="product-info">
+                    <div class="product-name">{{ product.name }}</div>
+                    <div class="product-price">{{ getProductPrice(product) }}</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        
+
+        <!-- Settings Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <span class="section-icon">⚙️</span>
+            Cài Đặt
+          </h4>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" formControlName="enableWebhook">
+                <span class="checkmark"></span>
+                Kích hoạt webhook
+              </label>
+              <small class="help-text">Cho phép nhận tin nhắn từ fanpage</small>
+            </div>
+            
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" formControlName="isActive">
+              <span class="checkmark"></span>
+              Trạng thái hoạt động
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <h5>⏱️ Tự động kiểm soát chi phí/kết quả</h5>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" formControlName="autoControlEnabled">
+                <span class="checkmark"></span>
+                Bật auto-control
+              </label>
+              <small class="help-text">Tự động tạm dừng khi vượt ngưỡng</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="spendThresholdDaily">Ngưỡng chi tiêu/ngày (VND)</label>
+              <input id="spendThresholdDaily" type="number" class="form-control" formControlName="spendThresholdDaily" placeholder="VD: 200000" />
+            </div>
+            <div class="form-group">
+              <label for="cprThresholdDaily">Ngưỡng CPR/ngày (VND/ hội thoại)</label>
+              <input id="cprThresholdDaily" type="number" class="form-control" formControlName="cprThresholdDaily" placeholder="VD: 50000" />
+            </div>
+            <div class="form-group">
+              <label for="minConversations">Số hội thoại tối thiểu</label>
+              <input id="minConversations" type="number" class="form-control" formControlName="minConversations" placeholder="VD: 3" />
+            </div>
+          </div>
+          <div class="form-group" *ngIf="isEditing() && getEditingAutoPausedReason()">
+            <small class="help-text">Lý do tự dừng gần nhất: {{ getEditingAutoPausedReason() }}</small>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-group">
+            <label for="notes">Ghi chú</label>
+            <textarea 
+              id="notes"
+              formControlName="notes" 
+              class="form-control"
+              rows="3"
+              placeholder="Thông tin bổ sung về nhóm quảng cáo này..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeModal()">
+          Hủy bỏ
+        </button>
+        <button type="submit" class="btn btn-primary" [disabled]="adGroupForm.invalid || isSaving()">
+          <span *ngIf="isSaving()" class="loading-dot"></span>
+          {{ isEditing() ? 'Cập nhật' : 'Tạo mới' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

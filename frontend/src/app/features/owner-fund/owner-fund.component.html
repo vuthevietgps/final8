@@ -1,0 +1,766 @@
+<div class="owner-fund-container">
+  <div class="header">
+    <h1>💰 Quản Lý Quỹ Owner</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="openTransactionForm()">
+        <span>💸</span> Ghi Nhận Giao Dịch
+      </button>
+      <button class="btn btn-primary" (click)="openWithdrawalForm()">
+        <span>➕</span> Tạo Phiếu Rút Tiền
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button 
+      [class.active]="activeTab === 'overview'" 
+      (click)="activeTab = 'overview'; loadFundSummary()">
+      💼 Tổng Quan
+    </button>
+    <button 
+      [class.active]="activeTab === 'fund-account'" 
+      (click)="activeTab = 'fund-account'; loadFundAccount()">
+      🏦 Quỹ Owner
+    </button>
+    <button 
+      [class.active]="activeTab === 'withdrawals'" 
+      (click)="activeTab = 'withdrawals'">
+      📋 Phiếu Rút Tiền
+      @if (pendingWithdrawals.length > 0) {
+        <span class="badge badge-warning">{{ pendingWithdrawals.length }}</span>
+      }
+    </button>
+    <button 
+      [class.active]="activeTab === 'transactions'" 
+      (click)="activeTab = 'transactions'; loadTransactions()">
+      📊 Lịch Sử Giao Dịch
+    </button>
+    <button 
+      [class.active]="activeTab === 'owners'" 
+      (click)="activeTab = 'owners'">
+      👤 Quản Lý Owner
+    </button>
+    <button 
+      [class.active]="activeTab === 'statistics'" 
+      (click)="activeTab = 'statistics'">
+      📈 Thống Kê
+    </button>
+  </div>
+
+  <!-- Fund Overview Tab -->
+  @if (activeTab === 'overview') {
+    <div class="tab-content">
+      @if (fundSummary(); as summary) {
+        <!-- Main Summary Cards -->
+        <div class="fund-summary-grid">
+          <div class="summary-card total-in">
+            <div class="card-icon">💵</div>
+            <div class="card-content">
+              <h3>Tổng Tiền Vào</h3>
+              <p class="amount positive">{{ formatCurrency(summary.summary.totalIn) }}</p>
+            </div>
+          </div>
+          
+          <div class="summary-card total-out">
+            <div class="card-icon">💸</div>
+            <div class="card-content">
+              <h3>Tổng Tiền Ra</h3>
+              <p class="amount negative">{{ formatCurrency(summary.summary.totalOut) }}</p>
+            </div>
+          </div>
+          
+          <div class="summary-card balance">
+            <div class="card-icon">💰</div>
+            <div class="card-content">
+              <h3>Số Dư Trong Quỹ</h3>
+              <p class="amount">{{ formatCurrency(summary.summary.totalBalance) }}</p>
+            </div>
+          </div>
+          
+          <div class="summary-card withdrawable" (click)="navigateToFinancialControl()">
+            <div class="card-icon">👤</div>
+            <div class="card-content">
+              <h3>Owner Withdrawable</h3>
+              <p class="amount highlight">{{ formatCurrency(summary.summary.ownerWithdrawable) }}</p>
+              <span class="card-hint">Số tiền có thể rút an toàn</span>
+            </div>
+            <div class="card-link">Xem CFO Dashboard →</div>
+          </div>
+        </div>
+
+        <!-- Secondary Stats -->
+        <div class="secondary-stats">
+          <div class="stat-item">
+            <span class="stat-label">Đang chờ duyệt:</span>
+            <span class="stat-value warning">{{ formatCurrency(summary.summary.pendingAmount) }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Tổng đã rút (all time):</span>
+            <span class="stat-value">{{ formatCurrency(summary.summary.totalWithdrawn) }}</span>
+          </div>
+        </div>
+
+        <!-- 30 Days Stats -->
+        <div class="recent-stats-card">
+          <h3>📅 30 Ngày Gần Đây</h3>
+          <div class="recent-stats-grid">
+            <div class="recent-stat">
+              <span class="label">Tiền vào:</span>
+              <span class="value positive">+{{ formatCurrency(summary.recent30Days.in) }}</span>
+            </div>
+            <div class="recent-stat">
+              <span class="label">Tiền ra:</span>
+              <span class="value negative">-{{ formatCurrency(summary.recent30Days.out) }}</span>
+            </div>
+            <div class="recent-stat net">
+              <span class="label">Chênh lệch:</span>
+              <span class="value" [class.positive]="summary.recent30Days.net > 0" [class.negative]="summary.recent30Days.net < 0">
+                {{ summary.recent30Days.net >= 0 ? '+' : '' }}{{ formatCurrency(summary.recent30Days.net) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CFO Dashboard Info (if available) -->
+        @if (summary.cfoDashboard) {
+          <div class="cfo-info-card">
+            <h3>📊 Thông Tin CFO Dashboard</h3>
+            <div class="cfo-info-grid">
+              <div class="cfo-item">
+                <span class="label">Bank Balance:</span>
+                <span class="value">{{ formatCurrency(summary.cfoDashboard.bankBalance) }}</span>
+              </div>
+              <div class="cfo-item">
+                <span class="label">Free Cash:</span>
+                <span class="value">{{ formatCurrency(summary.cfoDashboard.freeCash) }}</span>
+              </div>
+              <div class="cfo-item">
+                <span class="label">Runway:</span>
+                <span class="value">{{ summary.cfoDashboard.runwayMonths | number:'1.0-0' }} tháng</span>
+              </div>
+              <div class="cfo-item highlight">
+                <span class="label">Owner Withdrawable:</span>
+                <span class="value">{{ formatCurrency(summary.cfoDashboard.ownerWithdrawable) }}</span>
+              </div>
+            </div>
+            <button class="btn btn-link" (click)="navigateToFinancialControl()">
+              Đến Financial Control →
+            </button>
+          </div>
+        }
+
+        <!-- Owner List Summary -->
+        <div class="owner-summary-card">
+          <h3>👥 Số Dư Theo Owner</h3>
+          <div class="owner-summary-list">
+            @for (owner of summary.owners; track owner._id) {
+              <div class="owner-summary-item">
+                <span class="owner-name">{{ owner.name }}</span>
+                <span class="owner-share">{{ owner.profitSharePercentage }}%</span>
+                <span class="owner-balance">{{ formatCurrency(owner.availableBalance) }}</span>
+              </div>
+            } @empty {
+              <p class="empty-message">Chưa có owner nào</p>
+            }
+          </div>
+        </div>
+      } @else {
+        <div class="loading">Đang tải dữ liệu...</div>
+      }
+    </div>
+  }
+
+  <!-- Fund Account Tab -->
+  @if (activeTab === 'fund-account') {
+    <div class="tab-content">
+      @if (fundAccountInfo(); as info) {
+        <div class="fund-account-section">
+          <!-- Fund Balance Card -->
+          <div class="fund-balance-card">
+            <div class="fund-balance-header">
+              <h2>🏦 Quỹ Owner</h2>
+              <span class="fund-name">{{ info.account.name }}</span>
+            </div>
+            
+            <div class="fund-balance-amount">
+              <span class="label">Số Dư Hiện Tại:</span>
+              <span class="balance">{{ formatCurrency(info.account.balance) }}</span>
+            </div>
+
+            <div class="fund-stats-row">
+              <div class="fund-stat">
+                <span class="stat-label">Tổng đã nạp:</span>
+                <span class="stat-value positive">+{{ formatCurrency(info.account.totalDeposited) }}</span>
+              </div>
+              <div class="fund-stat">
+                <span class="stat-label">Tổng đã rút:</span>
+                <span class="stat-value negative">-{{ formatCurrency(info.account.totalWithdrawn) }}</span>
+              </div>
+              <div class="fund-stat">
+                <span class="stat-label">Đã trả lại công ty:</span>
+                <span class="stat-value">{{ formatCurrency(info.account.totalReturnedToCompany) }}</span>
+              </div>
+            </div>
+
+            @if (info.account.bankAccount) {
+              <div class="fund-bank-info">
+                <span>🏦 {{ info.account.bankName }}</span>
+                <span>TK: {{ info.account.bankAccount }}</span>
+              </div>
+            }
+          </div>
+
+          <!-- Owner Withdrawable Info -->
+          <div class="withdrawable-info-card" (click)="navigateToFinancialControl()">
+            <div class="info-icon">💡</div>
+            <div class="info-content">
+              <h3>Có Thể Chuyển Thêm Từ Bank Balance</h3>
+              <p class="withdrawable-amount">{{ formatCurrency(info.ownerWithdrawable) }}</p>
+              <span class="hint">Số tiền tối đa Owner có thể rút từ quỹ công ty</span>
+            </div>
+            <div class="info-link">CFO Dashboard →</div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="fund-actions">
+            <button class="btn btn-success btn-lg" (click)="openTransferModal()" [disabled]="info.ownerWithdrawable <= 0">
+              <span>💰</span> Chuyển Tiền Từ Bank Balance
+            </button>
+            <button class="btn btn-warning btn-lg" (click)="openWithdrawModal()" [disabled]="info.account.balance <= 0">
+              <span>💸</span> Rút Tiền Về Cá Nhân
+            </button>
+            <button class="btn btn-secondary btn-lg" (click)="returnToCompany()" [disabled]="info.account.balance <= 0">
+              <span>↩️</span> Trả Lại Quỹ Công Ty
+            </button>
+          </div>
+
+          <!-- Explanation -->
+          <div class="fund-explanation">
+            <h4>📖 Hướng Dẫn</h4>
+            <ul>
+              <li><strong>Chuyển từ Bank Balance:</strong> Lấy tiền từ quỹ công ty sang quỹ riêng của Owner. Số tiền không vượt quá Owner Withdrawable.</li>
+              <li><strong>Rút về cá nhân:</strong> Rút tiền từ quỹ Owner về tài khoản ngân hàng cá nhân.</li>
+              <li><strong>Trả lại công ty:</strong> Chuyển tiền từ quỹ Owner về lại quỹ công ty (Bank Balance).</li>
+            </ul>
+          </div>
+        </div>
+      } @else {
+        <div class="loading">Đang tải dữ liệu...</div>
+      }
+    </div>
+  }
+
+  <!-- Transactions Tab -->
+  @if (activeTab === 'transactions') {
+    <div class="tab-content">
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-group">
+          <label>Loại:</label>
+          <select [(ngModel)]="transactionTypeFilter" (change)="loadTransactions()">
+            <option value="">Tất cả</option>
+            <option value="in">Tiền vào</option>
+            <option value="out">Tiền ra</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Owner:</label>
+          <select [(ngModel)]="transactionOwnerFilter" (change)="loadTransactions()">
+            <option value="">Tất cả Owner</option>
+            @for (owner of owners(); track owner._id) {
+              <option [value]="owner._id">{{ owner.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <!-- Transactions Table -->
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Ngày</th>
+              <th>Owner</th>
+              <th>Loại</th>
+              <th>Danh mục</th>
+              <th>Số tiền</th>
+              <th>Số dư sau</th>
+              <th>Mô tả</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (tx of transactions(); track tx._id) {
+              <tr [class.in]="tx.type === 'in'" [class.out]="tx.type === 'out'">
+                <td>{{ formatDate(tx.date) }}</td>
+                <td>{{ getOwnerName(tx.ownerId) }}</td>
+                <td>
+                  <span class="type-badge" [class.in]="tx.type === 'in'" [class.out]="tx.type === 'out'">
+                    {{ tx.type === 'in' ? '⬆️ Vào' : '⬇️ Ra' }}
+                  </span>
+                </td>
+                <td>{{ getCategoryText(tx.category) }}</td>
+                <td class="amount" [class.positive]="tx.type === 'in'" [class.negative]="tx.type === 'out'">
+                  {{ tx.type === 'in' ? '+' : '-' }}{{ formatCurrency(tx.amount) }}
+                </td>
+                <td>{{ formatCurrency(tx.balanceAfter) }}</td>
+                <td>{{ tx.description || '-' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="empty-state">Không có giao dịch nào</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- Withdrawals Tab -->
+  @if (activeTab === 'withdrawals') {
+    <div class="tab-content">
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-group">
+          <label>Trạng thái:</label>
+          <select [(ngModel)]="statusFilter" (change)="loadWithdrawals()">
+            <option value="all">Tất cả</option>
+            <option [value]="WithdrawalStatus.PENDING">Chờ duyệt</option>
+            <option [value]="WithdrawalStatus.APPROVED">Đã duyệt</option>
+            <option [value]="WithdrawalStatus.COMPLETED">Hoàn thành</option>
+            <option [value]="WithdrawalStatus.REJECTED">Từ chối</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Owner:</label>
+          <select [(ngModel)]="ownerFilter" (change)="loadWithdrawals()">
+            <option value="">Tất cả Owner</option>
+            @for (owner of owners(); track owner._id) {
+              <option [value]="owner._id">{{ owner.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <!-- Urgent Alerts -->
+      @if (urgentWithdrawals.length > 0) {
+        <div class="alert alert-warning">
+          <strong>⚠️ {{ urgentWithdrawals.length }} phiếu rút tiền khẩn cấp cần xử lý!</strong>
+        </div>
+      }
+
+      <!-- Withdrawals Table -->
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Mã phiếu</th>
+              <th>Owner</th>
+              <th>Số tiền</th>
+              <th>Loại</th>
+              <th>Trạng thái</th>
+              <th>Ngày tạo</th>
+              <th>Lý do</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (withdrawal of filteredWithdrawals; track withdrawal._id) {
+              <tr [class.urgent]="withdrawal.isUrgent">
+                <td>
+                  <span class="withdrawal-id">{{ withdrawal._id?.slice(-6) }}</span>
+                  @if (withdrawal.isUrgent) {
+                    <span class="urgent-badge">🔥 Khẩn cấp</span>
+                  }
+                </td>
+                <td>{{ getOwnerName(withdrawal.ownerId) }}</td>
+                <td class="amount">{{ formatCurrency(withdrawal.amount) }}</td>
+                <td>{{ getTypeText(withdrawal.type) }}</td>
+                <td>
+                  <span [class]="'badge ' + getStatusBadgeClass(withdrawal.status)">
+                    {{ getStatusText(withdrawal.status) }}
+                  </span>
+                </td>
+                <td>{{ formatDate(withdrawal.requestDate) }}</td>
+                <td class="reason">{{ withdrawal.reason || '-' }}</td>
+                <td class="actions">
+                  @if (withdrawal.status === WithdrawalStatus.PENDING) {
+                    <button 
+                      class="btn btn-sm btn-success" 
+                      (click)="approveWithdrawal(withdrawal)"
+                      title="Duyệt">
+                      ✓
+                    </button>
+                    <button 
+                      class="btn btn-sm btn-danger" 
+                      (click)="rejectWithdrawal(withdrawal)"
+                      title="Từ chối">
+                      ✕
+                    </button>
+                    <button 
+                      class="btn btn-sm btn-secondary" 
+                      (click)="cancelWithdrawal(withdrawal)"
+                      title="Hủy">
+                      🗑
+                    </button>
+                  }
+                  @if (withdrawal.status === WithdrawalStatus.APPROVED) {
+                    <button 
+                      class="btn btn-sm btn-primary" 
+                      (click)="completeWithdrawal(withdrawal)"
+                      title="Hoàn thành">
+                      ✓ Hoàn thành
+                    </button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="8" class="empty-state">Không có phiếu rút tiền nào</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- Owners Tab -->
+  @if (activeTab === 'owners') {
+    <div class="tab-content">
+      <div class="header-actions">
+        <button class="btn btn-primary" (click)="openOwnerForm()">
+          ➕ Thêm Owner
+        </button>
+      </div>
+
+      <div class="owners-grid">
+        @for (owner of owners(); track owner._id) {
+          <div class="owner-card">
+            <div class="owner-header">
+              <h3>{{ owner.name }}</h3>
+              @if (!owner.isActive) {
+                <span class="badge badge-secondary">Không hoạt động</span>
+              }
+            </div>
+            <div class="owner-info">
+              <p><strong>Email:</strong> {{ owner.email || '-' }}</p>
+              <p><strong>Phone:</strong> {{ owner.phone || '-' }}</p>
+              <p><strong>Tỷ lệ lợi nhuận:</strong> {{ owner.profitSharePercentage }}%</p>
+              <p><strong>Số dư khả dụng:</strong> 
+                <span class="balance">{{ formatCurrency(owner.availableBalance) }}</span>
+              </p>
+              <p><strong>Đã rút:</strong> {{ formatCurrency(owner.totalWithdrawn) }}</p>
+              @if (owner.bankAccount) {
+                <p><strong>Ngân hàng:</strong> {{ owner.bankName }}</p>
+                <p><strong>STK:</strong> {{ owner.bankAccount }}</p>
+              }
+            </div>
+            <div class="owner-actions">
+              <button class="btn btn-sm btn-primary" (click)="openOwnerForm(owner)">
+                ✏️ Sửa
+              </button>
+              <button class="btn btn-sm btn-danger" (click)="deleteOwner(owner._id!)">
+                🗑 Xóa
+              </button>
+            </div>
+          </div>
+        } @empty {
+          <div class="empty-state">Chưa có Owner nào</div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Statistics Tab -->
+  @if (activeTab === 'statistics') {
+    <div class="tab-content">
+      @if (systemStats(); as stats) {
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>👥 Owners</h3>
+            <div class="stat-value">{{ stats.owners.total }}</div>
+            <div class="stat-detail">Hoạt động: {{ stats.owners.active }}</div>
+          </div>
+          <div class="stat-card">
+            <h3>💰 Tổng Số Dư</h3>
+            <div class="stat-value">{{ formatCurrency(stats.owners.totalBalance) }}</div>
+          </div>
+          <div class="stat-card">
+            <h3>💸 Tổng Đã Rút</h3>
+            <div class="stat-value">{{ formatCurrency(stats.owners.totalWithdrawn) }}</div>
+          </div>
+          <div class="stat-card">
+            <h3>📋 Chờ Duyệt</h3>
+            <div class="stat-value">{{ stats.withdrawals.pending.count }}</div>
+            <div class="stat-detail">{{ formatCurrency(stats.withdrawals.pending.amount) }}</div>
+          </div>
+          <div class="stat-card warning">
+            <h3>🔥 Khẩn Cấp</h3>
+            <div class="stat-value">{{ stats.withdrawals.urgent.count }}</div>
+            <div class="stat-detail">{{ formatCurrency(stats.withdrawals.urgent.amount) }}</div>
+          </div>
+          <div class="stat-card">
+            <h3>📅 Tháng Này</h3>
+            <div class="stat-value">{{ stats.withdrawals.thisMonth.count }}</div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+<!-- Owner Form Modal -->
+@if (showOwnerForm) {
+  <div class="modal-overlay" (click)="closeOwnerForm()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ editingOwner ? '✏️ Sửa Owner' : '➕ Thêm Owner' }}</h2>
+        <button class="btn-close" (click)="closeOwnerForm()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Tên Owner *</label>
+          <input type="text" [(ngModel)]="ownerForm.name" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" [(ngModel)]="ownerForm.email">
+          </div>
+          <div class="form-group">
+            <label>Điện thoại</label>
+            <input type="text" [(ngModel)]="ownerForm.phone">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Tỷ lệ lợi nhuận (%)</label>
+          <input type="number" [(ngModel)]="ownerForm.profitSharePercentage" min="0" max="100">
+        </div>
+        <div class="form-group">
+          <label>Ngân hàng</label>
+          <input type="text" [(ngModel)]="ownerForm.bankName">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Số tài khoản</label>
+            <input type="text" [(ngModel)]="ownerForm.bankAccount">
+          </div>
+          <div class="form-group">
+            <label>Chủ tài khoản</label>
+            <input type="text" [(ngModel)]="ownerForm.bankAccountName">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Ghi chú</label>
+          <textarea [(ngModel)]="ownerForm.notes" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" [(ngModel)]="ownerForm.isActive">
+            Đang hoạt động
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeOwnerForm()">Hủy</button>
+        <button class="btn btn-primary" (click)="saveOwner()">Lưu</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Withdrawal Form Modal -->
+@if (showWithdrawalForm) {
+  <div class="modal-overlay" (click)="closeWithdrawalForm()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>➕ Tạo Phiếu Rút Tiền</h2>
+        <button class="btn-close" (click)="closeWithdrawalForm()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Owner *</label>
+          <select [(ngModel)]="withdrawalForm.ownerId" required>
+            <option value="">-- Chọn Owner --</option>
+            @for (owner of owners(); track owner._id) {
+              <option [value]="owner._id">
+                {{ owner.name }} ({{ formatCurrency(owner.availableBalance) }})
+              </option>
+            }
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Số tiền *</label>
+          <input type="number" [(ngModel)]="withdrawalForm.amount" min="1000" required>
+        </div>
+        <div class="form-group">
+          <label>Loại rút tiền</label>
+          <select [(ngModel)]="withdrawalForm.type">
+            <option [value]="WithdrawalType.PROFIT_SHARE">Rút lợi nhuận định kỳ</option>
+            <option [value]="WithdrawalType.EMERGENCY">Khẩn cấp</option>
+            <option [value]="WithdrawalType.ADVANCE">Tạm ứng</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Lý do</label>
+          <textarea [(ngModel)]="withdrawalForm.reason" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Ghi chú</label>
+          <textarea [(ngModel)]="withdrawalForm.notes" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" [(ngModel)]="withdrawalForm.isUrgent">
+            🔥 Khẩn cấp (ưu tiên xử lý)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeWithdrawalForm()">Hủy</button>
+        <button class="btn btn-primary" (click)="saveWithdrawal()">Tạo Phiếu</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Fund Transaction Form Modal -->
+@if (showTransactionForm) {
+  <div class="modal-overlay" (click)="closeTransactionForm()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>💸 Ghi Nhận Giao Dịch Quỹ</h2>
+        <button class="btn-close" (click)="closeTransactionForm()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Owner *</label>
+          <select [(ngModel)]="transactionForm.ownerId" required>
+            <option value="">-- Chọn Owner --</option>
+            @for (owner of owners(); track owner._id) {
+              <option [value]="owner._id">
+                {{ owner.name }} ({{ formatCurrency(owner.availableBalance) }})
+              </option>
+            }
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Loại giao dịch *</label>
+          <select [(ngModel)]="transactionForm.type" (change)="onTransactionTypeChange()">
+            <option value="in">💵 Tiền vào quỹ</option>
+            <option value="out">💸 Tiền ra quỹ</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Danh mục *</label>
+          <select [(ngModel)]="transactionForm.category">
+            @if (transactionForm.type === 'in') {
+              <option value="profit_share">Phân bổ lợi nhuận</option>
+              <option value="capital_contribution">Góp vốn</option>
+              <option value="refund">Hoàn tiền</option>
+              <option value="other_in">Khác (vào)</option>
+            } @else {
+              <option value="withdrawal_profit">Rút lợi nhuận</option>
+              <option value="withdrawal_emergency">Rút khẩn cấp</option>
+              <option value="withdrawal_advance">Tạm ứng</option>
+              <option value="tax">Thuế</option>
+              <option value="other_out">Khác (ra)</option>
+            }
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Số tiền *</label>
+          <input type="number" [(ngModel)]="transactionForm.amount" min="1000" required>
+        </div>
+        <div class="form-group">
+          <label>Ngày giao dịch</label>
+          <input type="date" [(ngModel)]="transactionForm.date">
+        </div>
+        <div class="form-group">
+          <label>Mô tả</label>
+          <textarea [(ngModel)]="transactionForm.description" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Ghi chú</label>
+          <textarea [(ngModel)]="transactionForm.notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeTransactionForm()">Hủy</button>
+        <button class="btn btn-primary" (click)="saveTransaction()">Lưu Giao Dịch</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Transfer to Fund Modal -->
+@if (showTransferModal) {
+  <div class="modal-overlay" (click)="closeTransferModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>💰 Chuyển Tiền Từ Bank Balance</h2>
+        <button class="close-btn" (click)="closeTransferModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-box">
+          <p>💡 Số tiền tối đa có thể chuyển: <strong>{{ formatCurrency(fundAccountInfo()?.ownerWithdrawable || 0) }}</strong></p>
+        </div>
+        <div class="form-group">
+          <label>Số tiền *</label>
+          <input type="number" [(ngModel)]="transferForm.amount" min="1000" [max]="fundAccountInfo()?.ownerWithdrawable || 0" required>
+        </div>
+        <div class="form-group">
+          <label>Mô tả (tùy chọn)</label>
+          <textarea [(ngModel)]="transferForm.description" rows="2" placeholder="VD: Rút lợi nhuận tháng 1"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeTransferModal()">Hủy</button>
+        <button class="btn btn-success" (click)="transferToFund()" [disabled]="transferForm.amount <= 0">
+          Chuyển Tiền
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Withdraw from Fund Modal -->
+@if (showWithdrawModal) {
+  <div class="modal-overlay" (click)="closeWithdrawModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>💸 Rút Tiền Từ Quỹ Owner</h2>
+        <button class="close-btn" (click)="closeWithdrawModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-box">
+          <p>💰 Số dư quỹ Owner: <strong>{{ formatCurrency(fundAccountInfo()?.account?.balance || 0) }}</strong></p>
+        </div>
+        <div class="form-group">
+          <label>Số tiền *</label>
+          <input type="number" [(ngModel)]="withdrawFromFundForm.amount" min="1000" [max]="fundAccountInfo()?.account?.balance || 0" required>
+        </div>
+        <div class="form-group">
+          <label>Ngân hàng nhận</label>
+          <input type="text" [(ngModel)]="withdrawFromFundForm.bankName" placeholder="VD: Vietcombank">
+        </div>
+        <div class="form-group">
+          <label>Số tài khoản</label>
+          <input type="text" [(ngModel)]="withdrawFromFundForm.bankAccount" placeholder="VD: 1234567890">
+        </div>
+        <div class="form-group">
+          <label>Mô tả (tùy chọn)</label>
+          <textarea [(ngModel)]="withdrawFromFundForm.description" rows="2" placeholder="VD: Rút tiền chi tiêu cá nhân"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeWithdrawModal()">Hủy</button>
+        <button class="btn btn-warning" (click)="withdrawFromFund()" [disabled]="withdrawFromFundForm.amount <= 0">
+          Rút Tiền
+        </button>
+      </div>
+    </div>
+  </div>
+}

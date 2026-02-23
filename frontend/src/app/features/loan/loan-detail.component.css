@@ -1,0 +1,54 @@
+.loan-detail{padding:16px;display:flex;flex-direction:column;gap:12px}
+.header{display:flex;align-items:center;justify-content:space-between}
+.subtitle{margin:0;color:#666;font-size:13px}
+.back{text-decoration:none;color:#0d6efd}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.card{border:1px solid #eee;border-radius:8px;padding:10px;background:#fafafa}
+.card.highlight-green{background:#e6f4ea;border-color:#81c995}
+.card.highlight-red{background:#fdecea;border-color:#f28b82}
+.card.highlight-blue{background:#e8f0fe;border-color:#8ab4f8}
+.label{font-size:12px;color:#666}
+.value{font-weight:700;margin-top:4px}
+.sub{font-size:11px;color:#666;margin-top:4px}
+.data-table{width:100%;border-collapse:collapse;font-size:14px}
+.data-table th,.data-table td{border:1px solid #eee;padding:8px;text-align:left}
+.data-table th{background:#f7f7f7}
+.num{text-align:right}
+
+/* Badges */
+.badge{padding:2px 8px;border-radius:6px;background:#eee;font-size:12px;display:inline-block}
+.badge.paid{background:#e6f4ea;color:#216e39}
+.badge.unpaid{background:#fff3e0;color:#e65100}
+.badge.disbursement.pending{background:#fff3e0;color:#e65100}
+.badge.disbursement.partial{background:#e3f2fd;color:#1565c0}
+.badge.disbursement.fully{background:#e8f5e9;color:#2e7d32}
+
+/* Actions bar */
+.actions-bar{display:flex;gap:8px;margin:12px 0}
+.btn{padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer}
+.btn:hover{background:#f5f5f5}
+.btn.primary{background:#1d4ed8;color:#fff;border-color:#163fa6}
+.btn.primary:hover{background:#1e3a8a}
+.btn.primary:disabled{background:#9ca3af;border-color:#9ca3af;cursor:not-allowed}
+.btn-small{padding:4px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer}
+.btn-small:hover{background:#e8f0fe}
+
+/* Overdue row */
+tr.overdue{background:#fff3e0}
+tr.overdue td{color:#e65100}
+
+.empty{text-align:center;color:#888}
+.loading{padding:12px;color:#555}
+
+/* Modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:#fff;border-radius:12px;width:90%;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.2)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid #eee}
+.modal-header h3{margin:0}
+.modal-header .close{background:none;border:none;font-size:18px;cursor:pointer;color:#666}
+.modal-body{padding:16px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;padding:16px;border-top:1px solid #eee}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:13px;color:#333;margin-bottom:4px}
+.form-group input,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box}
+.form-group .hint{font-size:11px;color:#666;margin-top:4px}

@@ -1,0 +1,72 @@
+<nav class="sidebar" [class.collapsed]="isCollapsed">
+  <div class="sidebar-header">
+    <h3 *ngIf="!isCollapsed">Hệ Thống Quản Lý</h3>
+  <div *ngIf="!isCollapsed" class="version-badge">version14.0</div>
+    
+    <!-- Ads Alerts Notification Bell - only show for users with ad-groups permission -->
+    <app-ads-alerts *ngIf="!isCollapsed && canShowAlerts()"></app-ads-alerts>
+    
+    <button class="btn-theme-toggle" (click)="toggleTheme()" [title]="(themeService.theme()==='dark'?'Chế độ sáng':'Chế độ tối')" [attr.aria-label]="themeService.theme()==='dark'?'Chuyển sang chế độ sáng':'Chuyển sang chế độ tối'" *ngIf="!isCollapsed">
+      <span>{{ themeService.theme()==='dark' ? '🌙' : '☀️' }}</span>
+      <span>{{ themeService.theme()==='dark' ? 'Tối' : 'Sáng' }}</span>
+    </button>
+    <button class="collapse-toggle" (click)="toggleCollapse()" [title]="isCollapsed ? 'Mở rộng' : 'Thu gọn'">
+      {{ isCollapsed ? '>>' : '<<' }}
+    </button>
+    <div class="auth-actions" *ngIf="!isCollapsed">
+      <button *ngIf="authService.isAuthenticated(); else loginBtn" (click)="authService.logout()" class="btn btn-sm">Đăng xuất</button>
+      <ng-template #loginBtn>
+        <a routerLink="/login" class="btn btn-sm">Đăng nhập</a>
+      </ng-template>
+    </div>
+  </div>
+  
+  <ul class="menu-list">
+    <ng-container *ngFor="let item of menuItems">
+    <li class="menu-item" *ngIf="canShow(item)">
+      <!-- Mục không có submenu: cả dòng là link điều hướng -->
+      <a *ngIf="!item.children?.length"
+         class="menu-link link-content"
+         [routerLink]="item.route"
+         routerLinkActive="active"
+         [title]="isCollapsed ? item.label : ''">
+        <span class="icon">{{ item.icon }}</span>
+        <span class="label" *ngIf="!isCollapsed">{{ item.label }}</span>
+      </a>
+
+      <!-- Mục có submenu: click để mở rộng/thu gọn -->
+      <div *ngIf="item.children?.length && !isCollapsed"
+           class="menu-link has-children"
+           (click)="toggleExpanded(item.route)">
+        <div class="link-content expandable">
+          <span class="icon">{{ item.icon }}</span>
+          <span class="label">{{ item.label }}</span>
+          <span class="expand-icon" [class.expanded]="isExpanded(item.route)">
+            ▼
+          </span>
+        </div>
+      </div>
+
+      <!-- Collapsed menu with children: show only icon -->
+      <div *ngIf="item.children?.length && isCollapsed"
+           class="menu-link collapsed-parent"
+           [title]="item.label">
+        <span class="icon">{{ item.icon }}</span>
+      </div>
+
+      <ul *ngIf="item.children?.length && isExpanded(item.route) && !isCollapsed" class="submenu">
+        <ng-container *ngFor="let child of item.children">
+        <li class="submenu-item" *ngIf="canShow(child)">
+          <a [routerLink]="child.route"
+             routerLinkActive="active"
+             class="submenu-link">
+            <span class="icon">{{ child.icon }}</span>
+            <span class="label">{{ child.label }}</span>
+          </a>
+        </li>
+        </ng-container>
+      </ul>
+    </li>
+    </ng-container>
+  </ul>
+</nav>

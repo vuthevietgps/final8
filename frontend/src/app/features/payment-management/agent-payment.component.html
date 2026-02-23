@@ -1,0 +1,620 @@
+<div class="page">
+  <h2>💰 Thanh Toán Hoa Hồng Đại Lý Ngoài (Order-Level)</h2>
+  <p class="page-description">
+    Đánh dấu và theo dõi thanh toán hoa hồng cho <strong>đại lý ngoài</strong> theo từng đơn hàng.
+    <span class="help-text">
+      💡 Hoa hồng = COD - (Báo giá ĐL × SL) - Phí ship - Phí hoàn | Chỉ thanh toán đơn "Giao thành công" hoặc "Hàng hoàn"
+    </span>
+    <br/>
+    <span class="help-text" style="background: #e8f5e9; border-left-color: #4caf50; margin-top: 4px;">
+      ℹ️ Đại lý nội bộ không cần thanh toán hoa hồng - nhận lương cố định
+    </span>
+  </p>
+
+  <!-- CFO Spec v2.0: Tổng Hợp Vận Hành (Summary Cards) -->
+  <section class="card" *ngIf="opsSummary">
+    <div class="section-header">
+      <h3>📊 Tổng Hợp Vận Hành</h3>
+      <span class="hint" *ngIf="opsSummary.asOfDate">Cập nhật: {{ opsSummary.asOfDate }}</span>
+    </div>
+
+    <div class="summary-cards">
+      <!-- Payable Pending -->
+      <div class="summary-card payable clickable" (click)="filterByCard('payable')" title="Click để lọc đơn chờ trả">
+        <div class="card-icon">💸</div>
+        <div class="card-content">
+          <div class="card-label">Chờ Trả (+)</div>
+          <div class="card-value">{{ opsSummary.payablePending.amount | number:'1.0-0' }} đ</div>
+          <div class="card-sub">{{ opsSummary.payablePending.orderCount }} đơn</div>
+        </div>
+      </div>
+
+      <!-- Paid -->
+      <div class="summary-card paid clickable" (click)="filterByCard('paid')" title="Xem lịch sử đã thanh toán">
+        <div class="card-icon">✅</div>
+        <div class="card-content">
+          <div class="card-label">Đã Trả <span class="period-label">{{ periodLabel }}</span></div>
+          <div class="card-value">{{ opsSummary.paid.amount | number:'1.0-0' }} đ</div>
+          <div class="card-sub">{{ opsSummary.paid.orderCount }} đơn</div>
+        </div>
+      </div>
+
+      <!-- Clawback (always show) -->
+      <div class="summary-card clawback clickable" (click)="filterByCard('debt')" title="Click để xem đại lý nợ">
+        <div class="card-icon">⚠️</div>
+        <div class="card-content">
+          <div class="card-label">ĐL Nợ Công Ty (-)</div>
+          <div class="card-value" [class.text-danger]="opsSummary.clawbackOutstanding.amount > 0">{{ opsSummary.clawbackOutstanding.amount | number:'1.0-0' }} đ</div>
+          <div class="card-sub">{{ opsSummary.clawbackOutstanding.caseCount }} case</div>
+        </div>
+      </div>
+
+      <!-- Aging 0-7 -->
+      <div class="summary-card aging-0-7 clickable" (click)="filterByCard('aging-0-7')" title="Click để lọc đơn 0-7 ngày">
+        <div class="card-icon">📅</div>
+        <div class="card-content">
+          <div class="card-label">Aging 0-7 ngày</div>
+          <div class="card-value text-success">{{ opsSummary.payableAging[0].amount | number:'1.0-0' }} đ</div>
+          <div class="card-sub">{{ opsSummary.payableAging[0].orderCount }} đơn</div>
+        </div>
+      </div>
+
+      <!-- Aging 8-14 -->
+      <div class="summary-card aging-8-14 clickable" (click)="filterByCard('aging-8-14')" title="Click để lọc đơn 8-14 ngày">
+        <div class="card-icon">⏰</div>
+        <div class="card-content">
+          <div class="card-label">Aging 8-14 ngày</div>
+          <div class="card-value text-warning">{{ opsSummary.payableAging[1].amount | number:'1.0-0' }} đ</div>
+          <div class="card-sub">{{ opsSummary.payableAging[1].orderCount }} đơn</div>
+        </div>
+      </div>
+
+      <!-- Aging >14 -->
+      <div class="summary-card aging-15-plus clickable" (click)="filterByCard('aging-15')" title="Click để lọc đơn >14 ngày">
+        <div class="card-icon">🔴</div>
+        <div class="card-content">
+          <div class="card-label">Aging >14 ngày</div>
+          <div class="card-value text-danger">{{ opsSummary.payableAging[2].amount | number:'1.0-0' }} đ</div>
+          <div class="card-sub">{{ opsSummary.payableAging[2].orderCount }} đơn</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cards-hint">💡 Click vào thẻ để lọc nhanh</div>
+  </section>
+
+  <!-- Breakdown By Agent (Top 10) -->
+  <section class="card" *ngIf="opsSummary && opsSummary.byAgent.length > 0">
+    <div class="section-header">
+      <h3>👥 Theo Đại Lý (Top {{ showAllAgents ? opsSummary.byAgent.length : Math.min(10, opsSummary.byAgent.length) }})</h3>
+      <div class="section-actions">
+        <button class="btn-small" *ngIf="opsSummary.byAgent.length > 10" (click)="showAllAgents = !showAllAgents">
+          {{ showAllAgents ? '📉 Thu gọn' : '📊 Xem tất cả (' + opsSummary.byAgent.length + ')' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Đại lý</th>
+            <th class="num">Đơn chờ</th>
+            <th class="num">Chờ trả (+)</th>
+            <th class="num">Nợ (-)</th>
+            <th class="num">Net</th>
+            <th class="num">Đã trả</th>
+            <th class="num">0-7d</th>
+            <th class="num">8-14d</th>
+            <th class="num">15+d</th>
+            <th>Cảnh báo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let agent of (showAllAgents ? opsSummary.byAgent : opsSummary.byAgent.slice(0, 10))" 
+              [class.highlight-row]="agent.isOverThreshold"
+              [class.has-debt]="agent.clawbackOutstandingAmount > 0"
+              (click)="drilldownToAgent(agent.agentId)"
+              style="cursor: pointer;"
+              title="Click để lọc đơn hàng của đại lý này">
+            <td>
+              <div class="cell-title">{{ agent.agentName }}</div>
+            </td>
+            <td class="num">{{ agent.pendingPayableOrderCount }}</td>
+            <td class="num money text-success">{{ agent.pendingPayableAmount | number:'1.0-0' }}</td>
+            <td class="num money text-danger">{{ agent.clawbackOutstandingAmount | number:'1.0-0' }}</td>
+            <td class="num money" [class.text-danger]="agent.netAmount < 0" [class.text-success]="agent.netAmount > 0">
+              {{ agent.netAmount | number:'1.0-0' }}
+            </td>
+            <td class="num money">{{ agent.paidAmount | number:'1.0-0' }}</td>
+            <td class="num">{{ agent.payableAging[0].amount | number:'1.0-0' }}</td>
+            <td class="num" [class.text-warning]="agent.payableAging[1] && agent.payableAging[1].amount > 0">
+              {{ agent.payableAging[1].amount | number:'1.0-0' }}
+            </td>
+            <td class="num" [class.text-danger]="agent.payableAging[2] && agent.payableAging[2].amount > 0">
+              {{ agent.payableAging[2].amount | number:'1.0-0' }}
+            </td>
+            <td class="warnings-cell">
+              <div class="badge-group">
+                <span class="badge warning" *ngIf="agent.isOverThreshold" title="Chờ trả vượt 5.000.000đ">⚠️ >5M</span>
+                <span class="badge danger" *ngIf="agent.clawbackOutstandingAmount > 0" title="Đại lý đang nợ công ty">NỢ</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-hint" *ngIf="opsSummary.byAgent.length > 0">
+      💡 <em>Click vào dòng để lọc đơn hàng của đại lý đó</em>
+    </div>
+  </section>
+
+  <!-- Filters Section -->
+  <section class="card">
+    <div class="section-header">
+      <h3>🔍 Lọc Đơn Hàng</h3>
+      <div class="quick-filters">
+        <button class="btn-quick" [class.active]="quickDateFilter === 'today'" (click)="setQuickDateFilter('today')">Hôm nay</button>
+        <button class="btn-quick" [class.active]="quickDateFilter === 'week'" (click)="setQuickDateFilter('week')">7 ngày</button>
+        <button class="btn-quick" [class.active]="quickDateFilter === 'month'" (click)="setQuickDateFilter('month')">Tháng này</button>
+        <button class="btn-quick" [class.active]="quickDateFilter === 'all'" (click)="setQuickDateFilter('all')">Tất cả</button>
+      </div>
+    </div>
+    
+    <div class="filters">
+      <label>
+        Đại lý
+        <select [(ngModel)]="agentId">
+          <option value="">Tất cả đại lý</option>
+          <option *ngFor="let a of agents" [value]="a._id">
+            {{ a.fullName || a.email || 'Agent' }}
+          </option>
+        </select>
+      </label>
+      
+      <label>
+        Từ ngày
+        <input type="text" [(ngModel)]="fromDateDisplay" placeholder="dd/mm/yyyy" 
+               (blur)="parseDateInput('from', fromDateDisplay)" />
+      </label>
+      
+      <label>
+        Đến ngày
+        <input type="text" [(ngModel)]="toDateDisplay" placeholder="dd/mm/yyyy"
+               (blur)="parseDateInput('to', toDateDisplay)" />
+      </label>
+
+      <label>
+        Lọc Aging
+        <select [(ngModel)]="agingFilter">
+          <option value="">Tất cả</option>
+          <option value="0-7">0-7 ngày</option>
+          <option value="8-14">8-14 ngày</option>
+          <option value="15+">>14 ngày</option>
+        </select>
+      </label>
+      
+      <button (click)="applyFilters()">🔍 Tìm kiếm</button>
+      <button (click)="resetFilters()" class="btn-secondary">🔄 Reset</button>
+    </div>
+  </section>
+
+  <!-- Tabs: Payable vs Debt -->
+  <div class="tabs-container">
+    <button class="tab-btn" [class.active]="activeTab === 'payable'" (click)="setActiveTab('payable')">
+      💸 Chờ Trả ({{ payableOnlyOrders.length }})
+    </button>
+    <button class="tab-btn" [class.active]="activeTab === 'debt'" (click)="setActiveTab('debt')">
+      ⚠️ ĐL Nợ Công Ty ({{ debtOrders.length }})
+    </button>
+  </div>
+
+  <!-- Payable Orders Section (Tab: Chờ Trả) -->
+  <section class="card" id="pending-orders-section" *ngIf="activeTab === 'payable'">
+    <!-- CFO Spec v2.0: Banner cảnh báo khi selected > 5M -->
+    <div class="alert alert-warning" *ngIf="selectedCount > 0 && isOverThreshold">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-content">
+        <h4>Cảnh báo: Vượt Ngưỡng Thanh Toán (> 5M)</h4>
+        <p>
+          Tổng đã chọn: <strong>{{ selectedTotal | number:'1.0-0' }} đ</strong> vượt ngưỡng <strong>5,000,000 đ</strong>.
+          Bạn sẽ cần <strong>xác nhận</strong> và <strong>đính kèm chứng từ</strong> khi tạo phiếu.
+        </p>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <div>
+        <h3>📋 Đơn Hàng Chờ Thanh Toán (Chỉ Payable +)</h3>
+        <p class="section-sub">
+          Tổng: <strong>{{ payableOnlyOrders.length }}</strong> đơn chờ trả
+          <span *ngIf="activeAgingFilter"> | Đang lọc: <strong class="text-warning">{{ activeAgingFilter }}</strong></span>
+        </p>
+      </div>
+      <div class="section-actions">
+        <select [(ngModel)]="sortBy" (change)="sortOrders()" class="sort-select">
+          <option value="aging-desc">🔴 Aging giảm dần (quá hạn trước)</option>
+          <option value="aging-asc">🟢 Aging tăng dần</option>
+          <option value="amount-desc">💰 Số tiền giảm dần</option>
+          <option value="amount-asc">Số tiền tăng dần</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Selected Summary Bar (always visible when has selection) -->
+    <div class="selected-summary-bar" *ngIf="selectedCount > 0">
+      <div class="summary-left">
+        <span class="summary-icon">✅</span>
+        <span>Đã chọn: <strong>{{ selectedCount }}</strong> đơn</span>
+      </div>
+      <div class="summary-amounts">
+        <span class="amount-box payable-box">
+          💸 Trả: <strong>{{ selectedTotal | number:'1.0-0' }}</strong> đ
+        </span>
+        <span class="amount-box threshold-box" *ngIf="isOverThreshold">⚠️ >5M</span>
+      </div>
+      <div class="summary-actions">
+        <button (click)="deselectAll()" class="btn-small">❌ Bỏ chọn tất cả</button>
+        <button (click)="openCreateBatchModal()" class="btn-primary">💵 Tạo Phiếu</button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="hint">⏳ Đang tải...</div>
+
+    <div *ngIf="!loading && payableOnlyOrders.length === 0" class="hint">
+      ✅ Không có đơn hàng chờ thanh toán hoa hồng
+    </div>
+
+    <div class="table-wrapper" *ngIf="!loading && payableOnlyOrders.length > 0">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40px;">
+              <input 
+                type="checkbox" 
+                (change)="selectAllPayable($event)"
+                [checked]="selectedCount === payableOnlyOrders.length && payableOnlyOrders.length > 0" />
+            </th>
+            <th>Mã đơn</th>
+            <th>Khách hàng</th>
+            <th>Đại lý</th>
+            <th>SL</th>
+            <th>COD</th>
+            <th>Báo giá ĐL</th>
+            <th>Phí ship</th>
+            <th class="highlight">💰 Hoa hồng</th>
+            <th>Ngày ĐK</th>
+            <th>Aging</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let order of payableOnlyOrders" (click)="toggleOrderSelection(order)" style="cursor: pointer;">
+            <td>
+              <input type="checkbox" [(ngModel)]="order.selected" (click)="$event.stopPropagation()" />
+            </td>
+            <td>
+              <div class="cell-title">{{ order._id }}</div>
+              <div class="cell-sub" *ngIf="order.trackingNumber">
+                📦 {{ order.trackingNumber }}
+              </div>
+            </td>
+            <td>{{ order.customerName || '-' }}</td>
+            <td>
+              <div class="cell-sub">{{ getAgentName(order.agentId || '') }}</div>
+            </td>
+            <td class="num">{{ order.quantity || 1 }}</td>
+            <td class="num">{{ order.codAmount | number:'1.0-0' }}</td>
+            <td class="num">{{ order.agentQuote | number:'1.0-0' }}</td>
+            <td class="num">{{ order.shippingFee | number:'1.0-0' }}</td>
+            <td class="num money highlight text-success">
+              {{ calculateCommission(order) | number:'1.0-0' }}
+            </td>
+            <td class="num">
+              <span class="cell-sub">{{ order.agentEligibleAt ? (order.agentEligibleAt | date:'dd/MM') : (order.updatedAt | date:'dd/MM') }}</span>
+            </td>
+            <td class="num">
+              <span class="aging-badge" 
+                    [class.aging-normal]="getAgingDays(order) <= 7"
+                    [class.aging-warning]="getAgingDays(order) > 7 && getAgingDays(order) <= 14"
+                    [class.aging-danger]="getAgingDays(order) > 14">
+                {{ getAgingDays(order) }}d
+              </span>
+            </td>
+            <td>
+              <span class="badge success">
+                {{ order.orderStatus }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Debt Orders Section (Tab: ĐL Nợ Công Ty) -->
+  <section class="card" *ngIf="activeTab === 'debt'">
+    <div class="section-header">
+      <div>
+        <h3>⚠️ Đơn Hàng Đại Lý Nợ Công Ty</h3>
+        <p class="section-sub">
+          Tổng: <strong>{{ debtOrders.length }}</strong> đơn nợ | 
+          Tổng nợ: <strong class="text-danger">{{ totalDebtAmount | number:'1.0-0' }} đ</strong>
+        </p>
+      </div>
+      <div class="section-actions">
+        <button (click)="exportDebtReport()" class="btn-small">📄 Xuất báo cáo nợ</button>
+      </div>
+    </div>
+
+    <div class="info-box warning">
+      <span class="info-icon">ℹ️</span>
+      <span>Các đơn hoàn mà đại lý phải chịu chi phí. Không tạo phiếu thanh toán cho phần này - theo dõi công nợ riêng.</span>
+    </div>
+
+    <div *ngIf="!loading && debtOrders.length === 0" class="hint">
+      ✅ Không có đại lý nào đang nợ công ty
+    </div>
+
+    <div class="table-wrapper" *ngIf="!loading && debtOrders.length > 0">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã đơn</th>
+            <th>Khách hàng</th>
+            <th>Đại lý</th>
+            <th>SL</th>
+            <th>Chi phí NCC</th>
+            <th>Phí ship</th>
+            <th>Phí hoàn</th>
+            <th class="highlight">💸 Số nợ</th>
+            <th>Ngày hoàn</th>
+            <th>Aging</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let order of debtOrders" class="row-negative">
+            <td>
+              <div class="cell-title">{{ order._id }}</div>
+              <div class="cell-sub" *ngIf="order.trackingNumber">
+                📦 {{ order.trackingNumber }}
+              </div>
+            </td>
+            <td>{{ order.customerName || '-' }}</td>
+            <td>
+              <div class="cell-sub">{{ getAgentName(order.agentId || '') }}</div>
+            </td>
+            <td class="num">{{ order.quantity || 1 }}</td>
+            <td class="num">{{ order.supplierQuote | number:'1.0-0' }}</td>
+            <td class="num">{{ order.shippingFee | number:'1.0-0' }}</td>
+            <td class="num">{{ order.returnFee | number:'1.0-0' }}</td>
+            <td class="num money highlight text-danger">
+              {{ calculateCommission(order) | number:'1.0-0' }}
+              <span class="badge badge-sm danger">NỢ</span>
+            </td>
+            <td class="num">
+              <span class="cell-sub">{{ order.agentEligibleAt ? (order.agentEligibleAt | date:'dd/MM') : (order.updatedAt | date:'dd/MM') }}</span>
+            </td>
+            <td class="num">
+              <span class="aging-badge aging-danger">
+                {{ getAgingDays(order) }}d
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Payment Batches History -->
+  <section class="card">
+    <div class="section-header">
+      <h3>📋 Lịch Sử Phiếu Thanh Toán</h3>
+      <button (click)="loadBatches()" class="btn-small">🔄 Tải lại</button>
+    </div>
+
+    <div *ngIf="batchesLoading" class="hint">⏳ Đang tải...</div>
+
+    <div *ngIf="!batchesLoading && batches.length === 0" class="hint">
+      Chưa có phiếu thanh toán nào
+    </div>
+
+    <div class="table-wrapper" *ngIf="!batchesLoading && batches.length > 0">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã phiếu</th>
+            <th>Ngày thanh toán</th>
+            <th>Số đơn</th>
+            <th>Tổng hoa hồng</th>
+            <th>Ghi chú</th>
+            <th>Chứng từ</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let batch of batches">
+            <td>
+              <div class="cell-title">{{ batch.batchId }}</div>
+            </td>
+            <td>{{ batch.paidDate | date:'dd/MM/yyyy' }}</td>
+            <td>{{ batch.orderCount }}</td>
+            <td class="num money">{{ batch.totalAmount | number:'1.0-0' }}</td>
+            <td>
+              <div class="cell-sub">{{ batch.note || '-' }}</div>
+            </td>
+            <td>
+              <div class="attachment-links" *ngIf="batch.attachments && batch.attachments.length > 0">
+                <a *ngFor="let link of batch.attachments; let i = index" 
+                   [href]="link" target="_blank" class="attachment-link" title="{{ link }}">
+                  📎 {{ i + 1 }}
+                </a>
+              </div>
+              <span *ngIf="!batch.attachments || batch.attachments.length === 0" class="cell-sub">-</span>
+            </td>
+            <td>
+              <div class="actions">
+                <button class="btn-small" (click)="viewBatch(batch)">👁️ Xem</button>
+                <button class="btn-small" (click)="exportBatch(batch)">📄 Xuất</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<!-- Create Batch Modal -->
+<div class="modal-overlay" *ngIf="showBatchModal" (click)="closeBatchModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>� Tạo Phiếu Thanh Toán Hoa Hồng Agent</h3>
+      <button class="close-btn" (click)="closeBatchModal()">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <p class="modal-description">
+        Tạo lượt thanh toán hoa hồng cho <strong>{{ selectedCount }}</strong> đơn hàng
+        với tổng hoa hồng <strong class="money">{{ selectedTotal | number:'1.0-0' }}</strong> đ
+      </p>
+
+      <div class="form-group">
+        <label>Mã phiếu thanh toán *</label>
+        <input 
+          type="text" 
+          [(ngModel)]="batchForm.batchId" 
+          placeholder="VD: PTTT-AGENT-2026-01-001"
+          required />
+      </div>
+
+      <div class="form-group">
+        <label>Ngày thanh toán *</label>
+        <input 
+          type="date" 
+          [(ngModel)]="batchForm.paidDate"
+          required />
+      </div>
+
+      <div class="form-group">
+        <label>Ghi chú</label>
+        <textarea 
+          [(ngModel)]="batchForm.note"
+          rows="3"
+          placeholder="VD: Thanh toán hoa hồng tháng 01/2026"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>🔗 Link chứng từ</label>
+        <input 
+          type="text" 
+          [(ngModel)]="batchForm.attachments"
+          placeholder="VD: https://drive.google.com/... (nhiều link cách nhau bởi dấu phẩy)" />
+        <small class="form-hint">Nhập link hình ảnh hoặc file chứng từ thanh toán (bank transfer, receipt, ...)</small>
+      </div>
+
+      <!-- CFO Spec v2.0: Checkbox bắt buộc khi > 5M -->
+      <div class="form-group" *ngIf="isOverThreshold">
+        <div class="alert alert-warning">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-content">
+            <p>
+              <strong>Thanh toán vượt ngưỡng 5,000,000 đ</strong>
+              <br/>
+              Bạn phải xác nhận và đính kèm chứng từ để tiếp tục.
+            </p>
+          </div>
+        </div>
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="batchForm.confirmOverThreshold"
+            required />
+          <span>✅ Tôi xác nhận thanh toán vượt ngưỡng và đã đính kèm chứng từ đầy đủ</span>
+        </label>
+      </div>
+
+      <div class="batch-summary">
+        <h4>📋 Đơn hàng đã chọn:</h4>
+        <div class="order-list">
+          <div *ngFor="let order of selectedOrders; let i = index" class="order-item">
+            <span>{{ i + 1 }}. #{{ order._id }}</span>
+            <span class="money">{{ calculateCommission(order) | number:'1.0-0' }} đ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button (click)="closeBatchModal()" class="btn-secondary">Hủy</button>
+      <button (click)="createBatch()" 
+              class="btn-primary"
+              [disabled]="isOverThreshold && !batchForm.confirmOverThreshold">
+        ✅ Xác Nhận Thanh Toán
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- View Batch Modal -->
+<div class="modal-overlay" *ngIf="showViewBatchModal" (click)="closeViewBatchModal()">
+  <div class="modal modal-large" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>👁️ Chi Tiết Phiếu Thanh Toán</h3>
+      <button class="close-btn" (click)="closeViewBatchModal()">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="batch-info" *ngIf="selectedBatch">
+        <div class="info-row">
+          <span class="label">Mã phiếu:</span>
+          <span class="value">{{ selectedBatch.batchId }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Ngày thanh toán:</span>
+          <span class="value">{{ selectedBatch.paidDate | date:'dd/MM/yyyy' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Số đơn:</span>
+          <span class="value">{{ selectedBatch.orderCount }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Tổng hoa hồng:</span>
+          <span class="value money">{{ selectedBatch.totalAmount | number:'1.0-0' }} đ</span>
+        </div>
+        <div class="info-row" *ngIf="selectedBatch.note">
+          <span class="label">Ghi chú:</span>
+          <span class="value">{{ selectedBatch.note }}</span>
+        </div>
+      </div>
+
+      <h4>📋 Danh sách đơn hàng:</h4>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Mã đơn</th>
+              <th>Khách hàng</th>
+              <th>Hoa hồng</th>
+              <th>Ngày đặt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let order of batchOrders; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ order._id }}</td>
+              <td>{{ order.customerName || '-' }}</td>
+              <td class="num money">{{ order.agentPaidAmount | number:'1.0-0' }}</td>
+              <td>{{ order.orderDate | date:'dd/MM/yyyy' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button (click)="closeViewBatchModal()" class="btn-secondary">Đóng</button>
+    </div>
+  </div>
+</div>

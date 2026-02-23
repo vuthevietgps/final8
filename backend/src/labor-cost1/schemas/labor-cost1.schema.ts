@@ -1,0 +1,51 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+import { User } from '../../user/user.schema';
+
+@Schema({ timestamps: true })
+export class LaborCost1 {
+  @Prop({ type: Date, required: true, index: true })
+  date: Date; // Ngày (00:00:00) theo local, lưu dạng Date
+
+  @Prop({ type: Types.ObjectId, ref: User.name, required: true, index: true })
+  userId: Types.ObjectId; // Nhân công
+
+  @Prop({ type: String, required: true })
+  startTime: string; // HH:mm
+
+  @Prop({ type: String, required: true })
+  endTime: string; // HH:mm
+
+  @Prop({ type: Number, required: true, min: 0 })
+  workHours: number; // Số giờ làm (end - start)
+
+  @Prop({ type: Number, default: 0 })
+  sessionCount?: number; // Số phiên được gộp trong ngày
+
+  @Prop({ type: Number, required: true, min: 0 })
+  hourlyRate: number; // Cấu hình lương tại thời điểm ghi nhận (snapshot)
+
+  @Prop({ type: Number, required: true, min: 0 })
+  cost: number; // workHours * hourlyRate
+
+  @Prop({ type: String })
+  notes?: string;
+
+  @Prop({ type: Boolean, default: false })
+  paid?: boolean;
+
+  @Prop({ type: Date })
+  paidAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'LaborStatement', index: true })
+  statementId?: Types.ObjectId; // ID của phiếu thanh toán lương (nếu đã được gộp vào statement)
+
+  @Prop({ type: String, enum: ['unpaid', 'in_statement', 'paid'], default: 'unpaid', index: true })
+  paymentStatus?: string;
+  // - unpaid: Chưa gộp vào statement, chưa thanh toán
+  // - in_statement: Đã gộp vào statement, chờ thanh toán
+  // - paid: Đã thanh toán (statement closed)
+}
+
+export type LaborCost1Document = HydratedDocument<LaborCost1>;
+export const LaborCost1Schema = SchemaFactory.createForClass(LaborCost1);

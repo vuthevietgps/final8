@@ -1,0 +1,229 @@
+<div class="loan-dashboard">
+  <!-- Header -->
+  <header class="dash-header">
+    <div class="header-left">
+      <h1>📊 Quản Lý Khoản Vay</h1>
+      <span class="subtitle">Dashboard Tổng Quan • Tối Ưu Hóa Chi Phí Lãi</span>
+    </div>
+    <div class="header-right">
+      <button class="btn-secondary" routerLink="/loans/new">➕ Thêm khoản vay</button>
+      <button class="btn-primary" (click)="loadDashboard()">🔄 Làm mới</button>
+    </div>
+  </header>
+
+  <!-- Loading -->
+  @if (loading()) {
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <p>Đang tải dữ liệu...</p>
+    </div>
+  }
+
+  <!-- Error -->
+  @if (error()) {
+    <div class="error-container">
+      <p>❌ {{ error() }}</p>
+      <button class="btn-primary" (click)="loadDashboard()">Thử lại</button>
+    </div>
+  }
+
+  <!-- Dashboard Content -->
+  @if (dashboard() && !loading()) {
+    <!-- KPI Cards -->
+    <section class="kpi-section">
+      <div class="kpi-grid">
+        <!-- Available to Disburse -->
+        <div class="kpi-card available">
+          <div class="kpi-icon">💵</div>
+          <div class="kpi-content">
+            <div class="kpi-label">Có Thể Giải Ngân</div>
+            <div class="kpi-value">{{ formatCurrency(dashboard()!.availableToDisburse) }}đ</div>
+            <div class="kpi-hint">Số tiền còn lại có thể rút từ các hợp đồng vay</div>
+          </div>
+        </div>
+
+        <!-- Outstanding with Interest -->
+        <div class="kpi-card outstanding">
+          <div class="kpi-icon">💳</div>
+          <div class="kpi-content">
+            <div class="kpi-label">Đang Chịu Lãi</div>
+            <div class="kpi-value">{{ formatCurrency(dashboard()!.outstandingWithInterest) }}đ</div>
+            <div class="kpi-hint">
+              Chi phí lãi: {{ formatCurrency(dashboard()!.monthlyInterestCost) }}đ/tháng
+            </div>
+          </div>
+        </div>
+
+        <!-- Due Soon -->
+        <div class="kpi-card due" [class.critical]="dashboard()!.overdueAmount > 0">
+          <div class="kpi-icon">⏰</div>
+          <div class="kpi-content">
+            <div class="kpi-label">Sắp Phải Trả</div>
+            <div class="kpi-value">{{ formatCurrency(dueAmount()) }}đ</div>
+            <div class="kpi-tabs">
+              <button 
+                [class.active]="selectedDueWindow() === 7" 
+                (click)="setDueWindow(7)">7 ngày</button>
+              <button 
+                [class.active]="selectedDueWindow() === 14" 
+                (click)="setDueWindow(14)">14 ngày</button>
+              <button 
+                [class.active]="selectedDueWindow() === 30" 
+                (click)="setDueWindow(30)">30 ngày</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Overdue -->
+        @if (dashboard()!.overdueAmount > 0) {
+          <div class="kpi-card overdue">
+            <div class="kpi-icon">🚨</div>
+            <div class="kpi-content">
+              <div class="kpi-label">Đã Quá Hạn</div>
+              <div class="kpi-value danger">{{ formatCurrency(dashboard()!.overdueAmount) }}đ</div>
+              <div class="kpi-hint">Cần thanh toán ngay!</div>
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Alerts -->
+    @if (dashboard()!.alerts.length > 0) {
+      <section class="alerts-section">
+        <h2>⚠️ Cảnh Báo</h2>
+        <div class="alerts-list">
+          @for (alert of dashboard()!.alerts; track alert.loanId) {
+            <div class="alert-item" [class]="alert.severity">
+              <span class="alert-icon">{{ getAlertIcon(alert.severity) }}</span>
+              <span class="alert-message">{{ alert.message }}</span>
+              @if (alert.loanId) {
+                <button class="btn-small" (click)="goToPayment(alert.loanId)">Thanh toán</button>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Optimization Suggestion -->
+    @if (hasOptimizationSuggestion()) {
+      <section class="optimization-section">
+        <h2>💡 Gợi Ý Tối Ưu</h2>
+        <div class="suggestion-card">
+          <div class="suggestion-icon">🎯</div>
+          <div class="suggestion-content">
+            <p class="suggestion-title">Trả gốc sớm để tiết kiệm lãi</p>
+            <p class="suggestion-detail">
+              Bạn có <strong>{{ formatCurrency(dashboard()!.optimization.earlyPaymentSuggestion.availableFreeCash) }}đ</strong> tiền dư.
+              Nếu trả <strong>{{ formatCurrency(dashboard()!.optimization.earlyPaymentSuggestion.suggestedPayment) }}đ</strong> 
+              cho khoản vay "{{ dashboard()!.optimization.earlyPaymentSuggestion.targetLoanName }}" 
+              (lãi {{ formatPercent(dashboard()!.optimization.earlyPaymentSuggestion.targetLoanRate) }}/năm):
+            </p>
+            <div class="savings-preview">
+              <div class="saving-item">
+                <span class="saving-label">Tiết kiệm/tháng:</span>
+                <span class="saving-value">{{ formatCurrency(dashboard()!.optimization.earlyPaymentSuggestion.monthlySavings) }}đ</span>
+              </div>
+              <div class="saving-item">
+                <span class="saving-label">Tiết kiệm/năm:</span>
+                <span class="saving-value highlight">{{ formatCurrency(dashboard()!.optimization.earlyPaymentSuggestion.annualSavings) }}đ</span>
+              </div>
+            </div>
+            <button class="btn-primary" (click)="goToPayment(dashboard()!.optimization.earlyPaymentSuggestion.targetLoanId!)">
+              Thực hiện ngay
+            </button>
+          </div>
+        </div>
+      </section>
+    }
+
+    <!-- Loan Priority -->
+    @if (dashboard()!.optimization.loanPriority.length > 1) {
+      <section class="priority-section">
+        <h2>📊 Ưu Tiên Trả Nợ</h2>
+        <p class="priority-hint">Nên ưu tiên trả khoản có lãi suất cao trước để tối ưu chi phí</p>
+        <div class="priority-list">
+          @for (loan of dashboard()!.optimization.loanPriority; track loan.loanId) {
+            <div class="priority-item" [class.top-priority]="loan.priority === 1">
+              <span class="priority-rank">#{{ loan.priority }}</span>
+              <span class="priority-name">{{ loan.loanName }}</span>
+              <span class="priority-rate">{{ formatPercent(loan.effectiveRate) }}/năm</span>
+              <span class="priority-amount">{{ formatCurrency(loan.principalRemaining) }}đ</span>
+              <button class="btn-small" (click)="goToPayment(loan.loanId)">Trả</button>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Loan List -->
+    <section class="loans-section">
+      <h2>📋 Danh Sách Khoản Vay</h2>
+      <div class="loans-table-wrapper">
+        <table class="loans-table">
+          <thead>
+            <tr>
+              <th>Tên</th>
+              <th>Người cho vay</th>
+              <th>Dư nợ</th>
+              <th>Lãi/tháng</th>
+              <th>Sắp trả</th>
+              <th>Trạng thái</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (loan of dashboard()!.byLoan; track loan.loanId) {
+              <tr [class.has-overdue]="loan.overdueAmount > 0">
+                <td>
+                  <a [routerLink]="['/loans', loan.loanId]">{{ loan.name }}</a>
+                </td>
+                <td>{{ loan.lenderName }}</td>
+                <td class="number">{{ formatCurrency(loan.principalRemaining) }}đ</td>
+                <td class="number">{{ formatCurrency(loan.monthlyInterest) }}đ</td>
+                <td class="number">
+                  @if (loan.nextDueAmount > 0) {
+                    {{ formatCurrency(loan.nextDueAmount) }}đ
+                    <br><small>{{ loan.nextDueDate }}</small>
+                  } @else {
+                    -
+                  }
+                </td>
+                <td>
+                  <span class="status-badge" [class]="loan.status">{{ getStatusBadge(loan.status) }}</span>
+                </td>
+                <td class="actions">
+                  <button class="btn-small primary" (click)="goToPayment(loan.loanId)">💸 Trả</button>
+                  <button class="btn-small" (click)="goToDetail(loan.loanId)">Chi tiết</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Metadata -->
+    <section class="metadata-section">
+      <div class="metadata-grid">
+        <div class="metadata-item">
+          <span class="meta-label">🏦 Bank Balance:</span>
+          <span class="meta-value">{{ formatCurrency(dashboard()!.metadata.bankBalance) }}đ</span>
+        </div>
+        <div class="metadata-item">
+          <span class="meta-label">💰 Free Cash:</span>
+          <span class="meta-value">{{ formatCurrency(dashboard()!.metadata.freeCash) }}đ</span>
+        </div>
+        <div class="metadata-item">
+          <span class="meta-label">💼 Quỹ Owner:</span>
+          <span class="meta-value">{{ formatCurrency(dashboard()!.metadata.ownerFundBalance) }}đ</span>
+        </div>
+        <div class="metadata-item">
+          <span class="meta-label">🕐 Cập nhật:</span>
+          <span class="meta-value">{{ dashboard()!.metadata.calculatedAt | date:'HH:mm dd/MM/yyyy' }}</span>
+        </div>
+      </div>
+    </section>
+  }
+</div>

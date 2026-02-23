@@ -1,0 +1,1171 @@
+﻿/**
+ * FUNDS SERVICE - Quáº£n lÃ½ 4 Quá»¹ theo Spec Chuáº©n
+ * ==================================================
+ * 
+ * KIáº¾N TRÃšC CÃC QUá»¸ (FUNDS ARCHITECTURE):
+ * 1. QUá»¸ Äáº¶T CHá»– (Committed Cash) - Tiá»n Ä‘Ã£ cÃ³ CHá»¦ nhÆ°ng CHÆ¯A chi
+ * 2. QUá»¸ ADS (Growth Capital) - Nguá»“n duy nháº¥t Ä‘Æ°á»£c phÃ©p cháº¡y ads
+ * 3. QUá»¸ Dá»° PHÃ’NG (Survival Buffer) - Äá»‡m chá»‘ng sá»‘c há»‡ thá»‘ng
+ * 4. QUá»¸ OWNER (Thu nháº­p) - Tiá»n thá»±c sá»± thuá»™c vá» chá»§
+ * 
+ * Má»–I QUá»¸ CÃ“ 5 Lá»šP Dá»® LIá»†U:
+ * - Flow (HÃ´m qua): Î” tÄƒng/giáº£m
+ * - Stock (LÅ©y káº¿): Sá»‘ dÆ° hiá»‡n táº¡i
+ * - Projection (7-15 ngÃ y): Æ¯á»›c tÃ­nh tÆ°Æ¡ng lai
+ * - Threshold (NgÆ°á»¡ng): Má»©c an toÃ n / cáº£nh bÃ¡o
+ * - Permission (Quyá»n): Ai Ä‘Æ°á»£c dÃ¹ng, Ä‘iá»u kiá»‡n nÃ o
+ */
+
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
+import { FundingSource, FundingSourceDocument } from './schemas/funding-source.schema';
+import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
+
+// ===== INTERFACES =====
+
+/**
+ * Dá»¯ liá»‡u 5 lá»›p cá»§a má»—i quá»¹
+ */
+export interface FundLayer {
+  // 1. Flow (HÃ´m qua)
+  flow: {
+    yesterday: number;        // Sá»‘ tiá»n tÄƒng/giáº£m hÃ´m qua
+    reason?: string;          // LÃ½ do tÄƒng/giáº£m
+  };
+  
+  // 2. Stock (LÅ©y káº¿)
+  stock: {
+    current: number;          // Sá»‘ dÆ° hiá»‡n táº¡i
+    asOf: Date;               // Thá»i Ä‘iá»ƒm tÃ­nh
+  };
+  
+  // 3. Projection (7-15 ngÃ y)
+  projection: {
+    days7: number;            // Æ¯á»›c tÃ­nh sau 7 ngÃ y
+    days15: number;           // Æ¯á»›c tÃ­nh sau 15 ngÃ y
+    trend: 'up' | 'down' | 'stable';
+    dailyAverage: number;     // Trung bÃ¬nh ngÃ y
+  };
+  
+  // 4. Threshold (NgÆ°á»¡ng)
+  threshold: {
+    min: number;              // NgÆ°á»¡ng tá»‘i thiá»ƒu
+    max: number;              // NgÆ°á»¡ng tá»‘i Ä‘a
+    status: 'safe' | 'warning' | 'danger';
+    daysUntilMin?: number;    // Sá»‘ ngÃ y Ä‘áº¿n ngÆ°á»¡ng min
+  };
+  
+  // 5. Permission (Quyá»n)
+  permission: {
+    canUse: boolean;          // CÃ³ Ä‘Æ°á»£c dÃ¹ng khÃ´ng
+    allowedFor: string[];     // DÃ¹ng cho viá»‡c gÃ¬
+    blockedFor: string[];     // KhÃ´ng Ä‘Æ°á»£c dÃ¹ng cho viá»‡c gÃ¬
+    approvalRequired: boolean; // Cáº§n duyá»‡t khÃ´ng
+  };
+}
+
+/**
+ * Quá»¹ Äáº·t Chá»— (Committed Cash)
+ */
+export interface CommittedCashFund extends FundLayer {
+  breakdown: {
+    unpaidLaborCost: number;      // LÆ°Æ¡ng chÆ°a tráº£
+    unpaidOtherCost: number;      // Chi phÃ­ váº­n hÃ nh chÆ°a thanh toÃ¡n
+    unpaidAgentCommission: number; // Hoa há»“ng Ä‘áº¡i lÃ½ chÆ°a tráº£
+  };
+}
+
+/**
+ * Quá»¹ Ads (Growth Capital)
+ */
+export interface AdsFund extends FundLayer {
+  breakdown: {
+    fromInitialCapital: number;   // 45% vá»‘n ban Ä‘áº§u
+    fromReinvestment: number;     // 45% lá»£i nhuáº­n tÃ¡i Ä‘áº§u tÆ°
+    adsSpent: number;             // ÄÃ£ chi ads
+    remaining: number;            // CÃ²n láº¡i
+  };
+  dailyBudget: {
+    suggested: number;            // Budget Ä‘á» xuáº¥t/ngÃ y
+    actual: number;               // Budget thá»±c táº¿/ngÃ y
+    daysRemaining: number;        // Sá»‘ ngÃ y cÃ³ thá»ƒ cháº¡y
+  };
+}
+
+/**
+ * Quá»¹ Dá»± PhÃ²ng (Survival Buffer)
+ */
+export interface SurvivalBufferFund extends FundLayer {
+  breakdown: {
+    fromProfit: number;           // 20% lá»£i nhuáº­n thuáº§n
+    used: number;                 // ÄÃ£ sá»­ dá»¥ng (emergency)
+    remaining: number;            // CÃ²n láº¡i
+  };
+  survivalDays: number;           // Sá»‘ ngÃ y sá»‘ng sÃ³t náº¿u dá»«ng ads
+}
+
+/**
+ * Quá»¹ Owner (Thu nháº­p)
+ */
+export interface OwnerFund extends FundLayer {
+  breakdown: {
+    fromProfit: number;           // 20% lá»£i nhuáº­n thuáº§n
+    withdrawn: number;            // ÄÃ£ rÃºt
+    retained: number;             // Giá»¯ láº¡i
+  };
+}
+
+/**
+ * Káº¿t quáº£ tÃ­nh toÃ¡n tá»•ng há»£p cÃ¡c quá»¹
+ */
+export interface FundsOverview {
+  // Doanh thu (Net Revenue)
+  revenue: {
+    total: number;                // Tá»•ng doanh thu = COD thÃ nh cÃ´ng - tiá»n nháº­p hÃ ng
+    realized: number;             // ÄÃ£ nháº­n tá»« NCC
+    pending: number;              // Äang chá» NCC thanh toÃ¡n
+    orderCount: number;           // Sá»‘ Ä‘Æ¡n
+  };
+  
+  // Vá»‘n ban Ä‘áº§u (Seed Capital) - NGUá»’N, khÃ´ng pháº£i quá»¹
+  seedCapital: {
+    total: number;                // Tá»•ng vá»‘n vay/cÃ¡ nhÃ¢n
+    allocated: number;            // ÄÃ£ phÃ¢n bá»•
+    remaining: number;            // CÃ²n láº¡i
+  };
+  
+  // 4 Quá»¹ cá»‘t lÃµi
+  committedCash: CommittedCashFund;   // Quá»¹ Äáº·t Chá»—
+  adsFund: AdsFund;                   // Quá»¹ Ads
+  survivalBuffer: SurvivalBufferFund; // Quá»¹ Dá»± PhÃ²ng
+  ownerFund: OwnerFund;               // Quá»¹ Owner
+  
+  // Lá»£i nhuáº­n thuáº§n (Ä‘á»ƒ phÃ¢n bá»•)
+  netProfit: {
+    realized: number;             // Lá»£i nhuáº­n thuáº§n Ä‘Ã£ thá»±c hiá»‡n
+    pending: number;              // Lá»£i nhuáº­n thuáº§n Ä‘ang chá»
+    total: number;                // Tá»•ng
+  };
+  
+  // CÃ´ng thá»©c kiá»ƒm tra
+  validation: {
+    bankBalance: number;          // Tổng tiền ngân hàng hiện tại
+    bankBalanceYesterday: number; // Số dư ngân hàng hôm qua
+    bankBalanceDelta: number;     // Biến động (hôm nay - hôm qua)
+    totalFunds: number;           // Tổng các quỹ
+    difference: number;           // Chênh lệch (phải ≈ 0)
+    isValid: boolean;             // Hệ thống có đúng không
+  };
+  
+  // CÃ´ng thá»©c cá»‘t lÃµi
+  formulas: {
+    tienTuDo: number;             // TienTuDo = TongTienNganHang â€“ QuyDatCho
+    adsBudgetAllowed: number;     // AdsBudgetAllowed = min(QuyAds, TienTuDo)
+  };
+  
+  calculatedAt: Date;
+}
+
+@Injectable()
+export class FundsService {
+  private readonly logger = new Logger(FundsService.name);
+
+  constructor(
+    @InjectModel(TestOrder2.name)
+    private readonly orderModel: Model<TestOrder2Document>,
+    @InjectModel(FundingSource.name)
+    private readonly fundingSourceModel: Model<FundingSourceDocument>,
+    @InjectModel(LoanContract.name)
+    private readonly loanModel: Model<LoanContractDocument>,
+  ) {}
+
+  /**
+   * TÃ­nh toÃ¡n tá»•ng há»£p cÃ¡c quá»¹ theo Spec chuáº©n
+   */
+  async computeFundsOverview(): Promise<FundsOverview> {
+    try {
+      // 1. TÃ­nh Doanh Thu (Net Revenue)
+      const revenue = await this.computeRevenue();
+      
+      // 2. Láº¥y Vá»‘n ban Ä‘áº§u (Seed Capital)
+      const seedCapital = await this.getSeedCapital();
+      
+      // 3. TÃ­nh Lá»£i nhuáº­n thuáº§n
+      const netProfit = await this.computeNetProfit();
+      
+      // 4. TÃ­nh Quá»¹ Äáº·t Chá»— (Committed Cash)
+      const committedCash = await this.computeCommittedCashFund();
+      
+      // 5. TÃ­nh Quá»¹ Ads (Growth Capital)
+      const adsFund = await this.computeAdsFund(seedCapital.total, netProfit.realized);
+      
+      // 6. TÃ­nh Quá»¹ Dá»± PhÃ²ng (Survival Buffer)
+      const survivalBuffer = await this.computeSurvivalBufferFund(netProfit.realized);
+      
+      // 7. TÃ­nh Quá»¹ Owner (Thu nháº­p)
+      const ownerFund = await this.computeOwnerFund(netProfit.realized);
+      
+      // 8. TÃ­nh Sá»‘ dÆ° ngÃ¢n hÃ ng thá»±c táº¿ (Bank Balance)
+      const bankBalance = await this.computeBankBalance(seedCapital.total);
+      
+      // 9. CÃ´ng thá»©c kiá»ƒm tra
+      const totalFunds = committedCash.stock.current + adsFund.stock.current + 
+                        survivalBuffer.stock.current + ownerFund.stock.current;
+      
+      // ===== 10. CÃ”NG THá»¨C Cá»T LÃ•I =====
+      
+      /**
+       * TIá»€N KHáº¢ Dá»¤NG (Free Cash / Tiá»n Tá»± Do)
+       * =====================================
+       * CÃ”NG THá»¨C: Tiá»n kháº£ dá»¥ng = Sá»‘ dÆ° ngÃ¢n hÃ ng - Tiá»n Ä‘Ã£ cam káº¿t
+       * 
+       * Ã nghÄ©a:
+       * - Sá»‘ tiá»n THá»°C Sá»° cÃ³ thá»ƒ chi tiÃªu ngay láº­p tá»©c
+       * - ÄÃ£ trá»« Ä‘i táº¥t cáº£ cÃ¡c khoáº£n pháº£i tráº£ (lÆ°Æ¡ng, NCC, Ä‘áº¡i lÃ½ chÆ°a thanh toÃ¡n)
+       * - ÄÃ¢y lÃ  sá»‘ tiá»n "an toÃ n" Ä‘á»ƒ quyáº¿t Ä‘á»‹nh chi tiÃªu má»›i
+       * 
+       * VÃ­ dá»¥:
+       * - Sá»‘ dÆ° ngÃ¢n hÃ ng: 850M
+       * - Tiá»n Ä‘Ã£ cam káº¿t: 320M (lÆ°Æ¡ng 150M + NCC chÆ°a tráº£ 120M + Ä‘áº¡i lÃ½ 50M)
+       * â†’ Tiá»n kháº£ dá»¥ng = 850M - 320M = 530M âœ… (CÃ³ thá»ƒ dÃ¹ng)
+       * 
+       * âš ï¸ LÆ¯U Ã: KhÃ´ng bao giá» chi vÆ°á»£t quÃ¡ sá»‘ tiá»n kháº£ dá»¥ng!
+       */
+      const tienTuDo = bankBalance - committedCash.stock.current;
+      
+      /**
+       * NGÃ‚N SÃCH ADS CHO PHÃ‰P (Ads Budget Allowed)
+       * ==========================================
+       * CÃ”NG THá»¨C: MIN(Quá»¹ Ads hiá»‡n cÃ³, Tiá»n kháº£ dá»¥ng)
+       * 
+       * Ã nghÄ©a:
+       * - NgÃ¢n sÃ¡ch ads khÃ´ng Ä‘Æ°á»£c vÆ°á»£t quÃ¡ 2 giá»›i háº¡n:
+       *   1. Quá»¹ ads cÃ²n láº¡i (Ä‘Ã£ Ä‘Æ°á»£c phÃ¢n bá»•)
+       *   2. Tiá»n kháº£ dá»¥ng (trÃ¡nh áº£nh hÆ°á»Ÿng nghÄ©a vá»¥ khÃ¡c)
+       * 
+       * VÃ­ dá»¥:
+       * - Quá»¹ Ads: 180M
+       * - Tiá»n kháº£ dá»¥ng: 530M
+       * â†’ Ads Budget Allowed = MIN(180M, 530M) = 180M
+       * 
+       * Náº¿u tiá»n kháº£ dá»¥ng < Quá»¹ Ads â†’ Bá»‹ giá»›i háº¡n bá»Ÿi dÃ²ng tiá»n!
+       */
+      const adsBudgetAllowed = Math.min(adsFund.stock.current, tienTuDo);
+
+      // ===== TÍNH BANK BALANCE YESTERDAY & DELTA =====
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(23, 59, 59, 999); // End of yesterday
+      
+      const bankBalanceYesterday = await this.computeBankBalanceAsOf(yesterday, seedCapital.total);
+      const bankBalanceDelta = bankBalance - bankBalanceYesterday;
+
+      return {
+        revenue,
+        seedCapital,
+        committedCash,
+        adsFund,
+        survivalBuffer,
+        ownerFund,
+        netProfit,
+        validation: {
+          bankBalance,
+          bankBalanceYesterday,
+          bankBalanceDelta,
+          totalFunds,
+          difference: Math.abs(bankBalance - totalFunds),
+          isValid: Math.abs(bankBalance - totalFunds) < 1000 // Tolerance 1000Ä‘
+        },
+        formulas: {
+          tienTuDo,
+          adsBudgetAllowed
+        },
+        calculatedAt: new Date()
+      };
+    } catch (err) {
+      this.logger.error('computeFundsOverview failed', err);
+      throw err;
+    }
+  }
+
+  /**
+   * DOANH THU = COD giao thÃ nh cÃ´ng - tiá»n nháº­p hÃ ng
+   * Chá»‰ ghi nháº­n khi: Ä‘Æ¡n Ä‘Ã£ chá»‘t + NCC Ä‘Ã£ thanh toÃ¡n
+   */
+  private async computeRevenue() {
+    // 1. Doanh thu Ä‘Ã£ realized (NCC Ä‘Ã£ thanh toÃ¡n)
+    const realizedResult = await this.orderModel.aggregate([
+      { 
+        $match: { 
+          orderStatus: 'Giao thÃ nh cÃ´ng',
+          supplierPaymentStatus: 'paid',
+          codAmount: { $exists: true, $gt: 0 }
+        } 
+      },
+      { 
+        $group: { 
+          _id: null,
+          // Doanh thu = COD - tiá»n nháº­p hÃ ng (supplierAppliedPrice * quantity)
+          totalRevenue: { 
+            $sum: { 
+              $subtract: [
+                { $ifNull: ['$codAmount', 0] },
+                { $multiply: [
+                  { $ifNull: ['$supplierAppliedPrice', 0] },
+                  { $ifNull: ['$quantity', 1] }
+                ]}
+              ]
+            }
+          },
+          count: { $sum: 1 }
+        } 
+      }
+    ]);
+    
+    const realizedRevenue = realizedResult?.[0]?.totalRevenue || 0;
+    const realizedCount = realizedResult?.[0]?.count || 0;
+
+    // 2. Doanh thu pending (Ä‘Æ¡n thÃ nh cÃ´ng nhÆ°ng NCC chÆ°a thanh toÃ¡n)
+    const pendingResult = await this.orderModel.aggregate([
+      { 
+        $match: { 
+          orderStatus: 'Giao thÃ nh cÃ´ng',
+          supplierPaymentStatus: { $ne: 'paid' },
+          codAmount: { $exists: true, $gt: 0 }
+        } 
+      },
+      { 
+        $group: { 
+          _id: null,
+          totalRevenue: { 
+            $sum: { 
+              $subtract: [
+                { $ifNull: ['$codAmount', 0] },
+                { $multiply: [
+                  { $ifNull: ['$supplierAppliedPrice', 0] },
+                  { $ifNull: ['$quantity', 1] }
+                ]}
+              ]
+            }
+          },
+          count: { $sum: 1 }
+        } 
+      }
+    ]);
+    
+    const pendingRevenue = pendingResult?.[0]?.totalRevenue || 0;
+    const pendingCount = pendingResult?.[0]?.count || 0;
+
+    return {
+      total: realizedRevenue + pendingRevenue,
+      realized: realizedRevenue,
+      pending: pendingRevenue,
+      orderCount: realizedCount + pendingCount
+    };
+  }
+
+  /**
+   * Vá»N BAN Äáº¦U (Seed Capital)
+   * = Vá»‘n vay + Vá»‘n cÃ¡ nhÃ¢n bá» vÃ o
+   */
+  private async getSeedCapital() {
+    // 1. Lấy vốn từ LoanContract (khoản vay)
+    const loanResult = await this.loanModel.aggregate([
+      { $match: { status: { $in: ['active', 'draft'] } } },
+      { $group: { _id: null, total: { $sum: '$principal' } } }
+    ]);
+    const loanTotal = loanResult?.[0]?.total || 0;
+    
+    // 2. Lấy vốn từ FundingSource
+    const fundingSources = await this.fundingSourceModel.aggregate([
+      { $match: { status: 'active' } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$principal' },
+          allocated: { $sum: { $ifNull: ['$allocatedAmount', 0] } }
+        }
+      }
+    ]);
+
+    const fundingTotal = fundingSources?.[0]?.total || 0;
+    const allocated = fundingSources?.[0]?.allocated || 0;
+
+    return {
+      total: loanTotal + fundingTotal,
+      allocated,
+      remaining: loanTotal + fundingTotal - allocated
+    };
+  } },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$principal' },
+          allocated: { $sum: { $ifNull: ['$allocatedAmount', 0] } }
+        } 
+      }
+    ]);
+    
+    const total = fundingSources?.[0]?.total || 0;
+    const allocated = fundingSources?.[0]?.allocated || 0;
+    
+    return {
+      total,
+      allocated,
+      remaining: total - allocated
+    };
+  }
+
+  /**
+   * Lá»¢I NHUáº¬N THUáº¦N
+   */
+  private async computeNetProfit() {
+    // 1. Realized (Ä‘Ã£ thanh toÃ¡n cáº£ 2 bÃªn)
+    const realizedResult = await this.orderModel.aggregate([
+      { 
+        $match: { 
+          realizedAt: { $exists: true, $ne: null },
+          realizedNetProfit: { $exists: true }
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$realizedNetProfit' }
+        } 
+      }
+    ]);
+    const realized = realizedResult?.[0]?.total || 0;
+
+    // 2. Pending (chá» thanh toÃ¡n)
+    const pendingResult = await this.orderModel.aggregate([
+      { 
+        $match: { 
+          orderStatus: { $in: ['Giao thÃ nh cÃ´ng', 'HÃ ng hoÃ n'] },
+          realizedAt: { $in: [null, undefined] },
+          netProfit: { $exists: true }
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$netProfit' }
+        } 
+      }
+    ]);
+    const pending = pendingResult?.[0]?.total || 0;
+
+    return {
+      realized,
+      pending,
+      total: realized + pending
+    };
+  }
+
+  /**
+   * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   * Sá» DÆ¯ NGÃ‚N HÃ€NG (Bank Balance)
+   * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   * 
+   * Äáº I DIá»†N CHO: Sá»‘ tiá»n THá»°C Táº¾ trong tÃ i khoáº£n ngÃ¢n hÃ ng táº¡i thá»i Ä‘iá»ƒm hiá»‡n táº¡i
+   * 
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * CÃ”NG THá»¨C Tá»”NG QUÃT:
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * 
+   * Bank Balance = Vá»‘n Äáº§u VÃ o + Doanh Thu Thá»±c Táº¿ - Chi PhÃ­ ÄÃ£ Chi
+   * 
+   * Hay:
+   * Bank Balance = Initial Capital + Total Revenue - Total Actual Costs
+   * 
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * CHI TIáº¾T Tá»ªNG THÃ€NH PHáº¦N:
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * 
+   * 1ï¸âƒ£ TIá»€N VÃ€O (+):
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ a) Initial Capital (Vá»‘n Ban Äáº§u)                                    â”‚
+   *    â”‚    - Nguá»“n: funding_sources collection                              â”‚
+   *    â”‚    - Äiá»u kiá»‡n: type = 'initial_capital'                            â”‚
+   *    â”‚    - Ã nghÄ©a: Vá»‘n gá»‘c bá» ra lÃºc báº¯t Ä‘áº§u kinh doanh                 â”‚
+   *    â”‚    - VÃ­ dá»¥: Vay ngÃ¢n hÃ ng 1 tá»·, vá»‘n tá»± cÃ³ 500M â†’ Total: 1.5 tá»·   â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   *    
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ b) Total Revenue (Doanh Thu Thá»±c Táº¿)                                â”‚
+   *    â”‚    - Nguá»“n: testorder2 collection                                   â”‚
+   *    â”‚    - Äiá»u kiá»‡n: supplierPaymentStatus = 'paid'                      â”‚
+   *    â”‚    - Field: SUM(supplierPaidAmount)                                 â”‚
+   *    â”‚    - Ã nghÄ©a: Tá»•ng tiá»n THá»°C Sá»° nháº­n Ä‘Æ°á»£c tá»« Ä‘Æ¡n hÃ ng              â”‚
+   *    â”‚    - Logic: Chá»‰ tÃ­nh Ä‘Æ¡n Ä‘Ã£ thanh toÃ¡n cho NCC (nghÄ©a lÃ             â”‚
+   *    â”‚             khÃ¡ch hÃ ng Ä‘Ã£ tráº£ tiá»n cho ta)                          â”‚
+   *    â”‚    - VÃ­ dá»¥:                                                         â”‚
+   *    â”‚      * ÄÆ¡n #1: KhÃ¡ch tráº£ 100k â†’ ÄÃ£ thanh toÃ¡n NCC â†’ +100k âœ…       â”‚
+   *    â”‚      * ÄÆ¡n #2: KhÃ¡ch tráº£ 200k â†’ ChÆ°a tráº£ NCC â†’ KHÃ”NG TÃNH âŒ       â”‚
+   *    â”‚      â†’ Revenue = 100k                                               â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   * 
+   * 2ï¸âƒ£ TIá»€N RA (-):
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ a) Supplier Cost Paid (Chi PhÃ­ NCC ÄÃ£ Tráº£)                         â”‚
+   *    â”‚    - Nguá»“n: testorder2 collection                                   â”‚
+   *    â”‚    - Äiá»u kiá»‡n: supplierPaymentStatus = 'paid'                      â”‚
+   *    â”‚    - CÃ´ng thá»©c: SUM(supplierQuote Ã— quantity)                       â”‚
+   *    â”‚    - Ã nghÄ©a: Tiá»n ÄÃƒ CHUYá»‚N cho nhÃ  cung cáº¥p                       â”‚
+   *    â”‚    - VÃ­ dá»¥:                                                         â”‚
+   *    â”‚      * ÄÆ¡n #1: Mua hÃ ng 70k â†’ ÄÃ£ tráº£ NCC â†’ -70k âœ…                 â”‚
+   *    â”‚      * ÄÆ¡n #2: Mua hÃ ng 50k â†’ ChÆ°a tráº£ â†’ KHÃ”NG TRá»ª âŒ              â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   *    
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ b) Agent Commission Paid (Hoa Há»“ng Äáº¡i LÃ½ ÄÃ£ Tráº£)                  â”‚
+   *    â”‚    - Nguá»“n: testorder2 collection                                   â”‚
+   *    â”‚    - Äiá»u kiá»‡n: agentPaymentStatus = 'paid'                         â”‚
+   *    â”‚    - CÃ´ng thá»©c: SUM(agentQuote Ã— quantity)                          â”‚
+   *    â”‚    - Ã nghÄ©a: Tiá»n ÄÃƒ TRáº¢ cho Ä‘áº¡i lÃ½/sales                          â”‚
+   *    â”‚    - VÃ­ dá»¥: Äáº¡i lÃ½ A Ä‘Æ°á»£c hoa há»“ng 10k/Ä‘Æ¡n â†’ ÄÃ£ tráº£ â†’ -10k        â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   *    
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ c) Labor Cost Paid (LÆ°Æ¡ng ÄÃ£ Tráº£)                                   â”‚
+   *    â”‚    - Nguá»“n: laborstatements collection                              â”‚
+   *    â”‚    - Äiá»u kiá»‡n: status = 'closed'                                   â”‚
+   *    â”‚    - CÃ´ng thá»©c: SUM(openingBalance + periodCost + bonus - deduction)â”‚
+   *    â”‚    - Ã nghÄ©a: LÆ°Æ¡ng ÄÃƒ CHUYá»‚N CHO nhÃ¢n viÃªn                         â”‚
+   *    â”‚    - VÃ­ dá»¥: ThÃ¡ng 1 Ä‘Ã£ tráº£ lÆ°Æ¡ng 50M â†’ -50M                         â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   *    
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ d) Other Cost Confirmed (Chi PhÃ­ KhÃ¡c ÄÃ£ Chi)                       â”‚
+   *    â”‚    - Nguá»“n: othercosts collection                                   â”‚
+   *    â”‚    - Äiá»u kiá»‡n: isConfirmed = true                                  â”‚
+   *    â”‚    - Field: SUM(amount)                                             â”‚
+   *    â”‚    - Ã nghÄ©a: Chi phÃ­ vÄƒn phÃ²ng, Ä‘iá»‡n nÆ°á»›c... ÄÃƒ THANH TOÃN        â”‚
+   *    â”‚    - Workflow:                                                      â”‚
+   *    â”‚      * isConfirmed=false â†’ ChÆ°a chi, chá»‰ cam káº¿t                    â”‚
+   *    â”‚      * isConfirmed=true â†’ ÄÃƒ CHI, trá»« vÃ o bank balance             â”‚
+   *    â”‚    - VÃ­ dá»¥: Tiá»n Ä‘iá»‡n 5M Ä‘Ã£ thanh toÃ¡n â†’ -5M                        â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   *    
+   *    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   *    â”‚ e) Ads Spent (Chi PhÃ­ Quáº£ng CÃ¡o)                                    â”‚
+   *    â”‚    - Nguá»“n: testorder2.advertisingCost                              â”‚
+   *    â”‚    - Field: SUM(advertisingCost)                                    â”‚
+   *    â”‚    - Ã nghÄ©a: Tá»•ng chi phÃ­ ads Ä‘Ã£ phÃ¡t sinh tá»« Ä‘Æ¡n hÃ ng             â”‚
+   *    â”‚    - VÃ­ dá»¥: Cháº¡y ads cho 10 Ä‘Æ¡n, má»—i Ä‘Æ¡n cost 50k â†’ -500k          â”‚
+   *    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+   * 
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * VÃ Dá»¤ TÃNH TOÃN THá»°C Táº¾:
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * 
+   * Vá»‘n ban Ä‘áº§u:           1,000,000,000â‚«  (1 tá»·)
+   * (+) Doanh thu:           500,000,000â‚«  (KhÃ¡ch Ä‘Ã£ tráº£, NCC Ä‘Ã£ thanh toÃ¡n)
+   * (-) Chi NCC:            -300,000,000â‚«  (ÄÃ£ chuyá»ƒn tiá»n cho NCC)
+   * (-) Hoa há»“ng Ä‘áº¡i lÃ½:     -50,000,000â‚«  (ÄÃ£ tráº£ sales)
+   * (-) LÆ°Æ¡ng:              -100,000,000â‚«  (ÄÃ£ tráº£ nhÃ¢n viÃªn)
+   * (-) Chi phÃ­ khÃ¡c:        -20,000,000â‚«  (Äiá»‡n, nÆ°á»›c, vÄƒn phÃ²ng Ä‘Ã£ thanh toÃ¡n)
+   * (-) Chi phÃ­ ads:         -80,000,000â‚«  (ÄÃ£ cháº¡y ads)
+   * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   * = Sá»‘ dÆ° ngÃ¢n hÃ ng:       950,000,000â‚« âœ…
+   * 
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * NGUYÃŠN Táº®C QUAN TRá»ŒNG:
+   * â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+   * 
+   * âœ… CHá»ˆ TÃNH: Giao dá»‹ch ÄÃƒ HOÃ€N THÃ€NH (tiá»n Ä‘Ã£ vÃ o/ra thá»±c táº¿)
+   * âŒ KHÃ”NG TÃNH: Khoáº£n dá»± kiáº¿n, chÆ°a thanh toÃ¡n (â†’ thuá»™c Committed Cash)
+   * 
+   * Bank Balance = "Tiá»n THáº¬T trong ngÃ¢n hÃ ng lÃºc nÃ y"
+   * â‰  Tiá»n dá»± kiáº¿n cÃ³
+   * â‰  Tiá»n sáº½ thu
+   * â‰  Lá»£i nhuáº­n Æ°á»›c tÃ­nh
+   * 
+   * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   * ═══════════════════════════════════════════════════════════════════════════
+   */
+  private async computeBankBalance(seedCapital: number): Promise<number> {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📌 ĐỊNH NGHĨA CHUẨN: TIỀN TRONG NGÂN HÀNG = TIỀN VÀO - TIỀN RA
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // ✅ TIỀN ĐÃ VÀO (Cash In) - BẤT KỲ khoản tiền nào ĐÃ THỰC SỰ vào tài khoản:
+    // ──────────────────────────────────────────────────────────────────────────
+    // 1️⃣ VỐN BAN ĐẦU / TIỀN VAY (seedCapital)
+    //    - Tiền cá nhân nạp vào
+    //    - Tiền vay ngân hàng / đối tác
+    //    ✅ Làm tăng bankBalance
+    //    ❌ KHÔNG phải doanh thu, KHÔNG phải lợi nhuận
+    //
+    // 2️⃣ DOANH THU ĐÃ THỰC HIỆN (supplierPaidAmount)
+    //    - Tiền NCC chuyển cho công ty
+    //    - ĐÃ TRỪ tiền nhập hàng (NCC giữ lại phần của họ)
+    //    ✅ Làm tăng bankBalance
+    //    ✅ Là doanh thu (net revenue)
+    //    ❌ KHÔNG phải COD (COD là tiền khách trả NCC, không phải tiền vào công ty)
+    //
+    // ❌ KHÔNG ĐƯỢC TÍNH LÀ "TIỀN ĐÃ VÀO":
+    //    - COD khách trả NCC
+    //    - Doanh thu kế toán chưa thu tiền
+    //    - Doanh thu dự kiến
+    //    - Đơn chưa chốt
+    //    - Công nợ phải thu
+    //
+    // ✅ TIỀN ĐÃ RA (Cash Out) - BẤT KỲ khoản tiền nào ĐÃ THỰC SỰ ra khỏi tài khoản:
+    // ──────────────────────────────────────────────────────────────────────────
+    // 1. Chi phí Ads đã chi
+    // 2. Trả lương
+    // 3. Trả chi phí khác (điện, nước, văn phòng...)
+    // 4. Thanh toán cho đại lý (hoa hồng agent)
+    // 5. Owner Fund đã rút (tiền chủ rút ra)
+    //
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 💰 TIỀN VÀO #2: DOANH THU = supplierPaidAmount (Tiền NCC gửi về)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const revenueResult = await this.orderModel.aggregate([
+      {
+        $match: {
+          supplierPaymentStatus: 'paid',
+          supplierPaidAmount: { $exists: true }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$supplierPaidAmount' }
+        }
+      }
+    ]);
+    const totalRevenue = revenueResult?.[0]?.totalRevenue || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 💸 TIỀN RA #4: HOA HỒNG ĐẠI LÝ ĐÃ TRẢ
+    // ═══════════════════════════════════════════════════════════════════════════
+    const agentCommissionResult = await this.orderModel.aggregate([
+      {
+        $match: {
+          agentPaymentStatus: 'paid',
+          agentPaidAmount: { $exists: true, $gt: 0 }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$agentPaidAmount' }
+        }
+      }
+    ]);
+    const agentCommissionPaid = agentCommissionResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 💸 TIỀN RA #2: LƯƠNG ĐÃ TRẢ (từ laborstatements với status='closed')
+    // ═══════════════════════════════════════════════════════════════════════════
+    const laborResult = await this.orderModel.db.collection('laborstatements').aggregate([
+      { $match: { status: 'closed' } },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $add: [
+                { $ifNull: ['$openingBalance', 0] },
+                { $ifNull: ['$periodCost', 0] },
+                { $ifNull: ['$bonus', 0] },
+                { $multiply: [{ $ifNull: ['$deduction', 0] }, -1] }
+              ]
+            }
+          }
+        }
+      }
+    ]).toArray();
+    const laborCostPaid = laborResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 💸 TIỀN RA #3: CHI PHÍ KHÁC ĐÃ XÁC NHẬN (isConfirmed = true)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const otherCostResult = await this.orderModel.db.collection('othercosts').aggregate([
+      { $match: { isConfirmed: true } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]).toArray();
+    const otherCostConfirmed = otherCostResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 💸 TIỀN RA #1: CHI PHÍ QUẢNG CÁO (từ advertisingcosts collection)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const adsSpentResult = await this.orderModel.db.collection('advertisingcosts').aggregate([
+      { $group: { _id: null, total: { $sum: '$spend' } } }
+    ]).toArray();
+    const adsSpent = adsSpentResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 💸 TIỀN RA #5: OWNER FUND ĐÃ RÚT (từ capital_allocation_snapshots)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const ownerWithdrawnResult = await this.orderModel.db.collection('capital_allocation_snapshots').aggregate([
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$personalIncomeWithdrawn', 0] } } } }
+    ]).toArray();
+    const ownerWithdrawn = ownerWithdrawnResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🏦 TÍNH SỐ DƯ NGÂN HÀNG
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Công thức: Bank Balance = TIỀN VÀO - TIỀN RA
+    //
+    // 💰 TIỀN VÀO:
+    // - Vốn ban đầu / Tiền vay (seedCapital)
+    // - Doanh thu đã thực hiện (supplierPaidAmount - tiền NCC gửi về)
+    //
+    // 💸 TIỀN RA:
+    // - Chi phí Ads đã chi
+    // - Trả lương
+    // - Trả chi phí khác
+    // - Thanh toán cho đại lý (hoa hồng agent)
+    // - Owner Fund đã rút
+    // ═══════════════════════════════════════════════════════════════════════════
+    const totalCashIn = seedCapital + totalRevenue;
+    const totalCashOut = adsSpent + laborCostPaid + otherCostConfirmed + agentCommissionPaid + ownerWithdrawn;
+    const bankBalance = totalCashIn - totalCashOut;
+
+    this.logger.log(`💰 Bank Balance Calculation (Tiền Trong Ngân Hàng):`);
+    this.logger.log(`  ────────── TIỀN VÀO ──────────`);
+    this.logger.log(`  Vốn ban đầu (Loan + Funding): ${seedCapital.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  Doanh thu (NCC gửi về): ${totalRevenue.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  → Tổng tiền vào: ${totalCashIn.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  ────────── TIỀN RA ──────────`);
+    this.logger.log(`  Chi phí Ads: -${adsSpent.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  Trả lương: -${laborCostPaid.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  Chi phí khác: -${otherCostConfirmed.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  Hoa hồng đại lý: -${agentCommissionPaid.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  Owner rút: -${ownerWithdrawn.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  → Tổng tiền ra: -${totalCashOut.toLocaleString('vi-VN')}đ`);
+    this.logger.log(`  ──────────────────────────────────────`);
+    this.logger.log(`  🏦 SỐ DƯ NGÂN HÀNG: ${bankBalance.toLocaleString('vi-VN')}đ`);
+
+    return Math.max(0, bankBalance);
+  }
+
+  /**
+   * TÍNH SỐ DƯ NGÂN HÀNG TẠI THỜI ĐIỂM CỤ THỂ
+   * Dùng để tính Bank Balance hôm qua, hoặc bất kỳ ngày nào trong quá khứ
+   */
+  private async computeBankBalanceAsOf(endDate: Date, seedCapital: number): Promise<number> {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DOANH THU = supplierPaidAmount (đã thanh toán TRƯỚC endDate)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const revenueResult = await this.orderModel.aggregate([
+      {
+        $match: {
+          supplierPaymentStatus: 'paid',
+          supplierPaidAt: { $lte: endDate },
+          supplierPaidAmount: { $exists: true }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$supplierPaidAmount' }
+        }
+      }
+    ]);
+    const totalRevenue = revenueResult?.[0]?.totalRevenue || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HOA HỒNG ĐẠI LÝ ĐÃ TRẢ (trước endDate)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const agentCommissionResult = await this.orderModel.aggregate([
+      {
+        $match: {
+          agentPaymentStatus: 'paid',
+          agentPaidAt: { $lte: endDate },
+          agentPaidAmount: { $exists: true, $gt: 0 }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$agentPaidAmount' }
+        }
+      }
+    ]);
+    const agentCommissionPaid = agentCommissionResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LƯƠNG ĐÃ TRẢ (kỳ lương đã đóng trước endDate)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const laborResult = await this.orderModel.db.collection('laborstatements').aggregate([
+      { 
+        $match: { 
+          status: 'closed',
+          closedAt: { $lte: endDate }
+        } 
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $add: [
+                { $ifNull: ['$openingBalance', 0] },
+                { $ifNull: ['$periodCost', 0] },
+                { $ifNull: ['$bonus', 0] },
+                { $multiply: [{ $ifNull: ['$deduction', 0] }, -1] }
+              ]
+            }
+          }
+        }
+      }
+    ]).toArray();
+    const laborCostPaid = laborResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CHI PHÍ KHÁC ĐÃ XÁC NHẬN (trước endDate)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const otherCostResult = await this.orderModel.db.collection('othercosts').aggregate([
+      { 
+        $match: { 
+          isConfirmed: true,
+          confirmedAt: { $lte: endDate }
+        } 
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]).toArray();
+    const otherCostConfirmed = otherCostResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CHI PHÍ QUẢNG CÁO (trước endDate)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const adsSpentResult = await this.orderModel.db.collection('advertisingcosts').aggregate([
+      { 
+        $match: {
+          date: { $lte: endDate }
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$spend' } } }
+    ]).toArray();
+    const adsSpent = adsSpentResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OWNER FUND ĐÃ RÚT (trước endDate)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const ownerWithdrawnResult = await this.orderModel.db.collection('capital_allocation_snapshots').aggregate([
+      { 
+        $match: {
+          date: { $lte: endDate }
+        }
+      },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$personalIncomeWithdrawn', 0] } } } }
+    ]).toArray();
+    const ownerWithdrawn = ownerWithdrawnResult?.[0]?.total || 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TÍNH SỐ DƯ NGÂN HÀNG TẠI endDate
+    // ═══════════════════════════════════════════════════════════════════════════
+    const totalCashIn = seedCapital + totalRevenue;
+    const totalCashOut = adsSpent + laborCostPaid + otherCostConfirmed + agentCommissionPaid + ownerWithdrawn;
+    const bankBalance = totalCashIn - totalCashOut;
+
+    return Math.max(0, bankBalance);
+  }
+
+  private async computeCommittedCashFund(): Promise<CommittedCashFund> {
+    // 1. LÆ°Æ¡ng chÆ°a tráº£ - Tá»« LaborStatement
+    const unpaidLaborResult = await this.orderModel.db.collection('laborstatements').aggregate([
+      { $match: { status: { $in: ['draft', 'open'] } } },
+      { $group: { _id: null, total: { $sum: '$closingBalance' } } }
+    ]).toArray();
+    const unpaidLaborCost = unpaidLaborResult?.[0]?.total || 0;
+
+    // 2. Chi phÃ­ váº­n hÃ nh CHÆ¯A THANH TOÃN (isConfirmed = false)
+    // â†’ ÄÃ£ phÃ¡t sinh nghÄ©a vá»¥ nhÆ°ng chÆ°a chi thá»±c táº¿
+    // â†’ Ghi nháº­n vÃ o Committed Cash Ä‘á»ƒ "Ä‘áº·t chá»—" tiá»n
+    const unpaidOtherResult = await this.orderModel.db.collection('othercosts').aggregate([
+      { $match: { isConfirmed: { $ne: true } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]).toArray();
+    const unpaidOtherCost = unpaidOtherResult?.[0]?.total || 0;
+
+    // 3. Hoa há»“ng Ä‘áº¡i lÃ½ chÆ°a tráº£
+    const unpaidAgentResult = await this.orderModel.aggregate([
+      { 
+        $match: { 
+          orderStatus: { $in: ['Giao thÃ nh cÃ´ng', 'HÃ ng hoÃ n'] },
+          agentPaymentStatus: 'pending',
+          agentQuote: { $gt: 0 }
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] } }
+        } 
+      }
+    ]);
+    const unpaidAgentCommission = unpaidAgentResult?.[0]?.total || 0;
+
+    const totalCommitted = unpaidLaborCost + unpaidOtherCost + unpaidAgentCommission;
+
+    // TÃ­nh Flow (hÃ´m qua) - cáº§n snapshot trÆ°á»›c
+    const yesterday = await this.getYesterdayCommitted();
+    const flowYesterday = totalCommitted - yesterday;
+
+    return {
+      breakdown: {
+        unpaidLaborCost,
+        unpaidOtherCost,
+        unpaidAgentCommission
+      },
+      flow: {
+        yesterday: flowYesterday,
+        reason: flowYesterday > 0 ? 'NghÄ©a vá»¥ tÄƒng' : flowYesterday < 0 ? 'ÄÃ£ thanh toÃ¡n' : 'KhÃ´ng Ä‘á»•i'
+      },
+      stock: {
+        current: totalCommitted,
+        asOf: new Date()
+      },
+      projection: {
+        days7: totalCommitted * 1.1, // Æ¯á»›c tÃ­nh tÄƒng 10%
+        days15: totalCommitted * 1.2,
+        trend: flowYesterday > 0 ? 'up' : flowYesterday < 0 ? 'down' : 'stable',
+        dailyAverage: Math.abs(flowYesterday)
+      },
+      threshold: {
+        min: 0,
+        max: totalCommitted * 2, // Cáº£nh bÃ¡o náº¿u vÆ°á»£t 2x
+        status: totalCommitted < 50000000 ? 'safe' : totalCommitted < 100000000 ? 'warning' : 'danger',
+        daysUntilMin: undefined
+      },
+      permission: {
+        canUse: false,
+        allowedFor: ['Tráº£ lÆ°Æ¡ng', 'Tráº£ chi phÃ­ váº­n hÃ nh', 'Tráº£ hoa há»“ng Ä‘áº¡i lÃ½'],
+        blockedFor: ['Cháº¡y ads', 'Chi tiÃªu cÃ¡ nhÃ¢n', 'Äáº§u tÆ°'],
+        approvalRequired: true
+      }
+    };
+  }
+
+  /**
+   * QUá»¸ ADS (Growth Capital)
+   * = 45% vá»‘n ban Ä‘áº§u + 45% lá»£i nhuáº­n thuáº§n tÃ¡i Ä‘áº§u tÆ° - ads Ä‘Ã£ chi
+   */
+  private async computeAdsFund(seedCapital: number, realizedProfit: number): Promise<AdsFund> {
+    // TÃ­nh nguá»“n
+    const fromInitialCapital = Math.round(seedCapital * 0.45);
+    const fromReinvestment = Math.round(realizedProfit * 0.45);
+    
+    // Ads Ä‘Ã£ chi (tá»•ng lÅ©y káº¿ tá»« Ä‘Æ¡n hÃ ng)
+    const adsSpentResult = await this.orderModel.aggregate([
+      { 
+        $match: { 
+          advertisingCost: { $exists: true, $gt: 0 }
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$advertisingCost' }
+        } 
+      }
+    ]);
+    const adsSpent = adsSpentResult?.[0]?.total || 0;
+    
+    const totalAvailable = fromInitialCapital + fromReinvestment;
+    const remaining = Math.max(0, totalAvailable - adsSpent);
+
+    // ===== CHI PHÃ ADS NGÃ€Y HÃ”M QUA (tá»« collection advertisingcosts) =====
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+    const endOfYesterday = new Date(yesterday);
+    endOfYesterday.setHours(23, 59, 59, 999);
+
+    const yesterdayResult = await this.orderModel.db.collection('advertisingcosts').aggregate([
+      { 
+        $match: { 
+          date: { $gte: yesterday, $lte: endOfYesterday }
+        }
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$spentAmount' }
+        } 
+      }
+    ]).toArray();
+    const yesterdaySpent = yesterdayResult?.[0]?.total || 0;
+
+    // ===== TRUNG BÃŒNH 7 NGÃ€Y (Ä‘á»ƒ tÃ­nh projection) =====
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const dailyAdsResult = await this.orderModel.db.collection('advertisingcosts').aggregate([
+      { 
+        $match: { 
+          date: { $gte: sevenDaysAgo }
+        }
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$spentAmount' }, 
+          days: { $addToSet: '$date' } 
+        } 
+      }
+    ]).toArray();
+    const avgDailySpend = dailyAdsResult?.[0] 
+      ? dailyAdsResult[0].total / (dailyAdsResult[0].days?.length || 7)
+      : 0;
+    const daysRemaining = avgDailySpend > 0 ? Math.floor(remaining / avgDailySpend) : 999;
+
+    return {
+      breakdown: {
+        fromInitialCapital,
+        fromReinvestment,
+        adsSpent,
+        remaining
+      },
+      flow: {
+        yesterday: -Math.abs(yesterdaySpent), // Chi phÃ­ ads thá»±c táº¿ ngÃ y hÃ´m qua (luÃ´n Ã¢m)
+        reason: `Chi phÃ­ quáº£ng cÃ¡o ngÃ y hÃ´m qua: ${yesterdaySpent.toLocaleString('vi-VN')} Ä‘`
+      },
+      stock: {
+        current: remaining,
+        asOf: new Date()
+      },
+      projection: {
+        days7: remaining - avgDailySpend * 7,
+        days15: remaining - avgDailySpend * 15,
+        trend: 'down',
+        dailyAverage: avgDailySpend
+      },
+      threshold: {
+        min: avgDailySpend * 3, // Tá»‘i thiá»ƒu 3 ngÃ y
+        max: totalAvailable,
+        status: daysRemaining >= 7 ? 'safe' : daysRemaining >= 3 ? 'warning' : 'danger',
+        daysUntilMin: daysRemaining
+      },
+      permission: {
+        canUse: true,
+        allowedFor: ['Cháº¡y ads Facebook', 'Cháº¡y ads Google', 'Cháº¡y ads TikTok'],
+        blockedFor: ['Tráº£ lÆ°Æ¡ng', 'Chi tiÃªu cÃ¡ nhÃ¢n', 'Tráº£ hoa há»“ng'],
+        approvalRequired: false
+      },
+      dailyBudget: {
+        suggested: Math.min(remaining / 7, avgDailySpend * 1.2), // KhÃ´ng tÄƒng quÃ¡ 20%
+        actual: avgDailySpend,
+        daysRemaining
+      }
+    };
+  }
+
+  /**
+   * QUá»¸ Dá»° PHÃ’NG (Survival Buffer)
+   * = 20% lá»£i nhuáº­n thuáº§n
+   */
+  private async computeSurvivalBufferFund(realizedProfit: number): Promise<SurvivalBufferFund> {
+    const fromProfit = Math.round(realizedProfit * 0.20);
+    const used = 0; // TODO: Track emergency usage
+    const remaining = fromProfit - used;
+
+    // TÃ­nh sá»‘ ngÃ y sá»‘ng sÃ³t
+    const dailyCostResult = await this.orderModel.db.collection('othercosts').aggregate([
+      { 
+        $match: { 
+          date: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$amount' }, days: { $addToSet: '$date' } } }
+    ]).toArray();
+    const avgDailyCost = dailyCostResult?.[0] 
+      ? dailyCostResult[0].total / (dailyCostResult[0].days?.length || 30)
+      : 0;
+    const survivalDays = avgDailyCost > 0 ? Math.floor(remaining / avgDailyCost) : 999;
+
+    return {
+      breakdown: {
+        fromProfit,
+        used,
+        remaining
+      },
+      flow: {
+        yesterday: 0,
+        reason: 'KhÃ´ng sá»­ dá»¥ng'
+      },
+      stock: {
+        current: remaining,
+        asOf: new Date()
+      },
+      projection: {
+        days7: remaining,
+        days15: remaining,
+        trend: 'stable',
+        dailyAverage: 0
+      },
+      threshold: {
+        min: avgDailyCost * 14, // Tá»‘i thiá»ƒu 2 tuáº§n
+        max: avgDailyCost * 30, // Tá»‘i Ä‘a 1 thÃ¡ng
+        status: survivalDays >= 14 ? 'safe' : survivalDays >= 7 ? 'warning' : 'danger',
+        daysUntilMin: survivalDays
+      },
+      permission: {
+        canUse: false, // Máº·c Ä‘á»‹nh khÃ´ng Ä‘Æ°á»£c dÃ¹ng
+        allowedFor: ['Sá»± cá»‘ cashflow', 'Emergency'],
+        blockedFor: ['Cháº¡y ads', 'Scale', 'Chi tiÃªu thÆ°á»ng xuyÃªn'],
+        approvalRequired: true
+      },
+      survivalDays
+    };
+  }
+
+  /**
+   * QUá»¸ OWNER (Thu nháº­p)
+   * = 20% lá»£i nhuáº­n thuáº§n
+   */
+  private async computeOwnerFund(realizedProfit: number): Promise<OwnerFund> {
+    const fromProfit = Math.round(realizedProfit * 0.20);
+    const withdrawn = 0; // TODO: Track withdrawals
+    const retained = fromProfit - withdrawn;
+
+    return {
+      breakdown: {
+        fromProfit,
+        withdrawn,
+        retained
+      },
+      flow: {
+        yesterday: 0,
+        reason: 'ChÆ°a rÃºt'
+      },
+      stock: {
+        current: retained,
+        asOf: new Date()
+      },
+      projection: {
+        days7: retained,
+        days15: retained,
+        trend: 'stable',
+        dailyAverage: 0
+      },
+      threshold: {
+        min: 0,
+        max: fromProfit * 2,
+        status: 'safe',
+        daysUntilMin: undefined
+      },
+      permission: {
+        canUse: true,
+        allowedFor: ['RÃºt tiá»n cÃ¡ nhÃ¢n', 'TÃ i sáº£n dÃ i háº¡n'],
+        blockedFor: ['Cháº¡y ads', 'Tráº£ lÆ°Æ¡ng', 'Chi phÃ­ váº­n hÃ nh'],
+        approvalRequired: false
+      }
+    };
+  }
+
+  /**
+   * Helper: Láº¥y committed cash hÃ´m qua (tá»« snapshot)
+   */
+  private async getYesterdayCommitted(): Promise<number> {
+    // TODO: Implement snapshot system
+    return 0;
+  }
+}

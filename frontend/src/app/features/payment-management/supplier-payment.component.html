@@ -1,0 +1,420 @@
+<div class="page">
+  <h2>📦 Thanh Toán Nhà Cung Cấp (Order-Level)</h2>
+  <p class="page-description">
+    Đánh dấu và theo dõi thanh toán từng đơn hàng với nhà cung cấp.
+    <span class="help-text">
+      💡 Phải trả NCC = Báo giá NCC × Số lượng | Chỉ thanh toán đơn "Giao thành công" hoặc "Hàng hoàn"
+    </span>
+  </p>
+
+  <!-- ============ OPS SUMMARY DASHBOARD ============ -->
+  <section class="card ops-summary" *ngIf="opsSummary">
+    <div class="section-header">
+      <h3>📊 Tổng Hợp Vận Hành</h3>
+      <span class="as-of-date">Cập nhật: {{ opsSummary.asOfDate }}</span>
+    </div>
+
+    <!-- Dashboard Cards -->
+    <div class="summary-cards">
+      <div class="summary-card pending">
+        <div class="card-icon">⏳</div>
+        <div class="card-content">
+          <div class="card-value">{{ opsSummary.pending.orderCount }}</div>
+          <div class="card-label">Đơn chờ TT</div>
+          <div class="card-amount">{{ opsSummary.pending.amount | number:'1.0-0' }} đ</div>
+        </div>
+      </div>
+
+      <div class="summary-card paid">
+        <div class="card-icon">✅</div>
+        <div class="card-content">
+          <div class="card-value">{{ opsSummary.paid.orderCount }}</div>
+          <div class="card-label">Đơn đã TT</div>
+          <div class="card-amount">{{ opsSummary.paid.amount | number:'1.0-0' }} đ</div>
+        </div>
+      </div>
+
+      <!-- Aging buckets -->
+      <div class="summary-card aging" *ngFor="let aging of opsSummary.pendingAging">
+        <div class="card-icon" [ngClass]="{
+          'green': aging.bucket === '0_7',
+          'yellow': aging.bucket === '8_14',
+          'red': aging.bucket === '15_plus'
+        }">
+          {{ aging.bucket === '0_7' ? '🟢' : aging.bucket === '8_14' ? '🟡' : '🔴' }}
+        </div>
+        <div class="card-content">
+          <div class="card-value">{{ aging.orderCount }}</div>
+          <div class="card-label">{{ getAgingLabel(aging.bucket) }}</div>
+          <div class="card-amount">{{ aging.amount | number:'1.0-0' }} đ</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Breakdown by Supplier -->
+    <div class="supplier-breakdown">
+      <h4>📋 Theo Nhà Cung Cấp (Top {{ showAllSuppliers ? opsSummary.bySupplier.length : (opsSummary.bySupplier.length > 5 ? 5 : opsSummary.bySupplier.length) }})</h4>
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>NCC</th>
+            <th class="num">Pending</th>
+            <th class="num highlight">Số tiền chờ TT</th>
+            <th class="num">Đã TT</th>
+            <th class="num">0-7 ngày</th>
+            <th class="num">8-14 ngày</th>
+            <th class="num warning">>14 ngày</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of showAllSuppliers ? opsSummary.bySupplier : opsSummary.bySupplier.slice(0, 5)" 
+              [class.over-threshold]="s.isOverThreshold">
+            <td>
+              {{ s.supplierName }}
+              <span *ngIf="s.isOverThreshold" class="threshold-icon" title="Pending vượt 5.000.000đ">⚠️</span>
+            </td>
+            <td class="num">{{ s.pendingOrderCount }}</td>
+            <td class="num money highlight">{{ s.pendingAmount | number:'1.0-0' }}</td>
+            <td class="num">{{ s.paidAmount | number:'1.0-0' }}</td>
+            <td class="num">{{ s.pendingAging[0].amount | number:'1.0-0' }}</td>
+            <td class="num">{{ s.pendingAging[1].amount | number:'1.0-0' }}</td>
+            <td class="num warning">{{ s.pendingAging[2].amount | number:'1.0-0' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <button *ngIf="opsSummary.bySupplier.length > 5" 
+              class="btn-small" 
+              (click)="showAllSuppliers = !showAllSuppliers">
+        {{ showAllSuppliers ? '📉 Thu gọn' : '📈 Xem tất cả (' + opsSummary.bySupplier.length + ')' }}
+      </button>
+    </div>
+  </section>
+
+  <div *ngIf="opsSummaryLoading" class="hint">⏳ Đang tải tổng hợp...</div>
+
+  <!-- ============ THRESHOLD WARNING BANNER ============ -->
+  <div class="alert-banner warning" *ngIf="isSelectedOverThreshold">
+    ⚠️ <strong>Cảnh báo:</strong> Tổng tiền đang chọn vượt 5.000.000đ 
+    ({{ selectedTotal | number:'1.0-0' }} đ). Bạn sẽ cần xác nhận khi tạo phiếu.
+  </div>
+
+  <!-- Filters Section -->
+  <section class="card">
+    <div class="section-header">
+      <h3>🔍 Lọc Đơn Hàng</h3>
+    </div>
+    
+    <div class="filters">
+      <label>
+        Nhà cung cấp
+        <select [(ngModel)]="supplierId">
+          <option value="">Tất cả NCC</option>
+          <option *ngFor="let s of suppliers" [value]="s._id">
+            {{ s.fullName || s.email || 'NCC' }}
+          </option>
+        </select>
+      </label>
+      
+      <label>
+        Từ ngày
+        <input type="date" [(ngModel)]="fromDate" />
+      </label>
+      
+      <label>
+        Đến ngày
+        <input type="date" [(ngModel)]="toDate" />
+      </label>
+      
+      <label>
+        Trạng thái giao hàng
+        <select [(ngModel)]="orderStatus">
+          <option value="">Tất cả</option>
+          <option value="Giao thành công">Giao thành công</option>
+          <option value="Đang giao">Đang giao</option>
+          <option value="Hoàn hàng">Hoàn hàng</option>
+        </select>
+      </label>
+      
+      <button (click)="loadPendingOrders()">🔍 Tìm kiếm</button>
+    </div>
+  </section>
+
+  <!-- Pending Orders Section -->
+  <section class="card">
+    <div class="section-header">
+      <div>
+        <h3>📋 Đơn Hàng Chưa Thanh Toán</h3>
+        <p class="section-sub">
+          Tổng: <strong>{{ pendingOrders.length }}</strong> đơn
+          <span *ngIf="selectedCount > 0">
+            | Đã chọn: <strong>{{ selectedCount }}</strong> đơn - 
+            <strong class="money" [class.over-threshold]="isSelectedOverThreshold">{{ selectedTotal | number:'1.0-0' }}</strong> đ
+            <span *ngIf="isSelectedOverThreshold" class="threshold-icon">⚠️</span>
+          </span>
+        </p>
+      </div>
+      <div class="section-actions">
+        <button 
+          (click)="openCreateBatchModal()" 
+          [disabled]="selectedCount === 0"
+          class="btn-primary">
+          📄 Tạo Phiếu Thanh Toán
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="hint">⏳ Đang tải...</div>
+
+    <div *ngIf="!loading && pendingOrders.length === 0" class="hint">
+      ✅ Không có đơn hàng chưa thanh toán
+    </div>
+
+    <div class="table-wrapper" *ngIf="!loading && pendingOrders.length > 0">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40px;">
+              <input 
+                type="checkbox" 
+                (change)="selectAll($event)"
+                [checked]="selectedCount === pendingOrders.length && pendingOrders.length > 0" />
+            </th>
+            <th>Mã đơn</th>
+            <th>Khách hàng</th>
+            <th>NCC</th>
+            <th>SL</th>
+            <th>Báo giá NCC</th>
+            <th class="highlight">💰 Phải trả NCC</th>
+            <th>Ngày đặt</th>
+            <th>Trạng thái đơn</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let order of pendingOrders">
+            <td>
+              <input type="checkbox" [(ngModel)]="order.selected" />
+            </td>
+            <td>
+              <div class="cell-title">{{ order._id }}</div>
+              <div class="cell-sub" *ngIf="order.trackingNumber">
+                📦 {{ order.trackingNumber }}
+              </div>
+            </td>
+            <td>{{ order.customerName || '-' }}</td>
+            <td>
+              <div class="cell-sub">{{ getSupplierName(order.supplierId || '') }}</div>
+            </td>
+            <td class="num">{{ order.quantity || 1 }}</td>
+            <td class="num">{{ order.supplierQuote | number:'1.0-0' }}</td>
+            <td class="num money highlight">{{ calculateSupplierAmount(order) | number:'1.0-0' }}</td>
+            <td>{{ order.orderDate | date:'dd/MM/yyyy' }}</td>
+            <td>
+              <span class="badge" [ngClass]="{
+                'success': order.orderStatus === 'Giao thành công',
+                'pending': order.orderStatus === 'Hàng hoàn'
+              }">
+                {{ order.orderStatus }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Payment Batches History -->
+  <section class="card">
+    <div class="section-header">
+      <h3>📋 Lịch Sử Phiếu Thanh Toán</h3>
+      <button (click)="loadBatches()" class="btn-small">🔄 Tải lại</button>
+    </div>
+
+    <div *ngIf="batchesLoading" class="hint">⏳ Đang tải...</div>
+
+    <div *ngIf="!batchesLoading && batches.length === 0" class="hint">
+      Chưa có phiếu thanh toán nào
+    </div>
+
+    <div class="table-wrapper" *ngIf="!batchesLoading && batches.length > 0">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã phiếu</th>
+            <th>Ngày thanh toán</th>
+            <th>Số đơn</th>
+            <th>Tổng tiền</th>
+            <th>Ghi chú</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let batch of batches">
+            <td>
+              <div class="cell-title">{{ batch.batchId }}</div>
+            </td>
+            <td>{{ batch.paidDate | date:'dd/MM/yyyy' }}</td>
+            <td>{{ batch.orderCount }}</td>
+            <td class="num money">{{ batch.totalAmount | number:'1.0-0' }}</td>
+            <td>
+              <div class="cell-sub">{{ batch.note || '-' }}</div>
+            </td>
+            <td>
+              <div class="actions">
+                <button class="btn-small" (click)="viewBatch(batch)">👁️ Xem</button>
+                <button class="btn-small" (click)="exportBatch(batch)">📄 Xuất</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<!-- Create Batch Modal -->
+<div class="modal-overlay" *ngIf="showBatchModal" (click)="closeBatchModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📄 Tạo Phiếu Thanh Toán NCC</h3>
+      <button class="close-btn" (click)="closeBatchModal()">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <p class="modal-description">
+        Tạo phiếu thanh toán cho <strong>{{ selectedCount }}</strong> đơn hàng
+        với tổng số tiền <strong class="money" [class.over-threshold]="isSelectedOverThreshold">{{ selectedTotal | number:'1.0-0' }}</strong> đ
+      </p>
+
+      <!-- Threshold Warning trong Modal -->
+      <div class="alert-box warning" *ngIf="isSelectedOverThreshold">
+        ⚠️ <strong>Cảnh báo:</strong> Tổng tiền vượt 5.000.000đ. 
+        Vui lòng xác nhận bên dưới để tiếp tục.
+      </div>
+
+      <div class="form-group">
+        <label>Mã phiếu thanh toán *</label>
+        <input 
+          type="text" 
+          [(ngModel)]="batchForm.batchId" 
+          placeholder="VD: PTTT-NCC-2026-01-001"
+          required />
+      </div>
+
+      <div class="form-group">
+        <label>Ngày thanh toán *</label>
+        <input 
+          type="date" 
+          [(ngModel)]="batchForm.paidDate"
+          required />
+      </div>
+
+      <div class="form-group">
+        <label>Ghi chú</label>
+        <textarea 
+          [(ngModel)]="batchForm.note"
+          rows="3"
+          placeholder="VD: Thanh toán chu kỳ 01-10/01/2026"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>🔗 Link chứng từ</label>
+        <input 
+          type="text" 
+          [(ngModel)]="batchForm.attachments"
+          placeholder="VD: https://drive.google.com/... (nhiều link cách nhau bởi dấu phẩy)" />
+        <small class="form-hint">Nhập link hình ảnh hoặc file chứng từ thanh toán (bank transfer, receipt, ...)</small>
+      </div>
+
+      <!-- Confirm Over Threshold Checkbox -->
+      <div class="form-group confirm-threshold" *ngIf="isSelectedOverThreshold">
+        <label class="checkbox-label">
+          <input type="checkbox" [(ngModel)]="batchForm.confirmOverThreshold" />
+          <span class="checkmark"></span>
+          ✅ Tôi xác nhận thanh toán vượt 5.000.000đ cho phiếu này
+        </label>
+      </div>
+
+      <div class="batch-summary">
+        <h4>📋 Đơn hàng đã chọn:</h4>
+        <div class="order-list">
+          <div *ngFor="let order of selectedOrders; let i = index" class="order-item">
+            <span>{{ i + 1 }}. #{{ order._id }}</span>
+            <span class="money">{{ calculateSupplierAmount(order) | number:'1.0-0' }} đ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button (click)="closeBatchModal()" class="btn-secondary">Hủy</button>
+      <button (click)="createBatch()" 
+              class="btn-primary"
+              [disabled]="isSelectedOverThreshold && !batchForm.confirmOverThreshold">
+        ✅ Xác Nhận Thanh Toán
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- View Batch Modal -->
+<div class="modal-overlay" *ngIf="showViewBatchModal" (click)="closeViewBatchModal()">
+  <div class="modal modal-large" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>👁️ Chi Tiết Phiếu Thanh Toán</h3>
+      <button class="close-btn" (click)="closeViewBatchModal()">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="batch-info" *ngIf="selectedBatch">
+        <div class="info-row">
+          <span class="label">Mã phiếu:</span>
+          <span class="value">{{ selectedBatch.batchId }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Ngày thanh toán:</span>
+          <span class="value">{{ selectedBatch.paidDate | date:'dd/MM/yyyy' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Số đơn:</span>
+          <span class="value">{{ selectedBatch.orderCount }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Tổng tiền:</span>
+          <span class="value money">{{ selectedBatch.totalAmount | number:'1.0-0' }} đ</span>
+        </div>
+        <div class="info-row" *ngIf="selectedBatch.note">
+          <span class="label">Ghi chú:</span>
+          <span class="value">{{ selectedBatch.note }}</span>
+        </div>
+      </div>
+
+      <h4>📋 Danh sách đơn hàng:</h4>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Mã đơn</th>
+              <th>Khách hàng</th>
+              <th>Số tiền</th>
+              <th>Ngày đặt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let order of batchOrders; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ order._id }}</td>
+              <td>{{ order.customerName || '-' }}</td>
+              <td class="num money">{{ order.supplierPaidAmount | number:'1.0-0' }}</td>
+              <td>{{ order.orderDate | date:'dd/MM/yyyy' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button (click)="closeViewBatchModal()" class="btn-secondary">Đóng</button>
+    </div>
+  </div>
+</div>

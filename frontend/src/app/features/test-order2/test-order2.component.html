@@ -1,0 +1,240 @@
+<div class="test-order2-page">
+  <div class="toolbar">
+    <div class="left">
+      <button *ngIf="canAddNew()" class="btn btn-primary" (click)="addNew()" aria-label="Thêm đơn mới">➕ Thêm mới</button>
+      <button class="btn" (click)="refresh()" aria-label="Làm mới dữ liệu">🔄 Làm mới</button>
+      <button class="btn btn-success" (click)="downloadCSV()" aria-label="Tải Excel">📥 Tải Excel</button>
+      <button *ngIf="!isSupplier()" class="btn btn-info" (click)="downloadSupplierExcel()" aria-label="Tải Excel NCC">📊 Excel NCC</button>
+      <button *ngIf="!isSupplier()" class="btn btn-warning" (click)="downloadAgentExcel()" aria-label="Tải Excel Đại lý">📊 Excel ĐL</button>
+    </div>
+    <div class="stats">
+      <span class="badge">Tổng: {{ stats().total }}</span>
+      <span class="badge info">Đang hiển thị: {{ stats().filtered }}</span>
+      <span *ngIf="!isSupplier()" class="badge success">Kích hoạt: {{ stats().active }}</span>
+    </div>
+  </div>
+
+  <div class="filters-grid">
+    <input class="input" type="text" placeholder="Tìm KH/SĐT/mã vận đơn" [ngModel]="q()"
+      (ngModelChange)="onFilterChange('q', $event)" />
+    <select class="select" [ngModel]="selectedProduct()" (ngModelChange)="onFilterChange('product', $event)">
+      <option value="all">Sản phẩm: Tất cả</option>
+      <option *ngFor="let p of products()" [value]="p._id">{{ p.name }}</option>
+    </select>
+    <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedAgent()" (ngModelChange)="onFilterChange('agent', $event)">
+      <option value="all">Đại lý: Tất cả</option>
+      <option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
+    </select>
+    <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedSupplier()" (ngModelChange)="onFilterChange('supplier', $event)">
+      <option value="all">Nhà cung cấp: Tất cả</option>
+      <option *ngFor="let s of suppliers()" [value]="s._id">{{ s.fullName }}</option>
+    </select>
+    <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedAdGroup()" (ngModelChange)="onFilterChange('adGroup', $event)">
+      <option value="all">ID Nhóm QC: Tất cả</option>
+      <option *ngFor="let g of adGroups()" [value]="g._id">{{ g._id }}</option>
+    </select>
+
+    <select class="select status-select" [ngModel]="selectedProductionStatus()"
+      (ngModelChange)="onFilterChange('productionStatus', $event)">
+      <option value="all">TT Sản xuất: Tất cả</option>
+      <option *ngFor="let s of productionStatuses()" [value]="s" [ngStyle]="getStatusOptionStyle('prod', s)">{{ s }}
+      </option>
+    </select>
+    <select class="select status-select" [ngModel]="selectedOrderStatus()"
+      (ngModelChange)="onFilterChange('orderStatus', $event)">
+      <option value="all">TT Vận đơn: Tất cả</option>
+      <option *ngFor="let s of orderStatuses()" [value]="s" [ngStyle]="getStatusOptionStyle('del', s)">{{ s }}</option>
+    </select>
+    <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedActive()" (ngModelChange)="onFilterChange('active', $event)">
+      <option value="all">Trạng thái: Tất cả</option>
+      <option value="true">Đang hoạt động</option>
+      <option value="false">Ngừng</option>
+    </select>
+    <input class="input date-input" type="date" [ngModel]="from()" (ngModelChange)="onFilterChange('from', $event)" title="Từ ngày" />
+    <input class="input date-input" type="date" [ngModel]="to()" (ngModelChange)="onFilterChange('to', $event)" title="Đến ngày" />
+    <div class="filter-actions">
+      <button class="btn btn-outline" (click)="resetFilters()">↺ Đặt lại</button>
+      <button class="btn btn-search" (click)="refresh()">🔍 Tìm kiếm</button>
+    </div>
+  </div>
+
+  <!-- Split layout: fixed left (3 cols) + scrollable right -->
+  <div class="split-table" *ngIf="!isLoading(); else loadingTpl">
+    <div class="fixed-pane" #fixedPane (scroll)="onFixedScroll($event)">
+      <table class="fixed-table">
+        <thead>
+          <tr>
+            <th class="col-date">Ngày</th>
+            <th class="col-customer">KH</th>
+            <th class="col-product">SP / Nhà cung cấp</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let o of orders(); trackBy: trackById; let i = index" [class.alt]="i % 2 === 1">
+            <td class="muted col-date">{{ formatDate(o.createdAt) }}</td>
+            <td class="col-customer">
+              <!-- Suppliers: read-only customer name -->
+              <span *ngIf="isSupplier()" class="cell-text">{{ o.customerName }}</span>
+              <input *ngIf="!isSupplier()" type="text" [ngModel]="o.customerName" (blur)="onInputUpdate(o, 'customerName', $event)" />
+            </td>
+            <td class="col-product">
+              <!-- Suppliers: read-only product + supplier name -->
+              <ng-container *ngIf="isSupplier()">
+                <span class="cell-text" [ngStyle]="productSelectStyle(o.productId)">{{ getNameById(o.productId, products()) }}</span>
+                <div class="source-row">
+                  <span class="cell-text muted">{{ getSupplierName(o.supplierId) }}</span>
+                </div>
+              </ng-container>
+              <!-- Non-suppliers: editable product select + supplier source -->
+              <ng-container *ngIf="!isSupplier()">
+                <select [ngModel]="getId(o.productId)" (change)="onSelectUpdate(o, 'productId', $event)"
+                        [ngStyle]="productSelectStyle(o.productId)" class="status-dropdown">
+                  <option *ngFor="let p of products()" [value]="p._id" [ngStyle]="getProductOptionStyle(p._id)">{{ p.name }}</option>
+                </select>
+                <div class="source-row">
+                  <select class="source-select" [ngModel]="getSourceSelection(o)" (change)="onSourceSelect(o, $event)" [disabled]="!canEditSupplier()">
+                    <option *ngFor="let opt of sourceOptionsFor(o)" [value]="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+              </ng-container>
+            </td>
+          </tr>
+          <tr *ngIf="orders().length===0">
+            <td class="center muted" colspan="3">Chưa có đơn</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="scroll-pane" #scrollPane (scroll)="onScrollPane($event)">
+      <table class="scroll-table">
+        <thead>
+          <tr>
+            <th class="col-qty">SL</th>
+            <th *ngIf="!isSupplier()" class="col-agent">Đại lý</th>
+            <th *ngIf="!isSupplier()" class="col-wide">ID Nhóm QC</th>
+            <th *ngIf="!isSupplier()" class="col-active">Kích hoạt</th>
+            <th class="col-wide col-service">Chi tiết DV</th>
+            <th class="col-wide col-prod-status">TT Sản xuất</th>
+            <th class="w-order-status col-order-status">TT Vận đơn</th>
+            <th class="col-wide col-submit-link">Link nộp</th>
+            <th class="col-tracking">Mã vận đơn</th>
+            <th class="col-wide">Đặt cọc</th>
+            <th class="col-wide">COD</th>
+            <th class="col-wider">Người nhận</th>
+            <th class="col-wide">SĐT</th>
+            <th class="col-wider">Địa chỉ</th>
+            <th class="center col-delete" *ngIf="canDelete()">Xóa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let o of orders(); trackBy: trackById; let i = index" [class.alt]="i % 2 === 1">
+            <!-- SL: read-only for suppliers -->
+            <td class="col-qty">
+              <span *ngIf="isSupplier()" class="cell-text">{{ o.quantity }}</span>
+              <input *ngIf="!isSupplier()" class="input-qty" type="number" min="1" [ngModel]="o.quantity"
+                (blur)="onInputUpdate(o, 'quantity', $event)" />
+            </td>
+            <!-- Đại lý: hidden for suppliers -->
+            <td *ngIf="!isSupplier()" class="col-agent">
+              <select [ngModel]="getId(o.agentId)" (change)="onSelectUpdate(o, 'agentId', $event)">
+                <option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
+              </select>
+            </td>
+            <td class="col-wide source-inline" *ngIf="false">
+              <!-- placeholder if we decide to mirror source on scroll side -->
+            </td>
+            <!-- ID Nhóm QC: hidden for suppliers -->
+            <td *ngIf="!isSupplier()" class="col-wide">
+              <input type="text" [ngModel]="o.adGroupId" (ngModelChange)="o.adGroupId=$event" list="adGroupOptions" (blur)="onAdGroupIdBlur(o, $event)" placeholder="Nhập hoặc dán ID nhóm QC" />
+            </td>
+            <!-- Kích hoạt: hidden for suppliers -->
+            <td *ngIf="!isSupplier()" class="col-active text-center">
+              <input type="checkbox" [ngModel]="o.isActive" (change)="onInputUpdate(o, 'isActive', $event)" />
+            </td>
+            <!-- Chi tiết DV: editable for all -->
+            <td class="col-wide col-service"><input type="text" [ngModel]="o.serviceDetails" (blur)="onInputUpdate(o, 'serviceDetails', $event)" /></td>
+            <!-- TT Sản xuất: editable for all -->
+            <td class="col-wide col-prod-status" [ngStyle]="statusCellStyle('prod', o.productionStatus)">
+              <select [ngModel]="o.productionStatus" (change)="onSelectUpdate(o, 'productionStatus', $event)"
+                [ngStyle]="statusSelectStyle('prod', o.productionStatus)" class="status-dropdown">
+                <option *ngFor="let s of productionStatuses()" [value]="s" [ngStyle]="getStatusOptionStyle('prod', s)">{{ s }}</option>
+              </select>
+            </td>
+            <!-- TT Vận đơn: editable for all -->
+            <td class="w-order-status col-order-status" [ngStyle]="statusCellStyle('del', o.orderStatus || 'Chưa có mã vận đơn')">
+              <select class="w-100 status-dropdown" [ngModel]="o.orderStatus || 'Chưa có mã vận đơn'"
+                (change)="onSelectUpdate(o, 'orderStatus', $event)"
+                [ngStyle]="statusSelectStyle('del', o.orderStatus || 'Chưa có mã vận đơn')">
+                <option *ngFor="let s of orderStatuses()" [value]="s" [ngStyle]="getStatusOptionStyle('del', s)">{{ s }}</option>
+              </select>
+            </td>
+            <!-- Link nộp: editable for all -->
+            <td class="col-wide col-submit-link"><input type="text" [ngModel]="o.submitLink" (blur)="onInputUpdate(o, 'submitLink', $event)" /></td>
+            <!-- Mã vận đơn: editable for all -->
+            <td class="col-tracking"><input type="text" [ngModel]="o.trackingNumber" (blur)="onInputUpdate(o, 'trackingNumber', $event)" /></td>
+            <!-- Đặt cọc: editable for all -->
+            <td class="col-wide"><input type="number" min="0" step="1000" [ngModel]="o.depositAmount"
+                (blur)="onInputUpdate(o, 'depositAmount', $event)" /></td>
+            <!-- COD: editable for all -->
+            <td class="col-wide"><input type="number" min="0" step="1000" [ngModel]="o.codAmount"
+                (blur)="onInputUpdate(o, 'codAmount', $event)" /></td>
+            <!-- Người nhận: editable for all -->
+            <td class="col-wider"><input type="text" [ngModel]="o.receiverName" (blur)="onInputUpdate(o, 'receiverName', $event)" /></td>
+            <!-- SĐT: editable for all -->
+            <td class="col-wide"><input type="text" [ngModel]="o.receiverPhone" (blur)="onInputUpdate(o, 'receiverPhone', $event)" /></td>
+            <!-- Địa chỉ: editable for all -->
+            <td class="col-wider"><input type="text" [ngModel]="o.receiverAddress" (blur)="onInputUpdate(o, 'receiverAddress', $event)" /></td>
+            <td class="center col-delete" *ngIf="canDelete()"><button class="btn btn-sm btn-danger" (click)="delete(o)">Xóa</button></td>
+          </tr>
+          <tr *ngIf="orders().length===0">
+            <td class="center muted" [attr.colspan]="isSupplier() ? 12 : 15">Chưa có đơn</td>
+          </tr>
+        </tbody>
+      </table>
+      <datalist id="adGroupOptions">
+        <option *ngFor="let g of adGroups()" [value]="g._id"></option>
+      </datalist>
+    </div>
+  </div>
+
+  <ng-template #loadingTpl>
+    <div class="loading">Đang tải...</div>
+  </ng-template>
+
+<!-- Pagination Controls -->
+<div class="pagination-wrapper" *ngIf="!isLoading() && totalItems() > 0">
+  <div class="pagination-info">
+    Hiển thị {{ (currentPage() - 1) * pageSize() + 1 }} -
+    {{ Math.min(currentPage() * pageSize(), totalItems()) }}
+    trong tổng số {{ totalItems() }} kết quả
+  </div>
+
+  <div class="pagination-controls">
+    <select [ngModel]="pageSize()" (ngModelChange)="changePageSize($event)" class="page-size-select">
+      <option value="10">10/trang</option>
+      <option value="25">25/trang</option>
+      <option value="50">50/trang</option>
+      <option value="100">100/trang</option>
+    </select>
+
+    <button class="btn btn-sm" [disabled]="currentPage() <= 1" (click)="goToPage(1)">
+      ⏮️ Đầu
+    </button>
+    <button class="btn btn-sm" [disabled]="currentPage() <= 1" (click)="goToPage(currentPage() - 1)">
+      ⬅️ Trước
+    </button>
+
+    <span class="page-info">
+      Trang {{ currentPage() }} / {{ totalPages() }}
+    </span>
+
+    <button class="btn btn-sm" [disabled]="currentPage() >= totalPages()" (click)="goToPage(currentPage() + 1)">
+      Sau ➡️
+    </button>
+    <button class="btn btn-sm" [disabled]="currentPage() >= totalPages()" (click)="goToPage(totalPages())">
+      Cuối ⏭️
+    </button>
+  </div>
+</div>
+</div>

@@ -1,0 +1,320 @@
+<div class="loan-payment">
+  <!-- Header -->
+  <header class="payment-header">
+    <button class="btn-back" (click)="goBack()">← Quay lại</button>
+    <div class="header-title">
+      <h1>💸 Thanh Toán Khoản Vay</h1>
+      @if (options()) {
+        <span class="subtitle">{{ options()!.loan.name }} - {{ options()!.loan.lenderName }}</span>
+      }
+    </div>
+  </header>
+
+  <!-- Loading -->
+  @if (loading()) {
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <p>Đang tải thông tin...</p>
+    </div>
+  }
+
+  <!-- Error -->
+  @if (error() && !success()) {
+    <div class="error-container">
+      <p>❌ {{ error() }}</p>
+      <button class="btn-primary" (click)="loadOptions()">Thử lại</button>
+    </div>
+  }
+
+  <!-- Success -->
+  @if (success()) {
+    <div class="success-container">
+      <div class="success-icon">✅</div>
+      <h2>Thanh Toán Thành Công!</h2>
+      <p class="success-message">{{ success()!.message }}</p>
+      
+      <div class="success-details">
+        <div class="detail-row">
+          <span class="label">Số tiền:</span>
+          <span class="value">{{ formatCurrency(success()!.payment.amount) }}đ</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">Trả gốc:</span>
+          <span class="value">{{ formatCurrency(success()!.payment.amountToPrincipal) }}đ</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">Trả lãi:</span>
+          <span class="value">{{ formatCurrency(success()!.payment.amountToInterest) }}đ</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">Dư nợ còn lại:</span>
+          <span class="value highlight">{{ formatCurrency(success()!.loan.principalRemaining) }}đ</span>
+        </div>
+        
+        @if (success()!.savings) {
+          <div class="savings-info">
+            <p>💰 Bạn đã tiết kiệm:</p>
+            <p class="saving">{{ formatCurrency(success()!.savings!.monthlyInterestSaved) }}đ/tháng</p>
+            <p class="saving highlight">{{ formatCurrency(success()!.savings!.annualInterestSaved) }}đ/năm</p>
+          </div>
+        }
+      </div>
+      
+      <div class="success-actions">
+        <button class="btn-secondary" (click)="goBack()">Chi tiết khoản vay</button>
+        <button class="btn-primary" (click)="goToDashboard()">Dashboard</button>
+      </div>
+    </div>
+  }
+
+  <!-- Payment Form -->
+  @if (options() && !loading() && !success()) {
+    <div class="payment-content">
+      <!-- Loan Info -->
+      <section class="loan-info-section">
+        <h2>📋 Thông Tin Khoản Vay</h2>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="label">Dư nợ gốc:</span>
+            <span class="value">{{ formatCurrency(options()!.loan.principalRemaining) }}đ</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Lãi suất:</span>
+            <span class="value">{{ formatPercent(options()!.loan.interestRate) }}/năm</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Lãi/tháng:</span>
+            <span class="value">{{ formatCurrency(options()!.loan.monthlyInterest) }}đ</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Payment Type Selection -->
+      <section class="payment-type-section">
+        <h2>🎯 Chọn Loại Thanh Toán</h2>
+        <div class="type-options">
+          <!-- Principal -->
+          <div 
+            class="type-option" 
+            [class.selected]="paymentType() === 'principal'"
+            (click)="onPaymentTypeChange('principal')">
+            <div class="type-icon">💰</div>
+            <div class="type-content">
+              <div class="type-name">Trả Gốc</div>
+              <div class="type-desc">Giảm dư nợ, giảm lãi tháng sau</div>
+              <div class="type-amount">Tối đa: {{ formatCurrency(options()!.options.principalPayment.maxAmount) }}đ</div>
+            </div>
+            <div class="type-radio">
+              <input type="radio" name="paymentType" [checked]="paymentType() === 'principal'" />
+            </div>
+          </div>
+
+          <!-- Interest -->
+          <div 
+            class="type-option" 
+            [class.selected]="paymentType() === 'interest'"
+            (click)="onPaymentTypeChange('interest')">
+            <div class="type-icon">📈</div>
+            <div class="type-content">
+              <div class="type-name">Trả Lãi</div>
+              <div class="type-desc">Trả lãi tháng này</div>
+              <div class="type-amount">{{ formatCurrency(options()!.options.interestPayment.currentMonthInterest) }}đ</div>
+            </div>
+            <div class="type-radio">
+              <input type="radio" name="paymentType" [checked]="paymentType() === 'interest'" />
+            </div>
+          </div>
+
+          <!-- Scheduled -->
+          @if (options()!.options.scheduledPayments.length > 0) {
+            <div 
+              class="type-option" 
+              [class.selected]="paymentType() === 'scheduled'"
+              (click)="onPaymentTypeChange('scheduled')">
+              <div class="type-icon">📅</div>
+              <div class="type-content">
+                <div class="type-name">Trả Theo Kỳ</div>
+                <div class="type-desc">Thanh toán kỳ hạn đến hạn</div>
+                <div class="type-amount">{{ options()!.options.scheduledPayments.length }} kỳ chưa trả</div>
+              </div>
+              <div class="type-radio">
+                <input type="radio" name="paymentType" [checked]="paymentType() === 'scheduled'" />
+              </div>
+            </div>
+          }
+
+          <!-- Payoff -->
+          <div 
+            class="type-option payoff" 
+            [class.selected]="paymentType() === 'payoff'"
+            (click)="onPaymentTypeChange('payoff')">
+            <div class="type-icon">⚡</div>
+            <div class="type-content">
+              <div class="type-name">Tất Toán</div>
+              <div class="type-desc">Trả hết và đóng khoản vay</div>
+              <div class="type-amount">{{ formatCurrency(options()!.options.fullPayoff.totalPayoff) }}đ</div>
+            </div>
+            <div class="type-radio">
+              <input type="radio" name="paymentType" [checked]="paymentType() === 'payoff'" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Scheduled Payment Selection -->
+        @if (paymentType() === 'scheduled' && options()!.options.scheduledPayments.length > 0) {
+          <div class="scheduled-selection">
+            <h3>Chọn kỳ thanh toán:</h3>
+            <div class="scheduled-list">
+              @for (payment of options()!.options.scheduledPayments; track payment.repaymentId) {
+                <div 
+                  class="scheduled-item" 
+                  [class.selected]="selectedRepaymentId() === payment.repaymentId"
+                  [class.overdue]="payment.isOverdue"
+                  (click)="onScheduledPaymentSelect(payment.repaymentId)">
+                  <input 
+                    type="radio" 
+                    name="scheduledPayment" 
+                    [value]="payment.repaymentId"
+                    [checked]="selectedRepaymentId() === payment.repaymentId" />
+                  <div class="scheduled-content">
+                    <span class="scheduled-date">
+                      {{ payment.dueDate }}
+                      @if (payment.isOverdue) {
+                        <span class="overdue-badge">Quá hạn {{ payment.daysPastDue }} ngày</span>
+                      }
+                    </span>
+                    <span class="scheduled-amount">{{ formatCurrency(payment.total) }}đ</span>
+                    <small>Gốc: {{ formatCurrency(payment.amountPrincipal) }}đ + Lãi: {{ formatCurrency(payment.amountInterest) }}đ</small>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </section>
+
+      <!-- Payment Source -->
+      <section class="source-section">
+        <h2>💳 Nguồn Tiền</h2>
+        <div class="source-options">
+          <!-- Bank Balance -->
+          <div 
+            class="source-option" 
+            [class.selected]="source() === 'bank_balance'"
+            [class.disabled]="!options()!.sources.bankBalance.canUse"
+            (click)="options()!.sources.bankBalance.canUse && onSourceChange('bank_balance')">
+            <div class="source-icon">🏦</div>
+            <div class="source-content">
+              <div class="source-name">Bank Balance</div>
+              <div class="source-balance">Khả dụng: {{ formatCurrency(options()!.sources.bankBalance.available) }}đ</div>
+            </div>
+            <input 
+              type="radio" 
+              name="source" 
+              [checked]="source() === 'bank_balance'"
+              [disabled]="!options()!.sources.bankBalance.canUse" />
+          </div>
+
+          <!-- Owner Fund -->
+          <div 
+            class="source-option" 
+            [class.selected]="source() === 'owner_fund'"
+            [class.disabled]="!options()!.sources.ownerFund.canUse"
+            (click)="options()!.sources.ownerFund.canUse && onSourceChange('owner_fund')">
+            <div class="source-icon">💼</div>
+            <div class="source-content">
+              <div class="source-name">Quỹ Owner</div>
+              <div class="source-balance">Khả dụng: {{ formatCurrency(options()!.sources.ownerFund.available) }}đ</div>
+            </div>
+            <input 
+              type="radio" 
+              name="source" 
+              [checked]="source() === 'owner_fund'"
+              [disabled]="!options()!.sources.ownerFund.canUse" />
+          </div>
+        </div>
+
+        <!-- Owner Fund Account Selection -->
+        @if (source() === 'owner_fund' && options()!.sources.ownerFund.accounts.length > 0) {
+          <div class="account-selection">
+            <label>Chọn tài khoản:</label>
+            <select [(ngModel)]="sourceAccountId" (ngModelChange)="sourceAccountId.set($event)">
+              @for (account of options()!.sources.ownerFund.accounts; track account.id) {
+                <option [value]="account.id">
+                  {{ account.name }} ({{ formatCurrency(account.balance) }}đ)
+                </option>
+              }
+            </select>
+          </div>
+        }
+      </section>
+
+      <!-- Amount Input -->
+      <section class="amount-section">
+        <h2>💵 Số Tiền Thanh Toán</h2>
+        <div class="amount-input-group">
+          <input 
+            type="number" 
+            class="amount-input"
+            [ngModel]="amount()"
+            (ngModelChange)="amount.set($event)"
+            [max]="maxAmount()"
+            min="0"
+            placeholder="Nhập số tiền" />
+          <span class="currency">VNĐ</span>
+        </div>
+        
+        <div class="amount-hints">
+          <span class="hint">Tối đa: {{ formatCurrency(maxAmount()) }}đ</span>
+          <span class="hint">Khả dụng: {{ formatCurrency(availableBalance()) }}đ</span>
+        </div>
+
+        @if (amount() > availableBalance()) {
+          <div class="amount-error">
+            ⚠️ Số tiền vượt quá số dư khả dụng
+          </div>
+        }
+
+        <!-- Savings Preview -->
+        @if (paymentType() === 'principal' && estimatedSavings() && amount() > 0) {
+          <div class="savings-preview">
+            <div class="savings-icon">💡</div>
+            <div class="savings-content">
+              <p>Nếu trả {{ formatCurrency(amount()) }}đ gốc:</p>
+              <p class="saving">Tiết kiệm {{ formatCurrency(estimatedSavings()!.monthlySaved) }}đ/tháng</p>
+              <p class="saving highlight">≈ {{ formatCurrency(estimatedSavings()!.annualSaved) }}đ/năm</p>
+            </div>
+          </div>
+        }
+      </section>
+
+      <!-- Notes -->
+      <section class="notes-section">
+        <h2>📝 Ghi Chú (tùy chọn)</h2>
+        <textarea 
+          class="notes-input"
+          [ngModel]="notes()"
+          (ngModelChange)="notes.set($event)"
+          placeholder="Ghi chú về giao dịch này..."
+          rows="3"></textarea>
+      </section>
+
+      <!-- Submit Button -->
+      <section class="submit-section">
+        <button 
+          class="btn-submit" 
+          [disabled]="!canSubmit() || submitting()"
+          (click)="submitPayment()">
+          @if (submitting()) {
+            <span class="spinner-small"></span>
+            Đang xử lý...
+          } @else {
+            💸 Thanh Toán {{ formatCurrency(amount()) }}đ
+          }
+        </button>
+        
+        <button class="btn-cancel" (click)="goBack()">Hủy</button>
+      </section>
+    </div>
+  }
+</div>

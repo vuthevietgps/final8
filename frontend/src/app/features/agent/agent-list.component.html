@@ -1,0 +1,108 @@
+<div class="agent-page">
+  <div class="page-header">
+    <div>
+      <h2>🏢 Đại Lý</h2>
+      <p>Danh sách đại lý nội bộ và đại lý ngoài, quản lý nhanh thông tin liên hệ.</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn ghost" (click)="loadAgents()" [disabled]="loading()">
+        🔄 Làm mới
+      </button>
+      <a class="btn secondary" [routerLink]="['/quotes']">📊 Báo Giá Đại Lý</a>
+      <a class="btn primary" [routerLink]="['/users/new']">➕ Thêm Đại Lý</a>
+    </div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <span class="label">Tổng</span>
+      <span class="value">{{ summary().total }}</span>
+    </div>
+    <div class="summary-card">
+      <span class="label">Nội bộ</span>
+      <span class="value">{{ summary().internal }}</span>
+    </div>
+    <div class="summary-card">
+      <span class="label">Ngoài</span>
+      <span class="value">{{ summary().external }}</span>
+    </div>
+    <div class="summary-card">
+      <span class="label">Hoạt động</span>
+      <span class="value ok">{{ summary().active }}</span>
+    </div>
+    <div class="summary-card">
+      <span class="label">Không hoạt động</span>
+      <span class="value warn">{{ summary().inactive }}</span>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>Tìm kiếm</label>
+      <input
+        type="text"
+        placeholder="Tên, email, SĐT"
+        [ngModel]="searchTerm()"
+        (ngModelChange)="searchTerm.set($event)"
+      />
+    </div>
+    <div class="filter-group">
+      <label>Loại</label>
+      <select [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event)">
+        <option value="all">Tất cả</option>
+        <option value="internal">Đại lý nội bộ</option>
+        <option value="external">Đại lý ngoài</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Trạng thái</label>
+      <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+        <option value="all">Tất cả</option>
+        <option value="active">Hoạt động</option>
+        <option value="inactive">Không hoạt động</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div *ngIf="loading()" class="loading">Đang tải danh sách đại lý...</div>
+    <div *ngIf="error()" class="error">{{ error() }}</div>
+
+    <table *ngIf="!loading() && !error()" class="agent-table">
+      <thead>
+        <tr>
+          <th>Tên đại lý</th>
+          <th>Email</th>
+          <th>Số điện thoại</th>
+          <th>Loại</th>
+          <th>Trạng thái</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let agent of filteredAgents()">
+          <td>{{ agent.fullName }}</td>
+          <td>{{ agent.email || '—' }}</td>
+          <td>{{ agent.phone || '—' }}</td>
+          <td>
+            <span class="badge" [class.internal]="agent.role === 'internal_agent'" [class.external]="agent.role === 'external_agent'">
+              {{ getRoleLabel(agent.role) }}
+            </span>
+          </td>
+          <td>
+            <span class="status" [class.active]="agent.isActive !== false" [class.inactive]="agent.isActive === false">
+              {{ getStatusLabel(agent.isActive) }}
+            </span>
+          </td>
+          <td class="actions">
+            <a class="link" [routerLink]="['/users', agent._id]">Xem</a>
+            <a class="link" [routerLink]="['/users', agent._id, 'edit']">Sửa</a>
+          </td>
+        </tr>
+        <tr *ngIf="filteredAgents().length === 0">
+          <td colspan="6" class="empty">Không có đại lý nào phù hợp.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

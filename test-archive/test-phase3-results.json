@@ -1,0 +1,604 @@
+﻿{
+    "passed":  85,
+    "results":  [
+                    {
+                        "Description":  "Frontend server reachable (port 4200)",
+                        "Response":  null,
+                        "TestId":  "PRE-001",
+                        "Details":  "status=200, length=445",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Backend server reachable (port 3000)",
+                        "Response":  null,
+                        "TestId":  "PRE-002",
+                        "Details":  "status=200",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Frontend proxy to backend (/api/users)",
+                        "Response":  null,
+                        "TestId":  "PRE-003",
+                        "Details":  "proxy working, response length=8723",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Status":  "PASS",
+                        "TestId":  "PRE-004",
+                        "Description":  "Login Director",
+                        "Details":  "token obtained"
+                    },
+                    {
+                        "Description":  "Root URL loads Angular SPA (index.html)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-001",
+                        "Details":  "Angular SPA loaded",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Login page loads (/login)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-002",
+                        "Details":  "login page HTML loaded",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Unauthorized page loads (/unauthorized)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-003",
+                        "Details":  "page loaded, length=445",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Clear storage page (/clear-storage)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-004",
+                        "Details":  "page loaded, length=445",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Dashboard route returns SPA shell (/dashboard)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-005",
+                        "Details":  "SPA shell served for client-side guard",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Users route returns SPA shell (/users)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-006",
+                        "Details":  "SPA shell served for client-side guard",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Wildcard catch-all route (/nonexistent-path)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-007",
+                        "Details":  "SPA shell served (no server 404)",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Nested route: /finance/financial-control",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-008",
+                        "Details":  "SPA shell served",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Nested route: /orders/test2",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-009",
+                        "Details":  "SPA shell served",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Nested route: /costs/labor1",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-010",
+                        "Details":  "SPA shell served",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Nested route: /reports/return-report",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-011",
+                        "Details":  "SPA shell served",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Nested route: /loans/dashboard",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-012",
+                        "Details":  "SPA shell served",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Trailing slash: /orders/ loads SPA",
+                        "Response":  null,
+                        "TestId":  "TC-UI-NAV-013",
+                        "Details":  "SPA shell served",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Login via frontend proxy (POST /api/auth/login)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LOGIN-001",
+                        "Details":  "token received via proxy",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Login wrong password via proxy (expect 401)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LOGIN-002",
+                        "Details":  "Expected 401 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Login empty body via proxy (expect 400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LOGIN-003",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Profile via proxy with valid token",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LOGIN-004",
+                        "Details":  "email=vutheviet@gmail.com, role=director",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Profile via proxy without token (expect 401)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LOGIN-005",
+                        "Details":  "Expected 401 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Validate token via proxy",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LOGIN-006",
+                        "Details":  "valid=True",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/users",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-001",
+                        "Details":  "proxy OK, length=8723",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/test-order2",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-002",
+                        "Details":  "proxy OK, length=23245",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/products",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-003",
+                        "Details":  "proxy OK, length=20611",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/ad-accounts",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-004",
+                        "Details":  "proxy OK, length=413",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/ad-groups",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-005",
+                        "Details":  "proxy OK, length=2",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/delivery-status",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-006",
+                        "Details":  "proxy OK, length=1906",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/production-status",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-007",
+                        "Details":  "proxy OK, length=1271",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/product-category",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-008",
+                        "Details":  "proxy OK, length=2197",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/customers",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-009",
+                        "Details":  "proxy OK, length=47",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/financial-control/dashboard",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-010",
+                        "Details":  "proxy OK, length=500",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/cashflow/dashboard/summary",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-011",
+                        "Details":  "proxy OK, length=287",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/owner-fund/owners",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-012",
+                        "Details":  "proxy OK, length=797",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/ads-alerts",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-013",
+                        "Details":  "proxy OK, length=49",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Proxy: GET /api/finance/funding-sources",
+                        "Response":  null,
+                        "TestId":  "TC-UI-PROXY-014",
+                        "Details":  "proxy OK, length=1716",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Main JS bundle loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-ASSET-001",
+                        "Details":  "main.js path found but failed to load: main.js",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "CSS styles bundle loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-ASSET-002",
+                        "Details":  "styles.css path found but failed to load: styles.css",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Index HTML has title tag",
+                        "Response":  null,
+                        "TestId":  "TC-UI-ASSET-003",
+                        "Details":  "title tag present",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Login component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-001",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Dashboard component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-002",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Users component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-003",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Orders component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-004",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Products component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-005",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Finance component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-006",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Ad Groups component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-007",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Owner Fund component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-008",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Loans component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-009",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Lazy: Conversations component loads",
+                        "Response":  null,
+                        "TestId":  "TC-UI-LAZY-010",
+                        "Details":  "SPA shell OK, client will lazy-load",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: user missing fields (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-001",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: invalid email format (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-002",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: invalid role (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-003",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: order empty body (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-004",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: product missing fields (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-005",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: ad account missing accountType (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-006",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: extra fields rejected (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-007",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Form validation: login missing email (400)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-FORM-008",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Users list: returns valid JSON array",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-001",
+                        "Details":  "count=24, has _id/name/email fields",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Orders list: returns valid data",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-002",
+                        "Details":  "count=24, pagination present",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Products list: returns valid data",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-003",
+                        "Details":  "count=33",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Delivery statuses: UTF-8 Vietnamese content",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-004",
+                        "Details":  "count=5, has_data=True",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Product categories: list with data",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-005",
+                        "Details":  "count=8",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Financial Control: dashboard 8 numbers",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-006",
+                        "Details":  "dashboard data received, hasBankBalance=True",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "CRUD: Create user via proxy",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-007a",
+                        "Details":  "id=699012f4854936cf613cdca9, name=",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "CRUD: Read created user via proxy",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-007b",
+                        "Details":  "name=, email=phase3_crud_81386@test.com",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "CRUD: Update user via proxy",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-007c",
+                        "Details":  "name=",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "CRUD: Delete user via proxy (cleanup)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-007d",
+                        "Details":  "user deleted",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Ads alerts: list via proxy",
+                        "Response":  null,
+                        "TestId":  "TC-UI-DATA-008",
+                        "Details":  "alerts count=object",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: Director can GET /api/users (via proxy)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-001",
+                        "Details":  "director sees 24 users",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: Manager can GET /api/test-order2",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-002",
+                        "Details":  "manager sees orders, length=23245",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: Employee can GET /api/test-order2",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-003",
+                        "Details":  "employee sees orders",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: Employee blocked from /api/users (403)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-004",
+                        "Details":  "Expected 403 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: Director can GET /api/owner-fund/owners",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-005",
+                        "Details":  "owner fund accessible",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: Director can GET /api/cashflow/dashboard/summary",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-006",
+                        "Details":  "cashflow dashboard accessible",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "RBAC: No token -\u003e 401 via proxy",
+                        "Response":  null,
+                        "TestId":  "TC-UI-RBAC-007",
+                        "Details":  "Expected 401 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Content-Type: index.html is text/html",
+                        "Response":  null,
+                        "TestId":  "TC-UI-HDR-001",
+                        "Details":  "Content-Type=text/html",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Content-Type: API response is application/json",
+                        "Response":  null,
+                        "TestId":  "TC-UI-HDR-002",
+                        "Details":  "Content-Type=application/json; charset=utf-8",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "CORS: proxied request works (same-origin)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-HDR-003",
+                        "Details":  "proxied request successful (CORS not needed for same-origin)",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Responsive: HTML has viewport meta tag",
+                        "Response":  null,
+                        "TestId":  "TC-UI-HDR-004",
+                        "Details":  "viewport meta tag present",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "UTF-8: HTML declares charset=UTF-8",
+                        "Response":  null,
+                        "TestId":  "TC-UI-HDR-005",
+                        "Details":  "charset=UTF-8 declared",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Status":  "PASS",
+                        "TestId":  "TC-UI-PERF-001",
+                        "Description":  "Page load performance",
+                        "Details":  "Index (SPA shell): 16ms; Login page: 14ms; API /users (via proxy): 108ms; API /test-order2 (proxy): 175ms; API /financial-control: 16ms"
+                    },
+                    {
+                        "Description":  "Error: non-existent API returns 404",
+                        "Response":  null,
+                        "TestId":  "TC-UI-ERR-001",
+                        "Details":  "Expected 404 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Error: invalid JSON body returns 400",
+                        "Response":  null,
+                        "TestId":  "TC-UI-ERR-002",
+                        "Details":  "Expected 400 received",
+                        "Status":  "PASS"
+                    },
+                    {
+                        "Description":  "Error: wrong HTTP method (PUT /api/auth/login)",
+                        "Response":  null,
+                        "TestId":  "TC-UI-ERR-003",
+                        "Details":  "Expected 404 received",
+                        "Status":  "PASS"
+                    }
+                ],
+    "skipped":  0,
+    "passRate":  "100%",
+    "phase":  "Phase 3 - UI Functional Test",
+    "total":  85,
+    "date":  "2026-02-14 13:15:20",
+    "failed":  0
+}

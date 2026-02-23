@@ -1,0 +1,87 @@
+<div class="user-list-container">
+  <div class="header">
+    <h2>Quản Lý Người Dùng</h2>
+    <div class="actions">
+      <div class="filter-section">
+        <label for="roleFilter">Lọc theo vai trò:</label>
+        <select id="roleFilter" [(ngModel)]="selectedRole" (change)="onRoleChange()" class="form-select">
+          <option value="">Tất cả</option>
+          <option *ngFor="let role of userRoles" [value]="role">
+            {{ getRoleDisplayName(role) }}
+          </option>
+        </select>
+      </div>
+      <div class="button-group">
+        <app-import-user></app-import-user>
+        <app-export-user></app-export-user>
+        <button class="btn btn-primary" routerLink="/users/new">
+          <i class="icon-plus"></i> Thêm Người Dùng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div *ngIf="loading()" class="loading">
+      Đang tải...
+    </div>
+
+    <div *ngIf="error()" class="error">
+      {{ error() }}
+    </div>
+
+    <div *ngIf="!loading() && !error()" class="user-table-container">
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th>Họ Tên</th>
+            <th>Email</th>
+            <th>Số Điện Thoại</th>
+            <th>Vai Trò</th>
+            <th>Google Drive</th>
+            <th>Trạng Thái</th>
+            <th>Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let user of users()">
+            <td>{{ user.fullName }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.phone }}</td>
+            <td>
+              <span class="role-badge" [class]="'role-' + user.role">
+                {{ getRoleDisplayName(user.role) }}
+              </span>
+            </td>
+            <td>
+              <a *ngIf="user.googleDriveLink" [href]="user.googleDriveLink" target="_blank" rel="noopener noreferrer">Mở</a>
+              <span *ngIf="!user.googleDriveLink" class="muted">—</span>
+            </td>
+            <td>
+              <span class="status-badge" [class]="user.isActive ? 'active' : 'inactive'">
+                {{ user.isActive ? 'Hoạt động' : 'Không hoạt động' }}
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <a class="btn btn-sm btn-info" [routerLink]="['/users', user._id]">
+                  <i class="icon-eye"></i> Xem
+                </a>
+                <a class="btn btn-sm btn-warning" [routerLink]="['/users', user._id, 'edit']">
+                  <i class="icon-edit"></i> Sửa
+                </a>
+                <button type="button" class="btn btn-sm btn-danger" (click)="deleteUser(user._id!)">
+                  <i class="icon-trash"></i> Xóa
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+  <div *ngIf="users().length === 0" class="no-data">
+        Không có người dùng nào được tìm thấy.
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,989 @@
+﻿{
+    "phase":  "Phase 2 - API Integration",
+    "summary":  {
+                    "failed":  1,
+                    "passRate":  97.1,
+                    "skipped":  3,
+                    "total":  139,
+                    "passed":  135
+                },
+    "results":  [
+                    {
+                        "status":  "PASS",
+                        "testId":  "PRE-001",
+                        "description":  "Login Director (vutheviet@gmail.com)",
+                        "httpStatus":  200,
+                        "details":  "role=director, token_len=271"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-002",
+                        "description":  "Login sai password",
+                        "httpStatus":  401,
+                        "details":  "Got expected status 401"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-003",
+                        "description":  "Login email khong ton tai",
+                        "httpStatus":  401,
+                        "details":  "Got expected status 401"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-004",
+                        "description":  "Login body rong {}",
+                        "httpStatus":  400,
+                        "details":  "Got expected status 400"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-006",
+                        "description":  "Xem profile (Director)",
+                        "httpStatus":  200,
+                        "details":  "email=vutheviet@gmail.com, role=director"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-007",
+                        "description":  "Profile khong token",
+                        "httpStatus":  401,
+                        "details":  "Got expected status 401"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-008",
+                        "description":  "Validate token",
+                        "httpStatus":  200,
+                        "details":  "valid=True"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-009",
+                        "description":  "API voi fake token",
+                        "httpStatus":  401,
+                        "details":  "Got expected status 401"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AUTH-010",
+                        "description":  "Register user moi",
+                        "httpStatus":  200,
+                        "details":  "id=69900c9c854936cf613cd7b1, email=testregister_39884@test.com"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-001",
+                        "description":  "Lay danh sach users (Director)",
+                        "httpStatus":  200,
+                        "details":  "count=22"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-002",
+                        "description":  "Tao user moi",
+                        "httpStatus":  200,
+                        "details":  "id=69900c9c854936cf613cd7b6, email=testuser_97702@test.com, role=employee"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-003",
+                        "description":  "Tao user trung email",
+                        "httpStatus":  409,
+                        "details":  "Got expected status 409"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-004",
+                        "description":  "Tao user thieu required fields",
+                        "httpStatus":  400,
+                        "details":  "Got expected status 400"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-005",
+                        "description":  "Tao user role khong hop le",
+                        "httpStatus":  400,
+                        "details":  "Got expected status 400"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-006",
+                        "description":  "Cap nhat user",
+                        "httpStatus":  200,
+                        "details":  "name=Updated Name Phase2"
+                    },
+                    {
+                        "status":  "SKIP",
+                        "testId":  "TC-USER-011",
+                        "description":  "Employee khong co quyen GET /users",
+                        "httpStatus":  0,
+                        "details":  "No employee token"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-012",
+                        "description":  "Verify 7 role types exist",
+                        "httpStatus":  200,
+                        "details":  "roles: director, employee, external_agent, external_supplier, internal_agent, internal_supplier, manager (count=7)"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-009",
+                        "description":  "Export users CSV",
+                        "httpStatus":  200,
+                        "details":  "response_received (type=String)"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-007",
+                        "description":  "Xoa user",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-USER-008",
+                        "description":  "Xoa user ID khong ton tai",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SEC-006",
+                        "description":  "Password khong tra ve plaintext",
+                        "httpStatus":  200,
+                        "details":  "FAIL: password visible in response!"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-001",
+                        "description":  "Lay danh sach don hang",
+                        "httpStatus":  200,
+                        "details":  "orders=24, total="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-002",
+                        "description":  "Filter don hang theo supplier",
+                        "httpStatus":  200,
+                        "details":  "filtered=24"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-003",
+                        "description":  "Filter don hang theo ngay",
+                        "httpStatus":  200,
+                        "details":  "filtered=24"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-004",
+                        "description":  "Tao don hang moi",
+                        "httpStatus":  200,
+                        "details":  "id=69900c9f854936cf613cd7d2, customer=Test Customer Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-005",
+                        "description":  "Cap nhat don hang",
+                        "httpStatus":  200,
+                        "details":  "qty=5, customer=Updated Customer Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-006",
+                        "description":  "Cap nhat trang thai giao hang",
+                        "httpStatus":  200,
+                        "details":  "deliveryStatus="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-008",
+                        "description":  "Export don hang JSON",
+                        "httpStatus":  200,
+                        "details":  "exported (type=PSCustomObject)"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-009",
+                        "description":  "Export don hang CSV",
+                        "httpStatus":  200,
+                        "details":  "CSV response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-012",
+                        "description":  "Bao cao loi nhuan hang ngay",
+                        "httpStatus":  200,
+                        "details":  "report received (type=PSCustomObject)"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-013",
+                        "description":  "Bao cao loi nhuan san pham",
+                        "httpStatus":  200,
+                        "details":  "report received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ORDER-007",
+                        "description":  "Xoa don hang",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PAY-001",
+                        "description":  "Xem pending payment NCC",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PAY-002",
+                        "description":  "Xem pending payment Dai Ly",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PAY-003",
+                        "description":  "Supplier payment ops summary",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PAY-004",
+                        "description":  "Agent payment ops summary",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PAY-008",
+                        "description":  "Lich su payment batches NCC",
+                        "httpStatus":  200,
+                        "details":  "batches received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PAY-009",
+                        "description":  "Lich su payment batches Dai Ly",
+                        "httpStatus":  200,
+                        "details":  "batches received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-001",
+                        "description":  "Lay danh sach san pham",
+                        "httpStatus":  200,
+                        "details":  "count=33"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-002",
+                        "description":  "Tao san pham",
+                        "httpStatus":  200,
+                        "details":  "id=69900ca1854936cf613cd816, name=Test Product Phase2, sku=SP0034"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-003",
+                        "description":  "Cap nhat san pham",
+                        "httpStatus":  200,
+                        "details":  "name=Updated Product Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-005a",
+                        "description":  "Tao nhom san pham",
+                        "httpStatus":  200,
+                        "details":  "id=69900ca1854936cf613cd81c, name=Test Category Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-005b",
+                        "description":  "Lay danh sach nhom san pham",
+                        "httpStatus":  200,
+                        "details":  "count=9"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-005c",
+                        "description":  "Cap nhat nhom san pham",
+                        "httpStatus":  200,
+                        "details":  "name=Updated Category Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-005d",
+                        "description":  "Xoa nhom san pham",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PROD-004",
+                        "description":  "Xoa san pham",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-001a",
+                        "description":  "Lay danh sach tai khoan QC",
+                        "httpStatus":  200,
+                        "details":  "count=1"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-001b",
+                        "description":  "Tao tai khoan QC",
+                        "httpStatus":  200,
+                        "details":  "id=69900ca2854936cf613cd823, name=Test Ad Account Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-001c",
+                        "description":  "Cap nhat tai khoan QC",
+                        "httpStatus":  200,
+                        "details":  "name=Updated Ad Account Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-002a",
+                        "description":  "Lay danh sach nhom QC",
+                        "httpStatus":  200,
+                        "details":  "count=0"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-002b",
+                        "description":  "Tao nhom QC",
+                        "httpStatus":  200,
+                        "details":  "id=69900ca2854936cf613cd82d, name=Test Ad Group Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-002c",
+                        "description":  "Cap nhat nhom QC",
+                        "httpStatus":  200,
+                        "details":  "name=Updated Ad Group Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-004",
+                        "description":  "Lay chi phi quang cao",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-005",
+                        "description":  "Budget allocation auto (moderate)",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-006",
+                        "description":  "Budget allocation preview",
+                        "httpStatus":  200,
+                        "details":  "preview data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-007",
+                        "description":  "Budget allocation status",
+                        "httpStatus":  200,
+                        "details":  "status received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-008",
+                        "description":  "GET KPI nhan vien ads",
+                        "httpStatus":  200,
+                        "details":  "count="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-009",
+                        "description":  "Sync ad group daily report",
+                        "httpStatus":  200,
+                        "details":  "sync response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-010",
+                        "description":  "Optimal spend suggestions",
+                        "httpStatus":  200,
+                        "details":  "optimal spend data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-011",
+                        "description":  "Top ad groups",
+                        "httpStatus":  200,
+                        "details":  "top ad groups received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-002d",
+                        "description":  "Xoa nhom QC (cleanup)",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ADS-001d",
+                        "description":  "Xoa tai khoan QC (cleanup)",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ALERT-001",
+                        "description":  "Lay danh sach alerts",
+                        "httpStatus":  200,
+                        "details":  "count="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ALERT-002",
+                        "description":  "Alert summary",
+                        "httpStatus":  200,
+                        "details":  "total=0, critical=0, warning=0, unread=0"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ALERT-004",
+                        "description":  "Trigger manual alert check",
+                        "httpStatus":  200,
+                        "details":  "check triggered"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-ALERT-006",
+                        "description":  "Mark all alerts read",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-001a",
+                        "description":  "GET Funding Sources",
+                        "httpStatus":  200,
+                        "details":  "count=5"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-001b",
+                        "description":  "POST Funding Source",
+                        "httpStatus":  200,
+                        "details":  "id=69900ca5854936cf613cd85a"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-002",
+                        "description":  "GET Budget Buckets",
+                        "httpStatus":  200,
+                        "details":  "count=0"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-003",
+                        "description":  "GET Cashflows",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-004",
+                        "description":  "Finance Summary",
+                        "httpStatus":  200,
+                        "details":  "summary received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-005",
+                        "description":  "Available Funds current",
+                        "httpStatus":  200,
+                        "details":  "available funds received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-007",
+                        "description":  "Cashflow Health",
+                        "httpStatus":  200,
+                        "details":  "health data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-008",
+                        "description":  "Finance Dashboard",
+                        "httpStatus":  200,
+                        "details":  "dashboard data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FIN-009",
+                        "description":  "Finance Alerts",
+                        "httpStatus":  200,
+                        "details":  "alerts received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-LOAN-002",
+                        "description":  "Lay danh sach khoan vay",
+                        "httpStatus":  200,
+                        "details":  "count=5"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-LOAN-001",
+                        "description":  "Tao khoan vay",
+                        "httpStatus":  200,
+                        "details":  "id=69900ca8854936cf613cd887, lender="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-LOAN-006",
+                        "description":  "Upcoming repayments",
+                        "httpStatus":  200,
+                        "details":  "repayments received"
+                    },
+                    {
+                        "status":  "FAIL",
+                        "testId":  "TC-LOAN-007",
+                        "description":  "Loan summary",
+                        "httpStatus":  500,
+                        "details":  "The remote server returned an error: (500) Internal Server Error. | Body: "
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-LOAN-008",
+                        "description":  "Loan contract cashflow",
+                        "httpStatus":  200,
+                        "details":  "cashflow data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-LOAN-003",
+                        "description":  "Giai ngan khoan vay",
+                        "httpStatus":  200,
+                        "details":  "disburse response"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FC-001",
+                        "description":  "Dashboard 8 so",
+                        "httpStatus":  200,
+                        "details":  "found fields: bankBalance, committedCash, freeCash, monthlyBurn, runwayMonths, adsBudgetApproved, ownerWithdrawable, forecast7DLowPoint"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FC-002",
+                        "description":  "Full data (FreeCash = Bank - Committed)",
+                        "httpStatus":  200,
+                        "details":  "bank=205570000, committed=5086670, free=200483330, formula_ok=True"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FC-007",
+                        "description":  "Forecast 7 ngay",
+                        "httpStatus":  200,
+                        "details":  "forecast data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FC-008",
+                        "description":  "Optimal Ads suggestion",
+                        "httpStatus":  200,
+                        "details":  "optimal ads data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-FC-009",
+                        "description":  "Config defaults",
+                        "httpStatus":  200,
+                        "details":  "config: CommittedWindowDays=14, SurvivalMonths=3"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CF-001",
+                        "description":  "Cashflow dashboard summary",
+                        "httpStatus":  200,
+                        "details":  "summary received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CF-002",
+                        "description":  "Funds status",
+                        "httpStatus":  200,
+                        "details":  "funds status received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CF-003",
+                        "description":  "Ads decision",
+                        "httpStatus":  200,
+                        "details":  "ads decision received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CF-004",
+                        "description":  "Cashflow alerts",
+                        "httpStatus":  200,
+                        "details":  "alerts received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CF-005",
+                        "description":  "Profit summary",
+                        "httpStatus":  200,
+                        "details":  "profit summary received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CAP-002",
+                        "description":  "Lay danh sach policies",
+                        "httpStatus":  200,
+                        "details":  "count=1"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CAP-003",
+                        "description":  "Active policies",
+                        "httpStatus":  200,
+                        "details":  "active policies received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CAP-004",
+                        "description":  "Compute allocation",
+                        "httpStatus":  200,
+                        "details":  "allocation computed"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CAP-006",
+                        "description":  "Get latest snapshot",
+                        "httpStatus":  200,
+                        "details":  "snapshot received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CAP-007",
+                        "description":  "Reinvestment budget",
+                        "httpStatus":  200,
+                        "details":  "reinvestment data received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-OF-001a",
+                        "description":  "Lay danh sach owners",
+                        "httpStatus":  200,
+                        "details":  "count=2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-OF-001b",
+                        "description":  "Tao owner",
+                        "httpStatus":  200,
+                        "details":  "id=69900cb5854936cf613cd949, name=Test Owner Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-OF-001c",
+                        "description":  "Cap nhat owner",
+                        "httpStatus":  200,
+                        "details":  "name=Updated Owner Phase2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-OF-002",
+                        "description":  "Tao withdrawal request",
+                        "httpStatus":  200,
+                        "details":  "id=69900cb5854936cf613cd94e, status=pending"
+                    },
+                    {
+                        "status":  "SKIP",
+                        "testId":  "TC-OF-003",
+                        "description":  "Approve withdrawal",
+                        "httpStatus":  0,
+                        "details":  "Cannot get director userId"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-OF-008",
+                        "description":  "System statistics",
+                        "httpStatus":  200,
+                        "details":  "statistics received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-OF-009",
+                        "description":  "Fund account",
+                        "httpStatus":  200,
+                        "details":  "fund account received"
+                    },
+                    {
+                        "status":  "SKIP",
+                        "testId":  "TC-OF-010",
+                        "description":  "Employee khong truy cap Owner Fund",
+                        "httpStatus":  0,
+                        "details":  "No employee token"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SUP-001",
+                        "description":  "GET Supplier Quotes",
+                        "httpStatus":  200,
+                        "details":  "count="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SUP-002",
+                        "description":  "GET Supplier Payables",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AGENT-001",
+                        "description":  "GET Agent Quotes",
+                        "httpStatus":  200,
+                        "details":  "count=9"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AGENT-002",
+                        "description":  "GET Agent Receivables summary",
+                        "httpStatus":  200,
+                        "details":  "receivables summary received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CUST-001a",
+                        "description":  "Lay danh sach khach hang",
+                        "httpStatus":  200,
+                        "details":  "count="
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CUST-001b",
+                        "description":  "Sync khach hang tu don hang",
+                        "httpStatus":  200,
+                        "details":  "sync result received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CUST-001c",
+                        "description":  "Customer stats",
+                        "httpStatus":  200,
+                        "details":  "stats received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-CUST-002",
+                        "description":  "Search khach hang",
+                        "httpStatus":  200,
+                        "details":  "search results received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-COST-001",
+                        "description":  "GET Chi phi nhan cong",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-COST-002",
+                        "description":  "GET Chi phi khac",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-COST-003",
+                        "description":  "GET Salary Config",
+                        "httpStatus":  200,
+                        "details":  "response received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-STATUS-001a",
+                        "description":  "GET Trang thai san xuat",
+                        "httpStatus":  200,
+                        "details":  "count=6"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-STATUS-001b",
+                        "description":  "Tao trang thai SX",
+                        "httpStatus":  200,
+                        "details":  "id=69900cbe854936cf613cd9e2, name=Test Production Status"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-STATUS-001c",
+                        "description":  "Cap nhat trang thai SX",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-STATUS-001d",
+                        "description":  "Xoa trang thai SX",
+                        "httpStatus":  200,
+                        "details":  "OK"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-STATUS-002",
+                        "description":  "GET Trang thai giao hang",
+                        "httpStatus":  200,
+                        "details":  "count=5"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-STATUS-003",
+                        "description":  "GET Trang thai don hang",
+                        "httpStatus":  200,
+                        "details":  "count=0"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AI-001",
+                        "description":  "GET Fanpages",
+                        "httpStatus":  200,
+                        "details":  "count=1"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AI-002",
+                        "description":  "GET OpenAI Configs",
+                        "httpStatus":  200,
+                        "details":  "count=2"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AI-003",
+                        "description":  "GET API Tokens",
+                        "httpStatus":  200,
+                        "details":  "count=1"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-AI-004",
+                        "description":  "GET Chat conversations",
+                        "httpStatus":  200,
+                        "details":  "conversations received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-RPT-001",
+                        "description":  "Bao cao hang hoan (ad-group)",
+                        "httpStatus":  200,
+                        "details":  "report received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-RPT-002",
+                        "description":  "Bao cao hang hoan (product)",
+                        "httpStatus":  200,
+                        "details":  "returns received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-RPT-003",
+                        "description":  "Ad report (cost per order)",
+                        "httpStatus":  200,
+                        "details":  "ad report received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-RPT-004",
+                        "description":  "Ad group profit (performance)",
+                        "httpStatus":  200,
+                        "details":  "profit report received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SYS-001",
+                        "description":  "Health check (no auth)",
+                        "httpStatus":  200,
+                        "details":  "status=ok"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SYS-002",
+                        "description":  "Google Sync cred check",
+                        "httpStatus":  200,
+                        "details":  "sync status received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SYS-003",
+                        "description":  "Session logs (me)",
+                        "httpStatus":  200,
+                        "details":  "session logs received"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SEC-001",
+                        "description":  "API /users khong token",
+                        "httpStatus":  401,
+                        "details":  "Got expected status 401"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SEC-002",
+                        "description":  "API /users fake token",
+                        "httpStatus":  401,
+                        "details":  "Got expected status 401"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SEC-004",
+                        "description":  "NoSQL injection login",
+                        "httpStatus":  400,
+                        "details":  "Got error status 400 (expected 401)"
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-SEC-005",
+                        "description":  "XSS trong user name",
+                        "httpStatus":  200,
+                        "details":  [
+                                        {
+                                            "_id":  "69900cc0854936cf613cda01",
+                                            "fullName":  "XSS\u003cscript\u003ealert(1)\u003c/script\u003eTest",
+                                            "email":  "xsstest_3996@test.com",
+                                            "password":  "$2b$12$Couw0yuWK2Wo3b1rOCi0XOx61cqYi/NZkXIKDcomysreFHiXk201G",
+                                            "phone":  "0900000000",
+                                            "role":  "employee",
+                                            "isActive":  true,
+                                            "allowedLoginIps":  [
+
+                                                                ],
+                                            "createdAt":  "2026-02-14T05:48:48.874Z",
+                                            "updatedAt":  "2026-02-14T05:48:48.874Z",
+                                            "__v":  0
+                                        },
+                                        "User created (name=XSS\u003cscript\u003ealert(1)\u003c/script\u003eTest) - check if sanitized"
+                                    ]
+                    },
+                    {
+                        "status":  "PASS",
+                        "testId":  "TC-PERF-001",
+                        "description":  "API response times",
+                        "httpStatus":  null,
+                        "details":  "GET /users: 142ms; GET /test-order2: 259ms; GET /products: 231ms; GET /financial-control/dashboard: 5414ms; GET /cashflow/dashboard/summary: 10ms"
+                    }
+                ],
+    "date":  "2026-02-14 12:48:56"
+}

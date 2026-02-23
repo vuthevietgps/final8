@@ -1,0 +1,196 @@
+﻿<div class="page">
+  <div class="header">
+    <div>
+      <h2>🏦 Nguồn Vốn Khả Dụng</h2>
+      <p class="subtitle">Vốn khả dụng dựa trên lợi nhuận thực tế (đơn đã thanh toán cả NCC và Đại lý)</p>
+    </div>
+    <button (click)="loadCurrent()" [disabled]="loading()">🔄 Tải lại</button>
+  </div>
+
+  @if (error()) {
+    <div class="alert error">{{ error() }}</div>
+  }
+  
+  @if (loading()) {
+    <div class="loading">⏳ Đang xử lý...</div>
+  }
+
+  <!-- Mode Selector -->
+  <div class="mode-selector">
+    <label>Chế độ tính toán:</label>
+    <div class="mode-buttons">
+      <button 
+        [class.active]="selectedMode() === 'conservative'" 
+        (click)="onModeChange('conservative')">
+        🟢 An toàn
+      </button>
+      <button 
+        [class.active]="selectedMode() === 'moderate'" 
+        (click)="onModeChange('moderate')">
+        🟡 Cân bằng
+      </button>
+      <button 
+        [class.active]="selectedMode() === 'aggressive'" 
+        (click)="onModeChange('aggressive')">
+        🔴 Rủi ro
+      </button>
+    </div>
+    <div class="mode-description">
+      {{ getModeLabel(selectedMode()) }}
+    </div>
+  </div>
+
+  @if (current()) {
+    <!-- Main Stats -->
+    <div class="stats">
+      <div class="stat highlight" [class.negative]="current()!.safeAvailableFunds < 0">
+        <div class="label">💰 Tiền Chắc Ăn (Có thể phân bổ)</div>
+        <div class="value focus">{{ format(current()!.safeAvailableFunds) }} đ</div>
+        <div class="hint">Chỉ tính đơn đã thanh toán CẢ NCC VÀ Đại lý</div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat info">
+          <div class="label">📊 Tổng lợi nhuận (bao gồm pending)</div>
+          <div class="value">{{ format(current()!.totalNetProfit) }} đ</div>
+          <div class="hint">Ước tính + Thực tế</div>
+        </div>
+        <div class="stat">
+          <div class="label">⚠️ Mức rủi ro</div>
+          <div class="value risk-{{ current()!.additionalInfo?.riskLevel?.toLowerCase() }}">
+            {{ current()!.additionalInfo?.riskLevel || 'N/A' }}
+          </div>
+          <div class="hint">{{ current()!.mode }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cash Flow Details -->
+    <details class="details-section" open>
+      <summary>📊 Chi tiết dòng tiền</summary>
+      
+      @if (current()!.mode === 'conservative') {
+        <div class="cash-flow-grid">
+          <div class="flow-item positive">
+            <div class="flow-label">✅ Lợi nhuận thực tế (đã thanh toán cả 2 bên)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.realizedNetProfit) }} đ</div>
+            <div class="flow-count">{{ current()!.cashFlow.realizedOrderCount || 0 }} đơn</div>
+          </div>
+          <div class="flow-item pending">
+            <div class="flow-label">⏳ Lợi nhuận chờ thanh toán</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.pendingNetProfit) }} đ</div>
+            <div class="flow-count">{{ current()!.cashFlow.pendingOrderCount || 0 }} đơn</div>
+          </div>
+          <div class="flow-item">
+            <div class="flow-label">🏦 Vốn ban đầu</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.initialCapital) }} đ</div>
+          </div>
+          <div class="flow-item highlight">
+            <div class="flow-label">💰 Tiền chắc ăn (= Thực tế + Vốn)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.netCashAvailable) }} đ</div>
+          </div>
+        </div>
+      }
+
+      @if (current()!.mode === 'moderate') {
+        <div class="cash-flow-grid">
+          <div class="flow-item positive">
+            <div class="flow-label">✅ Realized (100%)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.realizedProfit) }} đ</div>
+            <div class="flow-count">{{ current()!.cashFlow.realizedCount || 0 }} đơn</div>
+          </div>
+          <div class="flow-item partial">
+            <div class="flow-label">🟡 Partial (70% - 1 bên paid)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.partialProfit) }} đ</div>
+            <div class="flow-count">{{ current()!.cashFlow.partialCount || 0 }} đơn</div>
+          </div>
+          <div class="flow-item pending">
+            <div class="flow-label">⏳ Pending (40%)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.pendingProfit) }} đ</div>
+            <div class="flow-count">{{ current()!.cashFlow.pendingCount || 0 }} đơn</div>
+          </div>
+          <div class="flow-item">
+            <div class="flow-label">📉 Sau chiết khấu</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.discountedFunds) }} đ</div>
+          </div>
+          <div class="flow-item">
+            <div class="flow-label">🏦 Vốn ban đầu</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.initialCapital) }} đ</div>
+          </div>
+          <div class="flow-item highlight">
+            <div class="flow-label">💰 Tiền khả dụng</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.netCashAvailable) }} đ</div>
+          </div>
+        </div>
+      }
+
+      @if (current()!.mode === 'aggressive') {
+        <div class="cash-flow-grid">
+          <div class="flow-item">
+            <div class="flow-label">📊 Ước tính (100%)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.estimatedProfit) }} đ</div>
+          </div>
+          <div class="flow-item positive">
+            <div class="flow-label">✅ Đã thực tế</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.realizedProfit) }} đ</div>
+          </div>
+          <div class="flow-item warning">
+            <div class="flow-label">⚠️ Chưa thực tế</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.unrealizedProfit) }} đ</div>
+          </div>
+          <div class="flow-item">
+            <div class="flow-label">🏦 Vốn ban đầu</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.initialCapital) }} đ</div>
+          </div>
+          <div class="flow-item">
+            <div class="flow-label">💳 Khoản vay khả dụng</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.loanAvailable) }} đ</div>
+          </div>
+          <div class="flow-item highlight">
+            <div class="flow-label">💰 Tổng (RỦI RO)</div>
+            <div class="flow-value">{{ format(current()!.cashFlow.netCashAvailable) }} đ</div>
+          </div>
+        </div>
+      }
+    </details>
+
+    <!-- Additional Info -->
+    @if (current()!.additionalInfo) {
+      <div class="note-box">
+        <strong>📌 Ghi chú:</strong>
+        <p>{{ current()!.additionalInfo?.description }}</p>
+        @if (current()!.additionalInfo?.warning) {
+          <p class="warning">⚠️ {{ current()!.additionalInfo?.warning }}</p>
+        }
+        @if (current()!.additionalInfo?.recommendation) {
+          <p class="recommendation">💡 {{ current()!.additionalInfo?.recommendation }}</p>
+        }
+      </div>
+    }
+
+    <!-- Actions -->
+    <div class="actions">
+      <button (click)="capture()" [disabled]="loading()" class="btn-primary">
+        📸 Lưu Snapshot
+      </button>
+    </div>
+  }
+
+  <!-- Snapshots History -->
+  @if (snapshots().length > 0) {
+    <details class="details-section">
+      <summary>📜 Lịch sử Snapshot ({{ snapshots().length }})</summary>
+      <div class="snapshot-list">
+        @for (s of snapshots(); track s.capturedAt) {
+          <div class="snapshot-item">
+            <span class="date">{{ s.capturedAt | date:'dd/MM/yyyy HH:mm' }}</span>
+            <span class="value">{{ format(s.available) }} đ</span>
+            @if (s.note) {
+              <span class="note">{{ s.note }}</span>
+            }
+          </div>
+        }
+      </div>
+    </details>
+  }
+</div>

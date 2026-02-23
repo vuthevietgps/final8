@@ -1,0 +1,329 @@
+<div class="product-container">
+  <div class="header">
+    <div class="header-left">
+      <h1>🛍️ Quản Lý Sản Phẩm</h1>
+      <p>Trường gọn: tên, nhóm, trạng thái, màu, nhà cung cấp.</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="openAddModal()">
+        <span class="icon">➕</span>
+        Thêm Mới
+      </button>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">📦</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats().totalProducts }}</div>
+        <div class="stat-label">Tổng Sản Phẩm</div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="error()" class="error-banner" (click)="clearError()">
+    <span class="error-icon">⚠️</span>
+    <span class="error-text">{{ error() }}</span>
+    <span class="error-close">✕</span>
+  </div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <input
+        type="text"
+        placeholder="🔍 Tìm theo tên hoặc mã"
+        class="search-input"
+        [value]="searchTerm()"
+        (input)="onSearchChange($event)"
+      />
+    </div>
+    <div class="filter-group">
+      <select
+        class="filter-select"
+        [value]="selectedStatus()"
+        (change)="onStatusFilterChange($event)"
+      >
+        <option value="all">Tất cả trạng thái</option>
+        <option value="Hoạt động">Hoạt động</option>
+        <option value="Tạm dừng">Tạm dừng</option>
+        <option value="Ngừng bán">Ngừng bán</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <select
+        class="filter-select"
+        [value]="selectedCategory()"
+        (change)="onCategoryFilterChange($event)"
+      >
+        <option value="all">Tất cả danh mục</option>
+        <option *ngFor="let category of categories()" [value]="category._id">
+          {{ category.icon }} {{ category.name }}
+        </option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <div *ngIf="isLoading()" class="loading">
+      <div class="spinner"></div>
+      <p>Đang tải dữ liệu...</p>
+    </div>
+
+    <table *ngIf="!isLoading()" class="products-table">
+      <thead>
+        <tr>
+          <th>Tên</th>
+          <th>Mã</th>
+          <th>Danh Mục</th>
+          <th>Nhà Cung Cấp</th>
+          <th>Trạng Thái</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let product of filteredProducts()" class="product-row">
+          <td class="name-cell">
+            <div class="product-name">
+              <span class="color-circle" [style.background-color]="product.color || '#3B82F6'"></span>
+              {{ product.name }}
+            </div>
+          </td>
+          <td class="sku-cell">{{ product.sku || '-' }}</td>
+          <td class="category-cell">
+            <div class="category-badge" [style.background-color]="$any(product).categoryId?.color || '#e5e7eb'">
+              <span class="category-icon">{{ $any(product).categoryId?.icon || '🏷️' }}</span>
+              <span class="category-name">{{ $any(product).categoryId?.name || 'Chưa phân loại' }}</span>
+            </div>
+          </td>
+          <td class="suppliers-cell">
+            <div class="suppliers">
+              <span class="supplier-tag" *ngFor="let sup of (product.suppliers || [])">{{ sup.supplierId || 'NCC' }}</span>
+            </div>
+          </td>
+          <td class="status-cell">
+            <span class="status-badge" [class]="product.status === 'Hoạt động' ? 'active' : 'inactive'">
+              {{ product.status || 'Hoạt động' }}
+            </span>
+          </td>
+          <td class="actions-cell">
+            <button class="btn-icon btn-edit" (click)="openEditModal(product)" title="Chỉnh sửa">✏️</button>
+            <button class="btn-icon btn-delete" (click)="deleteProduct(product)" title="Xóa">🗑️</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div *ngIf="!isLoading() && filteredProducts().length === 0" class="empty-state">
+      <div class="empty-icon">📦</div>
+      <h3>Không có sản phẩm nào</h3>
+      <p>Hãy thêm sản phẩm đầu tiên hoặc điều chỉnh bộ lọc tìm kiếm</p>
+      <button class="btn btn-primary" (click)="openAddModal()">
+        <span class="icon">➕</span>
+        Thêm Sản Phẩm Đầu Tiên
+      </button>
+    </div>
+  </div>
+</div>
+
+<div *ngIf="isAddModalOpen()" class="modal-overlay" (click)="closeAddModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>➕ Thêm Sản Phẩm Mới</h2>
+      <button class="modal-close" (click)="closeAddModal()">✕</button>
+    </div>
+
+    <form class="modal-form" (ngSubmit)="createProduct()">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="name">Tên Sản Phẩm *</label>
+          <input
+            type="text"
+            id="name"
+            required
+            [value]="formData().name"
+            (input)="onInputChange('name', $event)"
+            placeholder="Nhập tên sản phẩm"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="categoryId">Danh Mục *</label>
+          <select
+            id="categoryId"
+            required
+            [value]="formData().categoryId"
+            (change)="onInputChange('categoryId', $event)"
+          >
+            <option value="">Chọn danh mục</option>
+            <option *ngFor="let category of categories()" [value]="category._id">
+              {{ category.icon }} {{ category.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="status">Trạng Thái</label>
+          <select
+            id="status"
+            [value]="formData().status"
+            (change)="onInputChange('status', $event)"
+          >
+            <option value="Hoạt động">Hoạt động</option>
+            <option value="Tạm dừng">Tạm dừng</option>
+            <option value="Ngừng bán">Ngừng bán</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="color">Màu Sắc</label>
+          <div class="color-input-container">
+            <input
+              type="color"
+              id="color"
+              class="color-picker"
+              [value]="formData().color || '#3B82F6'"
+              (input)="onInputChange('color', $event)"
+            />
+            <input
+              type="text"
+              class="color-text"
+              [value]="formData().color || '#3B82F6'"
+              (input)="onInputChange('color', $event)"
+              placeholder="#3B82F6"
+              maxlength="7"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid full-width">
+        <div class="form-group">
+          <label>Nhà Cung Cấp</label>
+          <div class="supplier-list">
+            <label *ngFor="let supplier of suppliers()" class="supplier-item">
+              <input
+                type="checkbox"
+                [checked]="formData().supplierIds?.includes(supplier._id)"
+                (change)="onSupplierToggle(supplier._id, $any($event.target).checked)"
+              />
+              <div>
+                <div class="name">{{ supplier.fullName }}</div>
+                <div class="sub">{{ supplier.phone || '—' }}</div>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" (click)="closeAddModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary" [disabled]="isLoading()">
+          <span *ngIf="isLoading()" class="spinner small"></span>
+          {{ isLoading() ? 'Đang tạo...' : 'Tạo Sản Phẩm' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div *ngIf="isEditModalOpen()" class="modal-overlay" (click)="closeEditModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>✏️ Chỉnh Sửa Sản Phẩm</h2>
+      <button class="modal-close" (click)="closeEditModal()">✕</button>
+    </div>
+
+    <form class="modal-form" (ngSubmit)="updateProduct()">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="edit-name">Tên Sản Phẩm *</label>
+          <input
+            type="text"
+            id="edit-name"
+            required
+            [value]="formData().name"
+            (input)="onInputChange('name', $event)"
+            placeholder="Nhập tên sản phẩm"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-categoryId">Danh Mục *</label>
+          <select
+            id="edit-categoryId"
+            required
+            [value]="formData().categoryId"
+            (change)="onInputChange('categoryId', $event)"
+          >
+            <option value="">Chọn danh mục</option>
+            <option *ngFor="let category of categories()" [value]="category._id">
+              {{ category.icon }} {{ category.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-status">Trạng Thái</label>
+          <select
+            id="edit-status"
+            [value]="formData().status"
+            (change)="onInputChange('status', $event)"
+          >
+            <option value="Hoạt động">Hoạt động</option>
+            <option value="Tạm dừng">Tạm dừng</option>
+            <option value="Ngừng bán">Ngừng bán</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-color">Màu Sắc</label>
+          <div class="color-input-container">
+            <input
+              type="color"
+              id="edit-color"
+              class="color-picker"
+              [value]="formData().color || '#3B82F6'"
+              (input)="onInputChange('color', $event)"
+            />
+            <input
+              type="text"
+              class="color-text"
+              [value]="formData().color || '#3B82F6'"
+              (input)="onInputChange('color', $event)"
+              placeholder="#3B82F6"
+              maxlength="7"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid full-width">
+        <div class="form-group">
+          <label>Nhà Cung Cấp</label>
+          <div class="supplier-list">
+            <label *ngFor="let supplier of suppliers()" class="supplier-item">
+              <input
+                type="checkbox"
+                [checked]="formData().supplierIds?.includes(supplier._id)"
+                (change)="onSupplierToggle(supplier._id, $any($event.target).checked)"
+              />
+              <div>
+                <div class="name">{{ supplier.fullName }}</div>
+                <div class="sub">{{ supplier.phone || '—' }}</div>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" (click)="closeEditModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary" [disabled]="isLoading()">
+          <span *ngIf="isLoading()" class="spinner small"></span>
+          {{ isLoading() ? 'Đang cập nhật...' : 'Cập Nhật' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

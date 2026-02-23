@@ -1,0 +1,323 @@
+<div class="page">
+  <h2>📊 KPI Nhân Viên Quảng Cáo</h2>
+  <p class="page-description">
+    Theo dõi hiệu suất nhân viên quản lý Ads. 
+    <span class="kpi-target">🎯 Target: 70% nhóm QC có lợi nhuận | Tối thiểu 4 nhóm/platform/sản phẩm</span>
+  </p>
+
+  <!-- Filters -->
+  <section class="card filters-card">
+    <div class="filters">
+      <label>
+        Từ ngày
+        <input type="date" [(ngModel)]="fromDate" />
+      </label>
+      <label>
+        Đến ngày
+        <input type="date" [(ngModel)]="toDate" />
+      </label>
+      <button class="btn-primary" (click)="loadData(); loadAlerts()">🔍 Xem báo cáo</button>
+    </div>
+  </section>
+
+  <!-- Summary Cards -->
+  @if (data()) {
+    <section class="summary-cards">
+      <div class="summary-card">
+        <div class="card-icon">👥</div>
+        <div class="card-content">
+          <div class="card-value">{{ data()!.summary.totalEmployees }}</div>
+          <div class="card-label">Tổng nhân viên</div>
+        </div>
+      </div>
+      
+      <div class="summary-card success">
+        <div class="card-icon">✅</div>
+        <div class="card-content">
+          <div class="card-value">{{ data()!.summary.employeesMeetingKpi }}</div>
+          <div class="card-label">Đạt KPI</div>
+        </div>
+      </div>
+      
+      <div class="summary-card danger">
+        <div class="card-icon">❌</div>
+        <div class="card-content">
+          <div class="card-value">{{ data()!.summary.employeesNotMeetingKpi }}</div>
+          <div class="card-label">Chưa đạt KPI</div>
+        </div>
+      </div>
+      
+      <div class="summary-card">
+        <div class="card-icon">📈</div>
+        <div class="card-content">
+          <div class="card-value">{{ formatPercent(data()!.summary.overallProfitableRate) }}</div>
+          <div class="card-label">Tỷ lệ profitable</div>
+        </div>
+      </div>
+      
+      <div class="summary-card warning" *ngIf="criticalAlertCount > 0">
+        <div class="card-icon">🚨</div>
+        <div class="card-content">
+          <div class="card-value">{{ criticalAlertCount }}</div>
+          <div class="card-label">Cảnh báo nghiêm trọng</div>
+        </div>
+      </div>
+    </section>
+  }
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button 
+      [class.active]="activeTab() === 'overview'" 
+      (click)="activeTab.set('overview')">
+      📋 Tổng quan nhân viên
+    </button>
+    <button 
+      [class.active]="activeTab() === 'alerts'" 
+      (click)="activeTab.set('alerts')">
+      🔔 Cảnh báo ({{ allAlerts().length }})
+    </button>
+  </div>
+
+  <!-- Overview Tab -->
+  @if (activeTab() === 'overview') {
+    <section class="card">
+      <div class="section-header">
+        <h3>👥 Bảng xếp hạng nhân viên</h3>
+      </div>
+
+      @if (loading()) {
+        <div class="loading">⏳ Đang tải dữ liệu...</div>
+      }
+
+      @if (!loading() && data() && data()!.employees.length > 0) {
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Nhân viên</th>
+                <th>Nhóm QC</th>
+                <th>Profitable</th>
+                <th>Tỷ lệ</th>
+                <th>Chi phí</th>
+                <th>Doanh thu</th>
+                <th>Lợi nhuận</th>
+                <th>ROI</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (emp of data()!.employees; track emp.employeeId; let i = $index) {
+                <tr [class]="getKpiStatusClass(emp)">
+                  <td>{{ i + 1 }}</td>
+                  <td>
+                    <div class="cell-title">{{ emp.employeeName || 'N/A' }}</div>
+                    <div class="cell-sub">{{ emp.employeeEmail }}</div>
+                  </td>
+                  <td class="num">{{ emp.totalAdGroups }}</td>
+                  <td class="num">
+                    <span class="badge success">{{ emp.profitableAdGroups }}</span>
+                    /
+                    <span class="badge danger">{{ emp.unprofitableAdGroups }}</span>
+                  </td>
+                  <td class="num">
+                    <span [class.text-success]="emp.profitableRate >= 0.7" 
+                          [class.text-danger]="emp.profitableRate < 0.5">
+                      {{ formatPercent(emp.profitableRate) }}
+                    </span>
+                  </td>
+                  <td class="num">{{ emp.totalSpend | number:'1.0-0' }}</td>
+                  <td class="num">{{ emp.totalRevenue | number:'1.0-0' }}</td>
+                  <td class="num" [class.text-success]="emp.totalProfit > 0" [class.text-danger]="emp.totalProfit < 0">
+                    {{ emp.totalProfit | number:'1.0-0' }}
+                  </td>
+                  <td class="num">{{ emp.avgROI | number:'1.0-0' }}%</td>
+                  <td>
+                    <span [class]="getKpiStatusClass(emp)">
+                      {{ getKpiStatusText(emp) }}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="btn-small" (click)="viewEmployeeDetails(emp)">👁️ Chi tiết</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (!loading() && data() && data()!.employees.length === 0) {
+        <div class="empty-state">
+          <p>📭 Chưa có nhân viên nào được gán nhóm quảng cáo</p>
+          <p class="hint">Vào Quản lý Nhóm QC để gán nhân viên phụ trách</p>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- Alerts Tab -->
+  @if (activeTab() === 'alerts') {
+    <section class="card">
+      <div class="section-header">
+        <h3>🔔 Cảnh báo & Thông báo</h3>
+        <div class="alert-summary">
+          <span class="badge critical">🚨 {{ criticalAlertCount }} nghiêm trọng</span>
+          <span class="badge warning">⚠️ {{ warningAlertCount }} cảnh báo</span>
+        </div>
+      </div>
+
+      @if (allAlerts().length > 0) {
+        <div class="alerts-list">
+          @for (alert of allAlerts(); track $index) {
+            <div class="alert-item" [class]="getAlertClass(alert.type)">
+              <div class="alert-icon">{{ getAlertIcon(alert.type) }}</div>
+              <div class="alert-content">
+                <div class="alert-header">
+                  <span class="alert-employee">{{ alert.employeeName || 'Unknown' }}</span>
+                  <span class="alert-code">{{ alert.code }}</span>
+                </div>
+                <div class="alert-message">{{ alert.message }}</div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (allAlerts().length === 0) {
+        <div class="empty-state success">
+          <p>✅ Không có cảnh báo nào</p>
+        </div>
+      }
+    </section>
+  }
+</div>
+
+<!-- Employee Details Modal -->
+@if (showDetailsModal()) {
+  <div class="modal-overlay" (click)="closeDetailsModal()">
+    <div class="modal modal-large" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>👤 Chi tiết nhân viên: {{ selectedEmployee()?.employeeName }}</h3>
+        <button class="close-btn" (click)="closeDetailsModal()">×</button>
+      </div>
+      
+      <div class="modal-body">
+        @if (selectedEmployee()) {
+          <!-- Employee KPI Summary -->
+          <div class="detail-summary">
+            <div class="summary-row">
+              <div class="summary-item">
+                <span class="label">Tỷ lệ profitable:</span>
+                <span class="value" [class.text-success]="selectedEmployee()!.kpiProfitableRateMet">
+                  {{ formatPercent(selectedEmployee()!.profitableRate) }}
+                </span>
+              </div>
+              <div class="summary-item">
+                <span class="label">Target:</span>
+                <span class="value">70%</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">Trạng thái:</span>
+                <span [class]="getKpiStatusClass(selectedEmployee()!)">
+                  {{ getKpiStatusText(selectedEmployee()!) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Platform Breakdown -->
+          <h4>📊 Phân tích theo Platform/Sản phẩm</h4>
+          <div class="platform-breakdown">
+            @for (pb of selectedEmployee()!.platformBreakdown; track $index) {
+              <div class="platform-item" [class.not-met]="!pb.kpiMinGroupsMet">
+                <div class="platform-header">
+                  <span class="platform-icon">{{ getPlatformIcon(pb.platform) }}</span>
+                  <span class="platform-name">{{ pb.platform | uppercase }} - {{ pb.productCategoryName || 'Unknown' }}</span>
+                  <span class="platform-status" [class.success]="pb.kpiMinGroupsMet" [class.danger]="!pb.kpiMinGroupsMet">
+                    {{ pb.profitableGroups }}/{{ pb.kpiMinGroupsTarget }} nhóm profitable
+                  </span>
+                </div>
+                <div class="platform-metrics">
+                  <span>Tổng: {{ pb.totalGroups }} nhóm</span>
+                  <span>Chi phí: {{ pb.totalSpend | number:'1.0-0' }}</span>
+                  <span>Lợi nhuận: {{ pb.totalProfit | number:'1.0-0' }}</span>
+                  <span>ROI: {{ pb.avgROI | number:'1.0-0' }}%</span>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Ad Groups Table -->
+          <h4>📋 Danh sách nhóm quảng cáo</h4>
+          @if (loadingDetails()) {
+            <div class="loading">⏳ Đang tải...</div>
+          }
+          
+          @if (!loadingDetails() && employeeAdGroups().length > 0) {
+            <div class="table-wrapper">
+              <table class="compact">
+                <thead>
+                  <tr>
+                    <th>Nhóm QC</th>
+                    <th>Platform</th>
+                    <th>Chi phí</th>
+                    <th>Doanh thu</th>
+                    <th>Lợi nhuận</th>
+                    <th>ROI</th>
+                    <th>Đơn hàng</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (ag of employeeAdGroups(); track ag.adGroupId) {
+                    <tr [class.profitable]="ag.isProfitable" [class.unprofitable]="!ag.isProfitable">
+                      <td>
+                        <div class="cell-title">{{ ag.adGroupName }}</div>
+                        <div class="cell-sub">{{ ag.productCategoryName }}</div>
+                      </td>
+                      <td>{{ getPlatformIcon(ag.platform) }} {{ ag.platform }}</td>
+                      <td class="num">{{ ag.spend | number:'1.0-0' }}</td>
+                      <td class="num">{{ ag.revenue | number:'1.0-0' }}</td>
+                      <td class="num" [class.text-success]="ag.profit > 0" [class.text-danger]="ag.profit < 0">
+                        {{ ag.profit | number:'1.0-0' }}
+                      </td>
+                      <td class="num">{{ ag.roi | number:'1.0-0' }}%</td>
+                      <td class="num">{{ ag.successOrders }}/{{ ag.orders }}</td>
+                      <td>
+                        @if (ag.isProfitable) {
+                          <span class="badge success">✅ Có lãi</span>
+                        } @else {
+                          <span class="badge danger">❌ Lỗ</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <!-- Alerts for this employee -->
+          @if (selectedEmployee()!.alerts.length > 0) {
+            <h4>🔔 Cảnh báo</h4>
+            <div class="alerts-list compact">
+              @for (alert of selectedEmployee()!.alerts; track $index) {
+                <div class="alert-item" [class]="getAlertClass(alert.type)">
+                  <span class="alert-icon">{{ getAlertIcon(alert.type) }}</span>
+                  <span class="alert-message">{{ alert.message }}</span>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeDetailsModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,320 @@
+<div class="page">
+  <h2>� Thanh Toán Nhà Cung Cấp</h2>
+  <p class="page-description">
+    Quản lý đối soát và thanh toán với nhà cung cấp. 
+    <span class="help-text">
+      💡 NCC thu COD từ khách hàng và chuyển về doanh thu thuần theo chu kỳ 10 ngày.
+    </span>
+  </p>
+
+  <section class="card">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Đối soát theo kỳ</div>
+        <div class="section-sub">
+          📦 Mô hình Dropshipping: Kỳ tự động tổng hợp TẤT CẢ đơn hàng của NCC trong khoảng thời gian.
+          Mỗi đơn = giá NCC × số lượng. Bù trừ COD và thanh toán net.
+        </div>
+      </div>
+      <div class="section-actions">
+        <button (click)="refreshStatements()">Tải kỳ</button>
+      </div>
+    </div>
+    <div class="filters">
+      <label>
+        NCC
+        <select [(ngModel)]="statementSupplierId">
+          <option value="">Chọn NCC</option>
+          <option *ngFor="let s of suppliers" [value]="s._id">{{ s.fullName || 'NCC' }} ({{ s._id }})</option>
+        </select>
+      </label>
+      <label>
+        Từ ngày
+        <input type="date" [(ngModel)]="statementFrom" />
+      </label>
+      <label>
+        Đến ngày
+        <input type="date" [(ngModel)]="statementTo" />
+      </label>
+      <label>
+        Trạng thái
+        <select [(ngModel)]="statementStatus">
+          <option value="">Tất cả</option>
+          <option value="open">Chưa chốt</option>
+          <option value="closed">Đã chốt</option>
+        </select>
+      </label>
+      <label>
+        Ghi chú
+        <input type="text" [(ngModel)]="statementNotes" placeholder="Ghi chú kỳ (khi tạo)" />
+      </label>
+      <button (click)="upsertStatement()">Tạo/ cập nhật kỳ</button>
+    </div>
+
+    <div *ngIf="statementLoading" class="hint">Đang tải kỳ...</div>
+    <div *ngIf="!statementLoading && statements.length === 0" class="hint">Chưa có kỳ đối soát</div>
+
+    <div class="table-wrapper" *ngIf="statements.length">
+      <table>
+        <thead>
+          <tr>
+            <th>Kỳ</th>
+            <th>Opening</th>
+            <th title="Chi phí hàng + phí ship">Chi phí hàng</th>
+            <th>TT Payable</th>
+            <th>TT Kỳ</th>
+            <th title="Tổng COD NCC thu từ khách">COD NCC thu</th>
+            <th>Closing</th>
+            <th title="Doanh thu thuần = COD - Chi phí (số tiền NCC sẽ trả)" class="highlight">💰 Doanh thu thuần</th>
+            <th>Trạng thái</th>
+            <th>Thanh toán</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of statements">
+            <td>
+              <div class="cell-title">{{ s.periodFrom | date:'shortDate' }} → {{ s.periodTo | date:'shortDate' }}</div>
+              <div class="cell-sub">NCC: {{ s.supplierId }}</div>
+              <div class="cell-sub" *ngIf="s.notes">{{ s.notes }}</div>
+            </td>
+            <td class="num">{{ s.openingBalance | number:'1.0-0' }}</td>
+            <td class="num">{{ s.periodPayables | number:'1.0-0' }}</td>
+            <td class="num">{{ s.periodPayments | number:'1.0-0' }}</td>
+            <td class="num">{{ s.statementPaymentTotal | number:'1.0-0' }}</td>
+            <td class="num">{{ s.periodCodCollected | number:'1.0-0' }}</td>
+            <td class="num">{{ s.closingBalance | number:'1.0-0' }}</td>
+            <td class="num highlight" [class.positive]="s.netAfterCod > 0" [class.negative]="s.netAfterCod < 0">{{ s.netAfterCod | number:'1.0-0' }}</td>
+            <td>
+              <span [class.badge]="true" [class.open]="s.status==='open'" [class.closed]="s.status==='closed'">
+                {{ s.status === 'open' ? '🟡 Chưa chốt' : '🟢 Đã chốt' }}
+              </span>
+            </td>
+            <td>
+              <div class="payments" *ngIf="s.payments?.length">
+                <div class="payment" *ngFor="let p of s.payments">
+                  <span>{{ p.paidAt | date:'shortDate' }}</span>
+                  <span class="money">{{ p.amount | number:'1.0-0' }}</span>
+                  <span class="cell-sub">{{ p.reference || p.method }}</span>
+                  <a *ngFor="let d of p.documents" [href]="d" target="_blank" rel="noreferrer">📎</a>
+                </div>
+              </div>
+              <div *ngIf="!s.payments?.length" class="cell-sub">Chưa có thanh toán</div>
+            </td>
+            <td>
+              <div class="actions">
+                <button class="btn-small" (click)="openPaymentModal(s)" [disabled]="s.status==='closed'" title="Ghi nhận đã nhận tiền từ NCC">✅ Ghi nhận đã nhận</button>
+                <button class="btn-small" (click)="exportStatementPDF(s)" title="In biên bản đối soát">📄 Biên bản</button>
+                <button class="btn-small danger" (click)="confirmCloseStatement(s)" [disabled]="s.status==='closed'" title="Chốt kỳ đối soát">🔒 Chốt</button>
+                <button *ngIf="isDirector && s.status==='closed'" class="btn-small warning" (click)="reopenStatement(s)" title="Mở lại kỳ (Giám đốc)">🔓 Mở lại</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Danh sách công nợ (tham chiếu)</div>
+        <div class="section-sub">
+          ⚠️ Công nợ tự động từ đơn hàng khi NCC hoàn tất fulfillment (Đã trả kết quả).
+          Thanh toán thực hiện tại kỳ đối soát.
+        </div>
+      </div>
+      <div class="section-actions">
+        <button (click)="load()">Tải công nợ</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <label>
+        Tên / ID NCC
+        <input type="text" [(ngModel)]="search" placeholder="Nhập tên hoặc ID NCC" />
+      </label>
+      <label>
+        Trạng thái
+        <select [(ngModel)]="status">
+          <option value="">Tất cả</option>
+          <option value="unpaid">Chưa trả</option>
+          <option value="partial">Thanh toán một phần</option>
+          <option value="paid">Đã tất toán</option>
+        </select>
+      </label>
+      <label>
+        Từ ngày
+        <input type="date" [(ngModel)]="from" />
+      </label>
+      <label>
+        Đến ngày
+        <input type="date" [(ngModel)]="to" />
+      </label>
+    </div>
+
+    <div *ngIf="loading" class="hint">Đang tải...</div>
+    <div *ngIf="!loading && filteredRows.length === 0" class="hint">Không có dữ liệu</div>
+
+    <div class="table-wrapper" *ngIf="filteredRows.length">
+      <table>
+        <thead>
+          <tr>
+            <th>Nhà cung cấp</th>
+            <th>Đơn hàng</th>
+            <th>Tổng phải trả (gross)</th>
+            <th>Đã thanh toán (per-payable)</th>
+            <th>Còn lại</th>
+            <th>Trạng thái</th>
+            <th>Hạn thanh toán</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of filteredRows">
+            <td>
+              <div class="cell-title">{{ r.supplierName || r.supplierNameSnap || 'Không rõ tên' }}</div>
+              <div class="cell-sub">ID: {{ r.supplierId }}</div>
+            </td>
+            <td>
+              <div class="cell-sub">{{ r.orderId || '-' }}</div>
+              <div class="items" *ngIf="r.items?.length">
+                <div class="item" *ngFor="let it of r.items">
+                  <span class="item-name">{{ it.productNameSnap || 'Sản phẩm' }}</span>
+                  <span class="item-qty">× {{ it.quantity || 0 }}</span>
+                  <span class="item-price">@ {{ it.unitPrice || 0 | number:'1.0-0' }}</span>
+                </div>
+              </div>
+            </td>
+            <td class="num">{{ r.totalAmount | number:'1.0-0' }}</td>
+            <td class="num">{{ r.amountPaid | number:'1.0-0' }}</td>
+            <td class="num">{{ r.balance | number:'1.0-0' }}</td>
+            <td>{{ r.status }}</td>
+            <td>{{ r.dueDate ? (r.dueDate | date:'shortDate') : '' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Modal thanh toán kỳ -->
+  <div class="modal-overlay" *ngIf="paymentModal" (click)="closePaymentModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>💰 Thanh toán kỳ đối soát</h3>
+        <button class="close-btn" (click)="closePaymentModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="summary-box">
+          <div class="summary-row">
+            <span>Kỳ:</span>
+            <strong>{{ selectedStatement?.periodFrom | date:'shortDate' }} → {{ selectedStatement?.periodTo | date:'shortDate' }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>NCC:</span>
+            <strong>{{ getSupplierName(selectedStatement?.supplierId) }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>Closing Balance:</span>
+            <strong class="money">{{ selectedStatement?.closingBalance | number:'1.0-0' }} VND</strong>
+          </div>
+          <div class="summary-row">
+            <span>Net After COD:</span>
+            <strong class="money" [class.positive]="(selectedStatement?.netAfterCod || 0) > 0" [class.negative]="(selectedStatement?.netAfterCod || 0) < 0">
+              {{ selectedStatement?.netAfterCod | number:'1.0-0' }} VND
+            </strong>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Số tiền thanh toán *</label>
+          <input type="number" [(ngModel)]="paymentForm.amount" min="0" step="1000" placeholder="Nhập số tiền" required />
+        </div>
+
+        <div class="form-group">
+          <label>Ngày thanh toán *</label>
+          <input type="date" [(ngModel)]="paymentForm.paidAt" required />
+        </div>
+
+        <div class="form-group">
+          <label>Phương thức</label>
+          <select [(ngModel)]="paymentForm.method">
+            <option value="">Chọn phương thức</option>
+            <option value="Chuyển khoản">Chuyển khoản</option>
+            <option value="Tiền mặt">Tiền mặt</option>
+            <option value="Bù trừ">Bù trừ</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Mã giao dịch / Số phiếu</label>
+          <input type="text" [(ngModel)]="paymentForm.reference" placeholder="VD: TXN123456 hoặc PC-001" />
+        </div>
+
+        <div class="form-group">
+          <label>Ghi chú</label>
+          <textarea [(ngModel)]="paymentForm.notes" rows="2" placeholder="Ghi chú thêm..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Chứng từ đính kèm</label>
+          <div class="file-upload">
+            <input type="file" #fileInput (change)="onFileSelect($event)" multiple accept="image/*,.pdf" style="display:none" />
+            <button type="button" class="btn-upload" (click)="fileInput.click()">📎 Chọn file</button>
+            <span class="hint">Ảnh hoặc PDF, tối đa 5 file</span>
+          </div>
+          <div class="file-list" *ngIf="paymentForm.files.length">
+            <div class="file-item" *ngFor="let f of paymentForm.files; let i = index">
+              <span>📄 {{ f.name }}</span>
+              <button type="button" class="remove-file" (click)="removeFile(i)">✕</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Hoặc nhập link chứng từ (Google Drive, Dropbox...)</label>
+            <input type="text" [(ngModel)]="paymentForm.documentLinks" placeholder="Link 1, Link 2, ..." />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closePaymentModal()">Hủy</button>
+        <button class="btn-primary" (click)="submitPayment()" [disabled]="!paymentForm.amount || !paymentForm.paidAt">
+          ✅ Xác nhận thanh toán
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal xác nhận chốt kỳ -->
+  <div class="modal-overlay" *ngIf="confirmModal" (click)="closeConfirmModal()">
+    <div class="modal small" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>⚠️ Xác nhận chốt kỳ</h3>
+        <button class="close-btn" (click)="closeConfirmModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Bạn có chắc chắn muốn <strong>CHỐT KỲ</strong> này?</p>
+        <div class="warning-box">
+          <p>⚠️ Sau khi chốt:</p>
+          <ul>
+            <li>Không thể thêm/sửa thanh toán</li>
+            <li>Không thể cập nhật số liệu kỳ</li>
+            <li>Chỉ có thể xem và in biên bản</li>
+          </ul>
+        </div>
+        <div class="summary-box">
+          <div class="summary-row">
+            <span>Kỳ:</span>
+            <strong>{{ selectedStatement?.periodFrom | date:'shortDate' }} → {{ selectedStatement?.periodTo | date:'shortDate' }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>Closing Balance:</span>
+            <strong>{{ selectedStatement?.closingBalance | number:'1.0-0' }} VND</strong>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeConfirmModal()">Hủy</button>
+        <button class="btn-danger" (click)="executeCloseStatement()">🔒 Xác nhận chốt</button>
+      </div>
+    </div>
+  </div>
+</div>

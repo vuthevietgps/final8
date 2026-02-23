@@ -1,0 +1,14 @@
+.app-layout { display:flex; height:100vh; overflow:hidden; background:var(--color-bg); color:var(--color-text); }
+.main-content { flex:1; margin-left:280px; padding:20px; overflow-y:auto; background:var(--color-bg); transition: margin-left .2s ease; }
+
+/* Khi không có sidebar (trang login) */
+.app-layout.no-sidebar .main-content { margin-left:0; }
+
+/* Khi body có class .sidebar-collapsed (được toggle trong SidebarComponent),
+   dùng :host-context để áp dụng style từ global host vào component-scoped CSS */
+:host-context(.sidebar-collapsed) .main-content { margin-left:64px; }
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .main-content { margin-left:0; padding:10px; }
+}

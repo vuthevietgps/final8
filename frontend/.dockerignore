@@ -1,0 +1,42 @@
+.git
+.vscode
+node_modules
+dist
+coverage
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+tmp
+Dockerfile
+.dockerignore
+**/*.md
+node_modules
+npm-debug.log
+# Keep lockfiles to enable faster, deterministic installs
+# DO NOT ignore package-lock.json / yarn.lock / pnpm-lock.yaml
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+.yarn/
+
+# Build outputs
+dist
+coverage
+.tmp
+.angular
+
+# VCS & editor
+.git
+.gitignore
+.vscode
+.DS_Store
+**/.DS_Store
+
+# Logs
+*.log
+
+# Tests & docs (not needed in image)
+test
+**/*.spec.ts
+**/*.md

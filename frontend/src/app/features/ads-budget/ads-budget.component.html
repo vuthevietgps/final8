@@ -1,0 +1,447 @@
+<div class="ads-budget-container">
+  <!-- HEADER -->
+  <div class="page-header">
+    <div class="header-left">
+      <h1>📊 Quản Lý Ngân Sách Ads</h1>
+      <p class="subtitle">Gợi ý chi phí hàng ngày và KPI nhóm có lãi</p>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-secondary" (click)="activeTab() === 'suggestions' ? loadSuggestions() : loadKpiData()" [disabled]="isLoading() || kpiLoading()">
+        🔄 Làm mới
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB NAVIGATION -->
+  <div class="tab-navigation">
+    <button class="tab-btn" [class.active]="activeTab() === 'suggestions'" (click)="switchTab('suggestions')">
+      💡 Gợi Ý Chi Phí
+    </button>
+    <button class="tab-btn" [class.active]="activeTab() === 'kpi'" (click)="switchTab('kpi')">
+      📈 KPI Nhóm Có Lãi
+    </button>
+  </div>
+
+  <!-- ============================================= -->
+  <!-- TAB 1: GỢI Ý CHI PHÍ -->
+  <!-- ============================================= -->
+  @if (activeTab() === 'suggestions') {
+    <!-- SUMMARY -->
+    @if (summary(); as s) {
+      <div class="progress-section">
+        <div class="summary-cards">
+          <div class="summary-card">
+            <span class="label">Tổng nhóm</span>
+            <span class="value">{{ s.total }}</span>
+          </div>
+          <div class="summary-card">
+            <span class="label">Đã thực hiện</span>
+            <span class="value good">{{ s.actionDoneCount }}/{{ s.total }}</span>
+          </div>
+          <div class="summary-card" [class.alert]="s.alertCount > 0">
+            <span class="label">⚠️ Cảnh báo</span>
+            <span class="value">{{ s.alertCount }}</span>
+          </div>
+          <div class="summary-card profitable">
+            <span class="label">Gợi ý có Trần</span>
+            <span class="value">{{ formatCurrency(s.totalSuggestedSpendWithCap) }}</span>
+          </div>
+        </div>
+        <div class="summary-cards" style="margin-top: 12px;">
+          <div class="summary-card rec-increase">
+            <span class="label">↑ Tăng</span>
+            <span class="value">{{ s.increaseCount }}</span>
+          </div>
+          <div class="summary-card rec-maintain">
+            <span class="label">= Giữ</span>
+            <span class="value">{{ s.maintainCount }}</span>
+          </div>
+          <div class="summary-card rec-decrease">
+            <span class="label">↓ Giảm</span>
+            <span class="value">{{ s.decreaseCount }}</span>
+          </div>
+          <div class="summary-card rec-pause">
+            <span class="label">⏸ Tắt</span>
+            <span class="value">{{ s.pauseCount }}</span>
+          </div>
+        </div>
+      </div>
+    }
+
+  <!-- LOADING -->
+    @if (isLoading()) {
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    }
+
+    <!-- ERROR -->
+    @if (error()) {
+      <div class="error-container">
+        <p>{{ error() }}</p>
+        <button (click)="loadSuggestions()" class="btn btn-primary">Thử lại</button>
+      </div>
+    }
+
+    <!-- FILTERS -->
+    @if (!isLoading() && !error()) {
+      <div class="filters-row">
+        <div class="filter-group">
+          <label>Nền tảng:</label>
+          <select [ngModel]="platformFilter()" (ngModelChange)="platformFilter.set($event)">
+            <option value="all">Tất cả</option>
+            @for (p of platforms(); track p) {
+              <option [value]="p">{{ getPlatformIcon(p) }} {{ p | uppercase }}</option>
+            }
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Khuyến nghị:</label>
+          <select [ngModel]="recommendationFilter()" (ngModelChange)="recommendationFilter.set($event)">
+            <option value="all">Tất cả</option>
+            <option value="increase">↑ Tăng</option>
+            <option value="maintain">= Giữ</option>
+            <option value="decrease">↓ Giảm</option>
+            <option value="pause">⏸ Tắt</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>
+            <input type="checkbox" [ngModel]="showAlertOnly()" (ngModelChange)="showAlertOnly.set($event)">
+            ⚠️ Chỉ cảnh báo
+          </label>
+        </div>
+        <div class="filter-group">
+          <label>
+            <input type="checkbox" [ngModel]="showPendingOnly()" (ngModelChange)="showPendingOnly.set($event)">
+            Chưa thực hiện
+          </label>
+        </div>
+        <div class="filter-group">
+          <span class="sub-text">Hiển thị {{ filteredSuggestions().length }}/{{ suggestions().length }}</span>
+        </div>
+      </div>
+    }
+
+    <!-- TABLE -->
+    @if (!isLoading() && !error()) {
+      <div class="table-container">
+        <table class="suggestions-table">
+          <thead>
+            <tr>
+              <th>Nền Tảng</th>
+              <th>Sản Phẩm</th>
+              <th>Nhóm Quảng Cáo</th>
+              <th class="number">Chi Hôm Qua</th>
+              <th class="number">Gợi Ý (Có Trần)</th>
+              <th class="number">% Thay Đổi</th>
+              <th>Khuyến Nghị</th>
+              <th>Cảnh Báo</th>
+              <th>Hành Động</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of filteredSuggestions(); track s.adGroupId) {
+              <tr [class.has-alert]="s.hasAlert"
+                  [class.action-done]="s.actionDone">
+                <td class="platform-cell">
+                  <span class="platform-icon">{{ getPlatformIcon(s.platform) }}</span>
+                  {{ s.platform | uppercase }}
+                </td>
+                <td>{{ s.productCategoryName }}</td>
+                <td>
+                  <strong>{{ s.adGroupName }}</strong>
+                  <div class="sub-text">{{ s.adGroupId }}</div>
+                </td>
+                <td class="number">
+                  {{ formatCurrency(s.spendYesterday) }}
+                  @if (s.profitYesterday !== 0) {
+                    <div class="sub-text" [class.profit]="s.profitYesterday > 0" [class.loss]="s.profitYesterday < 0">
+                      {{ s.profitYesterday > 0 ? '+' : '' }}{{ formatCurrency(s.profitYesterday) }}
+                    </div>
+                  }
+                </td>
+                <td class="number">
+                  <strong>{{ formatCurrency(s.suggestedSpendWithCap) }}</strong>
+                </td>
+                <td class="number">
+                  <span [class.increase]="getDiffPercent(s) > 0" 
+                        [class.decrease]="getDiffPercent(s) < 0"
+                        [class.maintain]="getDiffPercent(s) === 0">
+                    {{ getDiffPercent(s) > 0 ? '+' : '' }}{{ formatPercent(getDiffPercent(s)) }}
+                  </span>
+                </td>
+                <td>
+                  <span class="recommendation-badge" [ngClass]="getRecommendationClass(s.recommendation)">
+                    {{ getRecommendationLabel(s.recommendation) }}
+                  </span>
+                </td>
+                <td class="alert-cell">
+                  @if (s.hasAlert) {
+                    <span class="alert-badge" title="Lỗ liên tiếp {{ s.consecutiveNegativeDays }} ngày">
+                      ⚠️ {{ s.consecutiveNegativeDays }} ngày lỗ
+                    </span>
+                  } @else {
+                    <span class="no-alert">-</span>
+                  }
+                </td>
+                <td class="action-cell">
+                  <button class="action-btn" 
+                          [class.done]="s.actionDone"
+                          (click)="toggleActionDone(s.adGroupId)">
+                    @if (s.actionDone) {
+                      ✅ Đã thực hiện
+                    } @else {
+                      ⏳ Chưa thực hiện
+                    }
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="9" class="empty-message">
+                  Không có dữ liệu gợi ý. Vui lòng kiểm tra dữ liệu Ad Group Daily Report.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- INFO BOX -->
+      <div class="info-box" style="margin-top: 20px;">
+        <h3>📖 Giải thích</h3>
+        <ul>
+          <li><strong>Chi Hôm Qua</strong>: Chi phí thực tế ngày hôm qua (không phải trung bình 30 ngày)</li>
+          <li><strong>Gợi Ý (Có Trần)</strong>: Áp dụng trần +20% tăng / -30% giảm → <strong>SỬ DỤNG GIÁ TRỊ NÀY</strong></li>
+          <li><strong>⚠️ Cảnh Báo</strong>: Nhóm quảng cáo lỗ liên tiếp ≥3 ngày, cần xem xét tắt hoặc điều chỉnh</li>
+          <li><strong>Hành Động</strong>: Đánh dấu khi đã điều chỉnh budget trên platform (reset mỗi ngày)</li>
+        </ul>
+      </div>
+    }
+  }
+
+  <!-- ============================================= -->
+  <!-- TAB 2: KPI NHÓM CÓ LÃI -->
+  <!-- ============================================= -->
+  @if (activeTab() === 'kpi') {
+    
+    <!-- KPI SUMMARY CARDS -->
+    @if (kpiDailySummary(); as ks) {
+      <div class="kpi-summary-cards">
+        <div class="kpi-card">
+          <span class="kpi-label">Tổng Platform/Product</span>
+          <span class="kpi-value">{{ ks.totalPlatformProducts }}</span>
+        </div>
+        <div class="kpi-card" [ngClass]="getKpiRateClass(ks.avgProfitableRate)">
+          <span class="kpi-label">Tỷ Lệ Có Lãi TB</span>
+          <span class="kpi-value">{{ formatRatePercent(ks.avgProfitableRate) }}</span>
+          <span class="kpi-target">Mục tiêu: ≥70%</span>
+        </div>
+        <div class="kpi-card" [ngClass]="getKpiRateClass(ks.avgKpiMetRate)">
+          <span class="kpi-label">Tỷ Lệ Đạt KPI</span>
+          <span class="kpi-value">{{ formatRatePercent(ks.avgKpiMetRate) }}</span>
+          <span class="kpi-target">≥4 nhóm có lãi/cặp</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Số Ngày</span>
+          <span class="kpi-value">{{ ks.totalDays }}</span>
+        </div>
+      </div>
+    }
+
+    <!-- KPI LOADING -->
+    @if (kpiLoading()) {
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Đang tải dữ liệu KPI...</p>
+      </div>
+    }
+
+    <!-- KPI ERROR -->
+    @if (kpiError()) {
+      <div class="error-container">
+        <p>{{ kpiError() }}</p>
+        <button (click)="loadKpiData()" class="btn btn-primary">Thử lại</button>
+      </div>
+    }
+
+    <!-- KPI FILTERS -->
+    @if (!kpiLoading() && !kpiError()) {
+      <div class="filters-row">
+        <div class="filter-group">
+          <label>Chế độ:</label>
+          <select [ngModel]="kpiViewMode()" (ngModelChange)="kpiViewMode.set($event); onKpiViewModeChange()">
+            <option value="daily">Theo ngày</option>
+            <option value="monthly">Theo tháng</option>
+          </select>
+        </div>
+
+        @if (kpiViewMode() === 'daily') {
+          <div class="filter-group">
+            <label>Thời gian:</label>
+            <div class="date-range-btns">
+              <button class="btn btn-sm" (click)="setKpiDateRange(7)">7 ngày</button>
+              <button class="btn btn-sm" (click)="setKpiDateRange(14)">14 ngày</button>
+              <button class="btn btn-sm" (click)="setKpiDateRange(30)">30 ngày</button>
+            </div>
+          </div>
+        }
+
+        @if (kpiViewMode() === 'monthly') {
+          <div class="filter-group">
+            <label>Tháng:</label>
+            <input type="month" [ngModel]="kpiYearMonth()" (ngModelChange)="kpiYearMonth.set($event); loadKpiMonthly()">
+          </div>
+        }
+
+        <div class="filter-group">
+          <label>Nền tảng:</label>
+          <select [ngModel]="kpiPlatformFilter()" (ngModelChange)="kpiPlatformFilter.set($event)">
+            <option value="all">Tất cả</option>
+            @for (p of kpiPlatforms(); track p) {
+              <option [value]="p">{{ getPlatformIcon(p) }} {{ p | uppercase }}</option>
+            }
+          </select>
+        </div>
+      </div>
+    }
+
+    <!-- KPI DAILY TABLE -->
+    @if (!kpiLoading() && !kpiError() && kpiViewMode() === 'daily') {
+      <div class="table-container">
+        <table class="kpi-table">
+          <thead>
+            <tr>
+              <th>Ngày</th>
+              <th>Nền Tảng</th>
+              <th>Sản Phẩm</th>
+              <th class="number">Tổng Nhóm</th>
+              <th class="number">Nhóm Có Lãi</th>
+              <th class="number">Tỷ Lệ</th>
+              <th>KPI</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (stat of filteredKpiDaily(); track stat.date + stat.platform + stat.productCategoryId) {
+              <tr>
+                <td>{{ formatDate(stat.date) }}</td>
+                <td class="platform-cell">
+                  <span class="platform-icon">{{ getPlatformIcon(stat.platform) }}</span>
+                  {{ stat.platform | uppercase }}
+                </td>
+                <td>{{ stat.productCategoryName }}</td>
+                <td class="number">{{ stat.totalGroups }}</td>
+                <td class="number">
+                  <strong [ngClass]="stat.profitableGroups >= 4 ? 'good' : 'bad'">{{ stat.profitableGroups }}</strong>
+                </td>
+                <td class="number">
+                  <span [ngClass]="getKpiRateClass(stat.profitableRate)">
+                    {{ formatRatePercent(stat.profitableRate) }}
+                  </span>
+                </td>
+                <td>
+                  <span class="kpi-badge" [ngClass]="getKpiMetClass(stat.kpiMet)">
+                    {{ getKpiMetBadge(stat.kpiMet) }}
+                  </span>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="empty-message">
+                  Không có dữ liệu KPI cho khoảng thời gian này.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- KPI MONTHLY TABLE -->
+    @if (!kpiLoading() && !kpiError() && kpiViewMode() === 'monthly') {
+      @if (kpiMonthlySummary(); as ms) {
+        <div class="monthly-summary">
+          <div class="best-worst">
+            @if (ms.bestPlatformProduct) {
+              <div class="best-item">
+                <span class="label">🏆 Tốt nhất:</span>
+                <span class="value">{{ getPlatformIcon(ms.bestPlatformProduct.platform) }} {{ ms.bestPlatformProduct.productCategoryName }}</span>
+                <span class="rate good">{{ formatRatePercent(ms.bestPlatformProduct.avgProfitableRate) }}</span>
+              </div>
+            }
+            @if (ms.worstPlatformProduct) {
+              <div class="worst-item">
+                <span class="label">⚠️ Cần cải thiện:</span>
+                <span class="value">{{ getPlatformIcon(ms.worstPlatformProduct.platform) }} {{ ms.worstPlatformProduct.productCategoryName }}</span>
+                <span class="rate bad">{{ formatRatePercent(ms.worstPlatformProduct.avgProfitableRate) }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="table-container">
+        <table class="kpi-table">
+          <thead>
+            <tr>
+              <th>Nền Tảng</th>
+              <th>Sản Phẩm</th>
+              <th class="number">Số Ngày</th>
+              <th class="number">TB Nhóm Có Lãi</th>
+              <th class="number">TB Tổng Nhóm</th>
+              <th class="number">Tỷ Lệ TB</th>
+              <th class="number">Ngày Đạt KPI</th>
+              <th class="number">Tỷ Lệ KPI</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (stat of filteredKpiMonthly(); track stat.platform + stat.productCategoryId) {
+              <tr>
+                <td class="platform-cell">
+                  <span class="platform-icon">{{ getPlatformIcon(stat.platform) }}</span>
+                  {{ stat.platform | uppercase }}
+                </td>
+                <td>{{ stat.productCategoryName }}</td>
+                <td class="number">{{ stat.totalDays }}</td>
+                <td class="number">{{ stat.avgProfitableGroups | number:'1.1-1' }}</td>
+                <td class="number">{{ stat.avgTotalGroups | number:'1.1-1' }}</td>
+                <td class="number">
+                  <span [ngClass]="getKpiRateClass(stat.avgProfitableRate)">
+                    {{ formatRatePercent(stat.avgProfitableRate) }}
+                  </span>
+                </td>
+                <td class="number">{{ stat.daysKpiMet }}</td>
+                <td class="number">
+                  <span [ngClass]="getKpiRateClass(stat.kpiMetRate)">
+                    {{ formatRatePercent(stat.kpiMetRate) }}
+                  </span>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="8" class="empty-message">
+                  Không có dữ liệu KPI cho tháng này.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- KPI INFO BOX -->
+    @if (!kpiLoading() && !kpiError()) {
+      <div class="info-box" style="margin-top: 20px;">
+        <h3>📖 Giải thích KPI</h3>
+        <ul>
+          <li><strong>Nhóm Có Lãi</strong>: Nhóm quảng cáo có netProfit > 0 trong ngày (loại trừ nhóm mới < 7 ngày)</li>
+          <li><strong>Tỷ Lệ Có Lãi</strong>: Số nhóm có lãi / Tổng số nhóm. <span class="good">Mục tiêu: ≥70%</span></li>
+          <li><strong>KPI Đạt</strong>: Có ít nhất <strong>4 nhóm có lãi</strong> cho mỗi cặp Platform + Sản Phẩm</li>
+          <li><strong>Theo Tháng</strong>: Trung bình các ngày trong tháng, giúp đánh giá xu hướng dài hạn</li>
+        </ul>
+      </div>
+    }
+  }
+</div>

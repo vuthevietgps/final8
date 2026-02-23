@@ -1,0 +1,342 @@
+<div class="ad-group-daily-report">
+  <div class="header">
+    <h1>📊 Chi Phí và Lợi Nhuận Nhóm Quảng Cáo Theo Ngày</h1>
+    <button class="btn-sync" (click)="syncToday()" [disabled]="syncing()">
+      {{ syncing() ? '🔄 Đang đồng bộ...' : '🔄 Đồng Bộ Hôm Qua' }}
+    </button>
+  </div>
+
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn" [class.active]="activeTab() === 'daily'" (click)="setTab('daily')">
+      📋 Chi Tiết Theo Ngày
+    </button>
+    <button class="tab-btn" [class.active]="activeTab() === 'optimal'" (click)="setTab('optimal')">
+      💡 Ngân Sách Tối Ưu
+    </button>
+  </div>
+
+  <!-- Sync Message -->
+  @if (syncMessage()) {
+    <div class="sync-message" [class.success]="syncMessage()?.includes('✅')" [class.error]="syncMessage()?.includes('❌')">
+      {{ syncMessage() }}
+    </div>
+  }
+
+  <!-- Summary Cards -->
+  @if (reportData()) {
+    <div class="summary-cards">
+      <div class="card">
+        <div class="card-title">Tổng Chi Phí Quảng Cáo</div>
+        <div class="card-value">{{ formatCurrency(reportData()?.summary?.totalAdsCost || 0) }}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Tổng Lợi Nhuận Thuần</div>
+        <div class="card-value" [class.profit]="(reportData()?.summary?.totalNetProfit || 0) > 0"
+             [class.loss]="(reportData()?.summary?.totalNetProfit || 0) < 0">
+          {{ formatCurrency(reportData()?.summary?.totalNetProfit || 0) }}
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- TAB 1: Chi Tiết Theo Ngày -->
+  @if (activeTab() === 'daily') {
+    <!-- Filter Form -->
+    <div class="filter-section">
+      <h2>🔍 Lọc Dữ Liệu</h2>
+      <form [formGroup]="filterForm" (ngSubmit)="onFilterSubmit()">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Từ Ngày:</label>
+            <input type="date" formControlName="fromDate">
+          </div>
+          <div class="form-group">
+            <label>Đến Ngày:</label>
+            <input type="date" formControlName="toDate">
+          </div>
+          <div class="form-group">
+            <label>ID Nhóm QC:</label>
+            <input type="text" formControlName="adGroupId" placeholder="Tất cả">
+          </div>
+          <div class="form-group">
+            <label>Nền Tảng:</label>
+            <select formControlName="platform">
+              <option value="">Tất cả</option>
+              <option value="facebook">Facebook</option>
+              <option value="google">Google</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary" [disabled]="loading()">
+            {{ loading() ? 'Đang tải...' : 'Lọc' }}
+          </button>
+          <button type="button" class="btn-secondary" (click)="resetFilters()">
+            Đặt Lại
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Error Message -->
+    @if (error()) {
+      <div class="error-message">
+        ⚠️ {{ error() }}
+      </div>
+    }
+
+    <!-- Report Table -->
+    @if (reportData() && !loading()) {
+      <div class="table-section">
+        <h2>📋 Chi Tiết Theo Ngày</h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Ngày</th>
+                <th>ID Nhóm QC</th>
+                <th>Tên Nhóm QC</th>
+                <th>Nền Tảng</th>
+                <th>Chi Phí QC</th>
+                <th>Chi Phí Gợi Ý</th>
+                <th>% Chênh Lệch</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of reportData()?.details || []; track item.date + item.adGroupId) {
+                <tr>
+                  <td>{{ item.date }}</td>
+                  <td>{{ item.adGroupId }}</td>
+                  <td>{{ item.adGroupName || '-' }}</td>
+                  <td>{{ item.platform }}</td>
+                  <td class="number">{{ formatCurrency(item.adsCost) }}</td>
+                  <td class="number suggestion" [title]="item.suggestionReason || ''">
+                    @if (item.suggestedSpend !== null) {
+                      <span [class.increase]="item.suggestedSpend > item.adsCost"
+                            [class.decrease]="item.suggestedSpend < item.adsCost"
+                            [class.maintain]="item.suggestedSpend === item.adsCost">
+                        {{ formatCurrency(item.suggestedSpend) }}
+                        @if (item.suggestedSpend > item.adsCost) {
+                          ↑
+                        } @else if (item.suggestedSpend < item.adsCost) {
+                          ↓
+                        } @else {
+                          =
+                        }
+                      </span>
+                    } @else {
+                      <span class="no-data">-</span>
+                    }
+                  </td>
+                  <td class="number">
+                    @if (dailyDiffPercent(item) !== null) {
+                      <span [class.increase]="dailyDiffPercent(item)! > 0"
+                            [class.decrease]="dailyDiffPercent(item)! < 0"
+                            [class.maintain]="dailyDiffPercent(item) === 0">
+                        {{ formatPercent(dailyDiffPercent(item)!) }}
+                      </span>
+                    } @else {
+                      <span class="no-data">-</span>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="empty-message">Không có dữ liệu</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
+    <!-- Top Ad Groups Section -->
+    <div class="top-section">
+      <h2>🏆 Top Nhóm Quảng Cáo</h2>
+      <form [formGroup]="topForm" (ngSubmit)="onTopFormSubmit()">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Từ Ngày:</label>
+            <input type="date" formControlName="fromDate">
+          </div>
+          <div class="form-group">
+            <label>Đến Ngày:</label>
+            <input type="date" formControlName="toDate">
+          </div>
+          <div class="form-group">
+            <label>Số Lượng:</label>
+            <input type="number" formControlName="limit" min="1" max="50">
+          </div>
+          <div class="form-group">
+            <label>Sắp Xếp Theo:</label>
+            <select formControlName="sortBy">
+              <option value="profit">Lợi Nhuận Thuần</option>
+              <option value="adsCost">Chi Phí QC</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">Cập Nhật</button>
+      </form>
+
+      @if (topAdGroups().length > 0) {
+        <div class="top-list">
+          @for (item of topAdGroups(); track item.adGroupId; let i = $index) {
+            <div class="top-item">
+              <div class="rank">{{ i + 1 }}</div>
+              <div class="top-info">
+                <div class="top-name">{{ item.adGroupName || item.adGroupId }}</div>
+                <div class="top-platform">{{ item.platform }}</div>
+              </div>
+              <div class="top-metrics">
+                <div class="metric">
+                  <span class="metric-label">Chi Phí QC:</span>
+                  <span class="metric-value">{{ formatCurrency(item.adsCost) }}</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-label">Lợi Nhuận Thuần:</span>
+                  <span class="metric-value" [class.profit]="item.netProfit > 0" [class.loss]="item.netProfit < 0">
+                    {{ formatCurrency(item.netProfit) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- TAB 2: Ngân Sách Tối Ưu -->
+  @if (activeTab() === 'optimal') {
+    <div class="optimal-section">
+      <h2>💡 Gợi Ý Ngân Sách Tối Ưu</h2>
+      <p class="description">
+        Dựa trên <strong>thuật toán lợi nhuận biên giảm dần (Diminishing Marginal Profit)</strong>.<br>
+        Phân tích lịch sử chi phí và lợi nhuận 30 ngày để tìm ra mức chi phí tối ưu cho từng nhóm quảng cáo.
+      </p>
+      
+      <!-- Tổng Chi Phí Đề Xuất - Dùng cho Financial Control -->
+      <div class="optimal-summary-cards">
+        <div class="card">
+          <div class="card-title">Chi Phí Hiện Tại (TB/Ngày)</div>
+          <div class="card-value">{{ formatCurrency(totalCurrentSpend()) }}</div>
+        </div>
+        <div class="card">
+          <div class="card-title">💡 Tổng Gợi Ý (Lợi Nhuận Biên)</div>
+          <div class="card-value">{{ formatCurrency(totalSuggestedSpend()) }}</div>
+        </div>
+        <div class="card highlight">
+          <div class="card-title">💰 Tổng Gợi Ý (LN Biên + Trần %)</div>
+          <div class="card-value">{{ formatCurrency(totalSuggestedSpendWithCap()) }}</div>
+          <div class="card-note">⚡ Dữ liệu này được dùng cho Financial Control</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Chênh Lệch (vs Trần %)</div>
+          @if (totalCurrentSpend() > 0) {
+            <div class="card-value" 
+                 [class.profit]="totalSuggestedSpendWithCap() > totalCurrentSpend()"
+                 [class.loss]="totalSuggestedSpendWithCap() < totalCurrentSpend()">
+              {{ formatPercent(((totalSuggestedSpendWithCap() - totalCurrentSpend()) / totalCurrentSpend()) * 100) }}
+              @if (totalSuggestedSpendWithCap() > totalCurrentSpend()) {
+                ↑
+              } @else if (totalSuggestedSpendWithCap() < totalCurrentSpend()) {
+                ↓
+              }
+            </div>
+          } @else {
+            <div class="card-value">-</div>
+          }
+        </div>
+      </div>
+      <div class="table-container">
+        <table class="optimal-table">
+          <thead>
+            <tr>
+              <th>Nhóm Quảng Cáo</th>
+              <th>Chi Phí TB/Ngày</th>
+              <th>Chi Phí Gợi Ý<br><small>(Lợi Nhuận Biên)</small></th>
+              <th>Chi Phí Gợi Ý<br><small>(LN Biên + Trần %)</small></th>
+              <th>Thay Đổi</th>
+              <th>Lý Do</th>
+              <th>Độ Tin Cậy</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (optimalSpendSuggestions().length > 0) {
+              @for (item of optimalSpendSuggestions(); track item.adGroupId) {
+                <tr>
+                  <td>
+                    <strong>{{ item.adGroupName }}</strong>
+                    <small class="sub-text">{{ item.adGroupId }}</small>
+                  </td>
+                  <td class="number">{{ formatCurrency(item.currentAvgSpend) }}</td>
+                  <td class="number suggestion-cell">
+                    <span [class.increase]="item.suggestedSpend > item.currentAvgSpend"
+                          [class.decrease]="item.suggestedSpend < item.currentAvgSpend"
+                          [class.maintain]="item.suggestedSpend === item.currentAvgSpend">
+                      {{ formatCurrency(item.suggestedSpend) }}
+                    </span>
+                  </td>
+                  <td class="number suggestion-cell highlight-cell">
+                    <span [class.increase]="item.suggestedSpendWithCap > item.currentAvgSpend"
+                          [class.decrease]="item.suggestedSpendWithCap < item.currentAvgSpend"
+                          [class.maintain]="item.suggestedSpendWithCap === item.currentAvgSpend">
+                      {{ formatCurrency(item.suggestedSpendWithCap) }}
+                      @if (item.suggestedSpendWithCap !== item.suggestedSpend) {
+                        <small class="capped-indicator">⚡</small>
+                      }
+                    </span>
+                  </td>
+                  <td class="number change-cell">
+                    @if (item.suggestedSpendWithCap > item.currentAvgSpend) {
+                      <span class="change-up">
+                        ↑ +{{ formatPercent((item.suggestedSpendWithCap - item.currentAvgSpend) / item.currentAvgSpend * 100) }}
+                      </span>
+                    } @else if (item.suggestedSpendWithCap < item.currentAvgSpend) {
+                      <span class="change-down">
+                        ↓ {{ formatPercent((item.suggestedSpendWithCap - item.currentAvgSpend) / item.currentAvgSpend * 100) }}
+                      </span>
+                    } @else {
+                      <span class="change-same">= Giữ nguyên</span>
+                    }
+                  </td>
+                  <td class="reason-cell">{{ item.reason }}</td>
+                  <td class="confidence-cell">
+                    <div class="confidence-bar">
+                      <div class="confidence-fill" [style.width.%]="item.confidence"></div>
+                    </div>
+                    <span>{{ item.confidence }}%</span>
+                  </td>
+                </tr>
+              }
+            } @else {
+              <tr>
+                <td colspan="7" class="empty-message">Chưa có dữ liệu để phân tích. Cần ít nhất 3 ngày dữ liệu cho mỗi nhóm quảng cáo.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="marginal-explanation">
+        <h3>📈 Giải Thích Thuật Toán</h3>
+        <ul>
+          <li><strong>Marginal Profit &gt; 1:</strong> Mỗi đồng chi thêm mang về hơn 1 đồng lợi nhuận → Nên TĂNG</li>
+          <li><strong>0 &lt; Marginal Profit &lt; 1:</strong> Đang gần điểm tối ưu → GIỮ NGUYÊN hoặc tăng nhẹ</li>
+          <li><strong>Marginal Profit &lt; 0:</strong> Chi thêm = Lỗ thêm → Cần GIẢM ngay</li>
+        </ul>
+      </div>
+    </div>
+  }
+
+  <!-- Loading Overlay -->
+  @if (loading()) {
+    <div class="loading-overlay">
+      <div class="spinner"></div>
+      <div>Đang tải dữ liệu...</div>
+    </div>
+  }
+</div>

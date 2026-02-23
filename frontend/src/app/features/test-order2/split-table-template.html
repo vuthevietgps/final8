@@ -1,0 +1,135 @@
+<!-- Split Table Layout: Fixed + Scrollable -->
+<div class="split-table-container" *ngIf="!isLoading(); else loadingTpl">
+  
+  <!-- Fixed Columns Section -->
+  <div class="fixed-columns">
+    <table class="fixed-table">
+      <thead>
+        <tr>
+          <th class="col-date">Ngày</th>
+          <th class="col-customer">KH</th>
+          <th class="col-product">SP</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let o of orders(); trackBy: trackById; let i = index" 
+            [class.even]="i % 2 === 1"
+            (mouseenter)="highlightRow(i)" 
+            (mouseleave)="unhighlightRow()">
+          <td class="muted col-date">{{ formatDate(o.createdAt) }}</td>
+          <td class="col-customer">
+            <input type="text" [ngModel]="o.customerName"
+                   (blur)="onInputUpdate(o, 'customerName', $event)" />
+          </td>
+          <td class="col-product">
+            <select [ngModel]="getId(o.productId)" (change)="onSelectUpdate(o, 'productId', $event)"
+                    [ngStyle]="productSelectStyle(o.productId)" class="status-dropdown">
+              <option *ngFor="let p of products()" [value]="p._id" [ngStyle]="getProductOptionStyle(p._id)">{{ p.name }}</option>
+            </select>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Scrollable Columns Section -->
+  <div class="scrollable-columns">
+    <table class="scrollable-table">
+      <thead>
+        <tr>
+          <th class="col-qty">SL</th>
+          <th class="col-agent">Đại lý</th>
+          <th class="col-wide">ID Nhóm QC</th>
+          <th class="col-active">Kích hoạt</th>
+          <th class="col-wide">Chi tiết DV</th>
+          <th class="col-wide">TT Sản xuất</th>
+          <th class="w-order-status">TT Vận đơn</th>
+          <th class="col-wide">Link nộp</th>
+          <th class="col-tracking">Mã vận đơn</th>
+          <th class="col-wide">Đặt cọc</th>
+          <th class="col-wide">COD</th>
+          <th class="col-wider">Người nhận</th>
+          <th class="col-wide">SĐT</th>
+          <th class="col-wider">Địa chỉ</th>
+          <th class="center">Xóa</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let o of orders(); trackBy: trackById; let i = index" 
+            [class.even]="i % 2 === 1"
+            [class.highlighted]="highlightedRowIndex === i"
+            (mouseenter)="highlightRow(i)" 
+            (mouseleave)="unhighlightRow()">
+          <td class="col-qty">
+            <input class="input-qty" type="number" min="1" [ngModel]="o.quantity"
+                   (blur)="onInputUpdate(o, 'quantity', $event)" />
+          </td>
+          <td class="col-agent">
+            <select [ngModel]="getId(o.agentId)" (change)="onSelectUpdate(o, 'agentId', $event)">
+              <option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
+            </select>
+          </td>
+          <td class="col-wide">
+            <select [ngModel]="getId(o.adGroupId)" (change)="onSelectUpdate(o, 'adGroupId', $event)">
+              <option value="">Chọn nhóm QC</option>
+              <option *ngFor="let g of adGroups()" [value]="g._id">{{ g.adGroupId }}</option>
+            </select>
+          </td>
+          <td class="col-active text-center">
+            <input type="checkbox" [ngModel]="o.isActive" 
+                   (change)="onCheckboxUpdate(o, 'isActive', $event)" />
+          </td>
+          <td class="col-wide">
+            <input type="text" [ngModel]="o.serviceDetails"
+                   (blur)="onInputUpdate(o, 'serviceDetails', $event)" />
+          </td>
+          <td class="col-wide">
+            <select [ngModel]="getId(o.productionStatusId)" (change)="onSelectUpdate(o, 'productionStatusId', $event)"
+                    [ngStyle]="getProductionStatusStyle(o.productionStatusId)" class="status-dropdown">
+              <option *ngFor="let ps of productionStatuses()" [value]="ps._id" 
+                      [ngStyle]="getProductionStatusOptionStyle(ps._id)">{{ ps.name }}</option>
+            </select>
+          </td>
+          <td class="w-order-status">
+            <select [ngModel]="getId(o.orderStatusId)" (change)="onSelectUpdate(o, 'orderStatusId', $event)"
+                    [ngStyle]="getOrderStatusStyle(o.orderStatusId)" class="status-dropdown">
+              <option *ngFor="let os of orderStatuses()" [value]="os._id" 
+                      [ngStyle]="getOrderStatusOptionStyle(os._id)">{{ os.name }}</option>
+            </select>
+          </td>
+          <td class="col-wide">
+            <input type="text" [ngModel]="o.submissionLink"
+                   (blur)="onInputUpdate(o, 'submissionLink', $event)" />
+          </td>
+          <td class="col-tracking">
+            <input type="text" [ngModel]="o.trackingCode"
+                   (blur)="onInputUpdate(o, 'trackingCode', $event)" />
+          </td>
+          <td class="col-wide">
+            <input type="number" min="0" [ngModel]="o.deposit"
+                   (blur)="onInputUpdate(o, 'deposit', $event)" />
+          </td>
+          <td class="col-wide">
+            <input type="number" min="0" [ngModel]="o.cod"
+                   (blur)="onInputUpdate(o, 'cod', $event)" />
+          </td>
+          <td class="col-wider">
+            <input type="text" [ngModel]="o.receiverName"
+                   (blur)="onInputUpdate(o, 'receiverName', $event)" />
+          </td>
+          <td class="col-wide">
+            <input type="text" [ngModel]="o.receiverPhone"
+                   (blur)="onInputUpdate(o, 'receiverPhone', $event)" />
+          </td>
+          <td class="col-wider">
+            <input type="text" [ngModel]="o.receiverAddress"
+                   (blur)="onInputUpdate(o, 'receiverAddress', $event)" />
+          </td>
+          <td class="center">
+            <button class="btn btn-sm btn-danger" (click)="deleteOrder(o._id)">🗑</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,66 @@
+<div class="cost2-page">
+  <div class="toolbar">
+    <button class="btn btn-primary" (click)="addNew()">➕ Thêm mới</button>
+    <button class="btn" (click)="load()">🔄 Làm mới</button>
+    <select [value]="filterAdAccountId()" (change)="filterAdAccountId.set($any($event.target).value); onFilterChange()">
+      <option value="all">Tất cả TK QC</option>
+      <option *ngFor="let a of adAccounts()" [value]="a._id">{{ a.name }} ({{ a.accountId }})</option>
+    </select>
+    <div class="channel-tabs">
+      <button class="btn" [class.active]="filterChannel()==='all'" (click)="setChannel('all')">Tất cả</button>
+      <button class="btn" [class.active]="filterChannel()==='facebook'" (click)="setChannel('facebook')">Facebook</button>
+      <button class="btn" [class.active]="filterChannel()==='google'" (click)="setChannel('google')">Google</button>
+    </div>
+  <button class="btn" (click)="downloadCsv()">⬇️ Tải xuống CSV</button>
+  <label class="btn" for="csvInput">⬆️ Tải lên CSV</label>
+  <input id="csvInput" type="file" accept=".csv,text/csv" (change)="onFileSelected($event)" style="display:none" />
+  </div>
+
+  <div class="error" *ngIf="error()">{{ error() }}</div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Ngày (dd/MM/yyyy)</th>
+  <th>ID Nhóm quảng cáo</th>
+  <th>Tài khoản QC</th>
+        <th>Kênh</th>
+        <th>Đã chi</th>
+        <th>CPM</th>
+        <th>CPC</th>
+        <th>Tần suất</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let r of items()">
+        <td>
+          <input type="text" [ngModel]="r.date" (keydown)="onEnter(r, 'date', $event)" (blur)="onBlur(r, 'date', $event)" placeholder="dd/MM/yyyy" />
+        </td>
+        <td>
+          <input type="text" [ngModel]="r.adGroupId" (keydown)="onEnter(r, 'adGroupId', $event)" (blur)="onBlur(r, 'adGroupId', $event)" />
+        </td>
+        <td>{{ r.adAccountName ? (r.adAccountName + ' (' + r.adAccountAccountId + ')') : '-' }}</td>
+        <td>{{ r.channel || 'facebook' }}</td>
+        <td>
+          <input type="number" step="0.01" [ngModel]="r.spentAmount" (keydown)="onEnter(r, 'spentAmount', $event)" (blur)="onBlur(r, 'spentAmount', $event)" />
+        </td>
+        <td>
+          <input type="number" step="0.01" [ngModel]="r.cpm" (keydown)="onEnter(r, 'cpm', $event)" (blur)="onBlur(r, 'cpm', $event)" />
+        </td>
+        <td>
+          <input type="number" step="0.01" [ngModel]="r.cpc" (keydown)="onEnter(r, 'cpc', $event)" (blur)="onBlur(r, 'cpc', $event)" />
+        </td>
+        <td>
+          <input type="number" step="1" [ngModel]="r.frequency" (keydown)="onEnter(r, 'frequency', $event)" (blur)="onBlur(r, 'frequency', $event)" />
+        </td>
+        <td>
+          <button class="btn btn-sm btn-danger" (click)="remove(r)">Xóa</button>
+        </td>
+      </tr>
+      <tr *ngIf="items().length===0">
+        <td colspan="7" class="center muted">Chưa có dữ liệu</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

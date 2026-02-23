@@ -1,0 +1,137 @@
+<div class="loan-page">
+  <div class="page-header">
+    <div>
+      <h2>� Quản Lý Khoản Vay</h2>
+      <p class="subtitle">Theo dõi danh sách khoản vay, giải ngân, trả nợ và dư nợ</p>
+    </div>
+    <div class="actions">
+      <select #statusSel (change)="onFilterChange(statusSel.value)">
+        <option value="">Tất cả trạng thái</option>
+        <option value="active">Đang hoạt động</option>
+        <option value="draft">Nháp</option>
+        <option value="closed">Đã tất toán</option>
+      </select>
+      <button class="refresh" (click)="load(); loadSummary()" [disabled]="loading()">🔄 Tải lại</button>
+      <a class="primary" routerLink="/loans/new">➕ Thêm khoản vay</a>
+    </div>
+  </div>
+
+  <!-- INTEGRATION LINKS -->
+  <div class="integration-links" *ngIf="!loading()">
+    <a routerLink="/finance/financial-control" class="link-card">
+      <span class="link-icon">🎛️</span>
+      <div class="link-content">
+        <span class="link-title">Financial Control</span>
+        <span class="link-desc">Bank Balance • Committed Cash • Dự báo 7 ngày</span>
+      </div>
+      <span class="link-arrow">→</span>
+    </a>
+    <a routerLink="/loans/upcoming" class="link-card warning" *ngIf="summary() && summary()!.upcomingRepayments > 0">
+      <span class="link-icon">⚠️</span>
+      <div class="link-content">
+        <span class="link-title">{{ summary()!.upcomingRepayments }} kỳ trả nợ sắp đến hạn</span>
+        <span class="link-desc">Trong 14 ngày tới → ảnh hưởng Committed Cash</span>
+      </div>
+      <span class="link-arrow">→</span>
+    </a>
+  </div>
+
+  <div *ngIf="error()" class="alert">{{ error() }}</div>
+  <div *ngIf="loading()" class="loading">Đang tải...</div>
+
+  <!-- SUMMARY SECTION -->
+  <div class="summary-grid" *ngIf="summary() && !loading()">
+    <div class="summary-card">
+      <div class="summary-icon">📄</div>
+      <div class="summary-content">
+        <div class="summary-label">Tổng khoản vay</div>
+        <div class="summary-value">{{ summary()!.totalContracts }}</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-icon">💰</div>
+      <div class="summary-content">
+        <div class="summary-label">Tổng gốc hợp đồng</div>
+        <div class="summary-value">{{ formatCurrency(summary()!.totalPrincipal) }} đ</div>
+      </div>
+    </div>
+    <div class="summary-card highlight-green">
+      <div class="summary-icon">✅</div>
+      <div class="summary-content">
+        <div class="summary-label">Đã giải ngân</div>
+        <div class="summary-value">{{ formatCurrency(summary()!.totalDisbursed) }} đ</div>
+        <div class="summary-sub">
+          <span class="badge pending">{{ summary()!.byStatus.pending }} chưa</span>
+          <span class="badge partial">{{ summary()!.byStatus.partial }} một phần</span>
+          <span class="badge fully">{{ summary()!.byStatus.fully }} đầy đủ</span>
+        </div>
+      </div>
+    </div>
+    <div class="summary-card highlight-yellow">
+      <div class="summary-icon">⏳</div>
+      <div class="summary-content">
+        <div class="summary-label">Chưa giải ngân</div>
+        <div class="summary-value">{{ formatCurrency(summary()!.totalPendingDisbursement) }} đ</div>
+      </div>
+    </div>
+    <div class="summary-card highlight-red">
+      <div class="summary-icon">🏦</div>
+      <div class="summary-content">
+        <div class="summary-label">Dư nợ còn lại</div>
+        <div class="summary-value">{{ formatCurrency(summary()!.totalPrincipalRemaining) }} đ</div>
+      </div>
+    </div>
+    <div class="summary-card highlight-blue">
+      <div class="summary-icon">💸</div>
+      <div class="summary-content">
+        <div class="summary-label">Đã trả (gốc + lãi)</div>
+        <div class="summary-value">{{ formatCurrency(summary()!.totalPrincipalPaid + summary()!.totalInterestPaid) }} đ</div>
+        <div class="summary-sub">
+          Gốc: {{ formatCurrency(summary()!.totalPrincipalPaid) }} | Lãi: {{ formatCurrency(summary()!.totalInterestPaid) }}
+        </div>
+      </div>
+    </div>
+    <div class="summary-card" [class.highlight-warning]="summary()!.upcomingRepayments > 0">
+      <div class="summary-icon">📅</div>
+      <div class="summary-content">
+        <div class="summary-label">Kỳ trả sắp đến hạn (14 ngày)</div>
+        <div class="summary-value">{{ summary()!.upcomingRepayments }}</div>
+        <a routerLink="/loans/upcoming" class="summary-link" *ngIf="summary()!.upcomingRepayments > 0">Xem chi tiết →</a>
+      </div>
+    </div>
+  </div>
+
+  <table class="data-table" *ngIf="!loading()">
+    <thead>
+      <tr>
+        <th>Tên khoản vay</th>
+        <th>Người cho vay</th>
+        <th>Gốc HĐ</th>
+        <th>Giải ngân</th>
+        <th>Dư nợ</th>
+        <th>Đã trả</th>
+        <th>Lãi suất (%)</th>
+        <th>Trạng thái</th>
+        <th>Giải ngân</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngIf="loans().length === 0">
+        <td colspan="10" class="empty">Chưa có khoản vay</td>
+      </tr>
+      <tr *ngFor="let loan of loans()">
+        <td>{{ loan.name }}</td>
+        <td>{{ loan.lenderName }}</td>
+        <td class="num">{{ formatCurrency(loan.principal) }}</td>
+        <td class="num">{{ formatCurrency(loan.disbursedAmount || 0) }}</td>
+        <td class="num">{{ formatCurrency(loan.principalRemaining) }}</td>
+        <td class="num">{{ formatCurrency((loan.totalPrincipalPaid || 0) + (loan.totalInterestPaid || 0)) }}</td>
+        <td class="num">{{ loan.interestRate || 0 }}</td>
+        <td><span class="badge" [class.active]="loan.status==='active'" [class.closed]="loan.status==='closed'">{{ loan.status || 'active' }}</span></td>
+        <td><span class="badge disbursement" [class]="getDisbursementStatusClass(loan.disbursementStatus)">{{ getDisbursementStatusLabel(loan.disbursementStatus) }}</span></td>
+        <td><a [routerLink]="['/loans', loan._id]">Chi tiết</a></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

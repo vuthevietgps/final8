@@ -1,0 +1,223 @@
+<div class="page">
+  <div class="header">
+    <h2>💰 Phân Bổ Lợi Nhuận Thuần</h2>
+    <button class="btn-primary" (click)="showPolicyForm.set(!showPolicyForm())">
+      {{ showPolicyForm() ? '✖️ Đóng' : '➕ Tạo Policy Mới' }}
+    </button>
+  </div>
+
+  <!-- Loading/Error -->
+  <div *ngIf="loading()" class="alert alert-info">⏳ Đang tải...</div>
+  <div *ngIf="error()" class="alert alert-danger">{{ error() }}</div>
+
+  <!-- Form tạo policy -->
+  <div *ngIf="showPolicyForm()" class="policy-form-card">
+    <h3>📋 Tạo Policy Mới</h3>
+    <form [formGroup]="policyForm" (ngSubmit)="createPolicy()">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tên Policy *</label>
+          <input type="text" formControlName="name" placeholder="balanced, aggressive, conservative..." />
+        </div>
+        <div class="form-group">
+          <label>Mô tả</label>
+          <input type="text" formControlName="description" placeholder="Chính sách cân bằng..." />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>🔄 Tái đầu tư / Ads (%) *</label>
+          <input type="number" formControlName="reinvestmentRatio" min="0" max="100" step="1" />
+        </div>
+        <div class="form-group">
+          <label>🛡️ Dự phòng an toàn (%) *</label>
+          <input type="number" formControlName="safetyReserveRatio" min="0" max="100" step="1" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>💵 Thu nhập cá nhân (%) *</label>
+          <input type="number" formControlName="personalIncomeRatio" min="0" max="100" step="1" />
+        </div>
+        <div class="form-group">
+          <label>🏦 Tài sản dài hạn (%) *</label>
+          <input type="number" formControlName="longTermAssetRatio" min="0" max="100" step="1" />
+        </div>
+      </div>
+
+      <div class="total-ratio" [class.invalid]="Math.abs(getTotalRatio() - 100) > 0.01">
+        Tổng: {{ getTotalRatio() }}% {{ Math.abs(getTotalRatio() - 100) > 0.01 ? '❌ Phải = 100%' : '✅' }}
+      </div>
+
+      <div class="form-group">
+        <label>Ghi chú</label>
+        <textarea formControlName="notes" rows="2" placeholder="Ghi chú thêm..."></textarea>
+      </div>
+
+      <button type="submit" class="btn-primary" [disabled]="policyForm.invalid || loading()">
+        💾 Lưu Policy
+      </button>
+    </form>
+  </div>
+
+  <!-- Active Policy -->
+  <div class="card" *ngIf="activePolicy()">
+    <h3>⚙️ Policy Đang Hoạt Động</h3>
+    <div class="policy-detail">
+      <div class="policy-name">
+        <strong>{{ activePolicy()!.name }}</strong>
+        <span class="badge-active">✅ ACTIVE</span>
+      </div>
+      <p class="policy-desc">{{ activePolicy()!.description }}</p>
+      <div class="ratios-grid">
+        <div class="ratio-item">
+          <span class="ratio-icon">🔄</span>
+          <span class="ratio-label">Tái đầu tư / Ads</span>
+          <span class="ratio-value">{{ activePolicy()!.reinvestmentRatio }}%</span>
+        </div>
+        <div class="ratio-item">
+          <span class="ratio-icon">🛡️</span>
+          <span class="ratio-label">Dự phòng an toàn</span>
+          <span class="ratio-value">{{ activePolicy()!.safetyReserveRatio }}%</span>
+        </div>
+        <div class="ratio-item">
+          <span class="ratio-icon">💵</span>
+          <span class="ratio-label">Thu nhập cá nhân</span>
+          <span class="ratio-value">{{ activePolicy()!.personalIncomeRatio }}%</span>
+        </div>
+        <div class="ratio-item">
+          <span class="ratio-icon">🏦</span>
+          <span class="ratio-label">Tài sản dài hạn</span>
+          <span class="ratio-value">{{ activePolicy()!.longTermAssetRatio }}%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Current Allocation -->
+  <div class="card" *ngIf="currentAllocation()">
+    <div class="card-header">
+      <h3>💰 Phân Bổ Hiện Tại (Từ Lợi Nhuận Thuần)</h3>
+      <button class="btn-secondary" (click)="captureSnapshot()">📸 Chụp Snapshot</button>
+    </div>
+    
+    <div class="total-profit">
+      <label>Tổng Lợi Nhuận Thuần:</label>
+      <span class="amount-large">{{ formatCurrency(currentAllocation()!.totalNetProfit) }}</span>
+    </div>
+
+    <div class="allocation-grid">
+      <div class="allocation-card reinvestment">
+        <div class="allocation-icon">🔄</div>
+        <div class="allocation-label">Tái đầu tư / Ads</div>
+        <div class="allocation-amount">{{ formatCurrency(currentAllocation()!.reinvestmentAmount) }}</div>
+        <div class="allocation-ratio">{{ currentAllocation()!.reinvestmentRatio }}%</div>
+      </div>
+
+      <div class="allocation-card safety">
+        <div class="allocation-icon">🛡️</div>
+        <div class="allocation-label">Dự phòng an toàn</div>
+        <div class="allocation-amount">{{ formatCurrency(currentAllocation()!.safetyReserveAmount) }}</div>
+        <div class="allocation-ratio">{{ currentAllocation()!.safetyReserveRatio }}%</div>
+      </div>
+
+      <div class="allocation-card personal">
+        <div class="allocation-icon">💵</div>
+        <div class="allocation-label">Thu nhập cá nhân</div>
+        <div class="allocation-amount">{{ formatCurrency(currentAllocation()!.personalIncomeAmount) }}</div>
+        <div class="allocation-ratio">{{ currentAllocation()!.personalIncomeRatio }}%</div>
+      </div>
+
+      <div class="allocation-card longterm">
+        <div class="allocation-icon">🏦</div>
+        <div class="allocation-label">Tài sản dài hạn</div>
+        <div class="allocation-amount">{{ formatCurrency(currentAllocation()!.longTermAssetAmount) }}</div>
+        <div class="allocation-ratio">{{ currentAllocation()!.longTermAssetRatio }}%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reinvestment Budget (Quan trọng cho auto ads) -->
+  <div class="card highlight" *ngIf="reinvestmentBudget()">
+    <h3>💸 Vốn Khả Dụng Cho Tái Đầu Tư Ads</h3>
+    <div class="budget-summary">
+      <div class="budget-item">
+        <label>Đã phân bổ:</label>
+        <span>{{ formatCurrency(reinvestmentBudget()!.totalAllocated) }}</span>
+      </div>
+      <div class="budget-item">
+        <label>Đã sử dụng:</label>
+        <span class="used">-{{ formatCurrency(reinvestmentBudget()!.totalUsed) }}</span>
+      </div>
+      <div class="budget-item available">
+        <label>Còn lại (Khả dụng):</label>
+        <span class="amount-large">{{ formatCurrency(reinvestmentBudget()!.available) }}</span>
+      </div>
+    </div>
+    <div class="info-box">
+      ℹ️ <strong>Số tiền này sẽ dùng cho module Auto điều chỉnh chi phí ads</strong>
+    </div>
+  </div>
+
+  <!-- All Policies -->
+  <div class="card">
+    <h3>📋 Tất Cả Policies</h3>
+    <div class="policies-list" *ngIf="policies().length > 0">
+      <div *ngFor="let policy of policies()" class="policy-item" [class.active]="policy.isActive">
+        <div class="policy-header">
+          <strong>{{ policy.name }}</strong>
+          <span class="badge" [class.badge-active]="policy.isActive">
+            {{ policy.isActive ? '✅ ACTIVE' : '⚪ Inactive' }}
+          </span>
+        </div>
+        <p class="policy-desc-small">{{ policy.description }}</p>
+        <div class="policy-ratios-inline">
+          🔄 {{ policy.reinvestmentRatio }}% | 
+          🛡️ {{ policy.safetyReserveRatio }}% | 
+          💵 {{ policy.personalIncomeRatio }}% | 
+          🏦 {{ policy.longTermAssetRatio }}%
+        </div>
+        <div class="policy-actions">
+          <button *ngIf="!policy.isActive" class="btn-small btn-primary" (click)="activatePolicy(policy)">
+            Kích hoạt
+          </button>
+          <button *ngIf="!policy.isActive" class="btn-small btn-danger" (click)="deletePolicy(policy)">
+            Xóa
+          </button>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="policies().length === 0" class="empty-state">
+      Chưa có policy nào. Tạo policy đầu tiên!
+    </div>
+  </div>
+
+  <!-- Snapshots History -->
+  <div class="card">
+    <h3>📊 Lịch Sử Snapshots (10 gần nhất)</h3>
+    <div class="snapshots-list" *ngIf="snapshots().length > 0">
+      <div *ngFor="let snapshot of snapshots()" class="snapshot-item">
+        <div class="snapshot-header">
+          <span class="snapshot-date">{{ formatDate(snapshot.date) }}</span>
+          <span class="snapshot-policy">Policy: {{ snapshot.policyName }}</span>
+        </div>
+        <div class="snapshot-amounts">
+          <div class="snapshot-col">
+            <label>Lợi nhuận thuần:</label>
+            <span>{{ formatCurrency(snapshot.totalNetProfit) }}</span>
+          </div>
+          <div class="snapshot-col">
+            <label>Tái đầu tư:</label>
+            <span>{{ formatCurrency(snapshot.reinvestmentAmount) }}</span>
+            <small>(Đã dùng: {{ formatCurrency(snapshot.reinvestmentUsed) }})</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="snapshots().length === 0" class="empty-state">
+      Chưa có snapshot nào. Hệ thống tự động chụp lúc 2:00 AM hàng ngày.
+    </div>
+  </div>
+</div>

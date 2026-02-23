@@ -1,0 +1,56 @@
+{
+  "name": "vision-ai-product-management",
+  "version": "2.0.0",
+  "description": "Complete Vision AI + Product Management System with NestJS backend and Angular frontend",
+  "main": "index.js",
+  "scripts": {
+    "demo:vision-ai": "node run-vision-ai-demo.js",
+    "test:vision-ai": "node run-automated-tests.js",
+    "test:full": "npm run test:vision-ai && echo 'Running demo after tests...' && npm run demo:vision-ai",
+    "prepare:check": "node prepare-sample-data.js check",
+    "prepare:seed": "node prepare-sample-data.js seed",
+    "prepare:clean": "node prepare-sample-data.js clean",
+    "prepare:stats": "node prepare-sample-data.js stats",
+    "prepare:full": "node prepare-sample-data.js full",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "start:backend": "cd backend && npm run start:dev",
+    "start:frontend": "cd frontend && npm start",
+    "start:all": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build:all": "npm run build:backend && npm run build:frontend"
+  },
+  "keywords": [
+    "vision-ai",
+    "product-management",
+    "nestjs",
+    "angular",
+    "mongodb",
+    "openai",
+    "image-analysis",
+    "e-commerce"
+  ],
+  "author": "Vision AI Development Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0",
+    "mongodb": "^6.20.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/vision-ai-product-management.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/vision-ai-product-management/issues"
+  },
+  "homepage": "https://github.com/yourusername/vision-ai-product-management#readme"
+}

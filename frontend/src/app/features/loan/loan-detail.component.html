@@ -1,0 +1,140 @@
+<div class="loan-detail" *ngIf="loan(); else loadingTpl">
+  <div class="header">
+    <div>
+      <h2>📄 {{ loan()?.name }}</h2>
+      <p class="subtitle">Người cho vay: {{ loan()?.lenderName }}</p>
+    </div>
+    <a routerLink="/loans" class="back">← Danh sách</a>
+  </div>
+
+  <!-- THÔNG TIN CHÍNH -->
+  <div class="info-grid">
+    <div class="card"><div class="label">Gốc hợp đồng</div><div class="value">{{ formatCurrency(loan()?.principal) }} đ</div></div>
+    <div class="card highlight-green">
+      <div class="label">Đã giải ngân</div>
+      <div class="value">{{ formatCurrency(loan()?.disbursedAmount || 0) }} đ</div>
+      <div class="badge disbursement" [class]="loan()?.disbursementStatus || 'pending'">{{ getDisbursementStatusLabel(loan()?.disbursementStatus) }}</div>
+    </div>
+    <div class="card highlight-red">
+      <div class="label">Dư nợ còn lại</div>
+      <div class="value">{{ formatCurrency(loan()?.principalRemaining) }} đ</div>
+    </div>
+    <div class="card highlight-blue">
+      <div class="label">Đã trả (gốc + lãi)</div>
+      <div class="value">{{ formatCurrency((loan()?.totalPrincipalPaid || 0) + (loan()?.totalInterestPaid || 0)) }} đ</div>
+      <div class="sub">Gốc: {{ formatCurrency(loan()?.totalPrincipalPaid) }} | Lãi: {{ formatCurrency(loan()?.totalInterestPaid) }}</div>
+    </div>
+    <div class="card"><div class="label">Lãi suất</div><div class="value">{{ loan()?.interestRate || 0 }} %/năm</div></div>
+    <div class="card"><div class="label">Kỳ trả</div><div class="value">{{ loan()?.repaymentCycle || '-' }}</div></div>
+    <div class="card"><div class="label">Trạng thái</div><div class="value">{{ loan()?.status || 'active' }}</div></div>
+    <div class="card"><div class="label">Thời gian</div><div class="value">{{ loan()?.startDate | date:'yyyy-MM-dd' }} → {{ loan()?.endDate | date:'yyyy-MM-dd' }}</div></div>
+  </div>
+
+  <!-- NÚT HÀNH ĐỘNG -->
+  <div class="actions-bar">
+    <button class="btn primary" (click)="openDisbursementModal()" 
+            *ngIf="loan()?.disbursementStatus !== 'fully' && loan()?.status !== 'closed'">
+      💰 Ghi nhận giải ngân
+    </button>
+  </div>
+
+  <h3>📅 Lịch trả nợ</h3>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Ngày đến hạn</th>
+        <th>Gốc</th>
+        <th>Lãi</th>
+        <th>Tổng</th>
+        <th>Trạng thái</th>
+        <th>Ngày thanh toán</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngIf="repayments().length === 0"><td colspan="7" class="empty">Chưa có lịch trả</td></tr>
+      <tr *ngFor="let r of repayments()" [class.overdue]="!r.paid && isOverdue(r.dueDate)">
+        <td>{{ r.dueDate | date:'yyyy-MM-dd' }}</td>
+        <td class="num">{{ formatCurrency(r.amountPrincipal) }}</td>
+        <td class="num">{{ formatCurrency(r.amountInterest) }}</td>
+        <td class="num">{{ formatCurrency((r.amountPrincipal||0)+(r.amountInterest||0)) }}</td>
+        <td>
+          <span class="badge" [class.paid]="r.paid" [class.unpaid]="!r.paid">
+            {{ r.paid ? '✅ Đã trả' : '⏳ Chưa trả' }}
+          </span>
+        </td>
+        <td>{{ r.paidDate ? (r.paidDate | date:'yyyy-MM-dd') : '-' }}</td>
+        <td>
+          <button class="btn-small" *ngIf="!r.paid" (click)="openPaymentModal(r)">💸 Trả nợ</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- MODAL GIẢI NGÂN -->
+<div class="modal-overlay" *ngIf="showDisbursementModal" (click)="closeDisbursementModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>💰 Ghi nhận giải ngân</h3>
+      <button class="close" (click)="closeDisbursementModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Số tiền giải ngân</label>
+        <input type="number" [(ngModel)]="disbursementForm.amount" min="0">
+        <span class="hint">Còn lại chưa giải ngân: {{ formatCurrency((loan()?.principal || 0) - (loan()?.disbursedAmount || 0)) }} đ</span>
+      </div>
+      <div class="form-group">
+        <label>Ngày giải ngân</label>
+        <input type="date" [(ngModel)]="disbursementForm.date">
+      </div>
+      <div class="form-group">
+        <label>Ghi chú</label>
+        <textarea [(ngModel)]="disbursementForm.notes" rows="2"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" (click)="closeDisbursementModal()">Hủy</button>
+      <button class="btn primary" (click)="submitDisbursement()" [disabled]="disbursementLoading || disbursementForm.amount <= 0">
+        {{ disbursementLoading ? 'Đang xử lý...' : 'Xác nhận' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TRẢ NỢ -->
+<div class="modal-overlay" *ngIf="showPaymentModal" (click)="closePaymentModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>💸 Ghi nhận thanh toán</h3>
+      <button class="close" (click)="closePaymentModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Kỳ trả: <strong>{{ selectedRepayment?.dueDate | date:'yyyy-MM-dd' }}</strong></p>
+      <p>Số tiền: <strong>{{ formatCurrency((selectedRepayment?.amountPrincipal || 0) + (selectedRepayment?.amountInterest || 0)) }} đ</strong> (Gốc: {{ formatCurrency(selectedRepayment?.amountPrincipal) }}, Lãi: {{ formatCurrency(selectedRepayment?.amountInterest) }})</p>
+      <div class="form-group">
+        <label>Ngày thanh toán</label>
+        <input type="date" [(ngModel)]="paymentForm.paidDate">
+      </div>
+      <div class="form-group">
+        <label>Mã tham chiếu (UH/chuyển khoản)</label>
+        <input type="text" [(ngModel)]="paymentForm.referenceId" placeholder="VD: TK-123456">
+      </div>
+      <div class="form-group">
+        <label>Ghi chú</label>
+        <textarea [(ngModel)]="paymentForm.notes" rows="2"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" (click)="closePaymentModal()">Hủy</button>
+      <button class="btn primary" (click)="submitPayment()" [disabled]="paymentLoading">
+        {{ paymentLoading ? 'Đang xử lý...' : 'Xác nhận đã trả' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<ng-template #loadingTpl>
+  <div class="loading">Đang tải khoản vay...</div>
+</ng-template>

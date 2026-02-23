@@ -1,0 +1,169 @@
+<div class="daily-profit-report">
+  <div class="header">
+    <h2>📊 Báo Cáo Lợi Nhuận Hàng Ngày</h2>
+    <div class="date-picker">
+      <label for="reportDate">Chọn ngày:</label>
+      <input 
+        type="date" 
+        id="reportDate" 
+        [value]="selectedDate()" 
+        (change)="onDateChange($event)"
+      />
+      <button (click)="loadReport()" [disabled]="loading()">
+        {{ loading() ? '⏳ Đang tải...' : '🔄 Làm mới' }}
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="error-message">
+      ⚠️ {{ error() }}
+    </div>
+  }
+
+  @if (report()) {
+    <div class="report-content">
+      <!-- Summary Cards -->
+      <div class="summary-cards">
+        <div class="card cash-available">
+          <div class="card-icon">💰</div>
+          <div class="card-content">
+            <div class="card-label">Tiền Chắc Ăn (Có thể phân bổ)</div>
+            <div class="card-value" [class.negative]="report()!.cashAvailable < 0">
+              {{ formatCurrency(report()!.cashAvailable) }}
+            </div>
+          </div>
+        </div>
+
+        <div class="card pending-orders">
+          <div class="card-icon">⏳</div>
+          <div class="card-content">
+            <div class="card-label">Đơn Chờ Thanh Toán</div>
+            <div class="card-value">{{ formatNumber(report()!.pending.totalOrders) }} đơn</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Three Column Report -->
+      <div class="report-columns">
+        <!-- Estimated Column -->
+        <div class="report-column estimated">
+          <div class="column-header">
+            <h3>📈 Lợi Nhuận Ước Tính</h3>
+            <span class="subtitle">Đơn hàng đã kết thúc</span>
+          </div>
+          <div class="column-content">
+            <div class="stat-row">
+              <span class="stat-label">Tổng đơn hàng:</span>
+              <span class="stat-value">{{ formatNumber(report()!.estimated.totalOrders) }}</span>
+            </div>
+            <div class="stat-row highlight">
+              <span class="stat-label">Lợi nhuận gộp:</span>
+              <span class="stat-value" [class.negative]="report()!.estimated.totalGrossProfit < 0">
+                {{ formatCurrency(report()!.estimated.totalGrossProfit) }}
+              </span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Chi phí QC:</span>
+              <span class="stat-value expense">-{{ formatCurrency(report()!.estimated.totalAdvertisingCost || 0) }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Chi phí nhân công:</span>
+              <span class="stat-value expense">-{{ formatCurrency(report()!.estimated.totalLaborCost || 0) }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Chi phí khác:</span>
+              <span class="stat-value expense">-{{ formatCurrency(report()!.estimated.totalOtherCost || 0) }}</span>
+            </div>
+            <div class="stat-row total">
+              <span class="stat-label">Lợi nhuận thuần:</span>
+              <span class="stat-value" [class.negative]="report()!.estimated.totalNetProfit < 0">
+                {{ formatCurrency(report()!.estimated.totalNetProfit) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Realized Column -->
+        <div class="report-column realized">
+          <div class="column-header">
+            <h3>✅ Lợi Nhuận Thực Tế</h3>
+            <span class="subtitle">Đã thanh toán cả 2 bên</span>
+          </div>
+          <div class="column-content">
+            <div class="stat-row">
+              <span class="stat-label">Tổng đơn hàng:</span>
+              <span class="stat-value">{{ formatNumber(report()!.realized.totalOrders) }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">NCC đã trả:</span>
+              <span class="stat-value" [class.negative]="(report()!.realized.totalSupplierPaid || 0) < 0">
+                {{ formatCurrency(report()!.realized.totalSupplierPaid || 0) }}
+              </span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Đã trả đại lý:</span>
+              <span class="stat-value expense">-{{ formatCurrency(report()!.realized.totalAgentPaid || 0) }}</span>
+            </div>
+            <div class="stat-row highlight">
+              <span class="stat-label">Lợi nhuận gộp:</span>
+              <span class="stat-value" [class.negative]="report()!.realized.totalGrossProfit < 0">
+                {{ formatCurrency(report()!.realized.totalGrossProfit) }}
+              </span>
+            </div>
+            <div class="stat-row total">
+              <span class="stat-label">Lợi nhuận thuần:</span>
+              <span class="stat-value" [class.negative]="report()!.realized.totalNetProfit < 0">
+                {{ formatCurrency(report()!.realized.totalNetProfit) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Column -->
+        <div class="report-column pending">
+          <div class="column-header">
+            <h3>⏳ Đang Chờ Thanh Toán</h3>
+            <span class="subtitle">Chưa thanh toán xong</span>
+          </div>
+          <div class="column-content">
+            <div class="stat-row">
+              <span class="stat-label">Tổng đơn hàng:</span>
+              <span class="stat-value">{{ formatNumber(report()!.pending.totalOrders) }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Chờ thanh toán NCC:</span>
+              <span class="stat-value warning">{{ formatNumber(report()!.pending.pendingSupplierPayment) }} đơn</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Chờ trả đại lý:</span>
+              <span class="stat-value warning">{{ formatNumber(report()!.pending.pendingAgentPayment) }} đơn</span>
+            </div>
+            <div class="stat-row highlight">
+              <span class="stat-label">Lợi nhuận gộp (ước tính):</span>
+              <span class="stat-value" [class.negative]="report()!.pending.estimatedGrossProfit < 0">
+                {{ formatCurrency(report()!.pending.estimatedGrossProfit) }}
+              </span>
+            </div>
+            <div class="stat-row total">
+              <span class="stat-label">Lợi nhuận thuần (ước tính):</span>
+              <span class="stat-value" [class.negative]="report()!.pending.estimatedNetProfit < 0">
+                {{ formatCurrency(report()!.pending.estimatedNetProfit) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Note -->
+      <div class="note">
+        <strong>📌 Ghi chú:</strong>
+        <ul>
+          <li><strong>Ước tính:</strong> Tất cả đơn hàng đã kết thúc (Giao thành công / Hàng hoàn)</li>
+          <li><strong>Thực tế:</strong> Chỉ đơn đã thanh toán xong CẢ NHÀ CUNG CẤP VÀ ĐẠI LÝ</li>
+          <li><strong>Tiền chắc ăn:</strong> Số tiền thực tế có thể phân bổ (= Lợi nhuận thuần thực tế)</li>
+        </ul>
+      </div>
+    </div>
+  }
+</div>

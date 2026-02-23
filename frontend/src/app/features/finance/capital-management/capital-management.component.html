@@ -1,0 +1,630 @@
+<div class="capital-management">
+  <!-- ========================================
+       HEADER SECTION
+       - Tiêu đề dashboard
+       - Mode selector: 3 modes tính toán khác nhau
+         • Conservative: Chỉ tính đơn đã thanh toán CẢ NCC VÀ Đại lý
+         • Moderate: Chiết khấu 100%/70%/40% theo trạng thái thanh toán
+         • Aggressive: Tính tất cả đơn + khoản vay khả dụng
+  ========================================= -->
+  <div class="page-header">
+    <div class="header-left">
+      <h1>💰 Quản Lý Vốn & Phân Bổ</h1>
+      <p class="subtitle">Dashboard tổng hợp vốn, lợi nhuận và phân bổ ngân sách</p>
+    </div>
+    <div class="header-right">
+      <!-- MODE SELECTOR: Thay đổi cách tính vốn khả dụng -->
+      <div class="mode-selector">
+        <button 
+          class="mode-btn"
+          [class.active]="currentMode() === 'conservative'"
+          (click)="setMode('conservative')"
+          title="Thanh toán 2 bên: Chỉ tính đơn đã thanh toán cả NCC và Đại lý">
+          🟢 Thanh toán 2 bên
+        </button>
+        <button 
+          class="mode-btn"
+          [class.active]="currentMode() === 'moderate'"
+          (click)="setMode('moderate')"
+          title="Thanh toán 1 bên: Chiết khấu theo trạng thái (100%/70%/40%)">
+          🟡 Thanh toán 1 bên
+        </button>
+        <button 
+          class="mode-btn"
+          [class.active]="currentMode() === 'aggressive'"
+          (click)="setMode('aggressive')"
+          title="Chưa thanh toán: Tính tất cả đơn + khoản vay">
+          🔴 Chưa thanh toán
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================
+       LOADING STATE
+       Hiển thị khi đang tải dữ liệu từ API
+  ========================================= -->
+  @if (isLoading()) {
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <p>Đang tải dữ liệu...</p>
+    </div>
+  }
+
+  <!-- ========================================
+       ERROR STATE
+       Hiển thị khi có lỗi load dữ liệu
+       - Có thể do API down
+       - Hoặc không có quyền truy cập
+       - Hoặc dữ liệu không hợp lệ
+  ========================================= -->
+  @if (error()) {
+    <div class="error-container">
+      <p>{{ error() }}</p>
+      <button (click)="loadDashboard()" class="btn btn-primary">Thử lại</button>
+    </div>
+  }
+
+  @if (!isLoading() && !error()) {
+    <!-- ========================================
+         TAB NAVIGATION
+         3 tabs chính của dashboard:
+         1. Tổng quan: Hiển thị vốn khả dụng, cash flow
+         2. Phân bổ lợi nhuận: Phân bổ theo policy (45%/25%/20%/10%)
+         3. Phân bổ ngân sách Ads: ROI-based budget allocation
+    ========================================= -->
+    <div class="tab-navigation">
+      <button 
+        class="tab-btn"
+        [class.active]="activeTab() === 'overview'"
+        (click)="setTab('overview')"
+        title="Xem tổng quan vốn khả dụng và cash flow">
+        📊 Tổng quan
+      </button>
+      <button 
+        class="tab-btn"
+        [class.active]="activeTab() === 'allocation'"
+        (click)="setTab('allocation')"
+        title="Phân bổ lợi nhuận theo chính sách">
+        📑 Phân bổ lợi nhuận
+      </button>
+      <button 
+        class="tab-btn"
+        [class.active]="activeTab() === 'budget'"
+        (click)="setTab('budget')"
+        title="Phân bổ ngân sách cho các nhóm quảng cáo">
+        🎯 Phân bổ ngân sách Ads
+      </button>
+    </div>
+
+    <!-- ========================================
+         TAB CONTENT CONTAINER
+         Nội dung thay đổi theo tab được chọn
+    ========================================= -->
+    <div class="tab-content">
+      <!-- ==========================================
+           TAB 1: TỔNG QUAN
+           
+           FLOW:
+           1. API GET /finance/available-funds/current?mode={mode}
+           2. Backend query TestOrder2 collection
+           3. Tính toán theo mode:
+              - Conservative: Chỉ đơn supplierPaymentStatus='paid' AND agentPaymentStatus='paid'|'n/a'
+              - Moderate: Realized 100% + Partial 70% + Pending 40%
+              - Aggressive: Tất cả đơn + khoản vay
+           4. Hiển thị:
+              - Summary cards: Tiền chắc ăn, Tổng profit, Đã thực hiện, Đang chờ
+              - Cash flow details: Chi tiết số liệu theo mode
+              - Risk info: Mô tả rủi ro và khuyến nghị
+      =========================================== -->
+      @if (activeTab() === 'overview') {
+        <div class="overview-section">
+          <!-- SUMMARY CARDS: 4 cards hiển thị số liệu chính -->
+          <div class="summary-cards">
+            <!-- CARD 1: Tiền chắc ăn - Số tiền có thể phân bổ ngay -->
+            <div class="summary-card primary" 
+                 title="LOGIC: Tiền chắc ăn = safeAvailableFunds (tính theo mode đã chọn). Thanh toán 2 bên: Chỉ tính đơn đã thanh toán cả 2 bên. Thanh toán 1 bên: Chiết khấu theo rủi ro (100%/70%/40%). Chưa thanh toán: Tính tất cả đơn + khoản vay.">
+              <div class="card-icon">💵</div>
+              <div class="card-content">
+                <h3>Tiền Chắc Ăn</h3>
+                <p class="big-number">{{ formatCurrency(funds()?.safeAvailableFunds) }}</p>
+                <div class="metrics-row">
+                  <div class="metric-item">
+                    <span class="metric-label">Hiện tại:</span>
+                    <span class="metric-value current">{{ formatCurrency(funds()?.safeAvailableFunds || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Hôm qua:</span>
+                    <span class="metric-value yesterday">{{ formatCurrency(funds()?.yesterday?.safeAvailableFunds || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Lũy kế:</span>
+                    <span class="metric-value cumulative">{{ formatCurrency(funds()?.cumulative?.safeAvailableFunds || 0) }}</span>
+                  </div>
+                </div>
+                <span class="badge" [class]="riskBadgeClass()">{{ modeLabel() }}</span>
+              </div>
+            </div>
+            
+            <!-- CARD 2: Tổng lợi nhuận - Bao gồm cả realized và pending -->
+            <div class="summary-card success"
+                 title="LOGIC: Tổng lợi nhuận = totalNetProfit. Bao gồm cả lợi nhuận đã thực hiện (realized) và đang chờ (pending). Tính bằng: Doanh thu - Chi phí NCC - Chi phí đại lý - Chi phí khác.">
+              <div class="card-icon">📈</div>
+              <div class="card-content">
+                <h3>Tổng Lợi Nhuận</h3>
+                <p class="big-number">{{ formatCurrency(funds()?.totalNetProfit) }}</p>
+                <div class="metrics-row">
+                  <div class="metric-item">
+                    <span class="metric-label">Hiện tại:</span>
+                    <span class="metric-value current">{{ formatCurrency(funds()?.totalNetProfit || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Hôm qua:</span>
+                    <span class="metric-value yesterday">{{ formatCurrency(funds()?.yesterday?.realizedProfit ?? 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Lũy kế:</span>
+                    <span class="metric-value cumulative">{{ formatCurrency(funds()?.cumulative?.totalNetProfit || 0) }}</span>
+                  </div>
+                </div>
+                <span class="sub-text">Net Profit</span>
+              </div>
+            </div>
+
+            @if (funds()?.cashFlow; as cf) {
+              <!-- CARD 3: Đã thực hiện - Đơn đã thanh toán đủ -->
+              <div class="summary-card info"
+                   title="LOGIC: Đã thực hiện = realizedNetProfit | realizedProfit. Tính từ các đơn có supplierPaymentStatus='paid' AND agentPaymentStatus IN ['paid','n/a']. Đây là lợi nhuận thực tế đã về tay.">
+                <div class="card-icon">✅</div>
+                <div class="card-content">
+                  <h3>Đã Thực Hiện</h3>
+                  <p class="big-number">{{ formatCurrency(cf.realizedNetProfit || cf.realizedProfit) }}</p>
+                  <div class="metrics-row">
+                    <div class="metric-item">
+                      <span class="metric-label">Hiện tại:</span>
+                      <span class="metric-value current">{{ formatCurrency(cf.realizedNetProfit || cf.realizedProfit || 0) }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Hôm qua:</span>
+                      <span class="metric-value yesterday">{{ formatCurrency(funds()?.yesterday?.realizedProfit || 0) }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Lũy kế:</span>
+                      <span class="metric-value cumulative">{{ formatCurrency(funds()?.cumulative?.realizedProfit || 0) }}</span>
+                    </div>
+                  </div>
+                  <span class="sub-text">{{ cf.realizedOrderCount || cf.realizedCount || 0 }} đơn</span>
+                </div>
+              </div>
+
+              <!-- CARD 4: Đang chờ - Đơn chưa thanh toán đủ -->
+              <div class="summary-card warning"
+                   title="LOGIC: Đang chờ = pendingNetProfit | pendingProfit. Tính từ các đơn chưa thanh toán đủ (supplierPaymentStatus != 'paid' OR agentPaymentStatus NOT IN ['paid','n/a']). Rủi ro: Tiền chưa về, có thể không thu được.">
+                <div class="card-icon">⏳</div>
+                <div class="card-content">
+                  <h3>Đang Chờ</h3>
+                  <p class="big-number">{{ formatCurrency(cf.pendingNetProfit || cf.pendingProfit) }}</p>
+                  <div class="metrics-row">
+                    <div class="metric-item">
+                      <span class="metric-label">Hiện tại:</span>
+                      <span class="metric-value current">{{ formatCurrency(cf.pendingNetProfit || cf.pendingProfit || 0) }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Hôm qua:</span>
+                      <span class="metric-value yesterday">{{ formatCurrency(funds()?.yesterday?.pendingProfit || 0) }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Lũy kế:</span>
+                      <span class="metric-value cumulative">{{ formatCurrency(funds()?.cumulative?.pendingProfit || 0) }}</span>
+                    </div>
+                  </div>
+                  <span class="sub-text">{{ cf.pendingOrderCount || cf.pendingCount || 0 }} đơn</span>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- CASH FLOW DETAILS: Chi tiết luồng vốn theo mode -->
+          @if (funds()?.cashFlow; as cf) {
+            <div class="cash-flow-section">
+              <h2>💸 Chi Tiết Luồng Vốn</h2>
+              <div class="flow-grid">
+                <!-- CONSERVATIVE MODE: Chỉ tính đơn đã thanh toán cả 2 bên -->
+                @if (currentMode() === 'conservative') {
+                  <div class="flow-item">
+                    <span class="label">💵 Doanh thu (sau thanh toán NCC)</span>
+                    <span class="value positive">{{ formatCurrency(cf.revenue) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Lợi nhuận ròng đã thực hiện</span>
+                    <span class="value positive">{{ formatCurrency(cf.realizedNetProfit) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Lợi nhuận gộp đã thực hiện</span>
+                    <span class="value">{{ formatCurrency(cf.realizedGrossProfit) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Số đơn đã thực hiện</span>
+                    <span class="value">{{ cf.realizedOrderCount || 0 }}</span>
+                  </div>
+                  <div class="flow-item warning-bg">
+                    <span class="label">🏗️ Vốn đặt chỗ vận hành</span>
+                    <span class="value warning">{{ formatCurrency(cf.reservedOperatingCapital) }}</span>
+                  </div>
+                  <div class="flow-item highlight">
+                    <span class="label">Đang chờ (chưa thanh toán)</span>
+                    <span class="value warning">{{ formatCurrency(cf.pendingNetProfit) }}</span>
+                  </div>
+                }
+
+                <!-- MODERATE MODE: Chiết khấu theo trạng thái -->
+                @if (currentMode() === 'moderate') {
+                  <div class="flow-item">
+                    <span class="label">💵 Doanh thu (sau thanh toán NCC)</span>
+                    <span class="value positive">{{ formatCurrency(cf.revenue) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Đã thực hiện (100%)</span>
+                    <span class="value positive">{{ formatCurrency(cf.realizedProfit) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Partial (70%)</span>
+                    <span class="value">{{ formatCurrency(cf.partialProfit) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Pending (40%)</span>
+                    <span class="value warning">{{ formatCurrency(cf.pendingProfit) }}</span>
+                  </div>
+                  <div class="flow-item warning-bg">
+                    <span class="label">🏗️ Vốn đặt chỗ vận hành</span>
+                    <span class="value warning">{{ formatCurrency(cf.reservedOperatingCapital) }}</span>
+                  </div>
+                  <div class="flow-item highlight">
+                    <span class="label">Tổng sau chiết khấu</span>
+                    <span class="value positive">{{ formatCurrency(cf.discountedFunds) }}</span>
+                  </div>
+                }
+
+                <!-- AGGRESSIVE MODE: Tất cả đơn + khoản vay -->
+                @if (currentMode() === 'aggressive') {
+                  <div class="flow-item">
+                    <span class="label">💵 Doanh thu (sau thanh toán NCC)</span>
+                    <span class="value positive">{{ formatCurrency(cf.revenue) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Vốn ban đầu</span>
+                    <span class="value">{{ formatCurrency(cf.initialCapital) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Tiền mặt ròng</span>
+                    <span class="value positive">{{ formatCurrency(cf.netCashAvailable) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Lợi nhuận ước tính</span>
+                    <span class="value">{{ formatCurrency(cf.estimatedProfit) }}</span>
+                  </div>
+                  <div class="flow-item warning-bg">
+                    <span class="label">🏗️ Vốn đặt chỗ vận hành</span>
+                    <span class="value warning">{{ formatCurrency(cf.reservedOperatingCapital) }}</span>
+                  </div>
+                  <div class="flow-item">
+                    <span class="label">Vay có thể sử dụng</span>
+                    <span class="value danger">{{ formatCurrency(cf.loanAvailable) }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- RISK INFO: Thông tin về mức độ rủi ro và khuyến nghị -->
+          @if (funds()?.additionalInfo; as info) {
+            <div class="info-box" [class]="'info-' + currentMode()">
+              <h3>ℹ️ {{ info.description }}</h3>
+              @if (info.note) {
+                <p><strong>Ghi chú:</strong> {{ info.note }}</p>
+              }
+              @if (info.warning) {
+                <p class="warning-text">⚠️ {{ info.warning }}</p>
+              }
+              @if (info.recommendation) {
+                <p><strong>Khuyến nghị:</strong> {{ info.recommendation }}</p>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ==========================================
+           TAB 2: PHÂN BỔ LỢI NHUẬN
+           
+           FLOW:
+           1. API GET /capital-allocation/policies/active - Lấy policy đang active
+           2. API GET /capital-allocation/compute?mode={mode} - Tính toán phân bổ
+           3. Backend sử dụng policy ratios (45%/25%/20%/10%) để phân bổ vốn
+           4. Hiển thị:
+              - Policy header: Tên policy, ngày tính
+              - Allocation chart: Visual bar chart với % phân bổ
+              - Allocation cards: 4 cards hiển thị số tiền từng loại
+              - Summary: Tổng vốn và tổng profit
+           5. Action: Capture snapshot để lưu lại trạng thái phân bổ
+      =========================================== -->
+      @if (activeTab() === 'allocation') {
+        <div class="allocation-section">
+          @if (allocation(); as a) {
+            <!-- POLICY HEADER: Thông tin policy đang sử dụng -->
+            <div class="policy-header">
+              <h2>📑 {{ a.policyName }}</h2>
+              <p class="policy-date">Ngày: {{ a.date }}</p>
+              <button class="btn btn-secondary" (click)="captureSnapshot()" title="Lưu snapshot phân bổ hiện tại vào DB">
+                📸 Lưu Snapshot
+              </button>
+            </div>
+
+            <!-- ALLOCATION CHART: Visual representation của phân bổ -->
+            <div class="allocation-chart-container">
+              <!-- Stacked bar chart hiển thị % phân bổ -->
+              <div class="allocation-bar">
+                <div class="bar-segment reinvest" [style.width.%]="allocationChart().reinvest" title="Tái đầu tư: {{ a.ratios.reinvestmentRatio * 100 }}%">
+                  <span class="segment-label">{{ a.ratios.reinvestmentRatio * 100 }}%</span>
+                </div>
+                <div class="bar-segment safety" [style.width.%]="allocationChart().safety" title="Dự phòng: {{ a.ratios.safetyReserveRatio * 100 }}%">
+                  <span class="segment-label">{{ a.ratios.safetyReserveRatio * 100 }}%</span>
+                </div>
+                <div class="bar-segment personal" [style.width.%]="allocationChart().personal" title="Thu nhập: {{ a.ratios.personalIncomeRatio * 100 }}%">
+                  <span class="segment-label">{{ a.ratios.personalIncomeRatio * 100 }}%</span>
+                </div>
+                <div class="bar-segment longterm" [style.width.%]="allocationChart().longTerm" title="Tài sản dài hạn: {{ a.ratios.longTermAssetRatio * 100 }}%">
+                  <span class="segment-label">{{ a.ratios.longTermAssetRatio * 100 }}%</span>
+                </div>
+              </div>
+              <!-- Legend giải thích màu sắc -->
+              <div class="chart-legend">
+                <div class="legend-item"><span class="dot reinvest"></span> Tái đầu tư</div>
+                <div class="legend-item"><span class="dot safety"></span> Dự phòng</div>
+                <div class="legend-item"><span class="dot personal"></span> Thu nhập</div>
+                <div class="legend-item"><span class="dot longterm"></span> Tài sản dài hạn</div>
+              </div>
+            </div>
+
+            <!-- ALLOCATION DETAILS: 4 cards hiển thị số tiền phân bổ chi tiết -->
+            <div class="allocation-grid">
+              <!-- 🔄 Tái đầu tư: Tiền quay lại vốn quảng cáo -->
+              <div class="allocation-card reinvest"
+                   title="LOGIC: Tái đầu tư = cashAvailable × reinvestmentRatio. Mặc định 45%. Đây là số tiền quay lại vốn quảng cáo để tăng trưởng doanh thu.">
+                <div class="card-header">
+                  <span class="icon">🔄</span>
+                  <span class="title">Tái Đầu Tư</span>
+                  <span class="ratio">{{ a.ratios.reinvestmentRatio * 100 }}%</span>
+                </div>
+                <p class="amount">{{ formatCurrency(a.reinvestmentAmount) }}</p>
+                <div class="metrics-row compact">
+                  <div class="metric-item">
+                    <span class="metric-label">Hiện tại:</span>
+                    <span class="metric-value current">{{ formatCurrency(a.reinvestmentAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Hôm qua:</span>
+                    <span class="metric-value yesterday">{{ formatCurrency(a.yesterday?.reinvestmentAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Lũy kế:</span>
+                    <span class="metric-value cumulative">{{ formatCurrency(a.cumulative?.totalReinvestment || 0) }}</span>
+                  </div>
+                </div>
+                <p class="description">Quay lại vốn quảng cáo</p>
+              </div>
+
+              <!-- 🛡️ Dự phòng: Quỹ dự phòng rủi ro -->
+              <div class="allocation-card safety"
+                   title="LOGIC: Dự phòng = cashAvailable × safetyReserveRatio. Mặc định 25%. Quỹ dự phòng cho các rủi ro không lường trước, chi phí bất ngờ, hoặc khi cần tăng cường marketing đột xuất.">
+                <div class="card-header">
+                  <span class="icon">🛡️</span>
+                  <span class="title">Dự Phòng</span>
+                  <span class="ratio">{{ a.ratios.safetyReserveRatio * 100 }}%</span>
+                </div>
+                <p class="amount">{{ formatCurrency(a.safetyReserveAmount) }}</p>
+                <div class="metrics-row compact">
+                  <div class="metric-item">
+                    <span class="metric-label">Hiện tại:</span>
+                    <span class="metric-value current">{{ formatCurrency(a.safetyReserveAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Hôm qua:</span>
+                    <span class="metric-value yesterday">{{ formatCurrency(a.yesterday?.safetyReserveAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Lũy kế:</span>
+                    <span class="metric-value cumulative">{{ formatCurrency(a.cumulative?.totalSafetyReserve || 0) }}</span>
+                  </div>
+                </div>
+                <p class="description">Quỹ dự phòng rủi ro</p>
+              </div>
+
+              <!-- 👤 Thu nhập: Thu nhập cá nhân -->
+              <div class="allocation-card personal"
+                   title="LOGIC: Thu nhập = cashAvailable × personalIncomeRatio. Mặc định 20%. Đây là thu nhập của chủ doanh nghiệp, có thể rút ra sử dụng cho nhu cầu cá nhân.">
+                <div class="card-header">
+                  <span class="icon">👤</span>
+                  <span class="title">Thu Nhập</span>
+                  <span class="ratio">{{ a.ratios.personalIncomeRatio * 100 }}%</span>
+                </div>
+                <p class="amount">{{ formatCurrency(a.personalIncomeAmount) }}</p>
+                <div class="metrics-row compact">
+                  <div class="metric-item">
+                    <span class="metric-label">Hiện tại:</span>
+                    <span class="metric-value current">{{ formatCurrency(a.personalIncomeAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Hôm qua:</span>
+                    <span class="metric-value yesterday">{{ formatCurrency(a.yesterday?.personalIncomeAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Lũy kế:</span>
+                    <span class="metric-value cumulative">{{ formatCurrency(a.cumulative?.totalPersonalIncome || 0) }}</span>
+                  </div>
+                </div>
+                <p class="description">Thu nhập cá nhân</p>
+              </div>
+
+              <!-- 🏦 Tài sản dài hạn: Đầu tư dài hạn -->
+              <div class="allocation-card longterm"
+                   title="LOGIC: Tài sản dài hạn = cashAvailable × longTermAssetRatio. Mặc định 10%. Đầu tư vào tài sản dài hạn (bất động sản, cổ phiếu, vàng, etc.) để bảo toàn và tăng trưởng tài sản.">
+                <div class="card-header">
+                  <span class="icon">🏦</span>
+                  <span class="title">Tài Sản Dài Hạn</span>
+                  <span class="ratio">{{ a.ratios.longTermAssetRatio * 100 }}%</span>
+                </div>
+                <p class="amount">{{ formatCurrency(a.longTermAssetAmount) }}</p>
+                <div class="metrics-row compact">
+                  <div class="metric-item">
+                    <span class="metric-label">Hiện tại:</span>
+                    <span class="metric-value current">{{ formatCurrency(a.longTermAssetAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Hôm qua:</span>
+                    <span class="metric-value yesterday">{{ formatCurrency(a.yesterday?.longTermAssetAmount || 0) }}</span>
+                  </div>
+                  <div class="metric-item">
+                    <span class="metric-label">Lũy kế:</span>
+                    <span class="metric-value cumulative">{{ formatCurrency(a.cumulative?.totalLongTermAsset || 0) }}</span>
+                  </div>
+                </div>
+                <p class="description">Đầu tư dài hạn</p>
+              </div>
+            </div>
+
+            <!-- ALLOCATION SUMMARY: Tổng kết số liệu -->
+            <div class="allocation-summary"
+                 title="Tổng kết vốn khả dụng và tổng lợi nhuận">
+              <div class="summary-row">
+                <span class="label">Tổng vốn khả dụng:</span>
+                <span class="value">{{ formatCurrency(a.cashAvailable) }}</span>
+              </div>
+              @if (a.yesterday?.cashAvailable !== undefined) {
+                <div class="summary-row secondary">
+                  <span class="label">Vốn khả dụng hôm qua:</span>
+                  <span class="value">{{ formatCurrency(a.yesterday?.cashAvailable ?? 0) }}</span>
+                </div>
+              }
+              @if (a.cumulative?.totalAllocated !== undefined) {
+                <div class="summary-row secondary">
+                  <span class="label">Tổng lũy kế đã phân bổ:</span>
+                  <span class="value">{{ formatCurrency(a.cumulative?.totalAllocated ?? 0) }}</span>
+                </div>
+              }
+              <div class="summary-row">
+                <span class="label">Tổng lợi nhuận ròng:</span>
+                <span class="value">{{ formatCurrency(a.totalNetProfit) }}</span>
+              </div>
+            </div>
+          } @else {
+            <div class="no-data">
+              <p>Không có dữ liệu phân bổ. Vui lòng thiết lập chính sách phân bổ.</p>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ==========================================
+           TAB 3: PHÂN BỔ NGÂN SÁCH ADS
+           
+           FLOW:
+           1. API GET /budget-allocation/status - Lấy trạng thái budget hiện tại
+           2. API GET /budget-allocation/preview (dryRun=true) - Preview phân bổ
+           3. Backend:
+              - Lấy tất cả ad groups
+              - Tính ROI cho mỗi group = (revenue - cost) / cost
+              - Phân loại: High (ROI ≥ 2), Medium (1 ≤ ROI < 2), Low (ROI < 1)
+              - Allocate budget dựa trên ROI ranking
+           4. Hiển thị:
+              - Budget status cards: Vốn khả dụng, Tổng đề xuất, Trạng thái, Số nhóm
+              - Allocation table: Chi tiết từng ad group (ROI, profit, budget)
+              - Summary: Số lượng thành công/bỏ qua/thất bại
+           5. Action: Apply allocation (POST với dryRun=false)
+      =========================================== -->
+      @if (activeTab() === 'budget') {
+        <div class="budget-section">
+          @if (budgetStatus(); as bs) {
+            <!-- BUDGET STATUS CARDS: 4 cards hiển thị trạng thái ngân sách -->
+            <div class="budget-status-cards">
+              <!-- Vốn tái đầu tư khả dụng để phân bổ -->
+              <div class="status-card"
+                   title="LOGIC: Vốn tái đầu tư khả dụng = Vốn ban đầu + Vốn phân bổ từ lợi nhuận - Chi phí ads">
+                <h3>Vốn tái đầu tư khả dụng</h3>
+                <p class="big-number">{{ formatCurrency(bs.availableFunds) }}</p>
+                @if (bs.reinvestmentBreakdown) {
+                  <div class="breakdown-mini">
+                    <span class="formula-mini" title="Vốn ban đầu + Vốn phân bổ - Chi phí ads">
+                      {{ formatCurrency(bs.reinvestmentBreakdown.initialReinvestment || 0) }}
+                      + {{ formatCurrency(bs.reinvestmentBreakdown.allocatedFromProfit || 0) }}
+                      - {{ formatCurrency(bs.reinvestmentBreakdown.adsCostSpent || 0) }}
+                    </span>
+                  </div>
+                }
+                @if (bs.yesterday?.availableFunds !== undefined) {
+                  <div class="historical-data">
+                    <span class="yesterday" title="Vốn tái đầu tư khả dụng ngày hôm qua">
+                      Hôm qua: {{ formatCurrency(bs.yesterday?.availableFunds ?? 0) }}
+                    </span>
+                  </div>
+                }
+                @if (bs.cumulative?.totalAllocated !== undefined) {
+                  <div class="cumulative-data">
+                    <span class="cumulative" title="Tổng lũy kế đã phân bổ từ lợi nhuận">
+                      Phân bổ lũy kế: {{ formatCurrency(bs.cumulative?.totalAllocated ?? 0) }}
+                    </span>
+                  </div>
+                }
+              </div>
+              <!-- Tổng budget được đề xuất cho tất cả ad groups -->
+              <div class="status-card"
+                   title="LOGIC: Tổng đề xuất chi = SUM(suggestedBudget) của tất cả ad groups. Tính dựa trên ROI: ROI ≥2.0 tăng 50%, ROI 1.0-2.0 tăng 20%, ROI <1.0 giảm 20-50%.">
+                <h3>Tổng đề xuất chi</h3>
+                <p class="big-number">{{ formatCurrency(bs.totalSuggestedSpend) }}</p>
+                @if (bs.yesterday?.totalSuggestedSpend !== undefined) {
+                  <div class="historical-data">
+                    <span class="yesterday" title="Tổng đề xuất chi ngày hôm qua">
+                      Hôm qua: {{ formatCurrency(bs.yesterday?.totalSuggestedSpend ?? 0) }}
+                    </span>
+                  </div>
+                }
+                @if (bs.cumulative?.totalSpent !== undefined) {
+                  <div class="cumulative-data">
+                    <span class="cumulative" title="Tổng lũy kế đã chi tiêu">
+                      Lũy kế: {{ formatCurrency(bs.cumulative?.totalSpent ?? 0) }}
+                    </span>
+                  </div>
+                }
+              </div>
+              <!-- Trạng thái: Đủ hay thiếu ngân sách -->
+              <div class="status-card" [class.success]="bs.canAfford" [class.danger]="!bs.canAfford"
+                   [title]="bs.canAfford ? 'LOGIC: canAfford = true. Vốn khả dụng ≥ Tổng đề xuất chi. Có thể phân bổ đầy đủ budget cho tất cả ad groups.' : 'LOGIC: canAfford = false. Vốn khả dụng < Tổng đề xuất chi. Sẽ phân bổ tỉ lệ (scale down) cho tất cả ad groups. Deficit = totalSuggestedSpend - availableFunds.'">
+                <h3>Trạng thái</h3>
+                <p class="status-text">
+                  @if (bs.canAfford) {
+                    ✅ Đủ ngân sách
+                  } @else {
+                    ❌ Thiếu {{ formatCurrency(bs.deficit) }}
+                  }
+                </p>
+                @if (bs.yesterday?.canAfford !== undefined) {
+                  <div class="historical-data">
+                    <span class="yesterday" [title]="'Trạng thái ngày hôm qua: ' + (bs.yesterday?.canAfford ? 'Đủ ngân sách' : 'Thiếu ngân sách')">
+                      Hôm qua: {{ bs.yesterday?.canAfford ? '✅ Đủ' : '❌ Thiếu' }}
+                    </span>
+                  </div>
+                }
+              </div>
+              <!-- Số lượng ad groups -->
+              <div class="status-card">
+                <h3>Số nhóm ads</h3>
+                <p class="big-number">{{ bs.adGroupCount }}</p>
+              </div>
+            </div>
+          }
+
+        </div>
+      }
+    </div>
+  }
+</div>

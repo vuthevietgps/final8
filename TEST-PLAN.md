@@ -1,0 +1,277 @@
+# KẾ HOẠCH & KẾT QUẢ TEST HỆ THỐNG SMARTERP
+**Cập nhật**: 23/02/2026 | **Version**: 15.0
+
+---
+
+## 1. TỔNG QUAN
+
+### ✅ Kết quả: 321 PASS / 0 FAIL (100%)
+
+| # | Module Test | Script | PASS | FAIL |
+|---|------------|--------|------|------|
+| 1 | Auth & RBAC | `test-module-auth-rbac.ps1` | 18 | 0 |
+| 2 | Customer | `test-module-customer.ps1` | 8 | 0 |
+| 3 | Ad Account & Group | `test-module-ad-account-group.ps1` | 34 | 0 |
+| 4 | Labor & Other Cost | `test-module-labor-other-cost.ps1` | 32 | 0 |
+| 5 | Owner Fund & Loan | `test-module-owner-fund-loan.ps1` | 43 | 0 |
+| 6 | Ads Alerts & KPI | `test-module-ads-alerts-kpi.ps1` | 26 | 0 |
+| 7 | Reports, Products & Config | `test-module-reports-products-config.ps1` | 41 | 0 |
+| 8 | Supply Chain | `test-module-supply-chain.ps1` | 28 | 0 |
+| 9 | Quotes | `test-module-quotes.ps1` | 18 | 0 |
+| 10 | Media, Chat & Config | `test-module-media-chat-config.ps1` | 33 | 0 |
+| 11 | Financial Deep | `test-module-financial-deep.ps1` | 40 | 0 |
+| | **TỔNG** | | **321** | **0** |
+
+### Cách chạy test
+
+```bash
+# Chạy từng module
+powershell -ExecutionPolicy Bypass -File test-module-auth-rbac.ps1
+
+# Chạy tất cả (master runner)
+powershell -ExecutionPolicy Bypass -File test-all-modules.ps1
+
+# Chạy và lưu output
+powershell -ExecutionPolicy Bypass -File test-all-modules.ps1 2>&1 | Tee-Object -FilePath test-all-output.txt
+```
+
+**Yêu cầu**: Backend phải đang chạy tại `http://localhost:3000`
+
+---
+
+## 2. CHI TIẾT TỪNG MODULE TEST
+
+### 2.1 Auth & RBAC (`test-module-auth-rbac.ps1`) — 18 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login Director | 1 |
+| 1 | User CRUD (create, list, get, update, deactivate, reactivate, delete) | 7 |
+| 2 | RBAC (login 7 roles, test access restrictions) | 7 |
+| 3 | Session Logs, Export Users, Salary Config | 3 |
+
+### 2.2 Customer (`test-module-customer.ps1`) — 8 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login | 1 |
+| 1 | Customer CRUD (create, list, get, update, search, stats, delete) | 7 |
+
+### 2.3 Ad Account & Group (`test-module-ad-account-group.ps1`) — 34 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login + setup (fanpage, product category) | 1 |
+| 1 | Ad Account CRUD (create, list, get, update) | 5 |
+| 2 | Ad Group CRUD (create 2 groups, list, get, update, filters) | 9 |
+| 3 | Advertising Cost (create daily costs, list, filter by date/adGroupId/platform) | 8 |
+| 4 | Group Profit Report, Daily Report sync/list/top/optimal-spend | 7 |
+| 5 | Cleanup | 4 |
+
+### 2.4 Labor & Other Cost (`test-module-labor-other-cost.ps1`) — 32 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login | 1 |
+| 1 | Labor Cost CRUD (create, list, get, update, filter by month/employee, delete) | 8 |
+| 2 | Other Cost CRUD (create, list, get, update, filter, summary, delete) | 9 |
+| 3 | KPI (update employee KPI percentage) | 1 |
+| 4 | Labor Statement (create, list, get, calculate, payment #1, payment #2, close, delete) | 10 |
+| 5 | Cleanup | 3 |
+
+### 2.5 Owner Fund & Loan (`test-module-owner-fund-loan.ps1`) — 43 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login | 1 |
+| 1 | Owner CRUD (create 2 owners, list, get, update, statistics, transactions) | 7 |
+| 2 | Withdrawal lifecycle: deposit → create → approve → complete, create → reject, create → cancel, list | 8 |
+| 3 | Fund Account (get, system stats, summary) | 3 |
+| 4 | Loan lifecycle: create → list → get → disburse ×2 → repayment → pay → summary → upcoming → cashflow → dashboard → payment options | 13 |
+| 5 | Funding Sources & Cashflows (create source, list, create cashflow in/out, list, finance summary, available funds, dashboard, alerts) | 10 |
+| 6 | Cleanup | 1 |
+
+### 2.6 Ads Alerts & KPI (`test-module-ads-alerts-kpi.ps1`) — 26 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login + get employee/ad-group info | 1 |
+| 1 | Ads Alerts (manual check, list, summary, filter by type, mark read, mark all read, dismiss) | 7 |
+| 2 | Employee KPI (list, meta employees, meta alerts, profitable stats daily/monthly/trend, employee KPI, ad-groups, assign, daily suggestions, generate, progress, product-platform) | 13 |
+| 3 | Capital Allocation (list policies, active policy, compute, snapshots, latest, reinvestment budget, create snapshot) | 7 |
+
+### 2.7 Reports, Products & Config (`test-module-reports-products-config.ps1`) — 41 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login | 1 |
+| 1 | Product Category CRUD (seed, create, list, active, stats, update, order, count, get, delete) | 10 |
+| 2 | Product CRUD (seed, create, list, stats, get, update, by-category, delete) | 8 |
+| 3 | Order Reports (daily profit, product profit, export JSON/CSV, supplier/agent ops summary, payment pending) | 8 |
+| 4 | Pending Orders (create with adGroupId, list, agents, update, approve→order, create #2, delete) | 7 |
+| 5 | Return Requests (create, get, resolve with items[].decision) | 3 |
+| 6 | Config (delivery status, production status, order status, salary config) | 4 |
+
+### 2.8 Supply Chain (`test-module-supply-chain.ps1`) — 28 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login + setup (get supplier & agent users) | 2 |
+| 1 | Supplier Payable CRUD (create, list, get, reject direct payment, verify unpaid, filter, statement by supplier, cashflow) | 8 |
+| 2 | Supplier Statements (upsert, list, get, add payment, close, reopen, payment summary) | 7 |
+| 3 | Agent Payables (upsert, list, summary, add payment, close, reopen, cashflow) | 7 |
+| 4 | Agent Receivables deprecated (list, summary, cashflow) | 3 |
+| 5 | Cleanup (delete payable) | 1 |
+
+### 2.9 Quotes (`test-module-quotes.ps1`) — 18 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login + setup (get supplier, agent, product) | 2 |
+| 1 | Agent Quote CRUD (create ×2, list, get, update/approve, by-agent, by-product, stats) | 8 |
+| 2 | Supplier Quote CRUD (create ×2, list, latest, effective, history, by-supplier) | 7 |
+| 3 | Cleanup | 1 |
+
+### 2.10 Media, Chat & Config (`test-module-media-chat-config.ps1`) — 33 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login | 1 |
+| 1 | Fanpage CRUD (create, list, get, update, create-ai-config, validate-token) | 6 |
+| 2 | OpenAI Config CRUD (create, list, get, update, test-key, delete) | 6 |
+| 3 | API Token CRUD & Operations (settings, create ×2, list, get, update, validate, set-primary, rotate, sync) | 10 |
+| 4 | Media Operations (list, import-by-url, master-sync, validate-product-images) | 4 |
+| 5 | Chat Messages (list conversations, send message, get conversation) | 3 |
+| 6 | Messenger Webhook (verify, receive) | 2 |
+| 7 | Cleanup | 1 |
+
+### 2.11 Financial Deep (`test-module-financial-deep.ps1`) — 40 tests
+| Phase | Nội dung test | Tests |
+|-------|-------------|-------|
+| 0 | Login | 1 |
+| 1 | Financial Control (dashboard, full, forecast, optimal-ads, config GET/PATCH, module-health, actions, debug) | 9 |
+| 2 | Budget Allocation (status, preview, auto dryRun) | 3 |
+| 3 | Funds (overview, committed-cash, ads, survival-buffer, owner, formulas) | 6 |
+| 4 | Cashflow Control - 5 controllers (dashboard/summary, ads/decision, alerts, funds/status, profit/summary) | 5 |
+| 5 | Delivery Status deep CRUD (seed, list, active, final, payment-trigger ×2, return ×2, stats, create, get, update, order, delete) | 14 |
+| 6 | Order Sheet Sync (status, agents-suppliers) | 2 |
+
+---
+
+## 3. DANH SÁCH ENDPOINTS (101 chức năng, 48+ controllers)
+
+### Authentication & Users
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 1-6 | Login, Register, Logout, Profile, Validate Token, Session Logs | `/auth/*`, `/session-logs` |
+| 7-10 | Users CRUD, Export CSV, Import CSV, Salary Config | `/users`, `/export-users`, `/import-users`, `/salary-config` |
+
+### Đơn hàng & Thanh toán
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 19-29 | Orders CRUD, Seed, Delivery Status, Export, Import, Reports, Pending Orders | `/test-order2/*`, `/pending-orders/*` |
+| 30-38 | Payment batch NCC/ĐL, Payment pending, Payment history | `/test-order2/supplier-payment/*`, `/test-order2/agent-payment/*` |
+
+### Sản phẩm & Khách hàng
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 39 | Customer CRUD | `/customers` |
+| 40-42 | Product Category, Products, Media | `/product-category`, `/products`, `/media` |
+
+### Quảng cáo
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 43-52 | Ad Accounts, Ad Groups, Advertising Cost, Reports, KPI, Alerts | `/ad-accounts`, `/ad-groups`, `/advertising-cost`, `/employee-ads-kpi`, `/ads-alerts` |
+
+### Tài chính
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 60-70 | Funding Sources, Cashflows, Loans, Dashboard, Alerts | `/finance/*` |
+| 71-75 | Financial Control (CFO Dashboard) | `/financial-control/*` |
+| 76-80 | Cashflow Control | `/cashflow/*` |
+| 81-84 | Capital Allocation | `/capital-allocation/*` |
+| 85-89 | Owner Fund (Owners, Withdrawals, Transactions) | `/owner-fund/*` |
+
+### Chi phí & Nhân sự
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 58-59 | Labor Cost, Other Cost | `/labor-cost1`, `/other-cost` |
+| 90-93 | Ad Group Daily Report | `/ad-group-daily-report/*` |
+
+### Hệ thống & Cấu hình
+| # | Chức năng | Endpoint |
+|---|-----------|---------|
+| 94-95 | Production Status, Delivery Status | `/production-status`, `/delivery-status` |
+| 96-97 | Return Report, Returns | `/return-report`, `/returns` |
+| 99-101 | Health, Inventory, Purchase Orders | `/health`, `/inventory`, `/purchase-orders` |
+
+---
+
+## 4. CHIẾN LƯỢC TEST
+
+### Các phase đã hoàn thành
+| Phase | Mô tả | Trạng thái |
+|-------|--------|-----------|
+| Phase 1 | Smoke Test — health, login, dashboard | ✅ Done |
+| Phase 2 | API Integration — CRUD, validation, JWT auth | ✅ Done |
+| Phase 3 | Business Logic — financial calc, workflows | ✅ Done |
+| Phase 4 | Security — RBAC, token, role-based access | ✅ Done |
+
+### Ma trận phân quyền
+
+| Feature | Director | Manager | Employee | Int.Agent | Ext.Agent | Int.Supplier | Ext.Supplier |
+|---------|:--------:|:-------:|:--------:|:---------:|:---------:|:------------:|:------------:|
+| Users CRUD | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Orders | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Products | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
+| Ad Accounts/Groups | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Finance | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Owner Fund | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| KPI | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Quotes | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+
+---
+
+## 5. BUG FIXES PHÁT HIỆN QUA TEST (16/02/2026)
+
+### Backend Fix
+| # | Vấn đề | File | Fix |
+|---|--------|------|-----|
+| 1 | Route ordering: `@Get(':employeeId')` intercepts static routes like `/daily-suggestions` | `employee-ads-kpi.controller.ts` | Moved wildcard routes to end of controller |
+
+### Data Mapping Issues (test scripts → backend)
+| # | Sai | Đúng | Ảnh hưởng |
+|---|-----|------|-----------|
+| 1 | `user.userType` | `user.role` | 4 scripts |
+| 2 | `user.name` | `user.fullName` | 4 scripts |
+| 3 | `user._id` (login response) | `user.id` | owner-fund script |
+| 4 | Ad Group missing `fanpageId` | Required field → create fanpage first | ad-account-group |
+| 5 | `kpiScore` | `kpiPercent` | labor-other-cost |
+| 6 | Product DTO: `price, sku, description` | Schema only has `name, categoryId` | reports-products |
+| 7 | Return resolve: `resolution, refundAmount` | `items[].{itemId, decision}` | reports-products |
+| 8 | Withdrawal approve: `approverNotes` | `approvedBy` (MongoId) | owner-fund |
+| 9 | Loan repayment: `amount, principalPortion` | `amountPrincipal, amountInterest` | owner-fund |
+| 10 | PO approve requires `adGroupId` | Must set before approve | reports-products |
+
+---
+
+## 6. LEGACY TEST SCRIPTS (tham khảo, đã superseded)
+
+Các scripts dưới đây đã được **thay thế** bởi 7 module tests + master runner:
+
+| Script | Ngày | Mô tả |
+|--------|------|-------|
+| `test-full-business-flow.ps1` | 16/02 | E2E business flow 15 phases |
+| `test-core-flow-e2e.ps1` | 14/02 | Core flow end-to-end |
+| `test-business-flow-e2e.ps1` | 15/02 | Business flow E2E v1 |
+| `test-business-flow-e2e-v2.ps1` | 16/02 | Business flow E2E v2 |
+| `test-phase1-smoke.ps1` | 14/02 | Phase 1 smoke test |
+| `test-phase2-api.ps1` | 14/02 | Phase 2 API integration |
+| `test-phase3-ui.ps1` | 14/02 | Phase 3 UI functional |
+| `test-phase4-business-logic.ps1` | 14/02 | Phase 4 business logic |
+| `test-phase5-security.ps1` | 14/02 | Phase 5 security |
+| `test-api.ps1` | 30/01 | Basic GET endpoints |
+| `test-crud.ps1` | 30/01 | Basic CRUD |
+| `test-operational.ps1` | 30/01 | Operational tests |
+| `test-ops.ps1` / `test-ops-v2.ps1` | 30/01 | Operations |
+| `test-business-flow.ps1` | 30/01 | Business flow |
+| `test-payment-batch.ps1` | 30/01 | Payment batch |
+| `test-advertising.ps1` | 30/01 | Advertising |
+| `test-ads-alerts.ps1` | 30/01 | Ads alerts |
+| `test-ads-settings-ui.ps1` | 30/01 | Ads settings UI |
+| `test-ads-sync.ps1` | 30/01 | Ads sync |
+| `test-agent-payment-ui.ps1` | 03/02 | Agent payment UI |
+| `test-cfo-spec-v2.ps1` | 03/02 | CFO spec v2 |
+| `test-financial-control.ps1` | 03/02 | Financial control |
+| `test-google-sheet-sync.ps1` | 30/01 | Google Sheets sync |
+| `test-labor-statement.ps1` | 02/02 | Labor statement |

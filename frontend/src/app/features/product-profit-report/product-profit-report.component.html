@@ -1,0 +1,236 @@
+<div class="product-profit-report">
+  <div class="header">
+    <h2>📅 Lợi Nhuận Sản Phẩm Theo Ngày</h2>
+    <div class="controls">
+      <div class="date-mode-toggle">
+        <button 
+          [class.active]="dateMode() === 'single'" 
+          (click)="onDateModeChange('single')">
+          Một ngày
+        </button>
+        <button 
+          [class.active]="dateMode() === 'range'" 
+          (click)="onDateModeChange('range')">
+          Khoảng thời gian
+        </button>
+      </div>
+      
+      @if (dateMode() === 'single') {
+        <div class="date-picker">
+          <label for="reportDate">Ngày:</label>
+          <input 
+            type="date" 
+            id="reportDate" 
+            [value]="selectedDate()" 
+            (change)="onDateChange($event)"
+          />
+        </div>
+      } @else {
+        <div class="date-range-picker">
+          <label for="fromDate">Từ:</label>
+          <input 
+            type="date" 
+            id="fromDate" 
+            [value]="fromDate()" 
+            (change)="onFromDateChange($event)"
+          />
+          <label for="toDate">Đến:</label>
+          <input 
+            type="date" 
+            id="toDate" 
+            [value]="toDate()" 
+            (change)="onToDateChange($event)"
+          />
+        </div>
+      }
+      
+      <button class="refresh-btn" (click)="loadReport()" [disabled]="loading()">
+        {{ loading() ? '⏳ Đang tải...' : '🔄 Làm mới' }}
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="error-message">
+      ⚠️ {{ error() }}
+    </div>
+  }
+
+  @if (report()) {
+    <div class="report-content">
+      <!-- Summary Cards -->
+      <div class="summary-cards">
+        <div class="card total-products">
+          <div class="card-icon">📦</div>
+          <div class="card-content">
+            <div class="card-label">Tổng sản phẩm</div>
+            <div class="card-value">{{ formatNumber(report()!.totals.totalProducts) }}</div>
+          </div>
+        </div>
+
+        <div class="card total-orders">
+          <div class="card-icon">🛒</div>
+          <div class="card-content">
+            <div class="card-label">Tổng đơn hàng</div>
+            <div class="card-value">{{ formatNumber(report()!.totals.totalOrders) }}</div>
+          </div>
+        </div>
+
+        <div class="card total-revenue">
+          <div class="card-icon">💵</div>
+          <div class="card-content">
+            <div class="card-label">Tổng doanh thu</div>
+            <div class="card-value">{{ formatCurrency(report()!.totals.totalRevenue) }}</div>
+          </div>
+        </div>
+
+        <div class="card net-profit">
+          <div class="card-icon">💰</div>
+          <div class="card-content">
+            <div class="card-label">Lợi nhuận thuần</div>
+            <div class="card-value" [class]="getProfitClass(report()!.totals.netProfit)">
+              {{ formatCurrency(report()!.totals.netProfit) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cost Breakdown -->
+      <div class="cost-breakdown">
+        <h3>Chi tiết chi phí</h3>
+        <div class="cost-items">
+          <div class="cost-item">
+            <span class="cost-label">Giá vốn sản phẩm:</span>
+            <span class="cost-value expense">{{ formatCurrency(report()!.totals.totalProductCost) }}</span>
+          </div>
+          <div class="cost-item">
+            <span class="cost-label">Chi phí quảng cáo:</span>
+            <span class="cost-value expense">{{ formatCurrency(report()!.totals.totalAdvertisingCost) }}</span>
+          </div>
+          <div class="cost-item">
+            <span class="cost-label">Chi phí nhân công:</span>
+            <span class="cost-value expense">{{ formatCurrency(report()!.totals.totalLaborCost) }}</span>
+          </div>
+          <div class="cost-item">
+            <span class="cost-label">Chi phí khác:</span>
+            <span class="cost-value expense">{{ formatCurrency(report()!.totals.totalOtherCost) }}</span>
+          </div>
+          <div class="cost-item">
+            <span class="cost-label">Hoa hồng đại lý:</span>
+            <span class="cost-value expense">{{ formatCurrency(report()!.totals.totalAgentCommission) }}</span>
+          </div>
+          <div class="cost-item total">
+            <span class="cost-label">Lợi nhuận gộp:</span>
+            <span class="cost-value" [class]="getProfitClass(report()!.totals.grossProfit)">
+              {{ formatCurrency(report()!.totals.grossProfit) }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Products Table -->
+      <div class="products-table-container">
+        <h3>Chi tiết theo sản phẩm</h3>
+        <table class="products-table">
+          <thead>
+            <tr>
+              <th (click)="sortBy('productName')" class="sortable">
+                Sản phẩm
+                @if (sortColumn() === 'productName') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('totalOrders')" class="sortable number">
+                Đơn
+                @if (sortColumn() === 'totalOrders') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('totalQuantity')" class="sortable number">
+                SL
+                @if (sortColumn() === 'totalQuantity') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('totalRevenue')" class="sortable number">
+                Doanh thu
+                @if (sortColumn() === 'totalRevenue') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('totalProductCost')" class="sortable number">
+                Giá vốn
+                @if (sortColumn() === 'totalProductCost') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('totalAdvertisingCost')" class="sortable number">
+                CP QC
+                @if (sortColumn() === 'totalAdvertisingCost') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('grossProfit')" class="sortable number">
+                LN Gộp
+                @if (sortColumn() === 'grossProfit') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('netProfit')" class="sortable number">
+                LN Thuần
+                @if (sortColumn() === 'netProfit') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+              <th (click)="sortBy('profitMargin')" class="sortable number">
+                Margin
+                @if (sortColumn() === 'profitMargin') {
+                  <span class="sort-icon">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+                }
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (product of getSortedProducts(); track product.productId) {
+              <tr>
+                <td class="product-name">
+                  <div class="product-info">
+                    <span class="color-dot" [style.background-color]="product.productColor"></span>
+                    <span class="name">{{ product.productName }}</span>
+                  </div>
+                </td>
+                <td class="number">{{ formatNumber(product.totalOrders) }}</td>
+                <td class="number">{{ formatNumber(product.totalQuantity) }}</td>
+                <td class="number">{{ formatCurrency(product.totalRevenue) }}</td>
+                <td class="number expense">{{ formatCurrency(product.totalProductCost) }}</td>
+                <td class="number expense">{{ formatCurrency(product.totalAdvertisingCost) }}</td>
+                <td class="number" [class]="getProfitClass(product.grossProfit)">
+                  {{ formatCurrency(product.grossProfit) }}
+                </td>
+                <td class="number" [class]="getProfitClass(product.netProfit)">
+                  {{ formatCurrency(product.netProfit) }}
+                </td>
+                <td class="number" [class]="getProfitClass(product.profitMargin)">
+                  {{ formatPercent(product.profitMargin) }}
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="9" class="empty-message">
+                  Không có dữ liệu cho khoảng thời gian này
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  @if (loading() && !report()) {
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <span>Đang tải dữ liệu...</span>
+    </div>
+  }
+</div>
