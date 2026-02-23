@@ -18,6 +18,8 @@ export class PendingOrder {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: false }) productId?: Types.ObjectId;
   /** Đại lý / nhân viên phụ trách (nếu đã chọn) */
   @Prop({ type: Types.ObjectId, ref: 'User', required: false }) agentId?: Types.ObjectId;
+  /** Nhà cung cấp chỉ định cho đơn */
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false }) supplierId?: Types.ObjectId;
   /** Ad group mapping từ hội thoại / tracking */
   @Prop({ trim: true }) adGroupId?: string;
   /** Thông tin khách hàng */

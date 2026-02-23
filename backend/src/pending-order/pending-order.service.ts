@@ -8,7 +8,6 @@ import { TestOrder2Service } from '../test-order2/test-order2.service';
 import { CreateTestOrder2Dto } from '../test-order2/dto/create-test-order2.dto';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
-import { Conversation } from '../chat-message/schemas/conversation.schema';
 
 @Injectable()
 export class PendingOrderService {
@@ -19,9 +18,13 @@ export class PendingOrderService {
   ) {}
 
   async create(dto: CreatePendingOrderDto) {
+    const rawFanpageId = dto.fanpageId;
+    const normalizedFanpageId = await this.normalizeFanpageId(dto.fanpageId);
+    if (normalizedFanpageId) dto.fanpageId = normalizedFanpageId;
+
     const normalizedAdGroup = dto.adGroupId?.trim();
     if (!normalizedAdGroup) {
-      const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid);
+      const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid, rawFanpageId);
       if (fallback) {
         dto.adGroupId = fallback;
       }
@@ -52,6 +55,20 @@ export class PendingOrderService {
     }));
   }
 
+  async getSuppliers() {
+    const roles = ['internal_supplier', 'external_supplier'];
+    const users = await this.conn.collection('users').find(
+      { role: { $in: roles }, isActive: { $ne: false } },
+      { projection: { _id: 1, fullName: 1, email: 1, role: 1 } }
+    ).limit(500).toArray();
+    return users.map(u => ({
+      _id: u._id,
+      fullName: (u as any).fullName || (u as any).email,
+      email: (u as any).email,
+      role: (u as any).role
+    }));
+  }
+
   findAll(query: any = {}) {
     const filter: FilterQuery<PendingOrderDocument> = {};
     if (query.fanpageId) filter.fanpageId = query.fanpageId;
@@ -67,10 +84,17 @@ export class PendingOrderService {
   }
 
   async update(id: string, dto: UpdatePendingOrderDto) {
+    const rawFanpageId = dto.fanpageId;
+    if (dto.fanpageId !== undefined) {
+      const normalizedFanpageId = await this.normalizeFanpageId(dto.fanpageId);
+      if (normalizedFanpageId) dto.fanpageId = normalizedFanpageId;
+      else delete (dto as any).fanpageId;
+    }
+
     if (dto.adGroupId) {
       dto.adGroupId = dto.adGroupId.trim();
     } else if (!dto.adGroupId && dto.fanpageId && dto.senderPsid) {
-      const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid);
+      const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid, rawFanpageId);
       if (fallback) dto.adGroupId = fallback;
     }
 
@@ -98,6 +122,7 @@ export class PendingOrderService {
       customerName: pending.customerName!,
       quantity: pending.quantity || 1,
       agentId: (pending.agentId ? pending.agentId.toString() : userId),
+      supplierId: (pending.supplierId ? pending.supplierId.toString() : undefined),
       adGroupId: pending.adGroupId || '0',
       isActive: true,
       productionStatus: 'Chưa làm',
@@ -131,23 +156,40 @@ export class PendingOrderService {
       if (pending.adGroupId) {
         update.lastAdGroupId = pending.adGroupId;
       }
+      const conversationFilter = await this.buildConversationFilter(pending.fanpageId, pending.senderPsid);
       await this.conn.collection('conversations').updateOne(
-        { fanpageId: pending.fanpageId, senderPsid: pending.senderPsid },
+        conversationFilter,
         { $set: update }
       );
     } catch {}
     return { order, pending };
   }
 
-  private async lookupConversationAdGroup(fanpageId?: string, senderPsid?: string): Promise<string | undefined> {
-    if (!fanpageId || !senderPsid) return undefined;
+  private async lookupConversationAdGroup(
+    fanpageId?: string,
+    senderPsid?: string,
+    rawFanpageId?: string,
+  ): Promise<string | undefined> {
+    if ((!fanpageId && !rawFanpageId) || !senderPsid) return undefined;
     const collection = this.conn.collection('conversations');
     let conv: any = null;
-    if (Types.ObjectId.isValid(fanpageId)) {
-      conv = await collection.findOne({ fanpageId: new Types.ObjectId(fanpageId), senderPsid }, { projection: { lastAdGroupId: 1 } });
-    }
-    if (!conv) {
-      conv = await collection.findOne({ fanpageId, senderPsid }, { projection: { lastAdGroupId: 1 } });
+    const fanpageCandidates = Array.from(
+      new Set([fanpageId, rawFanpageId].filter(Boolean).map(v => String(v).trim()).filter(Boolean))
+    );
+
+    for (const fpCandidate of fanpageCandidates) {
+      if (Types.ObjectId.isValid(fpCandidate)) {
+        conv = await collection.findOne(
+          { fanpageId: new Types.ObjectId(fpCandidate), senderPsid },
+          { projection: { lastAdGroupId: 1 } }
+        );
+        if (conv) break;
+      }
+      conv = await collection.findOne(
+        { fanpageId: fpCandidate, senderPsid },
+        { projection: { lastAdGroupId: 1 } }
+      );
+      if (conv) break;
     }
     const candidate = conv?.lastAdGroupId;
     if (typeof candidate === 'string' && candidate.trim()) {
@@ -164,11 +206,62 @@ export class PendingOrderService {
       if ((pending as any).phone) update.orderPhone = (pending as any).phone;
       if ((pending as any).adGroupId) update.lastAdGroupId = (pending as any).adGroupId;
       if (Object.keys(update).length === 0) return;
+      const conversationFilter = await this.buildConversationFilter((pending as any).fanpageId, (pending as any).senderPsid);
 
       await this.conn.collection('conversations').updateOne(
-        { fanpageId: (pending as any).fanpageId, senderPsid: (pending as any).senderPsid },
+        conversationFilter,
         { $set: update }
       );
     } catch {}
+  }
+
+  private async buildConversationFilter(fanpageId: any, senderPsid?: string): Promise<Record<string, any>> {
+    const filter: Record<string, any> = {};
+    if (senderPsid) filter.senderPsid = senderPsid;
+    if (!fanpageId) return filter;
+
+    const asString = String(fanpageId).trim();
+    if (!asString) return filter;
+
+    const candidateSet = new Set<string>([asString]);
+    if (Types.ObjectId.isValid(asString)) {
+      const fanpage = await this.conn.collection('fanpages').findOne(
+        { _id: new Types.ObjectId(asString) },
+        { projection: { pageId: 1 } }
+      );
+      if (fanpage?.pageId) candidateSet.add(String(fanpage.pageId).trim());
+    } else {
+      const fanpage = await this.conn.collection('fanpages').findOne(
+        { pageId: asString },
+        { projection: { _id: 1 } }
+      );
+      if (fanpage?._id) candidateSet.add(fanpage._id.toString());
+    }
+
+    const candidates = Array.from(candidateSet)
+      .filter(Boolean)
+      .map(v => (Types.ObjectId.isValid(v) ? new Types.ObjectId(v) : v));
+    if (candidates.length === 1) {
+      filter.fanpageId = candidates[0];
+    } else if (candidates.length > 1) {
+      filter.fanpageId = { $in: candidates };
+    }
+    return filter;
+  }
+
+  private async normalizeFanpageId(fanpageId?: string): Promise<string | undefined> {
+    if (!fanpageId) return undefined;
+    const value = fanpageId.trim();
+    if (!value) return undefined;
+    if (Types.ObjectId.isValid(value)) return value;
+
+    const fanpage = await this.conn.collection('fanpages').findOne(
+      { pageId: value },
+      { projection: { _id: 1 } }
+    );
+    if (!fanpage?._id) {
+      throw new BadRequestException('fanpageId is invalid (must be Mongo _id or an existing fanpage pageId)');
+    }
+    return fanpage._id.toString();
   }
 }

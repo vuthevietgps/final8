@@ -5,7 +5,7 @@ import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChatMessageService, ConversationSummary, ChatMessage } from './chat-message.service';
 import { findLastAdGroupFromMessages } from './utils/chat-message.utils';
-import { PendingOrderService, PendingOrder, AgentOption } from './pending-order.service';
+import { PendingOrderService, PendingOrder, AgentOption, SupplierOption } from './pending-order.service';
 import { ProductService } from '../product/product.service';
 import { MediaPickerService, MediaItem } from './media-picker.service';
 import { Product } from '../product/models/product.interface';
@@ -56,6 +56,7 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   extractSuggestions = signal<any|undefined>(undefined);
   products = signal<Product[]>([]);
   agents = signal<AgentOption[]>([]);
+  suppliers = signal<SupplierOption[]>([]);
   createdOrderId = signal<string|undefined>(undefined); // ID đơn test-order2 được tạo sau approve
   // auto refresh time every 30s for time-ago display
   private interval?: any;
@@ -84,7 +85,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     // preload limited products (could enhance with pagination later)
     this.productSvc.getAll().subscribe({ next: list => this.products.set(list.slice(0,200)), error: _=>{} });
     // load agents list for assignment
-  this.pendingSvc.listAgents().subscribe({ next: list => { this.agents.set(list); }, error: err=>{ console.warn('[Agents] load failed', err); } });
+    this.pendingSvc.listAgents().subscribe({ next: list => { this.agents.set(list); }, error: err=>{ console.warn('[Agents] load failed', err); } });
+    this.pendingSvc.listSuppliers().subscribe({ next: list => { this.suppliers.set(list); }, error: err=>{ console.warn('[Suppliers] load failed', err); } });
 
     // Load danh sách fanpage để hiển thị tên + pageId trong header
     this.fanpageSvc.list().subscribe({
@@ -511,7 +513,7 @@ export class ConversationListComponent implements OnInit, OnDestroy {
    */
   private buildPendingPayload(src: PendingOrder, extra: Partial<PendingOrder> = {}): PendingOrder {
     const allowed: (keyof PendingOrder)[] = [
-      'fanpageId','senderPsid','productId','agentId','adGroupId','customerName','phone','address','quantity','status','notes','orderDate'
+      'fanpageId','senderPsid','productId','agentId','supplierId','adGroupId','customerName','phone','address','quantity','status','notes','orderDate'
     ];
     const out: any = {};
     for(const k of allowed){ if((src as any)[k] !== undefined) out[k] = (src as any)[k]; }

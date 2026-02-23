@@ -2,10 +2,12 @@ import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString } from 'class-validat
 import { IsDateString } from 'class-validator';
 
 export class CreatePendingOrderDto {
-  @IsOptional() @IsMongoId() fanpageId?: string;
+  // Chấp nhận cả Mongo _id hoặc Facebook pageId; service sẽ normalize về _id trước khi lưu
+  @IsOptional() @IsString() fanpageId?: string;
   @IsOptional() @IsString() senderPsid?: string;
   @IsOptional() @IsMongoId() productId?: string;
   @IsOptional() @IsMongoId() agentId?: string;
+  @IsOptional() @IsMongoId() supplierId?: string;
   @IsOptional() @IsString() adGroupId?: string;
   @IsOptional() @IsString() customerName?: string;
   @IsOptional() @IsString() phone?: string;

@@ -9,6 +9,7 @@ export interface PendingOrder {
   senderPsid?: string;
   productId?: string;
   agentId?: string;
+  supplierId?: string;
   adGroupId?: string;
   customerName?: string;
   phone?: string;
@@ -24,6 +25,10 @@ export interface AgentOption {
   _id: string; fullName: string; email: string; role: string;
 }
 
+export interface SupplierOption {
+  _id: string; fullName: string; email: string; role: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PendingOrderService {
   private base = `${environment.apiUrl}/pending-orders`;
@@ -32,4 +37,5 @@ export class PendingOrderService {
   update(id: string, body: PendingOrder){ return this.http.patch<PendingOrder>(`${this.base}/${id}`, body); }
   approve(id: string){ return this.http.post<{order:any; pending: PendingOrder}>(`${this.base}/${id}/approve`, {}); }
   listAgents(){ return this.http.get<AgentOption[]>(`${this.base}/agents`); }
+  listSuppliers(){ return this.http.get<SupplierOption[]>(`${this.base}/suppliers`); }
 }
