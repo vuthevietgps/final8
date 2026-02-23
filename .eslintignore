@@ -1,0 +1,12 @@
+node_modules/
+dist/
+**/dist/
+**/.cache/
+**/.turbo/
+**/.next/
+**/.angular/
+**/coverage/
+**/.nyc_output/
+backend/uploads/
+media/
+data/
