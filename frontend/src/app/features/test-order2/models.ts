@@ -1,6 +1,7 @@
 export interface TestOrder2 {
   _id: string;
   productId: { _id: string; name?: string; color?: string } | string;
+  productUsageDurationMonths?: number;
   productSource?: 'inventory' | 'supplier';
   supplierId?: string | { _id: string };
   supplierPriceLevel?: number;

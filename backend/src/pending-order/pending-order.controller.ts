@@ -13,6 +13,7 @@ export class PendingOrderController {
   @Post() @RequirePermissions('pending-orders') create(@Body() dto: CreatePendingOrderDto) { return this.service.create(dto); }
   @Get() @RequirePermissions('pending-orders') findAll(@Query() q?: any) { return this.service.findAll(q||{}); }
   @Get('agents') @RequirePermissions('pending-orders') agents() { return this.service.getAgents(); }
+  @Get('suppliers') @RequirePermissions('pending-orders') suppliers() { return this.service.getSuppliers(); }
   @Get(':id') @RequirePermissions('pending-orders') findOne(@Param('id') id: string) { return this.service.findOne(id); }
   @Patch(':id') @RequirePermissions('pending-orders') update(@Param('id') id: string, @Body() dto: UpdatePendingOrderDto) { return this.service.update(id, dto); }
   @Delete(':id') @RequirePermissions('pending-orders') remove(@Param('id') id: string) { return this.service.remove(id); }

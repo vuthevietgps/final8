@@ -20,6 +20,50 @@ export class LaborStatementService {
     private readonly salaryConfigService: SalaryConfigService,
   ) {}
 
+  private parseDateInput(input: string | Date, fieldName: string): Date {
+    if (input instanceof Date) {
+      if (Number.isNaN(input.getTime())) {
+        throw new BadRequestException(`${fieldName} is invalid`);
+      }
+      return new Date(input);
+    }
+
+    const raw = String(input).trim();
+    const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymd) {
+      const y = Number(ymd[1]);
+      const m = Number(ymd[2]) - 1;
+      const d = Number(ymd[3]);
+      const localDate = new Date(y, m, d);
+      if (
+        localDate.getFullYear() !== y ||
+        localDate.getMonth() !== m ||
+        localDate.getDate() !== d
+      ) {
+        throw new BadRequestException(`${fieldName} is invalid`);
+      }
+      return localDate;
+    }
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException(`${fieldName} is invalid`);
+    }
+    return parsed;
+  }
+
+  private getDayStart(input: string | Date, fieldName: string): Date {
+    const date = this.parseDateInput(input, fieldName);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  private getDayEnd(input: string | Date, fieldName: string): Date {
+    const date = this.parseDateInput(input, fieldName);
+    date.setHours(23, 59, 59, 999);
+    return date;
+  }
+
   /**
    * Tạo phiếu thanh toán lương mới
    * Tự động tính tổng từ các phiên làm việc chưa thanh toán trong kỳ
@@ -29,12 +73,19 @@ export class LaborStatementService {
    */
   async createStatement(dto: CreateLaborStatementDto) {
     const { employeeId, periodFrom, periodTo, openingBalance, bonus, deduction, notes } = dto;
+    const employeeObjectId = new Types.ObjectId(employeeId);
+    const periodStart = this.getDayStart(periodFrom, 'periodFrom');
+    const periodEnd = this.getDayEnd(periodTo, 'periodTo');
+
+    if (periodEnd < periodStart) {
+      throw new BadRequestException('periodTo must be on or after periodFrom');
+    }
 
     // 1. Kiểm tra đã có statement cho period này chưa
     const existing = await this.statementModel.findOne({
-      employeeId: new Types.ObjectId(employeeId),
-      periodFrom: new Date(periodFrom),
-      periodTo: new Date(periodTo),
+      employeeId: employeeObjectId,
+      periodFrom: { $lte: periodEnd },
+      periodTo: { $gte: periodStart },
     });
 
     if (existing) {
@@ -43,10 +94,10 @@ export class LaborStatementService {
 
     // 2. Lấy tất cả phiên làm việc chưa thanh toán trong kỳ
     const laborCosts = await this.laborCostModel.find({
-      userId: new Types.ObjectId(employeeId),
+      userId: employeeObjectId,
       date: {
-        $gte: new Date(periodFrom),
-        $lte: new Date(periodTo),
+        $gte: periodStart,
+        $lte: periodEnd,
       },
       paymentStatus: 'unpaid', // Chỉ lấy phiên chưa gộp vào statement nào
     });
@@ -100,7 +151,7 @@ export class LaborStatementService {
 
     // 7.5 Tính dueDate từ periodTo + paymentDays (CFO Spec v3.2)
     const paymentDays = salaryConfig?.paymentDays || [5]; // Mặc định ngày 5
-    const periodEndDate = new Date(periodTo);
+    const periodEndDate = new Date(periodEnd);
     
     // Tìm ngày thanh toán gần nhất SAU periodTo
     let dueDate: Date;
@@ -118,9 +169,9 @@ export class LaborStatementService {
 
     // 8. Tạo statement
     const statement = new this.statementModel({
-      employeeId: new Types.ObjectId(employeeId),
-      periodFrom: new Date(periodFrom),
-      periodTo: new Date(periodTo),
+      employeeId: employeeObjectId,
+      periodFrom: periodStart,
+      periodTo: periodEnd,
       status: 'draft',
       openingBalance: openingBalance || 0,
       periodCost,
@@ -395,13 +446,15 @@ export class LaborStatementService {
       query.status = filters.status;
     }
     if (filters?.periodFrom || filters?.periodTo) {
-      query.periodFrom = {};
-      if (filters.periodFrom) {
-        query.periodFrom.$gte = new Date(filters.periodFrom);
-      }
-      if (filters.periodTo) {
-        query.periodFrom.$lte = new Date(filters.periodTo);
-      }
+      const filterStart = filters.periodFrom
+        ? this.getDayStart(filters.periodFrom, 'periodFrom')
+        : new Date('1970-01-01T00:00:00.000Z');
+      const filterEnd = filters.periodTo
+        ? this.getDayEnd(filters.periodTo, 'periodTo')
+        : new Date('9999-12-31T23:59:59.999Z');
+
+      query.periodFrom = { $lte: filterEnd };
+      query.periodTo = { $gte: filterStart };
     }
 
     return this.statementModel

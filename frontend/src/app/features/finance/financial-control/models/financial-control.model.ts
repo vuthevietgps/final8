@@ -158,6 +158,8 @@ export interface MonthlyBurnBreakdown {
   laborCore: number;
   operationsMandatory: number;
   loanPayment: number;
+  agentCommission?: number;
+  supplierPendingPayment?: number;
   total: number;
 }
 

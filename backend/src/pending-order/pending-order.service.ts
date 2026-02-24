@@ -1,14 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
+import { Model, FilterQuery, Connection, Types } from 'mongoose';
 import { PendingOrder, PendingOrderDocument } from './schemas/pending-order.schema';
 import { CreatePendingOrderDto } from './dto/create-pending-order.dto';
 import { UpdatePendingOrderDto } from './dto/update-pending-order.dto';
 import { TestOrder2Service } from '../test-order2/test-order2.service';
 import { CreateTestOrder2Dto } from '../test-order2/dto/create-test-order2.dto';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
-import { Conversation } from '../chat-message/schemas/conversation.schema';
 
 @Injectable()
 export class PendingOrderService {
@@ -18,7 +16,41 @@ export class PendingOrderService {
     @InjectConnection() private readonly conn: Connection,
   ) {}
 
+  private normalizeOptionalMongoId(value?: string): string | undefined {
+    if (!value) return undefined;
+    const normalized = String(value).trim();
+    if (!normalized) return undefined;
+    return Types.ObjectId.isValid(normalized) ? normalized : undefined;
+  }
+
+  /**
+   * Accept fanpageId as Mongo _id or pageId and normalize to Mongo _id string.
+   */
+  private async normalizeFanpageId(value?: string): Promise<string | undefined> {
+    if (!value) return undefined;
+    const normalized = String(value).trim();
+    if (!normalized) return undefined;
+    if (Types.ObjectId.isValid(normalized)) return normalized;
+
+    const fanpage = await this.conn.collection('fanpages').findOne(
+      { pageId: normalized },
+      { projection: { _id: 1 } },
+    );
+
+    return fanpage?._id ? String(fanpage._id) : undefined;
+  }
+
+  private async normalizeFanpageIdOrThrow(value?: string): Promise<string | undefined> {
+    if (!value) return undefined;
+    const normalized = await this.normalizeFanpageId(value);
+    if (!normalized) {
+      throw new BadRequestException('fanpageId khong hop le (chap nhan Mongo _id hoac pageId)');
+    }
+    return normalized;
+  }
+
   async create(dto: CreatePendingOrderDto) {
+    dto.fanpageId = await this.normalizeFanpageIdOrThrow(dto.fanpageId);
     const normalizedAdGroup = dto.adGroupId?.trim();
     if (!normalizedAdGroup) {
       const fallback = await this.lookupConversationAdGroup(dto.fanpageId, dto.senderPsid);
@@ -52,11 +84,38 @@ export class PendingOrderService {
     }));
   }
 
-  findAll(query: any = {}) {
+  async getSuppliers() {
+    const roles = ['internal_supplier', 'external_supplier'];
+    const users = await this.conn.collection('users').find(
+      { role: { $in: roles }, isActive: { $ne: false } },
+      { projection: { _id: 1, fullName: 1, email: 1, role: 1 } }
+    ).limit(500).toArray();
+    return users.map(u => ({
+      _id: u._id,
+      fullName: (u as any).fullName || (u as any).email,
+      email: (u as any).email,
+      role: (u as any).role
+    }));
+  }
+
+  async findAll(query: any = {}) {
     const filter: FilterQuery<PendingOrderDocument> = {};
-    if (query.fanpageId) filter.fanpageId = query.fanpageId;
+    if (query.fanpageId) {
+      const normalizedFanpageId = await this.normalizeFanpageId(query.fanpageId);
+      if (!normalizedFanpageId) return [];
+      filter.fanpageId = normalizedFanpageId;
+    }
     if (query.status) filter.status = query.status;
-    if (query.agentId) filter.agentId = query.agentId;
+    if (query.agentId) {
+      const normalizedAgentId = this.normalizeOptionalMongoId(query.agentId);
+      if (!normalizedAgentId) return [];
+      filter.agentId = normalizedAgentId;
+    }
+    if (query.supplierId) {
+      const normalizedSupplierId = this.normalizeOptionalMongoId(query.supplierId);
+      if (!normalizedSupplierId) return [];
+      filter.supplierId = normalizedSupplierId;
+    }
     return this.model.find(filter).sort({ createdAt: -1 }).limit(500).lean();
   }
 
@@ -67,6 +126,7 @@ export class PendingOrderService {
   }
 
   async update(id: string, dto: UpdatePendingOrderDto) {
+    dto.fanpageId = await this.normalizeFanpageIdOrThrow(dto.fanpageId);
     if (dto.adGroupId) {
       dto.adGroupId = dto.adGroupId.trim();
     } else if (!dto.adGroupId && dto.fanpageId && dto.senderPsid) {
@@ -98,6 +158,7 @@ export class PendingOrderService {
       customerName: pending.customerName!,
       quantity: pending.quantity || 1,
       agentId: (pending.agentId ? pending.agentId.toString() : userId),
+      supplierId: pending.supplierId?.toString(),
       adGroupId: pending.adGroupId || '0',
       isActive: true,
       productionStatus: 'Chưa làm',

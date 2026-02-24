@@ -14,26 +14,32 @@ export class TestOrder2ImportService {
       throw new BadRequestException('items must be an array');
     }
 
-    const docs: Partial<TestOrder2>[] = payload.items.map((i) => ({
-      productId: i.productId ? new Types.ObjectId(i.productId) : undefined,
-      customerName: i.customerName,
-      quantity: typeof i.quantity === 'number' ? i.quantity : undefined,
-      agentId: i.agentId ? new Types.ObjectId(i.agentId) : undefined,
-      adGroupId: i.adGroupId,
-      isActive: typeof i.isActive === 'boolean' ? i.isActive : true,
-      productionStatus: i.productionStatus,
-      orderStatus: i.orderStatus,
-      serviceDetails: i.serviceDetails,
-      submitLink: i.submitLink,
-      trackingNumber: i.trackingNumber,
-      depositAmount: typeof i.depositAmount === 'number' ? i.depositAmount : 0,
-      codAmount: typeof i.codAmount === 'number' ? i.codAmount : 0,
-      manualPayment: typeof i.manualPayment === 'number' ? i.manualPayment : 0,
-      receiverName: i.receiverName,
-      receiverPhone: i.receiverPhone,
-      receiverAddress: i.receiverAddress,
-      orderDate: i.orderDate ? new Date(i.orderDate) : undefined,
-    }));
+    const docs: Partial<TestOrder2>[] = payload.items.map((i) => {
+      const parsedUsageDuration = Number(i.productUsageDurationMonths);
+      return {
+        productId: i.productId ? new Types.ObjectId(i.productId) : undefined,
+        productUsageDurationMonths: Number.isFinite(parsedUsageDuration) && parsedUsageDuration > 0
+          ? Math.floor(parsedUsageDuration)
+          : undefined,
+        customerName: i.customerName,
+        quantity: typeof i.quantity === 'number' ? i.quantity : undefined,
+        agentId: i.agentId ? new Types.ObjectId(i.agentId) : undefined,
+        adGroupId: i.adGroupId,
+        isActive: typeof i.isActive === 'boolean' ? i.isActive : true,
+        productionStatus: i.productionStatus,
+        orderStatus: i.orderStatus,
+        serviceDetails: i.serviceDetails,
+        submitLink: i.submitLink,
+        trackingNumber: i.trackingNumber,
+        depositAmount: typeof i.depositAmount === 'number' ? i.depositAmount : 0,
+        codAmount: typeof i.codAmount === 'number' ? i.codAmount : 0,
+        manualPayment: typeof i.manualPayment === 'number' ? i.manualPayment : 0,
+        receiverName: i.receiverName,
+        receiverPhone: i.receiverPhone,
+        receiverAddress: i.receiverAddress,
+        orderDate: i.orderDate ? new Date(i.orderDate) : undefined,
+      };
+    });
 
     const res = await this.model.insertMany(docs);
     return { inserted: res.length };

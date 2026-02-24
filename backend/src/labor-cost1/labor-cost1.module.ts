@@ -9,6 +9,7 @@ import { LaborStatementService } from './labor-statement.service';
 import { LaborCost1Controller } from './labor-cost1.controller';
 import { FinanceModule } from '../finance/finance.module';
 import { SalaryConfigModule } from '../salary-config/salary-config.module';
+import { TestOrder2Module } from '../test-order2/test-order2.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { SalaryConfigModule } from '../salary-config/salary-config.module';
       { name: SessionLog.name, schema: SessionLogSchema },
     ]),
     forwardRef(() => FinanceModule),
+    forwardRef(() => TestOrder2Module),
     SalaryConfigModule,
   ],
   controllers: [LaborCost1Controller],

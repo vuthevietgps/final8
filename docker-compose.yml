@@ -7,6 +7,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:-smarterp_dev_secret_key_change_in_prod}
       # MongoDB connection string; uses Atlas by default, can override with MONGODB_URI env var
       MONGODB_URI: ${MONGODB_URI:-mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system}
       # If using Google credentials, prefer GOOGLE_CREDENTIALS_JSON env; file mounting removed during cleanup

@@ -1,28 +1,76 @@
-/**
+﻿/**
  * File: other-cost/other-cost.service.ts
- * Mục đích: Xử lý nghiệp vụ cho Chi Phí Vận Hành (CRUD, lọc theo ngày, thống kê).
+ * Má»¥c Ä‘Ã­ch: Xá»­ lÃ½ nghiá»‡p vá»¥ cho Chi PhÃ­ Váº­n HÃ nh (CRUD, lá»c theo ngÃ y, thá»‘ng kÃª).
  * 
- * CFO v3.1: Thêm dueDate + category để tính Committed Cash chính xác
+ * CFO v3.1: ThÃªm dueDate + category Ä‘á»ƒ tÃ­nh Committed Cash chÃ­nh xÃ¡c
  */
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { OtherCost, OtherCostDocument, OpsCategory } from './schemas/other-cost.schema';
 import { CreateOtherCostDto } from './dto/create-other-cost.dto';
 import { UpdateOtherCostDto } from './dto/update-other-cost.dto';
+import { TestOrder2Service } from '../test-order2/test-order2.service';
 
 @Injectable()
 export class OtherCostService {
   private readonly logger = new Logger(OtherCostService.name);
 
+  private formatDayIso(date: Date, useUtc: boolean): string {
+    const year = useUtc ? date.getUTCFullYear() : date.getFullYear();
+    const month = String((useUtc ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
+    const day = String(useUtc ? date.getUTCDate() : date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Generate day keys in both local and UTC calendars to avoid timezone drift
+   * when a stored Date was normalized by a different timezone convention.
+   */
+  private collectDayIsoCandidates(value?: Date | string | null): string[] {
+    if (!value) return [];
+
+    const candidates = new Set<string>();
+    if (typeof value === 'string') {
+      const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) candidates.add(m[1]);
+    }
+
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return Array.from(candidates);
+
+    candidates.add(this.formatDayIso(date, false));
+    candidates.add(this.formatDayIso(date, true));
+    return Array.from(candidates);
+  }
+
+  private async triggerRecalculateForDates(values: Array<Date | string | null | undefined>): Promise<void> {
+    const daySet = new Set<string>();
+    for (const value of values) {
+      for (const dayIso of this.collectDayIsoCandidates(value ?? null)) {
+        daySet.add(dayIso);
+      }
+    }
+
+    for (const dayIso of daySet) {
+      try {
+        await this.testOrder2Service.recalculateOrdersForDate(dayIso);
+      } catch (error: any) {
+        this.logger.error(`Failed to recalculate orders after other-cost change for ${dayIso}`, error);
+      }
+    }
+  }
+
   constructor(
     @InjectModel(OtherCost.name)
     private readonly otherCostModel: Model<OtherCostDocument>,
+    @Inject(forwardRef(() => TestOrder2Service))
+    private readonly testOrder2Service: TestOrder2Service,
   ) {}
 
   /**
-   * Tạo mới chi phí vận hành
-   * CFO v3.1: dueDate là required
+   * Táº¡o má»›i chi phÃ­ váº­n hÃ nh
+   * CFO v3.1: dueDate lÃ  required
    */
   async create(dto: CreateOtherCostDto): Promise<OtherCost> {
     const payload: Partial<OtherCost> = {
@@ -36,11 +84,13 @@ export class OtherCostService {
       confirmedAt: dto.isConfirmed ? new Date() : undefined,
     };
     const created = new this.otherCostModel(payload);
-    return created.save();
+    const saved = await created.save();
+    await this.triggerRecalculateForDates([saved.date as any]);
+    return saved;
   }
 
   /**
-   * Lấy danh sách chi phí, có thể lọc theo khoảng thời gian
+   * Láº¥y danh sÃ¡ch chi phÃ­, cÃ³ thá»ƒ lá»c theo khoáº£ng thá»i gian
    */
   async findAll(from?: string, to?: string): Promise<OtherCost[]> {
     const filter: any = {};
@@ -53,18 +103,21 @@ export class OtherCostService {
   }
 
   /**
-   * Lấy chi tiết 1 chi phí theo id
+   * Láº¥y chi tiáº¿t 1 chi phÃ­ theo id
    */
   async findOne(id: string): Promise<OtherCost> {
     const found = await this.otherCostModel.findById(id).exec();
-    if (!found) throw new NotFoundException('Không tìm thấy chi phí');
+    if (!found) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­');
     return found;
   }
 
   /**
-   * Cập nhật chi phí
+   * Cáº­p nháº­t chi phÃ­
    */
   async update(id: string, dto: UpdateOtherCostDto): Promise<OtherCost> {
+    const existing = await this.otherCostModel.findById(id).exec();
+    if (!existing) throw new NotFoundException('Other cost not found');
+
     const update: any = { ...dto };
     if (dto.date) {
       update.date = new Date(dto.date);
@@ -85,32 +138,37 @@ export class OtherCostService {
     const updated = await this.otherCostModel
       .findByIdAndUpdate(id, update, { new: true })
       .exec();
-    if (!updated) throw new NotFoundException('Không tìm thấy chi phí để cập nhật');
+    if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­ Ä‘á»ƒ cáº­p nháº­t');
+    await this.triggerRecalculateForDates([existing.date as any, updated.date as any]);
     return updated;
   }
 
   /**
-   * Xác nhận đã chi
+   * XÃ¡c nháº­n Ä‘Ã£ chi
    */
   async confirm(id: string): Promise<OtherCost> {
     const updated = await this.otherCostModel
       .findByIdAndUpdate(id, { isConfirmed: true, confirmedAt: new Date() }, { new: true })
       .exec();
-    if (!updated) throw new NotFoundException('Không tìm thấy chi phí để xác nhận');
+    if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­ Ä‘á»ƒ xÃ¡c nháº­n');
     return updated;
   }
 
   /**
-   * Xóa chi phí
+   * XÃ³a chi phÃ­
    */
   async remove(id: string): Promise<{ message: string }> {
+    const existing = await this.otherCostModel.findById(id).exec();
+    if (!existing) throw new NotFoundException('Other cost not found');
+
     const deleted = await this.otherCostModel.findByIdAndDelete(id).exec();
-    if (!deleted) throw new NotFoundException('Không tìm thấy chi phí để xóa');
+    if (!deleted) throw new NotFoundException('Other cost not found');
+    await this.triggerRecalculateForDates([existing.date as any]);
     return { message: 'Xóa chi phí thành công' };
   }
 
   /**
-   * Thống kê tổng tiền theo bộ lọc thời gian (tùy chọn)
+   * Thá»‘ng kÃª tá»•ng tiá»n theo bá»™ lá»c thá»i gian (tÃ¹y chá»n)
    */
   async getSummary(from?: string, to?: string): Promise<{ totalAmount: number; count: number }> {
     const match: any = {};
@@ -129,26 +187,26 @@ export class OtherCostService {
   }
 
   // ============ Summary for Financial Control ============
-  // NOTE: Đây là chi phí vận hành (Account Payable - AP)
+  // NOTE: ÄÃ¢y lÃ  chi phÃ­ váº­n hÃ nh (Account Payable - AP)
 
   /**
-   * Tổng hợp chi phí vận hành (Operating Expenses) cho Financial Control
-   * CFO v3.1: Tối giản nhưng đủ cho Committed + Forecast
+   * Tá»•ng há»£p chi phÃ­ váº­n hÃ nh (Operating Expenses) cho Financial Control
+   * CFO v3.1: Tá»‘i giáº£n nhÆ°ng Ä‘á»§ cho Committed + Forecast
    */
   async getCashflowSummary(windowDays: number = 14): Promise<{
-    // === TỔNG HỢP ===
-    totalOpsPaid: number;             // Chi phí đã trả (cash-out)
-    totalOpsUnpaid: number;           // Chi phí chưa trả (AP)
-    totalOpsDue14d: number;           // Đến hạn trong windowDays (Committed)
+    // === Tá»”NG Há»¢P ===
+    totalOpsPaid: number;             // Chi phÃ­ Ä‘Ã£ tráº£ (cash-out)
+    totalOpsUnpaid: number;           // Chi phÃ­ chÆ°a tráº£ (AP)
+    totalOpsDue14d: number;           // Äáº¿n háº¡n trong windowDays (Committed)
     
-    // === FORECAST 7 NGÀY ===
+    // === FORECAST 7 NGÃ€Y ===
     dueByDay7d: {
       date: string;                   // YYYY-MM-DD
       amount: number;
       count: number;
     }[];
     
-    // === PHÂN LOẠI ===
+    // === PHÃ‚N LOáº I ===
     byCategory: {
       category: string;
       paid: number;
@@ -175,22 +233,22 @@ export class OtherCostService {
     const day7End = new Date(today);
     day7End.setDate(day7End.getDate() + 7);
 
-    // === 1. TỔNG HỢP ===
-    // Tổng đã trả (isConfirmed = true)
+    // === 1. Tá»”NG Há»¢P ===
+    // Tá»•ng Ä‘Ã£ tráº£ (isConfirmed = true)
     const paidAgg = await this.otherCostModel.aggregate([
       { $match: { isConfirmed: true } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
     const totalOpsPaid = paidAgg[0]?.total || 0;
 
-    // Tổng chưa trả (unpaid)
+    // Tá»•ng chÆ°a tráº£ (unpaid)
     const unpaidAgg = await this.otherCostModel.aggregate([
       { $match: { isConfirmed: { $ne: true } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
     const totalOpsUnpaid = unpaidAgg[0]?.total || 0;
 
-    // Đến hạn trong windowDays (Committed)
+    // Äáº¿n háº¡n trong windowDays (Committed)
     // CFO rule: due14d = sum(amount where !isConfirmed && dueDate <= today + windowDays)
     const dueAgg = await this.otherCostModel.aggregate([
       {
@@ -293,7 +351,7 @@ export class OtherCostService {
       dueDate: { $exists: false },
     });
     if (missingDueDateCount > 0) {
-      const msg = `[Ops] ${missingDueDateCount} khoản chưa chi thiếu dueDate`;
+      const msg = `[Ops] ${missingDueDateCount} khoáº£n chÆ°a chi thiáº¿u dueDate`;
       this.logger.warn(msg);
       alerts.push(msg);
     }
@@ -314,7 +372,7 @@ export class OtherCostService {
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]);
       const overdueAmount = overdueAgg[0]?.total || 0;
-      const msg = `[Ops] ${overdueCount} khoản quá hạn, tổng ${overdueAmount.toLocaleString('vi-VN')} VNĐ`;
+      const msg = `[Ops] ${overdueCount} khoáº£n quÃ¡ háº¡n, tá»•ng ${overdueAmount.toLocaleString('vi-VN')} VNÄ`;
       this.logger.warn(msg);
       alerts.push(msg);
     }
@@ -335,3 +393,4 @@ export class OtherCostService {
     };
   }
 }
+

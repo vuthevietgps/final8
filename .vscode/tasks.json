@@ -2,12 +2,87 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Start Backend",
+      "label": "Install Backend Dependencies",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false,
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Install Frontend Dependencies",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false,
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Install All Dependencies (No Docker)",
+      "dependsOn": [
+        "Install Backend Dependencies",
+        "Install Frontend Dependencies"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "Free Port 3000 (Backend)",
+      "type": "shell",
+      "command": "$pids = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($pids) { $pids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Write-Host \"Freed port 3000\" } else { Write-Host \"Port 3000 is free\" }",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Free Port 4200 (Frontend)",
+      "type": "shell",
+      "command": "$pids = Get-NetTCPConnection -LocalPort 4200 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($pids) { $pids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Write-Host \"Freed port 4200\" } else { Write-Host \"Port 4200 is free\" }",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Backend (No Docker)",
       "type": "shell",
       "command": "npm run start:dev",
       "options": {
         "cwd": "${workspaceFolder}/backend"
       },
+      "dependsOn": [
+        "Free Port 3000 (Backend)"
+      ],
+      "dependsOrder": "sequence",
       "group": "none",
       "presentation": {
         "reveal": "always",
@@ -18,12 +93,16 @@
       "problemMatcher": []
     },
     {
-      "label": "Start Frontend",
+      "label": "Start Frontend (No Docker)",
       "type": "shell",
       "command": "npm start",
       "options": {
         "cwd": "${workspaceFolder}/frontend"
       },
+      "dependsOn": [
+        "Free Port 4200 (Frontend)"
+      ],
+      "dependsOrder": "sequence",
       "group": "none",
       "presentation": {
         "reveal": "always",
@@ -34,8 +113,11 @@
       "problemMatcher": []
     },
     {
-      "label": "Start All (Backend + Frontend)",
-      "dependsOn": ["Start Backend", "Start Frontend"],
+      "label": "Start All (No Docker)",
+      "dependsOn": [
+        "Start Backend (No Docker)",
+        "Start Frontend (No Docker)"
+      ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     }

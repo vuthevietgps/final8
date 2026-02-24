@@ -360,7 +360,7 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
             </div>
 
             <div class="drilldown-body" *ngIf="activeDrilldown() === 'monthlyBurn' && cfoFullMetrics()">
-              <p class="drilldown-formula">Burn = Lương core + Vận hành bắt buộc + Trả nợ</p>
+              <p class="drilldown-formula">Burn = Lương core + Vận hành bắt buộc (trừ ads) + Trả nợ + Hoa hồng đại lý chờ thanh toán + NCC chờ thanh toán</p>
               <table class="breakdown-table">
                 <thead>
                   <tr><th>Hạng mục</th><th>Số tiền/tháng</th><th>Ghi chú</th></tr>
@@ -380,6 +380,16 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
                     <td>💳 Trả nợ</td>
                     <td>{{ formatCurrency(cfoFullMetrics()!.monthlyBurnBreakdown.loanPayment) }}</td>
                     <td>Gốc + lãi hàng tháng</td>
+                  </tr>
+                  <tr>
+                    <td>🤝 Hoa hồng đại lý chờ thanh toán</td>
+                    <td>{{ formatCurrency(cfoFullMetrics()!.monthlyBurnBreakdown.agentCommission || 0) }}</td>
+                    <td>Công nợ đại lý chưa thanh toán</td>
+                  </tr>
+                  <tr>
+                    <td>🏭 NCC chờ thanh toán</td>
+                    <td>{{ formatCurrency(cfoFullMetrics()!.monthlyBurnBreakdown.supplierPendingPayment || 0) }}</td>
+                    <td>Công nợ nhà cung cấp đang chờ thanh toán</td>
                   </tr>
                   <tr class="total-row">
                     <td><strong>TỔNG BURN</strong></td>

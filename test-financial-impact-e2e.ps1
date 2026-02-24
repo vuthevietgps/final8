@@ -630,7 +630,9 @@ if ($fc) {
     Write-Step "9.8" "monthlyBurn breakdown sums"
     if ($fc.monthlyBurnBreakdown) {
         $mb = $fc.monthlyBurnBreakdown
-        Assert-Equal "monthlyBurn sum" ($mb.laborCore + $mb.operationsMandatory + $mb.loanPayment) $fc.monthlyBurn
+        $agent = if ($null -ne $mb.agentCommission) { $mb.agentCommission } else { 0 }
+        $supplier = if ($null -ne $mb.supplierPendingPayment) { $mb.supplierPendingPayment } else { 0 }
+        Assert-Equal "monthlyBurn sum" ($mb.laborCore + $mb.operationsMandatory + $mb.loanPayment + $agent + $supplier) $fc.monthlyBurn
     }
 
     Write-Step "9.9" "runway calculation"

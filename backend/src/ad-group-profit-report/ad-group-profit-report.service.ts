@@ -25,6 +25,24 @@ export class AdGroupProfitReportService {
   ) {}
 
   /**
+   * Ưu tiên lọc theo orderDate để đồng bộ với các báo cáo lợi nhuận theo ngày đơn.
+   * Fallback createdAt cho dữ liệu legacy chưa có orderDate.
+   */
+  private buildDateRangeMatch(startDate: Date, endDate: Date): any {
+    return {
+      $or: [
+        { orderDate: { $gte: startDate, $lte: endDate } },
+        { orderDate: { $exists: false }, createdAt: { $gte: startDate, $lte: endDate } },
+        { orderDate: null, createdAt: { $gte: startDate, $lte: endDate } },
+      ],
+    };
+  }
+
+  private getEffectiveOrderDateExpression(): any {
+    return { $ifNull: ['$orderDate', '$createdAt'] };
+  }
+
+  /**
    * Lấy performance report cho từng ad group
    * @param params - Tham số lọc (từ ngày, đến ngày, adGroupIds)
    */
@@ -45,7 +63,7 @@ export class AdGroupProfitReportService {
       isActive: { $ne: false },
       adGroupId: { $exists: true, $ne: null },
       netProfit: { $exists: true },
-      createdAt: { $gte: startDate, $lte: endDate }
+      ...this.buildDateRangeMatch(startDate, endDate),
     };
 
     // Chỉ tính đơn đã kết thúc (Giao thành công hoặc Hàng hoàn)
@@ -271,14 +289,14 @@ export class AdGroupProfitReportService {
       {
         $match: {
           adGroupId,
-          createdAt: { $gte: startDate, $lte: endDate },
+          ...this.buildDateRangeMatch(startDate, endDate),
           orderStatus: { $in: ['Giao thành công', 'Hàng hoàn', 'Đã đối soát', 'Hoàn thành'] }
         }
       },
       {
         $group: {
           _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+            $dateToString: { format: '%Y-%m-%d', date: this.getEffectiveOrderDateExpression() }
           },
           spend: { $sum: '$advertisingCost' },
           profit: { $sum: '$netProfit' },

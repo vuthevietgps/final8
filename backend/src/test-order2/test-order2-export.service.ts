@@ -26,7 +26,7 @@ export class TestOrder2ExportService {
     const items = await this.model.find(query).sort({ createdAt: -1 }).lean();
 
     const header = [
-      'orderDate','customerName','productId','quantity','agentId','adGroupId',
+      'orderDate','customerName','productId','productUsageDurationMonths','quantity','agentId','adGroupId',
       'productionStatus','orderStatus','trackingNumber','submitLink',
       'depositAmount','codAmount','manualPayment',
       'supplierQuote','agentQuote','shippingFee','returnFee','productType',
@@ -37,6 +37,7 @@ export class TestOrder2ExportService {
       i.orderDate ? new Date(i.orderDate).toISOString() : '',
       i.customerName || '',
       i.productId ? String(i.productId) : '',
+      (i as any).productUsageDurationMonths ?? '',
       i.quantity ?? 0,
       i.agentId ? String(i.agentId) : '',
       i.adGroupId || '',

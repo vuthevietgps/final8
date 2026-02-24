@@ -1,11 +1,12 @@
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString } from 'class-validator';
-import { IsDateString } from 'class-validator';
+import { IsDateString, IsEnum, IsMongoId, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreatePendingOrderDto {
-  @IsOptional() @IsMongoId() fanpageId?: string;
+  // Accept either Mongo _id or fanpage pageId. Service will normalize to ObjectId.
+  @IsOptional() @IsString() fanpageId?: string;
   @IsOptional() @IsString() senderPsid?: string;
   @IsOptional() @IsMongoId() productId?: string;
   @IsOptional() @IsMongoId() agentId?: string;
+  @IsOptional() @IsMongoId() supplierId?: string;
   @IsOptional() @IsString() adGroupId?: string;
   @IsOptional() @IsString() customerName?: string;
   @IsOptional() @IsString() phone?: string;

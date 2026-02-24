@@ -9,7 +9,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { Product, ProductDocument } from '../product/schemas/product.schema';
-import { CreateCustomerDto, UpdateCustomerDto } from './dto';
+import { UpdateCustomerDto } from './dto';
 
 // Interface cho lịch thông báo
 export interface CustomerExpiryNotification {
@@ -54,29 +54,49 @@ export class CustomerService {
     return Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
   }
 
+  private normalizeUsageDurationMonths(value: unknown): number | null {
+    const normalized = Number(value);
+    if (!Number.isFinite(normalized)) return null;
+    const rounded = Math.floor(normalized);
+    return rounded > 0 ? rounded : null;
+  }
+
+  private resolveUsageDurationMonths(...values: unknown[]): number | null {
+    for (const value of values) {
+      const normalized = this.normalizeUsageDurationMonths(value);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  private getOrderPurchaseDate(order: any): Date {
+    if (order?.orderDate) return new Date(order.orderDate);
+    if (order?.createdAt) return new Date(order.createdAt);
+    return new Date();
+  }
+
   /**
    * Đồng bộ dữ liệu khách hàng từ TestOrder2
    */
   async syncCustomersFromOrders(): Promise<void> {
     this.logger.log('🔄 Starting customer sync from TestOrder2...');
 
-    // Lấy tất cả đơn hàng có thông tin khách hàng đầy đủ
     const orders = await this.testOrder2Model
       .find({
         customerName: { $exists: true, $ne: '' },
         receiverPhone: { $exists: true, $ne: '' },
         receiverAddress: { $exists: true, $ne: '' },
+        productId: { $exists: true, $ne: null },
         isActive: true
       })
       .populate('productId')
-      .sort({ createdAt: -1 })
+      .sort({ orderDate: -1, createdAt: -1 })
       .exec();
 
     this.logger.log(`📦 Found ${orders.length} orders with customer info`);
 
-    // Group orders by customer (name + phone)
     const customerGroups = new Map<string, typeof orders>();
-    
+
     orders.forEach(order => {
       const key = `${order.customerName}-${order.receiverPhone}`;
       if (!customerGroups.has(key)) {
@@ -92,37 +112,43 @@ export class CustomerService {
 
     for (const [customerKey, customerOrders] of customerGroups) {
       try {
-        // Lấy đơn hàng mới nhất của khách hàng này
-        const latestOrder = customerOrders[0]; // Already sorted by createdAt desc
+        const latestOrder = customerOrders[0];
         const product = latestOrder.productId as any;
 
-        if (!product || !product.usageDurationMonths) {
-          this.logger.warn(`⚠️ Product missing usageDurationMonths for order ${latestOrder._id}`);
-          continue;
-        }
-
-        // Tính toán thời gian còn lại - P2 FIX: dùng tháng thực tế
-        const purchaseDate = new Date(latestOrder.createdAt);
-        const expiryDate = this.calculateExpiryDate(purchaseDate, product.usageDurationMonths);
-        const remainingDays = this.calculateRemainingDays(expiryDate);
-
-        // Tìm hoặc tạo customer
         const existingCustomer = await this.customerModel.findOne({
           customerName: latestOrder.customerName,
           phoneNumber: latestOrder.receiverPhone
         });
 
+        const usageDurationMonths = this.resolveUsageDurationMonths(
+          (latestOrder as any).productUsageDurationMonths,
+          product?.usageDurationMonths,
+          existingCustomer?.usageDurationMonths
+        );
+
+        if (!usageDurationMonths) {
+          this.logger.warn(
+            `⚠️ Missing usageDurationMonths for order ${latestOrder._id} (product=${product?._id || 'N/A'})`
+          );
+          continue;
+        }
+
+        const latestPurchaseDate = this.getOrderPurchaseDate(latestOrder);
+        const latestExpiryDate = this.calculateExpiryDate(latestPurchaseDate, usageDurationMonths);
+        const latestRemainingDays = this.calculateRemainingDays(latestExpiryDate);
+
         if (existingCustomer) {
-          // Cập nhật nếu có đơn hàng mới hơn
-          if (new Date(latestOrder.createdAt) > existingCustomer.latestPurchaseDate) {
+          const isNewerOrder = latestPurchaseDate > new Date(existingCustomer.latestPurchaseDate);
+
+          if (isNewerOrder) {
             await this.customerModel.updateOne(
               { _id: existingCustomer._id },
               {
                 address: latestOrder.receiverAddress,
                 productId: latestOrder.productId,
-                latestPurchaseDate: latestOrder.createdAt,
-                usageDurationMonths: product.usageDurationMonths,
-                remainingDays,
+                latestPurchaseDate,
+                usageDurationMonths,
+                remainingDays: latestRemainingDays,
                 latestOrderId: latestOrder._id,
                 lastCalculated: new Date()
               }
@@ -130,25 +156,39 @@ export class CustomerService {
             updatedCount++;
             this.logger.log(`📝 Updated customer: ${latestOrder.customerName}`);
           } else {
-            // Chỉ cập nhật remainingDays
+            const currentUsageDuration = this.resolveUsageDurationMonths(
+              existingCustomer.usageDurationMonths,
+              usageDurationMonths
+            );
+            if (!currentUsageDuration) continue;
+
+            const currentPurchaseDate = new Date(existingCustomer.latestPurchaseDate);
+            const expiryDate = this.calculateExpiryDate(currentPurchaseDate, currentUsageDuration);
+            const remainingDays = this.calculateRemainingDays(expiryDate);
+
+            const updatePayload: any = {
+              remainingDays,
+              lastCalculated: new Date()
+            };
+
+            if (existingCustomer.usageDurationMonths !== currentUsageDuration) {
+              updatePayload.usageDurationMonths = currentUsageDuration;
+            }
+
             await this.customerModel.updateOne(
               { _id: existingCustomer._id },
-              {
-                remainingDays,
-                lastCalculated: new Date()
-              }
+              updatePayload
             );
           }
         } else {
-          // Tạo mới
           await this.customerModel.create({
             customerName: latestOrder.customerName,
             phoneNumber: latestOrder.receiverPhone,
             address: latestOrder.receiverAddress,
             productId: latestOrder.productId,
-            latestPurchaseDate: latestOrder.createdAt,
-            usageDurationMonths: product.usageDurationMonths,
-            remainingDays,
+            latestPurchaseDate,
+            usageDurationMonths,
+            remainingDays: latestRemainingDays,
             latestOrderId: latestOrder._id,
             isDisabled: false,
             lastCalculated: new Date()
@@ -156,7 +196,6 @@ export class CustomerService {
           syncedCount++;
           this.logger.log(`✅ Created customer: ${latestOrder.customerName}`);
         }
-
       } catch (error) {
         this.logger.error(`❌ Error processing customer ${customerKey}:`, error.message);
       }
@@ -164,7 +203,6 @@ export class CustomerService {
 
     this.logger.log(`🎉 Customer sync completed: ${syncedCount} created, ${updatedCount} updated`);
   }
-
   /**
    * Lấy danh sách khách hàng với tìm kiếm và lọc
    */
@@ -176,7 +214,7 @@ export class CustomerService {
   }> {
     const {
       search,
-      expiringSoon, // Lọc sắp hết hạn (< 15 ngày)
+      expiringSoon, // Lọc sắp hết hạn (<= 10 ngày)
       expired,      // P1 FIX: Lọc đã hết hạn
       isDisabled,
       limit = 100,
@@ -195,7 +233,7 @@ export class CustomerService {
 
     // Lọc sắp hết hạn
     if (expiringSoon === 'true') {
-      mongoQuery.remainingDays = { $lt: 15, $gt: 0 };
+      mongoQuery.remainingDays = { $lte: 10, $gt: 0 };
       mongoQuery.isDisabled = false;
     }
 
@@ -238,9 +276,9 @@ export class CustomerService {
     ] = await Promise.all([
       this.customerModel.countDocuments(),
       this.customerModel.countDocuments({ isDisabled: false }),
-      this.customerModel.countDocuments({ 
-        remainingDays: { $lt: 15, $gt: 0 }, 
-        isDisabled: false 
+      this.customerModel.countDocuments({
+        remainingDays: { $lte: 10, $gt: 0 },
+        isDisabled: false
       }),
       this.customerModel.countDocuments({ 
         remainingDays: { $lte: 0 }, 
@@ -298,35 +336,51 @@ export class CustomerService {
 
     const customers = await this.customerModel.find({ isDisabled: false }).populate('productId');
     let updatedCount = 0;
+    let recalculatedCount = 0;
+    const now = new Date();
 
     for (const customer of customers) {
       try {
         const product = customer.productId as any;
-        if (!product?.usageDurationMonths) continue;
+        const usageDurationMonths = this.resolveUsageDurationMonths(
+          product?.usageDurationMonths,
+          customer.usageDurationMonths
+        );
+        if (!usageDurationMonths) continue;
 
         const purchaseDate = new Date(customer.latestPurchaseDate);
-        // P2 FIX: dùng tháng thực tế thay vì 30 ngày/tháng
-        const expiryDate = this.calculateExpiryDate(purchaseDate, product.usageDurationMonths);
+        const expiryDate = this.calculateExpiryDate(purchaseDate, usageDurationMonths);
         const remainingDays = this.calculateRemainingDays(expiryDate);
 
+        const updatePayload: any = { lastCalculated: now };
+        let hasBusinessDataChange = false;
+
         if (customer.remainingDays !== remainingDays) {
-          await this.customerModel.updateOne(
-            { _id: customer._id },
-            { 
-              remainingDays,
-              lastCalculated: new Date()
-            }
-          );
+          updatePayload.remainingDays = remainingDays;
+          hasBusinessDataChange = true;
+        }
+
+        if (customer.usageDurationMonths !== usageDurationMonths) {
+          updatePayload.usageDurationMonths = usageDurationMonths;
+          hasBusinessDataChange = true;
+        }
+
+        await this.customerModel.updateOne(
+          { _id: customer._id },
+          updatePayload
+        );
+
+        if (hasBusinessDataChange) {
           updatedCount++;
         }
+        recalculatedCount++;
       } catch (error) {
         this.logger.error(`Error updating customer ${customer._id}:`, error.message);
       }
     }
 
-    this.logger.log(`📊 Updated remaining days for ${updatedCount} customers`);
+    this.logger.log(`📊 Updated remaining days for ${updatedCount} customers (recalculated: ${recalculatedCount})`);
   }
-
   /**
    * Tìm khách hàng theo ID
    */
@@ -416,7 +470,13 @@ export class CustomerService {
     const notifications: CustomerExpiryNotification[] = customers.map(customer => {
       const product = customer.productId as any;
       const purchaseDate = new Date(customer.latestPurchaseDate);
-      const expiryDate = this.calculateExpiryDate(purchaseDate, product?.usageDurationMonths || customer.usageDurationMonths);
+      const usageDurationMonths = this.resolveUsageDurationMonths(
+        product?.usageDurationMonths,
+        customer.usageDurationMonths
+      );
+      const expiryDate = usageDurationMonths
+        ? this.calculateExpiryDate(purchaseDate, usageDurationMonths)
+        : purchaseDate;
 
       // Xác định mức độ ưu tiên
       let priority: 'urgent' | 'warning' | 'normal';
@@ -506,7 +566,13 @@ export class CustomerService {
       const notifications: CustomerExpiryNotification[] = customersExpiringOnDay.map(customer => {
         const product = customer.productId as any;
         const purchaseDate = new Date(customer.latestPurchaseDate);
-        const expiryDate = this.calculateExpiryDate(purchaseDate, product?.usageDurationMonths || customer.usageDurationMonths);
+        const usageDurationMonths = this.resolveUsageDurationMonths(
+          product?.usageDurationMonths,
+          customer.usageDurationMonths
+        );
+        const expiryDate = usageDurationMonths
+          ? this.calculateExpiryDate(purchaseDate, usageDurationMonths)
+          : purchaseDate;
 
         return {
           _id: customer._id.toString(),

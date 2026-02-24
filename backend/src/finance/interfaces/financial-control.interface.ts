@@ -134,10 +134,11 @@ export interface CommittedCashBreakdown {
 // ═══════════════════════════════════════════════════════════
 
 export interface MonthlyBurnBreakdown {
-  laborCore: number;        // Lương core
-  operationsMandatory: number; // Vận hành bắt buộc
-  loanPayment: number;      // Trả nợ bắt buộc
-  agentCommission?: number; // Hoa hồng đại lý đã trả (recurring obligation)
+  laborCore: number;           // Lương core (dự chi tháng tới)
+  operationsMandatory: number; // Vận hành bắt buộc (loại trừ ads)
+  loanPayment: number;         // Trả nợ bắt buộc (đến hạn tháng tới)
+  agentCommission?: number;    // Hoa hồng đại lý chờ thanh toán
+  supplierPendingPayment?: number; // Khoản NCC chờ thanh toán
   total: number;
   // CFO v3.1: Flag if estimation was used due to missing data
   isEstimated?: boolean;    // true if some data came from fallback/estimation

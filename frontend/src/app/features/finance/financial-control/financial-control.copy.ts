@@ -50,8 +50,8 @@ export const KPI_TOOLTIPS: KpiTooltipsType = {
   },
   monthlyBurn: {
     meaning: 'Chi phí bắt buộc hàng tháng để doanh nghiệp tồn tại.',
-    formula: 'MonthlyBurn = Lương core + Vận hành bắt buộc + Trả nợ bắt buộc.',
-    source: 'Labor Statements + Other Costs (mandatory) + Loan Payments.',
+    formula: 'MonthlyBurn = Lương core + Vận hành bắt buộc (trừ ads) + Trả nợ + Hoa hồng đại lý chờ thanh toán + NCC chờ thanh toán.',
+    source: 'Labor/AP + Other Costs (non-ads) + Debt due + Agent pending + Supplier pending.',
     note: 'Dùng để tính Runway và Survival Floor.',
   },
   runway: {

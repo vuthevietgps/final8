@@ -47,6 +47,7 @@ export class ProductComponent implements OnInit {
     categoryId: '',
     status: 'Hoạt động',
     color: '#3B82F6',
+    usageDurationMonths: 1,
     supplierIds: [],
   });
 
@@ -145,6 +146,7 @@ export class ProductComponent implements OnInit {
       categoryId: '',
       status: 'Hoạt động',
       color: '#3B82F6',
+      usageDurationMonths: 1,
       supplierIds: [],
     });
     this.isAddModalOpen.set(true);
@@ -161,6 +163,7 @@ export class ProductComponent implements OnInit {
       categoryId: product.categoryId?._id || '',
       status: product.status,
       color: product.color || '#3B82F6',
+      usageDurationMonths: product.usageDurationMonths || 1,
       supplierIds: (product.suppliers || []).map(s => s.supplierId || ''),
     });
     this.isEditModalOpen.set(true);
@@ -177,7 +180,13 @@ export class ProductComponent implements OnInit {
       return;
     }
 
-    const payload = { ...this.formData() } as CreateProductDto;
+    const usageDurationMonths = Number(this.formData().usageDurationMonths || 0);
+    if (!Number.isFinite(usageDurationMonths) || usageDurationMonths < 1) {
+      this.error.set('Thoi han su dung phai >= 1 thang');
+      return;
+    }
+
+    const payload = { ...this.formData(), usageDurationMonths } as CreateProductDto;
 
     this.isLoading.set(true);
     this.productService.create(payload).subscribe({
@@ -204,8 +213,14 @@ export class ProductComponent implements OnInit {
       return;
     }
 
+    const usageDurationMonths = Number(this.formData().usageDurationMonths || 0);
+    if (!Number.isFinite(usageDurationMonths) || usageDurationMonths < 1) {
+      this.error.set('Thoi han su dung phai >= 1 thang');
+      return;
+    }
+
     this.isLoading.set(true);
-    const payload = { ...this.formData() } as UpdateProductDto;
+    const payload = { ...this.formData(), usageDurationMonths } as UpdateProductDto;
     this.productService.update(product._id, payload).subscribe({
       next: (updatedProduct) => {
         this.products.update(products => 
@@ -260,7 +275,9 @@ export class ProductComponent implements OnInit {
 
   onInputChange(field: keyof CreateProductDto, event: Event): void {
     const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    const value: any = target.value;
+    const value: any = field === 'usageDurationMonths'
+      ? Math.max(0, Math.floor(Number(target.value) || 0))
+      : target.value;
     this.updateFormField(field, value);
   }
 

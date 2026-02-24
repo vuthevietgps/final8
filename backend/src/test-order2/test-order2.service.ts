@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from './schemas/test-order2.schema';
 import { CreateTestOrder2Dto } from './dto/create-test-order2.dto';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
 import { SupplierPayableService } from '../supplier-payable/supplier-payable.service';
 import { OrderSheetSyncService } from '../order-sheet-sync/order-sheet-sync.service';
 import { OrderCalculationService } from './services/order-calculation.service';
@@ -33,12 +34,34 @@ export class TestOrder2Service {
 
   constructor(
     @InjectModel(TestOrder2.name) private model: Model<TestOrder2Document>,
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     private readonly calculationService: OrderCalculationService,
     private readonly paymentService: OrderPaymentService,
     private readonly reportService: OrderReportService,
     private readonly supplierPayableService: SupplierPayableService,
     private readonly orderSheetSyncService: OrderSheetSyncService,
   ) {}
+
+  private normalizeUsageDurationMonths(value: unknown): number | undefined {
+    const normalized = Number(value);
+    if (!Number.isFinite(normalized)) return undefined;
+    const rounded = Math.floor(normalized);
+    return rounded > 0 ? rounded : undefined;
+  }
+
+  private async getProductUsageDurationMonths(productId?: Types.ObjectId | string): Promise<number | undefined> {
+    if (!productId) return undefined;
+    const id = typeof productId === 'string' ? productId : productId.toString();
+    if (!Types.ObjectId.isValid(id)) return undefined;
+
+    const product = await this.productModel
+      .findById(id)
+      .select('usageDurationMonths')
+      .lean<{ usageDurationMonths?: number }>()
+      .exec();
+
+    return this.normalizeUsageDurationMonths(product?.usageDurationMonths);
+  }
 
   // ============ ORDER LIFECYCLE HOOKS ============
 
@@ -197,6 +220,7 @@ export class TestOrder2Service {
 
     const doc: Partial<TestOrder2> = {
       productId: dto.productId ? new Types.ObjectId(dto.productId) : undefined,
+      productUsageDurationMonths: this.normalizeUsageDurationMonths(dto.productUsageDurationMonths),
       customerName: dto.customerName,
       quantity: dto.quantity ?? 1,
       agentId: dto.agentId ? new Types.ObjectId(dto.agentId) : undefined,
@@ -226,6 +250,11 @@ export class TestOrder2Service {
       agentQuote: dto.agentQuote,
       productType: dto.productType,
     };
+
+    if (!doc.productUsageDurationMonths && doc.productId) {
+      doc.productUsageDurationMonths = await this.getProductUsageDurationMonths(doc.productId);
+    }
+
     const created = new this.model(doc);
     await this.calculationService.autoCalculateQuoteFields(created);
     this.ensureCodCollectedIfDelivered(created as any, null);
@@ -281,6 +310,9 @@ export class TestOrder2Service {
     if (typeof updates.supplierId === 'string') updates.supplierId = new Types.ObjectId(updates.supplierId);
     if (typeof updates.orderDate === 'string') updates.orderDate = new Date(updates.orderDate);
     if (typeof updates.isActive === 'string') updates.isActive = updates.isActive === 'true' || updates.isActive === '1';
+    if (updates.productUsageDurationMonths !== undefined) {
+      updates.productUsageDurationMonths = this.normalizeUsageDurationMonths(updates.productUsageDurationMonths);
+    }
     ['quantity', 'depositAmount', 'codAmount', 'manualPayment', 'shippingFee', 'returnFee'].forEach((k) => {
       const key = k as keyof TestOrder2;
       const v: any = (updates as any)[key];
@@ -294,8 +326,8 @@ export class TestOrder2Service {
     // ============ SUPPLIER QUOTE SNAPSHOT IMMUTABILITY ============
     const newSupplierId = updates.supplierId?.toString();
     const newProductId = updates.productId?.toString();
-    const supplierChanged = newSupplierId && newSupplierId !== prevSupplierId;
-    const productChanged = newProductId && newProductId !== prevProductId;
+    const supplierChanged = !!newSupplierId && newSupplierId !== prevSupplierId;
+    const productChanged = !!newProductId && newProductId !== prevProductId;
 
     if (supplierChanged || productChanged) {
       updates.supplierQuoteId = undefined;
@@ -308,9 +340,16 @@ export class TestOrder2Service {
       this.logger.log(`Supplier/Product changed for order ${id} - clearing supplier quote snapshot. Old: ${prevSupplierId}/${prevProductId}, New: ${newSupplierId}/${newProductId}`);
     }
 
+    if (productChanged || (updates.productId && updates.productUsageDurationMonths === undefined)) {
+      const resolvedUsageDuration = await this.getProductUsageDurationMonths(updates.productId);
+      if (resolvedUsageDuration) {
+        updates.productUsageDurationMonths = resolvedUsageDuration;
+      }
+    }
+
     // ============ AGENT QUOTE SNAPSHOT IMMUTABILITY ============
     const newAgentId = updates.agentId?.toString();
-    const agentChanged = newAgentId && newAgentId !== prevAgentId;
+    const agentChanged = !!newAgentId && newAgentId !== prevAgentId;
 
     if (agentChanged || productChanged) {
       updates.agentQuoteId = undefined;

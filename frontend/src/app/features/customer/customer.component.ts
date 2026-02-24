@@ -347,7 +347,7 @@ export class CustomerComponent implements OnInit {
    */
   getRemainingDaysClass(days: number): string {
     if (days <= 0) return 'expired';
-    if (days < 15) return 'expiring';
+    if (days <= 10) return 'expiring';
     return 'normal';
   }
 
@@ -357,7 +357,7 @@ export class CustomerComponent implements OnInit {
   getStatusClass(customer: Customer): string {
     if (customer.isDisabled) return 'disabled';
     if (customer.remainingDays <= 0) return 'expired';
-    if (customer.remainingDays < 15) return 'expiring';
+    if (customer.remainingDays <= 10) return 'expiring';
     return 'active';
   }
 
@@ -367,7 +367,7 @@ export class CustomerComponent implements OnInit {
   getStatusText(customer: Customer): string {
     if (customer.isDisabled) return 'Đã vô hiệu hóa';
     if (customer.remainingDays <= 0) return 'Đã hết hạn';
-    if (customer.remainingDays < 15) return 'Sắp hết hạn';
+    if (customer.remainingDays <= 10) return 'Sắp hết hạn';
     return 'Hoạt động';
   }
 

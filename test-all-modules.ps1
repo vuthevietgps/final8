@@ -35,6 +35,7 @@ $modules = @(
     @{ Name = "Quotes";                   Script = "test-module-quotes.ps1" }
     @{ Name = "Media, Chat & Config";     Script = "test-module-media-chat-config.ps1" }
     @{ Name = "Financial Deep";           Script = "test-module-financial-deep.ps1" }
+    @{ Name = "Net Profit & Ad Group";    Script = "test-module-net-profit-adgroup.ps1" }
 )
 
 $results = @()

@@ -1,9 +1,14 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean, IsDateString, Min } from 'class-validator';
 
 export class CreateTestOrder2Dto {
   @IsOptional()
   @IsString()
   productId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  productUsageDurationMonths?: number;
 
   @IsString()
   customerName: string;

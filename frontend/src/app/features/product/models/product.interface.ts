@@ -8,6 +8,7 @@ export interface Product {
   categoryId: ProductCategoryRef;
   status: 'Hoạt động' | 'Tạm dừng';
   color: string;
+  usageDurationMonths?: number;
   sku?: string;
   suppliers?: Array<{ supplierId?: string }>;
   createdAt?: string;
@@ -27,6 +28,7 @@ export interface CreateProductDto {
   categoryId: string;
   status?: 'Hoạt động' | 'Tạm dừng';
   color?: string;
+  usageDurationMonths?: number;
   supplierIds?: string[];
 }
 

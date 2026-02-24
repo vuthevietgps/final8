@@ -370,7 +370,7 @@ export class OrderCalculationService {
       let advertisingCost = 0;
       if (doc.adGroupId && doc.adGroupId !== '0') {
         try {
-          const adCostResult = await this.model.db.collection('advertising_costs').aggregate([
+          const adCostResult = await this.model.db.collection('advertisingcosts').aggregate([
             {
               $match: {
                 adGroupId: doc.adGroupId,

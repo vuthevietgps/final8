@@ -39,7 +39,7 @@ export class ProductService {
     payload.minStock = Number(payload.minStock || 0);
     payload.maxStock = Number(payload.maxStock || 0);
     payload.estimatedDeliveryDays = Number(payload.estimatedDeliveryDays || 0);
-    payload.usageDurationMonths = Number(payload.usageDurationMonths || 0);
+    payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 1));
     payload.totalCost = payload.importPrice + payload.shippingCost + payload.packagingCost;
 
     const createdProduct = new this.productModel(payload);
@@ -89,6 +89,10 @@ export class ProductService {
     if (Array.isArray((payload as any).supplierIds)) {
       payload.suppliers = (payload as any).supplierIds.map((id: any) => ({ supplierId: new Types.ObjectId(id) }));
       delete payload.supplierIds;
+    }
+
+    if (payload.usageDurationMonths !== undefined) {
+      payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 1));
     }
 
     // Ensure totalCost stays correct when updating (pre-save hook won't run)

@@ -18,6 +18,7 @@
  */
 
 import { Module } from '@nestjs/common';
+import { FinanceModule } from '../finance/finance.module';
 
 // Controllers
 import { DashboardController } from './controllers/dashboard.controller';
@@ -34,7 +35,7 @@ import { AdsDecisionService } from './services/ads-decision.service';
 import { AlertsService } from './services/alerts.service';
 
 @Module({
-  imports: [],
+  imports: [FinanceModule],
   controllers: [
     DashboardController,
     FundsController,

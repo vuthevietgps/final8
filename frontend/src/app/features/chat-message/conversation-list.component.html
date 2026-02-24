@@ -138,6 +138,12 @@
             <option *ngFor="let a of agents()" [value]="a._id">{{ a.fullName }} ({{ a.role }})</option>
           </select>
         </label>
+        <label>Nhà cung cấp
+          <select [ngModel]="orderDraft()?.supplierId" (ngModelChange)="setDraftField('supplierId',$event)">
+            <option value="">-- Chọn nhà cung cấp --</option>
+            <option *ngFor="let s of suppliers()" [value]="s._id">{{ s.fullName }} ({{ s.role }})</option>
+          </select>
+        </label>
         <label>Ghi chú<textarea rows="2" [ngModel]="orderDraft()?.notes" (ngModelChange)="setDraftField('notes',$event)"></textarea></label>
         <label>Ngày đặt hàng
           <input type="date" [ngModel]="orderDraft()?.orderDate ? (orderDraft()?.orderDate!.substring(0,10)) : ''" (ngModelChange)="setDraftField('orderDate',$event)"/>
@@ -199,3 +205,4 @@
     <span class="error" *ngIf="error()">{{ error() }}</span>
   </div>
 </div>
+

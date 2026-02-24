@@ -85,7 +85,7 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(1)
   @Type(() => Number)
   usageDurationMonths?: number;
 

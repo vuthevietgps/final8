@@ -18,6 +18,7 @@ import { FundingSource, FundingSourceDocument } from './schemas/funding-source.s
 import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdvertisingCost, AdvertisingCostDocument } from '../advertising-cost/schemas/advertising-cost.schema';
+import { COMPLETED_ORDER_STATUSES, PaymentStatus } from '../test-order2/constants/test-order2.constants';
 import { AdGroupDailyReportService } from './ad-group-daily-report.service';
 import { FinanceService } from './finance.service';
 import { SupplierPayableService } from '../supplier-payable/supplier-payable.service';
@@ -196,13 +197,14 @@ export class FinancialControlService {
       const adsBudgetApproved = Math.min(optimalAdsSuggestion, availableAfterSurvival);
 
       // 9. Max Daily Ads
-      const maxDailyAds = (adsBudgetApproved / this.config.SupplierCashCycleDays) * this.config.SafetyFactor;
+      // AdsBudgetApproved is a 7-day envelope, so normalize by 7 days for daily limit.
+      const maxDailyAds = (adsBudgetApproved / 7) * this.config.SafetyFactor;
 
       // 10. Owner Withdrawable
       const ownerWithdrawable = Math.max(0, availableAfterSurvival - adsBudgetApproved);
 
-      // 11. Forecast 7D
-      const forecast7D = await this.getForecast7D(bankBalance, maxDailyAds, monthlyBurnBreakdown);
+      // 11. Forecast 7D (base-case: exclude ads spend)
+      const forecast7D = await this.getForecast7D(bankBalance, 0, monthlyBurnBreakdown);
 
       // 12. Build aggregated alerts with source (CFO v3.1)
       const alerts = this.buildAggregatedAlerts(
@@ -371,7 +373,7 @@ export class FinancialControlService {
     // Lương đã trả
     const laborResult = await this.laborModel.aggregate([
       { $match: { status: 'closed' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
+      { $group: { _id: null, total: { $sum: '$statementPaymentTotal' } } },
     ]);
     const laborCost = laborResult[0]?.total || 0;
 
@@ -593,103 +595,194 @@ export class FinancialControlService {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // MONTHLY BURN - CFO Spec v3.1: Paid cash-out last 30 days
+  // MONTHLY BURN - business rule: exclude ads, include pending obligations
   // ═══════════════════════════════════════════════════════════
 
   private async getMonthlyBurn(): Promise<MonthlyBurnBreakdown> {
-    // CFO Spec v3.1 Option 2: Burn = paid cash-out last 30 days
-    // Alert BURN_USING_LAST_30D khi không có đủ 3 tháng history
-
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const windowDays = 30;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const windowEnd = new Date(today);
+    windowEnd.setDate(windowEnd.getDate() + windowDays);
 
     let laborCore = 0;
     let operationsMandatory = 0;
     let loanPayment = 0;
     let agentCommission = 0;
+    let supplierPendingPayment = 0;
     let isEstimated = false;
     const estimationNotes: string[] = [];
 
-    // 1. Lương đã trả last 30d - từ summary totalPayrollPaid
+    // 1) Payroll due in next 30 days
     try {
-      const laborSummary = await this.laborStatementService.getCashflowSummary(30);
-      laborCore = laborSummary.totalPayrollPaid || 0;
+      const laborSummary = await this.laborStatementService.getCashflowSummary(windowDays);
+      laborCore = Math.max(0, laborSummary.totalPayrollDue14d || 0);
     } catch (err) {
-      this.logger.warn('[P2] Failed to get payroll paid from summary, falling back to direct query');
+      this.logger.warn('[P2] Failed to get payroll due from summary, falling back to direct query');
       isEstimated = true;
       estimationNotes.push('payroll: fallback query');
       const laborResult = await this.laborModel.aggregate([
         {
           $match: {
-            status: 'closed',
-            closedAt: { $gte: thirtyDaysAgo },
+            status: { $in: ['draft', 'open', 'approved'] },
+            $or: [
+              { dueDate: { $lte: windowEnd } },
+              { dueDate: { $exists: false } },
+            ],
           },
         },
-        { $group: { _id: null, total: { $sum: '$statementPaymentTotal' } } }, // Fix: Đúng field name
+        { $group: { _id: null, total: { $sum: '$closingBalance' } } },
       ]);
-      laborCore = laborResult[0]?.total || 0;
+      laborCore = Math.max(0, laborResult[0]?.total || 0);
     }
 
-    // 2. Vận hành đã trả last 30d - từ summary totalOpsPaid
+    // 2) Mandatory operations due in next 30 days (exclude ads/marketing)
     try {
-      const opsSummary = await this.otherCostService.getCashflowSummary(30);
-      operationsMandatory = opsSummary.totalOpsPaid || 0;
+      const opsSummary = await this.otherCostService.getCashflowSummary(windowDays);
+      operationsMandatory = (opsSummary.byCategory || [])
+        .filter((item) => !this.isAdsCategory(item.category))
+        .reduce((sum, item) => sum + (item.due14d || 0), 0);
     } catch (err) {
-      this.logger.warn('[P2] Failed to get ops paid from summary, falling back to direct query');
+      this.logger.warn('[P2] Failed to get ops due from summary, falling back to direct query');
       isEstimated = true;
       estimationNotes.push('ops: fallback query');
       const opsResult = await this.otherCostModel.aggregate([
         {
           $match: {
-            isConfirmed: true,
-            createdAt: { $gte: thirtyDaysAgo },
-            category: { $nin: ['ads', 'marketing', 'quảng cáo'] },
+            isConfirmed: { $ne: true },
+            $and: [
+              {
+                $or: [
+                  { dueDate: { $lte: windowEnd } },
+                  { dueDate: { $exists: false } },
+                ],
+              },
+              {
+                $or: [
+                  { category: { $exists: false } },
+                  { category: { $not: /(ads|marketing|quang cao|quảng cáo)/i } },
+                ],
+              },
+            ],
           },
         },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]);
-      operationsMandatory = opsResult[0]?.total || 0;
+      operationsMandatory = Math.max(0, opsResult[0]?.total || 0);
     }
 
-    // 3. Trả nợ đã trả last 30d - từ debt summary totalDebtPaid
+    // 3) Debt due in next 30 days
     try {
-      const debtSummary = await this.financeService.getDebtCashflowSummary(30);
-      loanPayment = debtSummary.totalDebtPaid || 0;
+      const debtSummary = await this.financeService.getDebtCashflowSummary(windowDays);
+      loanPayment = Math.max(0, debtSummary.totalDebtDue14d || 0);
     } catch (err) {
-      this.logger.warn('[P2] Failed to get debt paid from summary, falling back to 0');
+      this.logger.warn('[P2] Failed to get debt due from summary, falling back to 0');
       isEstimated = true;
       estimationNotes.push('debt: unavailable');
       loanPayment = 0;
     }
 
-    // 4. Agent commission đã trả last 30d (Fix #8: include in burn for accurate survival floor)
+    // 4) Agent commission pending payment (next 30 days)
     try {
-      const agentSummary = await this.agentService.getCashflowSummary(30);
-      agentCommission = agentSummary.totalAgentPaid || 0;
+      const agentSummary = await this.agentService.getCashflowSummary(windowDays);
+      agentCommission = Math.max(0, agentSummary.totalAgentDue14d || 0);
     } catch (err) {
-      this.logger.warn('[P2] Failed to get agent paid from summary, falling back to 0');
+      this.logger.warn('[P2] Failed to get agent due from summary, falling back to direct query');
       isEstimated = true;
-      estimationNotes.push('agent: unavailable');
-      agentCommission = 0;
+      estimationNotes.push('agent: fallback query');
+      const agentFallback = await this.orderModel.aggregate([
+        {
+          $match: {
+            orderStatus: { $in: [...COMPLETED_ORDER_STATUSES] },
+            agentPaymentStatus: PaymentStatus.PENDING,
+            agentQuote: { $gt: 0 },
+            agentId: { $exists: true, $ne: null },
+            isActive: { $ne: false },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: {
+                $multiply: [
+                  { $ifNull: ['$agentQuote', 0] },
+                  { $ifNull: ['$quantity', 1] },
+                ],
+              },
+            },
+          },
+        },
+      ]);
+      agentCommission = Math.max(0, agentFallback[0]?.total || 0);
     }
 
-    // CFO Note: Ads spend proxy KHÔNG đưa vào burn survival
-    // Ads spend chỉ dùng cho growth optimization, không ảnh hưởng sống còn
+    // 5) Supplier pending payment
+    try {
+      supplierPendingPayment = await this.getPendingSupplierPaymentAmount();
+    } catch (err) {
+      this.logger.warn('[P2] Failed to get supplier pending payment');
+      isEstimated = true;
+      estimationNotes.push('supplier: unavailable');
+      supplierPendingPayment = 0;
+    }
 
-    const total = laborCore + operationsMandatory + loanPayment + agentCommission;
+    // Ads is explicitly excluded by business rule.
+    const total = laborCore + operationsMandatory + loanPayment + agentCommission + supplierPendingPayment;
 
-    // Alert: BURN_USING_LAST_30D
-    this.logger.log(`[P2] Monthly burn calculated from last 30d paid: ${total.toLocaleString('vi-VN')}đ (labor: ${laborCore}, ops: ${operationsMandatory}, debt: ${loanPayment}, agent: ${agentCommission})`);
+    this.logger.log(
+      `[P2] Monthly burn (exclude ads, include pending) = ${total.toLocaleString('vi-VN')} ` +
+      `(labor: ${laborCore}, ops: ${operationsMandatory}, debt: ${loanPayment}, agentPending: ${agentCommission}, supplierPending: ${supplierPendingPayment})`,
+    );
 
     return {
       laborCore,
       operationsMandatory,
       loanPayment,
       agentCommission,
+      supplierPendingPayment,
       total,
       isEstimated,
       estimationNotes: isEstimated ? estimationNotes : undefined,
     };
+  }
+
+  private async getPendingSupplierPaymentAmount(): Promise<number> {
+    const result = await this.orderModel.aggregate([
+      {
+        $match: {
+          orderStatus: { $in: [...COMPLETED_ORDER_STATUSES] },
+          supplierPaymentStatus: PaymentStatus.PENDING,
+          supplierId: { $exists: true, $ne: null },
+          supplierQuote: { $gt: 0 },
+          isActive: { $ne: false },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$supplierQuote', 0] },
+                { $ifNull: ['$quantity', 1] },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    return Math.max(0, result[0]?.total || 0);
+  }
+
+  private isAdsCategory(category?: string): boolean {
+    if (!category) return false;
+    const normalized = String(category).trim().toLowerCase();
+    return normalized.includes('ads')
+      || normalized.includes('marketing')
+      || normalized.includes('quang cao')
+      || normalized.includes('quảng cáo');
   }
 
   // ═══════════════════════════════════════════════════════════

@@ -13,13 +13,6 @@ export class AuthInterceptor implements HttpInterceptor {
     let authReq = req;
     const token = this.authService.getToken();
 
-    // Bypass auth header cho các endpoint financial-control (public dashboards)
-    // Check cả /financial-control/ và /api/financial-control/
-    if (req.url.includes('financial-control')) {
-      console.log('AuthInterceptor: Bypassing auth for financial-control:', req.url);
-      return next.handle(req);
-    }
-
     console.log('AuthInterceptor:', { url: req.url, hasToken: !!token, tokenPreview: token?.substring(0, 20) });
 
     if (token) {

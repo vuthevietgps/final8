@@ -6,6 +6,10 @@ export class TestOrder2 {
   @Prop({ type: Types.ObjectId, ref: 'Product' })
   productId?: Types.ObjectId;
 
+  // Snapshot thời hạn sử dụng tại thời điểm tạo/cập nhật đơn
+  @Prop({ type: Number, min: 1 })
+  productUsageDurationMonths?: number;
+
   @Prop({ type: String })
   customerName?: string;
 

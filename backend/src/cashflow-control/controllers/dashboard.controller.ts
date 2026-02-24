@@ -27,7 +27,7 @@ export class DashboardController {
    * - cashflowSafetyIndex: 0-1 health indicator
    */
   @Get('summary')
-  getSummary(): DashboardSummaryDto {
+  async getSummary(): Promise<DashboardSummaryDto> {
     return this.dashboardService.getSummary();
   }
 }
