@@ -1,16 +1,18 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { CapitalAllocationService } from './capital-allocation.service';
 import { CreateCapitalAllocationPolicyDto, UpdateCapitalAllocationPolicyDto } from './dto/create-capital-allocation-policy.dto';
-import { JwtAuthGuard } from '../auth/guards/auth.guard';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('capital-allocation')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('finance')
 export class CapitalAllocationController {
   constructor(private readonly service: CapitalAllocationService) {}
 
   // ========== POLICIES ==========
   
   @Post('policies')
-  @UseGuards(JwtAuthGuard)
   createPolicy(@Body() dto: CreateCapitalAllocationPolicyDto) {
     return this.service.createPolicy(dto);
   }
@@ -26,7 +28,6 @@ export class CapitalAllocationController {
   }
 
   @Patch('policies/:id')
-  @UseGuards(JwtAuthGuard)
   updatePolicy(
     @Param('id') id: string,
     @Body() dto: UpdateCapitalAllocationPolicyDto
@@ -35,7 +36,6 @@ export class CapitalAllocationController {
   }
 
   @Delete('policies/:id')
-  @UseGuards(JwtAuthGuard)
   deletePolicy(@Param('id') id: string) {
     return this.service.deletePolicy(id);
   }
@@ -50,7 +50,6 @@ export class CapitalAllocationController {
   // ========== SNAPSHOTS ==========
 
   @Post('snapshots')
-  @UseGuards(JwtAuthGuard)
   captureSnapshot(
     @Body() body: { note?: string; policyId?: string }
   ) {
@@ -69,7 +68,6 @@ export class CapitalAllocationController {
   }
 
   @Patch('snapshots/:id/usage')
-  @UseGuards(JwtAuthGuard)
   updateSnapshotUsage(
     @Param('id') id: string,
     @Body() updates: {

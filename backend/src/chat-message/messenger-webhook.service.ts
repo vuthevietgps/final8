@@ -657,11 +657,13 @@ export class MessengerWebhookService {
         .replace(/\s{2,}/g, ' ')
         .trim();
 
-      const FB_ENABLED = process.env.FB_SENDING_ENABLED === '1';
+      // AI auto-reply can be controlled independently from manual operator sends.
+      // Default is enabled; set AI_FB_SENDING_ENABLED=0 to disable only AI auto-send.
+      const FB_ENABLED = process.env.AI_FB_SENDING_ENABLED !== '0';
       const PUBLIC_ORIGIN = process.env.MEDIA_ABSOLUTE_BASE || process.env.PUBLIC_ORIGIN || process.env.APP_PUBLIC_ORIGIN || '';
       
       if (this.isDebugMode) {
-        this.logger.debug(`[FB Send] FB_ENABLED=${FB_ENABLED}, PUBLIC_ORIGIN=${PUBLIC_ORIGIN}, fanpage.accessToken=${!!fanpage?.accessToken}`);
+        this.logger.debug(`[FB Send] FB_ENABLED=${FB_ENABLED}, AI_FB_SENDING_ENABLED=${process.env.AI_FB_SENDING_ENABLED}, FB_SENDING_ENABLED=${process.env.FB_SENDING_ENABLED}, PUBLIC_ORIGIN=${PUBLIC_ORIGIN}, fanpage.accessToken=${!!fanpage?.accessToken}`);
       }
       
       // Determine 24h window eligibility based on last inbound message
@@ -751,7 +753,7 @@ export class MessengerWebhookService {
                 }),
               }).then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
               // Record image message internally as well
-              await this.chatService.create({
+              const savedImage = await this.chatService.create({
                 fanpageId: fanpage._id.toString(),
                 senderPsid,
                 content: imgUrl,
@@ -763,6 +765,16 @@ export class MessengerWebhookService {
                 receivedAt: new Date() as any,
                 awaitingHuman: false,
               } as any);
+              try {
+                this.chatEvents.emit({
+                  type: 'new-message',
+                  fanpageId: String(fanpage._id),
+                  senderPsid,
+                  direction: 'out',
+                  snippet: '[image]',
+                  createdAt: (savedImage as any)?.createdAt || new Date(),
+                });
+              } catch {}
             }
           }
         } catch (err) {
@@ -770,12 +782,15 @@ export class MessengerWebhookService {
           deliveryNote = `Lỗi gửi tới Facebook: ${(err as any)?.message || String(err)}`;
         }
       } else {
-        if (!FB_ENABLED) deliveryNote = 'FB_SENDING_ENABLED=0 (đang tắt gửi ra Facebook).';
+        if (!FB_ENABLED) {
+          deliveryNote = 'AI_FB_SENDING_ENABLED=0 (đang tắt AI gửi ra Facebook).';
+          this.logger.warn(`[AI Send] Disabled by env on pid=${process.pid}: AI_FB_SENDING_ENABLED=${process.env.AI_FB_SENDING_ENABLED ?? '<unset>'}, FB_SENDING_ENABLED=${process.env.FB_SENDING_ENABLED ?? '<unset>'}`);
+        }
         else if (!fanpage?.accessToken) deliveryNote = 'Thiếu Access Token của fanpage.';
       }
 
       // Always record the text reply internally
-      await this.chatService.create({
+      const savedAiText = await this.chatService.create({
         fanpageId: fanpage._id.toString(),
         senderPsid,
         content: sanitized,
@@ -786,11 +801,21 @@ export class MessengerWebhookService {
         receivedAt: new Date() as any,
         awaitingHuman: false,
       } as any);
+      try {
+        this.chatEvents.emit({
+          type: 'new-message',
+          fanpageId: String(fanpage._id),
+          senderPsid,
+          direction: 'out',
+          snippet: String(sanitized || '').slice(0, 120),
+          createdAt: (savedAiText as any)?.createdAt || new Date(),
+        });
+      } catch {}
 
       // If not delivered to Facebook, append a small system diagnostic message for operators
       if (deliveryNote) {
         try {
-          await this.chatService.create({
+          const savedSystem = await this.chatService.create({
             fanpageId: fanpage._id.toString(),
             senderPsid,
             content: `[KHÔNG GỬI RA FB] ${deliveryNote}`,
@@ -800,6 +825,14 @@ export class MessengerWebhookService {
             receivedAt: new Date() as any,
             awaitingHuman: false,
           } as any);
+          this.chatEvents.emit({
+            type: 'new-message',
+            fanpageId: String(fanpage._id),
+            senderPsid,
+            direction: 'system',
+            snippet: `[KHÔNG GỬI RA FB] ${deliveryNote}`.slice(0, 120),
+            createdAt: (savedSystem as any)?.createdAt || new Date(),
+          });
         } catch (e) {
           if (this.isDebugMode) this.logger.warn('Failed to record non-delivery note: ' + (e as any)?.message);
         }

@@ -1,6 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { PERMISSIONS_KEY } from '../decorators/auth.decorator';
 import { AuthGuard } from '@nestjs/passport';
 
 @Injectable()
@@ -31,7 +32,10 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.get<string[]>('permissions', context.getHandler());
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (!requiredPermissions) {
       return true; // Nếu không yêu cầu permission cụ thể thì cho phép
     }
@@ -58,10 +62,9 @@ export class RolesGuard implements CanActivate {
         'labor-costs','other-costs','salary-config',
         'customers','purchase-costs','fanpages','openai-configs',
         'quotes','reports','export','import','settings',
-        'ads-budget','employee-ads-kpi','owner-fund'
+        'ads-budget','employee-ads-kpi','owner-fund','finance'
       ],
       'manager': [
-        'orders','pending-orders',
         'ad-accounts','ad-groups','advertising-costs','media','fanpages','openai-configs','api-tokens',
         'ads-budget','employee-ads-kpi'
       ],

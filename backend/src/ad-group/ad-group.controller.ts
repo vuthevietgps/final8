@@ -8,7 +8,7 @@ export class AdGroupController {
  * Mục đích: REST API cho Nhóm Quảng Cáo với tích hợp chatbot
  * Chức năng: CRUD ad groups, lấy products theo category, webhook lookup, auto-discover
  */
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, BadRequestException, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, BadRequestException, Inject, UseGuards } from '@nestjs/common';
 import { AdGroupService } from './ad-group.service';
 import { CreateAdGroupDto } from './dto/create-ad-group.dto';
 import { UpdateAdGroupDto } from './dto/update-ad-group.dto';
@@ -17,8 +17,12 @@ import { Model } from 'mongoose';
 import { Product, ProductDocument } from '../product/schemas/product.schema';
 import { AdGroupRecommendationService } from './ad-group.recommendation.service';
 import { AdGroupSyncService } from './ad-group.sync.service';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('ad-groups')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('ad-groups')
 export class AdGroupController {
   constructor(
     private readonly adGroupService: AdGroupService,
@@ -91,10 +95,9 @@ export class AdGroupController {
     try {
       const products = await this.productModel
         .find({ 
-          productCategoryId: categoryId,
-          isActive: { $ne: false }
+          categoryId: categoryId
         })
-        .select('name description price image isActive')
+        .select('name description price images status')
         .sort({ name: 1 })
         .lean();
 

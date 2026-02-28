@@ -12,7 +12,9 @@ import { AdvertisingCost, AdvertisingCostDocument } from './schemas/advertising-
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { ApiToken, ApiTokenDocument } from '../api-token/schemas/api-token.schema';
-import { TestOrder2Service } from '../test-order2/test-order2.service';
+import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
+
+const GOOGLE_ADS_API_VERSION = process.env.GOOGLE_ADS_API_VERSION || 'v19';
 
 @Injectable()
 export class AdvertisingCostGoogleSyncService {
@@ -23,7 +25,7 @@ export class AdvertisingCostGoogleSyncService {
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
     @InjectModel(AdAccount.name) private readonly adAccountModel: Model<AdAccountDocument>,
     @InjectModel(ApiToken.name) private readonly tokenModel: Model<ApiTokenDocument>,
-    private readonly testOrder2Service: TestOrder2Service,
+    private readonly recalculationQueue: AdvertisingCostRecalculationQueueService,
   ) {}
 
   private normalizeDay(dayISO: string): Date {
@@ -111,6 +113,45 @@ export class AdvertisingCostGoogleSyncService {
     return Number.isFinite(num) ? num / scale : 0;
   }
 
+  async getSyncHealth() {
+    const now = Date.now();
+    const envRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN?.trim();
+    const tokenDoc = await this.tokenModel
+      .findOne({ provider: 'google', status: 'active' })
+      .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 })
+      .select('name adAccountId lastCheckStatus lastCheckMessage lastCheckedAt updatedAt')
+      .lean();
+
+    const latestRecord: any = await this.costModel
+      .findOne({ channel: 'google' })
+      .sort({ updatedAt: -1 })
+      .select('date updatedAt adGroupId spentAmount')
+      .lean();
+
+    const lastSyncAt = latestRecord?.updatedAt ? new Date(latestRecord.updatedAt).toISOString() : undefined;
+    const syncFreshnessHours = lastSyncAt ? Math.round((now - new Date(lastSyncAt).getTime()) / (1000 * 60 * 60)) : null;
+
+    return {
+      platform: 'google',
+      token: {
+        source: envRefreshToken ? 'env' : (tokenDoc ? 'database' : 'none'),
+        configured: Boolean(envRefreshToken || tokenDoc),
+        developerTokenConfigured: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN),
+        oauthClientConfigured: Boolean(process.env.GOOGLE_ADS_CLIENT_ID && process.env.GOOGLE_ADS_CLIENT_SECRET),
+        databaseTokenName: tokenDoc?.name || null,
+        boundAdAccountId: tokenDoc?.adAccountId || null,
+        lastCheckStatus: tokenDoc?.lastCheckStatus || null,
+        lastCheckMessage: tokenDoc?.lastCheckMessage || null,
+        lastCheckedAt: tokenDoc?.lastCheckedAt ? new Date(tokenDoc.lastCheckedAt).toISOString() : null,
+      },
+      sync: {
+        lastRecordDate: latestRecord?.date ? new Date(latestRecord.date).toISOString().slice(0, 10) : null,
+        lastSyncAt,
+        freshnessHours: syncFreshnessHours,
+      },
+    };
+  }
+
   private async fetchCostForAccount(params: {
     account: AdAccountDocument;
     adGroupIds: string[];
@@ -142,7 +183,7 @@ export class AdvertisingCostGoogleSyncService {
     }
 
     const gaql = this.buildGaql(params.adGroupIds, params.dayISO);
-    const url = `https://googleads.googleapis.com/v15/customers/${customerId}/googleAds:searchStream`;
+    const url = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
       'developer-token': developerToken,
@@ -234,11 +275,9 @@ export class AdvertisingCostGoogleSyncService {
       const res = await this.syncForDate(dayISO);
       this.logger.log(`Google Ads sync completed: updated ${res.updated} ad groups`);
       
-      // Recalculate all orders for this date after sync
-      if (res.updated > 0 && this.testOrder2Service) {
-        this.logger.log(`Recalculating orders for ${dayISO}...`);
-        const recalcResult = await this.testOrder2Service.recalculateOrdersForDate(dayISO);
-        this.logger.log(`Recalculation completed: ${recalcResult.updated} orders updated`);
+      // Debounce recalculation để tránh chạy trùng với các cron sync khác.
+      if (res.updated > 0) {
+        this.recalculationQueue.scheduleRecalculation(dayISO, 'google-cron');
       }
     } catch (err) {
       this.logger.error('Cron Google Ads sync failed', err as any);

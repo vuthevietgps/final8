@@ -331,7 +331,7 @@ export class AdGroupDailyReportService {
       const profitYesterday = yesterdayRecord?.netProfit || 0;
       
       // CFO Spec v3.0: Tính baseline từ max(spendYesterday, avgLast3Days, minStartBudget)
-      const MIN_START_BUDGET = 60000; // Ngân sách tối thiểu 60k VNĐ (user request)
+      const MIN_START_BUDGET = 60000; // Ngân sách tối thiểu 60k VNĐ
       const sortedByDateDescForAvg = [...records].sort((a: any, b: any) => b.date.localeCompare(a.date));
       const last3DaysRecords = sortedByDateDescForAvg.slice(0, 3);
       const avgLast3Days = last3DaysRecords.length > 0 

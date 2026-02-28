@@ -226,7 +226,7 @@
         <div class="form-section">
           <h4 class="section-title">
             <span class="section-icon">📄</span>
-            Fanpage và Sản Phẩm
+            Fanpage và Danh Mục Sản Phẩm
           </h4>
           
           <div class="form-row">
@@ -249,7 +249,7 @@
                 formControlName="productCategoryId" 
                 class="form-control"
                 (change)="onCategoryChange($event)">
-                <option value="">-- Chọn danh mục --</option>
+                <option value="">-- Chọn danh mục sản phẩm --</option>
                 <option *ngFor="let category of productCategories()" [value]="category._id">
                   {{ category.name }}
                 </option>

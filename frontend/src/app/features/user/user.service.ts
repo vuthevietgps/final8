@@ -55,4 +55,12 @@ export class UserService {
   getAgents(): Observable<User[]> {
     return this.http.get<User[]>(`${this.apiUrl}/agents`, { withCredentials: true });
   }
+
+  /**
+   * Lấy danh sách đại lý cho module quảng cáo.
+   * Backend bảo vệ bằng quyền 'ad-groups'.
+   */
+  getAgentsForAds(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/agents-for-ads`, { withCredentials: true });
+  }
 }

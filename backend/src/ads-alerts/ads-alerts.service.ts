@@ -12,6 +12,7 @@ import { Model } from 'mongoose';
 import { AdsAlertsEventsService, AdsAlert, AlertType, AlertCategory } from './ads-alerts-events.service';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
+import { AdvertisingCost, AdvertisingCostDocument } from '../advertising-cost/schemas/advertising-cost.schema';
 
 // Alert thresholds
 const THRESHOLDS = {
@@ -41,10 +42,16 @@ export class AdsAlertsService {
   private readonly logger = new Logger(AdsAlertsService.name);
   private isChecking = false;
 
+  private toUtcStartOfDay(input: Date | string): Date {
+    const date = typeof input === 'string' ? new Date(input) : new Date(input);
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  }
+
   constructor(
     private alertsEventsService: AdsAlertsEventsService,
     @InjectModel(AdGroup.name) private adGroupModel: Model<AdGroupDocument>,
     @InjectModel(TestOrder2.name) private orderModel: Model<TestOrder2Document>,
+    @InjectModel(AdvertisingCost.name) private advertisingCostModel: Model<AdvertisingCostDocument>,
   ) {}
 
   /**
@@ -80,10 +87,13 @@ export class AdsAlertsService {
         .lean()
         .exec();
 
-      // Get last 7 days data from orders aggregated by adGroupId
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Get last 7 full UTC days data
+      const now = new Date();
+      const sevenDaysAgo = this.toUtcStartOfDay(
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 7)),
+      );
       
+      // Orders provide revenue/profit/order count
       const orderMetrics = await this.orderModel.aggregate([
         {
           $match: {
@@ -98,15 +108,34 @@ export class AdsAlertsService {
             totalOrders: { $sum: 1 },
             totalRevenue: { $sum: { $ifNull: ['$codCollectedBySupplier', 0] } },
             totalProfit: { $sum: { $ifNull: ['$netProfit', 0] } },
-            totalAdsSpent: { $sum: { $ifNull: ['$advertisingCost', 0] } },
           }
         }
       ]).exec();
 
-      // Create a map from order metrics
+      // AdvertisingCost is the source-of-truth for ad spend
+      const spendMetrics = await this.advertisingCostModel.aggregate([
+        {
+          $match: {
+            adGroupId: { $exists: true, $ne: null },
+            date: { $gte: sevenDaysAgo },
+          },
+        },
+        {
+          $group: {
+            _id: '$adGroupId',
+            totalAdsSpent: { $sum: { $ifNull: ['$spentAmount', 0] } },
+          },
+        },
+      ]).exec();
+
+      // Create maps for fast lookup
       const orderMetricsMap = new Map<string, any>();
       for (const om of orderMetrics) {
         orderMetricsMap.set(om._id, om);
+      }
+      const spendMetricsMap = new Map<string, any>();
+      for (const sm of spendMetrics) {
+        spendMetricsMap.set(sm._id, sm);
       }
 
       // Aggregate metrics per ad group
@@ -118,7 +147,8 @@ export class AdsAlertsService {
 
         const orderData = orderMetricsMap.get(adGroupId);
         
-        const spend = orderData?.totalAdsSpent || 0;
+        const spendData = spendMetricsMap.get(adGroupId);
+        const spend = spendData?.totalAdsSpent || 0;
         const revenue = orderData?.totalRevenue || 0;
         const profit = orderData?.totalProfit || 0;
         const orders = orderData?.totalOrders || 0;

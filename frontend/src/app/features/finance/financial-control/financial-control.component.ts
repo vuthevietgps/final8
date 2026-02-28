@@ -728,6 +728,8 @@ export class FinancialControlComponent implements OnInit {
     return hasIssues ? 'partial' : 'ok';
   });
 
+  loadError = signal<string | null>(null);
+
   ngOnInit() {
     this.loadData();
   }
@@ -754,6 +756,7 @@ export class FinancialControlComponent implements OnInit {
 
   loadData() {
     this.loading.set(true);
+    this.loadError.set(null);
     this.service.loadDashboardData().subscribe({
       next: (result) => {
         this.data.set(result);
@@ -763,10 +766,9 @@ export class FinancialControlComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to load financial control data:', err);
-        this.service.getMockData().subscribe({
-          next: (mockData) => { this.data.set(mockData); this.loading.set(false); },
-          error: () => this.loading.set(false)
-        });
+        this.data.set(null);
+        this.loadError.set('Không tải được dữ liệu tài chính từ server. Vui lòng kiểm tra đăng nhập hoặc kết nối backend.');
+        this.loading.set(false);
         // Even if legacy overview fail, still try to load CFO data (actions/banner/module health)
         this.loadCFOData();
       }

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { FinanceService } from './finance.service';
 import { CreateFundingSourceDto } from './dto/create-funding-source.dto';
 import { UpdateFundingSourceDto } from './dto/update-funding-source.dto';
@@ -16,6 +17,7 @@ import { AutoScaleExecutionService } from './auto-scale-execution.service';
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('finance')
 export class FinanceController {
   constructor(
     private readonly financeService: FinanceService,

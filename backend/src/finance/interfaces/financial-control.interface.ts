@@ -14,7 +14,7 @@ export interface FinancialControlConfig {
   SurvivalMonths: number;         // Default: 3
   SupplierCashCycleDays: number;  // Default: 10
   RiskAdjustInflow: number;       // Default: 0.80
-  MinStartBudget: number;         // Default: 200_000
+  MinStartBudget: number;         // Default: 60_000
   UpperCapMultiplier: number;     // Default: 1.20
   LowerCapMultiplier: number;     // Default: 0.70
   SafetyFactor: number;           // Default: 0.80
@@ -25,7 +25,7 @@ export const DEFAULT_CONFIG: FinancialControlConfig = {
   SurvivalMonths: 3,
   SupplierCashCycleDays: 10,
   RiskAdjustInflow: 0.80,
-  MinStartBudget: 200_000,
+  MinStartBudget: 60_000,
   UpperCapMultiplier: 1.20,
   LowerCapMultiplier: 0.70,
   SafetyFactor: 0.80,

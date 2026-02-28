@@ -14,13 +14,17 @@ import { AdGroupAutoControlService } from './ad-group.auto-control.service';
 import { AdGroupSyncService } from './ad-group.sync.service';
 import { AdGroupRecommendationService } from './ad-group.recommendation.service';
 import { AdAccount, AdAccountSchema } from '../ad-account/schemas/ad-account.schema';
+import { AdvertisingCost, AdvertisingCostSchema } from '../advertising-cost/schemas/advertising-cost.schema';
+import { ProductCategory, ProductCategorySchema } from '../product-category/schemas/product-category.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: AdGroup.name, schema: AdGroupSchema },
       { name: Product.name, schema: ProductSchema },
-      { name: AdAccount.name, schema: AdAccountSchema }
+      { name: ProductCategory.name, schema: ProductCategorySchema },
+      { name: AdAccount.name, schema: AdAccountSchema },
+      { name: AdvertisingCost.name, schema: AdvertisingCostSchema },
     ]),
     forwardRef(() => AdvertisingCostModule),
     ApiTokenModule

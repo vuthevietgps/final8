@@ -60,7 +60,7 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
 
 .fixed-table, .scroll-table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; table-layout: fixed; }
 /* Sum-wide min width so columns never overlap; adjust if you change column widths */
-.scroll-table { min-width: 2800px; }
+.scroll-table { min-width: 3020px; }
 
 .fixed-table th, .scroll-table th, .fixed-table td, .scroll-table td { border: none; border-bottom: 1px solid #f1f5f9; padding: 10px 8px; vertical-align: middle; font-size: 0.875rem; box-sizing: border-box; }
 .fixed-table thead th, .scroll-table thead th { height: var(--row-h); line-height: calc(var(--row-h) - 2px); white-space: nowrap; }
@@ -86,6 +86,8 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
 .fixed-table .col-date { width: 110px; min-width: 110px; max-width: 110px; }
 .fixed-table .col-customer { width: 200px; min-width: 200px; max-width: 200px; }
 .fixed-table .col-product { width: 200px; min-width: 200px; max-width: 200px; }
+.fixed-table .col-supplier { width: 220px; min-width: 220px; max-width: 220px; }
+.scroll-table .col-supplier { width: 220px; min-width: 220px; max-width: 220px; }
 
 /* Column widths (scroll pane) reuse existing ones */
 .col-qty { width: 60px; min-width: 60px; }

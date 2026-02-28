@@ -12,6 +12,7 @@ import { MediaModule } from '../media/media.module';
 
 import { MessengerWebhookService } from './messenger-webhook.service';
 import { ChatEventsService } from './chat-events.service';
+import { AiDeliveryRecoveryService } from './ai-delivery-recovery.service';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { ChatEventsService } from './chat-events.service';
     ProductModule,
     MediaModule,
   ],
-  providers: [ChatMessageService, MessengerWebhookService, ChatEventsService],
+  providers: [ChatMessageService, MessengerWebhookService, ChatEventsService, AiDeliveryRecoveryService],
   controllers: [ChatMessageController, MessengerWebhookController],
   exports: [ChatMessageService, ChatEventsService]
 })

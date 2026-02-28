@@ -13,7 +13,7 @@ import { AdvertisingCost, AdvertisingCostDocument } from './schemas/advertising-
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { ApiToken, ApiTokenDocument } from '../api-token/schemas/api-token.schema';
-import { TestOrder2Service } from '../test-order2/test-order2.service';
+import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
 
 @Injectable()
 export class AdvertisingCostTiktokSyncService {
@@ -24,7 +24,7 @@ export class AdvertisingCostTiktokSyncService {
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
     @InjectModel(AdAccount.name) private readonly adAccountModel: Model<AdAccountDocument>,
     @InjectModel(ApiToken.name) private readonly tokenModel: Model<ApiTokenDocument>,
-    private readonly testOrder2Service: TestOrder2Service,
+    private readonly recalculationQueue: AdvertisingCostRecalculationQueueService,
   ) {}
 
   private normalizeDay(dayISO: string): Date {
@@ -36,6 +36,42 @@ export class AdvertisingCostTiktokSyncService {
     if (!id) return undefined;
     const clean = id.replace(/[^0-9]/g, '');
     return clean || undefined;
+  }
+
+  async getSyncHealth() {
+    const now = Date.now();
+    const envToken = process.env.TIKTOK_ACCESS_TOKEN?.trim();
+    const tokenDoc = await this.tokenModel
+      .findOne({ provider: 'tiktok', status: 'active' })
+      .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 })
+      .select('name lastCheckStatus lastCheckMessage lastCheckedAt updatedAt')
+      .lean();
+
+    const latestRecord: any = await this.costModel
+      .findOne({ channel: 'tiktok' })
+      .sort({ updatedAt: -1 })
+      .select('date updatedAt adGroupId spentAmount')
+      .lean();
+
+    const lastSyncAt = latestRecord?.updatedAt ? new Date(latestRecord.updatedAt).toISOString() : undefined;
+    const syncFreshnessHours = lastSyncAt ? Math.round((now - new Date(lastSyncAt).getTime()) / (1000 * 60 * 60)) : null;
+
+    return {
+      platform: 'tiktok',
+      token: {
+        source: envToken ? 'env' : (tokenDoc ? 'database' : 'none'),
+        configured: Boolean(envToken || tokenDoc),
+        databaseTokenName: tokenDoc?.name || null,
+        lastCheckStatus: tokenDoc?.lastCheckStatus || null,
+        lastCheckMessage: tokenDoc?.lastCheckMessage || null,
+        lastCheckedAt: tokenDoc?.lastCheckedAt ? new Date(tokenDoc.lastCheckedAt).toISOString() : null,
+      },
+      sync: {
+        lastRecordDate: latestRecord?.date ? new Date(latestRecord.date).toISOString().slice(0, 10) : null,
+        lastSyncAt,
+        freshnessHours: syncFreshnessHours,
+      },
+    };
   }
 
   /** Lấy access token TikTok: ưu tiên env, sau đó ApiToken provider=tiktok */
@@ -65,8 +101,10 @@ export class AdvertisingCostTiktokSyncService {
       spentAmount: Number(doc.spentAmount || 0),
       cpm: Number(doc.cpm || 0),
       cpc: Number(doc.cpc || 0),
+      frequency: Number((doc as any).frequency || 0),
       impressions: Number((doc as any).impressions || 0),
       clicks: Number((doc as any).clicks || 0),
+      reach: Number((doc as any).reach || 0),
     };
     await this.costModel.updateOne({ adGroupId, date }, { $set: payload }, { upsert: true });
   }
@@ -85,7 +123,7 @@ export class AdvertisingCostTiktokSyncService {
           report_type: 'BASIC',
           data_level: 'AUCTION_ADGROUP',
           dimensions: ['adgroup_id', 'stat_time_day'],
-          metrics: ['spend', 'impressions', 'clicks', 'cpc', 'cpm'],
+          metrics: ['spend', 'impressions', 'clicks', 'cpc', 'cpm', 'reach', 'frequency'],
           time_range: { start_date: opts.dayISO, end_date: opts.dayISO },
           page_size: PAGE_SIZE,
           page: page,
@@ -105,12 +143,17 @@ export class AdvertisingCostTiktokSyncService {
           if (!adGroupId) continue;
           if (opts.adGroupIdsFilter && opts.adGroupIdsFilter.size > 0 && !opts.adGroupIdsFilter.has(adGroupId)) continue;
           const day = row.stat_time_day || opts.dayISO;
+          const impressions = Number(row.impressions || 0);
+          const reach = Number(row.reach || 0);
+          const frequency = Number(row.frequency || 0) || (reach > 0 ? impressions / reach : 0);
           await this.upsertCost(adGroupId, day, {
             spentAmount: row.spend,
-            impressions: row.impressions,
+            impressions,
             clicks: row.clicks,
             cpc: row.cpc,
             cpm: row.cpm,
+            reach,
+            frequency,
           });
           updated++;
         }
@@ -191,11 +234,9 @@ export class AdvertisingCostTiktokSyncService {
       const res = await this.syncForDate(dayISO);
       this.logger.log(`TikTok Ads sync completed: updated ${res.updated} ad groups`);
       
-      // Recalculate all orders for this date after sync
-      if (res.updated > 0 && this.testOrder2Service) {
-        this.logger.log(`Recalculating orders for ${dayISO}...`);
-        const recalcResult = await this.testOrder2Service.recalculateOrdersForDate(dayISO);
-        this.logger.log(`Recalculation completed: ${recalcResult.updated} orders updated`);
+      // Debounce recalculation để gộp với các sync cron trước đó trong buổi sáng.
+      if (res.updated > 0) {
+        this.recalculationQueue.scheduleRecalculation(dayISO, 'tiktok-cron');
       }
     } catch (err) {
       this.logger.error('Cron TikTok Ads sync failed', err as any);

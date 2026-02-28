@@ -3,12 +3,16 @@
  * Mục đích: Định nghĩa REST API cho "Báo giá đại lý" (CRUD, thống kê),
  *   nhận/validate payload, và gọi service xử lý nghiệp vụ.
  */
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ValidationPipe, UseGuards } from '@nestjs/common';
 import { QuoteService } from './quote.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('quotes')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('quotes')
 export class QuoteController {
   constructor(private readonly quoteService: QuoteService) {}
 

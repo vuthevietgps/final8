@@ -1,18 +1,24 @@
-/**
+﻿/**
  * File: ad-group/ad-group.service.ts
- * Mục đích: Xử lý nghiệp vụ Nhóm Quảng Cáo (CRUD, filter).
+ * Má»¥c Ä‘Ã­ch: Xá»­ lÃ½ nghiá»‡p vá»¥ NhÃ³m Quáº£ng CÃ¡o (CRUD, filter).
  */
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery } from 'mongoose';
 import { AdGroup, AdGroupDocument } from './schemas/ad-group.schema';
 import { CreateAdGroupDto } from './dto/create-ad-group.dto';
 import { UpdateAdGroupDto } from './dto/update-ad-group.dto';
+import { AdvertisingCost, AdvertisingCostDocument } from '../advertising-cost/schemas/advertising-cost.schema';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
 
 @Injectable()
 export class AdGroupService {
+  private readonly logger = new Logger(AdGroupService.name);
+
   constructor(
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
+    @InjectModel(AdvertisingCost.name) private readonly advertisingCostModel: Model<AdvertisingCostDocument>,
+    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
   ) {}
 
   async create(dto: CreateAdGroupDto): Promise<AdGroup> {
@@ -25,7 +31,7 @@ export class AdGroupService {
     } catch (e: any) {
       // Mongo duplicate key error
       if (e?.code === 11000 && e?.keyPattern?.adGroupId) {
-        throw new BadRequestException('ID nhóm quảng cáo đã tồn tại. Vui lòng nhập ID khác.');
+        throw new BadRequestException('ID nhÃ³m quáº£ng cÃ¡o Ä‘Ã£ tá»“n táº¡i. Vui lÃ²ng nháº­p ID khÃ¡c.');
       }
       throw e;
     }
@@ -51,7 +57,7 @@ export class AdGroupService {
   }
 
   /**
-   * Tìm kiếm nhóm quảng cáo với bộ lọc + từ khóa (tên hoặc adGroupId)
+   * TÃ¬m kiáº¿m nhÃ³m quáº£ng cÃ¡o vá»›i bá»™ lá»c + tá»« khÃ³a (tÃªn hoáº·c adGroupId)
    */
   async search(query?: any): Promise<AdGroup[]> {
     const filter: FilterQuery<AdGroupDocument> = {};
@@ -90,13 +96,13 @@ export class AdGroupService {
       .populate('agentId', 'fullName name')
       .populate('adAccountId', 'name accountId')
       .exec();
-    if (!doc) throw new NotFoundException('Không tìm thấy nhóm quảng cáo');
+    if (!doc) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
     return doc;
   }
 
   /**
-   * Tìm Ad Group theo adGroupId và fanpageId (dùng cho webhook)
-   * Phục vụ AI chatbot khi nhận tin nhắn từ webhook
+   * TÃ¬m Ad Group theo adGroupId vÃ  fanpageId (dÃ¹ng cho webhook)
+   * Phá»¥c vá»¥ AI chatbot khi nháº­n tin nháº¯n tá»« webhook
    */
   async findByAdGroupIdAndFanpage(adGroupId: string, fanpageId: string): Promise<AdGroup | null> {
     return this.adGroupModel.findOne({ 
@@ -118,41 +124,97 @@ export class AdGroupService {
       .populate('agentId', 'fullName name')
       .populate('adAccountId', 'name accountId')
       .exec();
-    if (!updated) throw new NotFoundException('Không tìm thấy nhóm quảng cáo');
+    if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
     return updated;
   }
 
   async remove(id: string): Promise<void> {
-    const res = await this.adGroupModel.findByIdAndDelete(id).exec();
-    if (!res) throw new NotFoundException('Không tìm thấy nhóm quảng cáo');
+    const existing = await this.adGroupModel.findById(id).select('adGroupId').lean();
+    if (!existing) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
+
+    await this.adGroupModel.findByIdAndDelete(id).exec();
+
+    // Cascade cleanup vÃ¬ AdvertisingCost liÃªn káº¿t báº±ng adGroupId string.
+    if (existing.adGroupId) {
+      try {
+        const cleanup = await this.advertisingCostModel.deleteMany({ adGroupId: existing.adGroupId });
+        this.logger.log(`Deleted adGroup ${existing.adGroupId} and cleaned ${cleanup.deletedCount || 0} advertising cost records.`);
+      } catch (error: any) {
+        this.logger.warn(`AdGroup deleted but failed to cleanup AdvertisingCost for ${existing.adGroupId}: ${error?.message}`);
+      }
+    }
   }
 
   /**
    * Thống kê số lượng nhóm quảng cáo theo sản phẩm.
-   * Trả về mảng gồm { productId, active, inactive }
+   * Trả về mảng gồm { productId, productName, active, inactive }.
+   * productId is Product _id from products collection.
    */
-  async getCountsByProduct(): Promise<Array<{ productId: string; active: number; inactive: number }>> {
-    const rows = await this.adGroupModel.aggregate([
+  async getCountsByProduct(): Promise<Array<{ productId: string; productName: string; active: number; inactive: number }>> {
+    // Always use products collection as the source of truth for product list.
+    const rows = await this.productModel.aggregate([
       {
-        $group: {
-          _id: '$productCategoryId',
-          active: {
-            $sum: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] }
+        $lookup: {
+          from: this.adGroupModel.collection.name,
+          let: { productId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: [
+                    { $toString: '$$productId' },
+                    {
+                      $map: {
+                        input: { $ifNull: ['$selectedProducts', []] },
+                        as: 'selectedProductId',
+                        in: { $toString: '$$selectedProductId' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                active: {
+                  $sum: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] },
+                },
+                inactive: {
+                  $sum: { $cond: [{ $eq: ['$isActive', false] }, 1, 0] },
+                },
+              },
+            },
+          ],
+          as: 'adGroupStats',
+        },
+      },
+      {
+        $addFields: {
+          stats: {
+            $ifNull: [
+              { $arrayElemAt: ['$adGroupStats', 0] },
+              { active: 0, inactive: 0 },
+            ],
           },
-          inactive: {
-            $sum: { $cond: [{ $eq: ['$isActive', false] }, 1, 0] }
-          }
-        }
+        },
       },
       {
         $project: {
           _id: 0,
           productId: { $toString: '$_id' },
-          active: 1,
-          inactive: 1
-        }
-      }
+          productName: '$name',
+          active: { $ifNull: ['$stats.active', 0] },
+          inactive: { $ifNull: ['$stats.inactive', 0] },
+        },
+      },
+      {
+        $sort: { productName: 1 },
+      },
     ]).exec();
-    return rows as Array<{ productId: string; active: number; inactive: number }>;
+
+    return rows as Array<{ productId: string; productName: string; active: number; inactive: number }>;
   }
 }
+
+

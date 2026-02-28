@@ -179,12 +179,10 @@ export class AuthService {
   // Newly explicit permissions
   'customers', 'purchase-costs',
   'quotes', 'reports', 'export', 'import', 'settings',
-        'ads-budget', 'employee-ads-kpi', 'owner-fund'
+        'ads-budget', 'employee-ads-kpi', 'owner-fund', 'finance'
       ],
       'manager': [
-        'orders', // Đơn hàng
-        'pending-orders',
-        'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Quảng cáo + Media
+        'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Ads + media
         'fanpages', 'openai-configs', 'api-tokens', 'chat-messages',
         'ads-budget', 'employee-ads-kpi'
       ],

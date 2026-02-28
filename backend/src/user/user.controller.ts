@@ -81,6 +81,17 @@ export class UserController {
   }
 
   /**
+   * GET /users/agents-for-ads - Danh sách đại lý đang hoạt động cho màn Nhóm Quảng Cáo
+   * - Quyền: 'ad-groups' (manager/director dùng được ở UI quảng cáo mà không cần quyền orders)
+   * - Trả về: _id, fullName, email, role
+   */
+  @Get('agents-for-ads')
+  @RequirePermissions('ad-groups')
+  getActiveAgentsForAds() {
+    return this.userService.findActiveAgentsMinimal([UserRole.INTERNAL_AGENT, UserRole.EXTERNAL_AGENT]);
+  }
+
+  /**
    * GET /users/suppliers - Danh sách Nhà Cung Cấp (nội bộ/ngoài)
    * Query:
    *  - q: search theo tên/email/điện thoại/địa chỉ

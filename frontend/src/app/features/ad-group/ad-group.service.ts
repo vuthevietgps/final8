@@ -5,8 +5,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { AdGroup, CreateAdGroup, UpdateAdGroup, AdGroupRecommendation } from './models/ad-group.model';
 import { environment } from '../../../environments/environment';
+import { Product } from '../product/models/product.interface';
 
 @Injectable({ providedIn: 'root' })
 export class AdGroupService {
@@ -55,10 +57,17 @@ export class AdGroupService {
     return this.http.get<AdGroup[]>(`${this.apiUrl}/search`, { params, withCredentials: true });
   }
 
-  getCountsByProduct(): Observable<Array<{ productId: string; active: number; inactive: number }>> {
-    return this.http.get<Array<{ productId: string; active: number; inactive: number }>>(
-      `${this.apiUrl}/stats/counts-by-product`
+  getCountsByProduct(): Observable<Array<{ productId: string; productName: string; active: number; inactive: number }>> {
+    return this.http.get<Array<{ productId: string; productName: string; active: number; inactive: number }>>(
+      `${this.apiUrl}/stats/counts-by-product`,
+      { withCredentials: true }
     );
+  }
+
+  getProductsByCategory(categoryId: string): Observable<Product[]> {
+    return this.http
+      .get<{ success: boolean; data: Product[] }>(`${this.apiUrl}/products-by-category/${categoryId}`, { withCredentials: true })
+      .pipe(map(res => res?.data || []));
   }
 
   // ==========================================

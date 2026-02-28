@@ -864,7 +864,7 @@ export class EmployeeAdsKpiService {
     recommendation: 'increase' | 'maintain' | 'decrease' | 'pause';
     reason: string;
   } {
-    const MIN_START_BUDGET = 200_000; // 200k VND cho nhóm mới
+    const MIN_START_BUDGET = 60_000; // 60k VND cho nhóm mới (thống nhất với CFO Spec)
     const UPPER_CAP = 1.20; // Tăng tối đa 20%
     const LOWER_CAP = 0.70; // Giảm tối đa 30%
 

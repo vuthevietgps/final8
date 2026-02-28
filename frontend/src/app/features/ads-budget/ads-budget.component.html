@@ -6,7 +6,7 @@
       <p class="subtitle">Gợi ý chi phí hàng ngày và KPI nhóm có lãi</p>
     </div>
     <div class="header-right">
-      <button class="btn btn-secondary" (click)="activeTab() === 'suggestions' ? loadSuggestions() : loadKpiData()" [disabled]="isLoading() || kpiLoading()">
+      <button class="btn btn-secondary" (click)="refreshActiveTab()" [disabled]="isLoading() || kpiLoading() || emergencyLoading()">
         🔄 Làm mới
       </button>
     </div>
@@ -19,6 +19,9 @@
     </button>
     <button class="tab-btn" [class.active]="activeTab() === 'kpi'" (click)="switchTab('kpi')">
       📈 KPI Nhóm Có Lãi
+    </button>
+    <button class="tab-btn" [class.active]="activeTab() === 'emergency'" (click)="switchTab('emergency')">
+      🚨 Hành Động Khẩn Cấp
     </button>
   </div>
 
@@ -218,6 +221,297 @@
           <li><strong>⚠️ Cảnh Báo</strong>: Nhóm quảng cáo lỗ liên tiếp ≥3 ngày, cần xem xét tắt hoặc điều chỉnh</li>
           <li><strong>Hành Động</strong>: Đánh dấu khi đã điều chỉnh budget trên platform (reset mỗi ngày)</li>
         </ul>
+      </div>
+    }
+  }
+
+  <!-- ============================================= -->
+  <!-- TAB 3: HÀNH ĐỘNG KHẨN CẤP -->
+  <!-- ============================================= -->
+  @if (activeTab() === 'emergency') {
+    @if (emergencySummary(); as es) {
+      <div class="progress-section emergency-progress">
+        <div class="summary-cards">
+          <div class="summary-card">
+            <span class="label">Tổng việc</span>
+            <span class="value">{{ es.total }}</span>
+          </div>
+          <div class="summary-card">
+            <span class="label">Đã xử lý</span>
+            <span class="value good">{{ es.done }}</span>
+          </div>
+          <div class="summary-card">
+            <span class="label">Còn tồn</span>
+            <span class="value">{{ es.pending }}</span>
+          </div>
+          <div class="summary-card alert">
+            <span class="label">Khẩn cấp</span>
+            <span class="value">{{ es.critical }}</span>
+          </div>
+          @if (overdueCount() > 0) {
+            <div class="summary-card overdue">
+              <span class="label">Quá hạn</span>
+              <span class="value overdue-blink">{{ overdueCount() }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (emergencyLoading()) {
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Đang tải checklist hành động khẩn cấp...</p>
+      </div>
+    }
+
+    @if (emergencyError()) {
+      <div class="error-container">
+        <p>{{ emergencyError() }}</p>
+        <button (click)="loadEmergencyActions()" class="btn btn-primary">Thử lại</button>
+      </div>
+    }
+
+    @if (!emergencyLoading() && !emergencyError()) {
+      <div class="emergency-intro">
+        <h3>Checklist công việc Ads trong ngày</h3>
+        <p>Làm theo thứ tự: <strong>Tạo mới</strong> -> <strong>Đổi chi phí</strong> -> <strong>Tắt nhóm</strong>.</p>
+      </div>
+
+      <div class="emergency-block funding-block">
+        <h4>0) Dự kiến tiền trong tổng tài khoản quảng cáo cần có để hệ thống hoạt động bình thường</h4>
+        <div class="funding-controls">
+          <div class="funding-control">
+            <label for="coverageDays">Số ngày dự phòng</label>
+            <input
+              id="coverageDays"
+              type="number"
+              min="1"
+              [ngModel]="emergencyCoverageDays()"
+              (ngModelChange)="setEmergencyCoverageDays($event)"
+            />
+          </div>
+          <div class="funding-control">
+            <label for="currentBalance">Tổng số dư hiện có trong tài khoản quảng cáo (VND)</label>
+            <input
+              id="currentBalance"
+              type="number"
+              min="0"
+              [ngModel]="emergencyCurrentBalance()"
+              (ngModelChange)="setEmergencyCurrentBalance($event)"
+            />
+          </div>
+        </div>
+
+        @if (emergencyFundingPlan(); as fp) {
+          <div class="summary-cards funding-summary">
+            <div class="summary-card">
+              <span class="label">Nhu cầu/ngày</span>
+              <span class="value">{{ formatCurrency(fp.requiredDaily) }}</span>
+            </div>
+            <div class="summary-card">
+              <span class="label">Tổng cần có ({{ fp.coverageDays }} ngày)</span>
+              <span class="value">{{ formatCurrency(fp.requiredTotal) }}</span>
+            </div>
+            <div class="summary-card">
+              <span class="label">Số dư hiện có</span>
+              <span class="value">{{ formatCurrency(fp.currentBalance) }}</span>
+            </div>
+            <div class="summary-card" [class.alert]="fp.shortage > 0">
+              <span class="label">Cần nạp thêm</span>
+              <span class="value">{{ formatCurrency(fp.shortage) }}</span>
+            </div>
+          </div>
+
+          <div class="funding-note" [class.ok]="fp.shortage === 0">
+            @if (fp.shortage > 0) {
+              ⚠️ Yêu cầu nạp tiền hôm nay: Nạp thêm <strong>{{ formatCurrency(fp.shortage) }}</strong> vào tổng tài khoản quảng cáo để đảm bảo chạy ổn định {{ fp.coverageDays }} ngày.
+            } @else {
+              ✅ Tổng số dư hiện tại đã đủ cho vận hành bình thường {{ fp.coverageDays }} ngày.
+            }
+          </div>
+
+          <div class="table-container" *ngIf="fp.byPlatform.length > 0">
+            <table class="emergency-table">
+              <thead>
+                <tr>
+                  <th>Nền tảng</th>
+                  <th class="number">Nhu cầu/ngày</th>
+                  <th class="number">Nhu cầu/{{ fp.coverageDays }} ngày</th>
+                  <th class="number">Tỷ trọng</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of fp.byPlatform; track item.platform) {
+                  <tr>
+                    <td>{{ getPlatformIcon(item.platform) }} {{ item.platform | uppercase }}</td>
+                    <td class="number">{{ formatCurrency(item.requiredDaily) }}</td>
+                    <td class="number">{{ formatCurrency(item.requiredTotal) }}</td>
+                    <td class="number">{{ formatPercent(item.sharePercent) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+      <div class="emergency-block">
+        <h4>1) Tạo mới tài khoản quảng cáo, nhóm quảng cáo trên nền tảng ... cho sản phẩm ...</h4>
+        <div class="table-container">
+          <table class="emergency-table">
+            <thead>
+              <tr>
+                <th>Ưu tiên</th>
+                <th>Việc cần làm</th>
+                <th>Lý do</th>
+                <th>Deadline</th>
+                <th>Trạng thái</th>
+                <th>Xác minh</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (task of creationTasks(); track task.id) {
+                <tr [class.done-row]="task.done" [class.overdue-row]="isTaskOverdue(task)">
+                  <td>
+                    <span class="priority-badge" [ngClass]="getPriorityClass(task.priority)">
+                      {{ getPriorityLabel(task.priority) }}
+                    </span>
+                    @if (isTaskOverdue(task)) {
+                      <span class="overdue-badge">QUÁ HẠN</span>
+                    }
+                  </td>
+                  <td><strong>{{ task.actionText }}</strong></td>
+                  <td>{{ task.reason }}</td>
+                  <td>{{ task.deadline }}</td>
+                  <td class="action-cell">
+                    <button class="action-btn" [class.done]="task.done" (click)="toggleEmergencyTaskDone(task.id)">
+                      @if (task.done) { ✅ Đã xong } @else { ⏳ Chưa xong }
+                    </button>
+                    @if (task.doneByName) {
+                      <div class="done-by">{{ task.doneByName }}</div>
+                    }
+                  </td>
+                  <td class="verification-cell" [ngClass]="getVerificationClass(task.verificationStatus)">
+                    <span>{{ getVerificationIcon(task.verificationStatus) }} {{ getVerificationLabel(task.verificationStatus) }}</span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="6" class="empty-message">Không có việc tạo mới trong ngày.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="emergency-block">
+        <h4>2) Thay đổi chi phí các nhóm quảng cáo dưới đây thành ...</h4>
+        <div class="table-container">
+          <table class="emergency-table">
+            <thead>
+              <tr>
+                <th>Ưu tiên</th>
+                <th>Nhóm QC</th>
+                <th>Chi hiện tại</th>
+                <th>Chi cần đặt</th>
+                <th>Lý do</th>
+                <th>Trạng thái</th>
+                <th>Xác minh</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (task of budgetAdjustmentTasks(); track task.id) {
+                <tr [class.done-row]="task.done" [class.overdue-row]="isTaskOverdue(task)">
+                  <td>
+                    <span class="priority-badge" [ngClass]="getPriorityClass(task.priority)">
+                      {{ getPriorityLabel(task.priority) }}
+                    </span>
+                    @if (isTaskOverdue(task)) {
+                      <span class="overdue-badge">QUÁ HẠN</span>
+                    }
+                  </td>
+                  <td>
+                    <strong>{{ task.adGroupName }}</strong>
+                    <div class="sub-text">{{ task.adGroupId }}</div>
+                  </td>
+                  <td class="number">{{ formatCurrency(task.currentSpend) }}</td>
+                  <td class="number"><strong>{{ formatCurrency(task.targetSpend) }}</strong></td>
+                  <td>{{ task.reason }}</td>
+                  <td class="action-cell">
+                    <button class="action-btn" [class.done]="task.done" (click)="toggleEmergencyTaskDone(task.id)">
+                      @if (task.done) { ✅ Đã xong } @else { ⏳ Chưa xong }
+                    </button>
+                    @if (task.doneByName) {
+                      <div class="done-by">{{ task.doneByName }}</div>
+                    }
+                  </td>
+                  <td class="verification-cell" [ngClass]="getVerificationClass(task.verificationStatus)">
+                    <span>{{ getVerificationIcon(task.verificationStatus) }} {{ getVerificationLabel(task.verificationStatus) }}</span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="empty-message">Không có nhóm cần đổi chi phí.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="emergency-block">
+        <h4>3) Tắt các nhóm quảng cáo ... Vì ...</h4>
+        <div class="table-container">
+          <table class="emergency-table">
+            <thead>
+              <tr>
+                <th>Ưu tiên</th>
+                <th>Nhóm cần tắt</th>
+                <th>Lý do tắt</th>
+                <th>Deadline</th>
+                <th>Trạng thái</th>
+                <th>Xác minh</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (task of pauseTasks(); track task.id) {
+                <tr [class.done-row]="task.done" [class.overdue-row]="isTaskOverdue(task)">
+                  <td>
+                    <span class="priority-badge" [ngClass]="getPriorityClass(task.priority)">
+                      {{ getPriorityLabel(task.priority) }}
+                    </span>
+                    @if (isTaskOverdue(task)) {
+                      <span class="overdue-badge">QUÁ HẠN</span>
+                    }
+                  </td>
+                  <td>
+                    <strong>{{ task.adGroupName }}</strong>
+                    <div class="sub-text">{{ task.adGroupId }}</div>
+                  </td>
+                  <td>{{ task.reason }}</td>
+                  <td>{{ task.deadline }}</td>
+                  <td class="action-cell">
+                    <button class="action-btn" [class.done]="task.done" (click)="toggleEmergencyTaskDone(task.id)">
+                      @if (task.done) { ✅ Đã xong } @else { ⏳ Chưa xong }
+                    </button>
+                    @if (task.doneByName) {
+                      <div class="done-by">{{ task.doneByName }}</div>
+                    }
+                  </td>
+                  <td class="verification-cell" [ngClass]="getVerificationClass(task.verificationStatus)">
+                    <span>{{ getVerificationIcon(task.verificationStatus) }} {{ getVerificationLabel(task.verificationStatus) }}</span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="6" class="empty-message">Không có nhóm nào cần tắt ngay.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       </div>
     }
   }

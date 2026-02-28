@@ -13,7 +13,7 @@
  */
 
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MulterModule } from '@nestjs/platform-express';
@@ -65,6 +65,7 @@ import { EmployeeAdsKpiModule } from './employee-ads-kpi/employee-ads-kpi.module
 import { AdsAlertsModule } from './ads-alerts/ads-alerts.module';
 import { CashflowControlModule } from './cashflow-control/cashflow-control.module';
 import { OwnerFundModule } from './owner-fund/owner-fund.module';
+import { EmergencyActionModule } from './emergency-action/emergency-action.module';
 
 @Module({
   imports: [
@@ -93,13 +94,23 @@ import { OwnerFundModule } from './owner-fund/owner-fund.module';
     }),
 
     // Kết nối MongoDB (ưu tiên MONGODB_URI từ môi trường; fallback atlas smarterp-dev)
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev', {
-      connectionFactory: (connection) => {
-        connection.on('connected', () => {
-          console.log('MongoDB connected with UTF-8 support');
-        });
-        return connection;
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => {
+        const uri = configService.get<string>('MONGODB_URI') ||
+          'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+        console.log('MongoDB connecting to:', uri.replace(/\/\/[^:]+:[^@]+@/, '//<credentials>@'));
+        return {
+          uri,
+          connectionFactory: (connection) => {
+            connection.on('connected', () => {
+              console.log('MongoDB connected with UTF-8 support');
+            });
+            return connection;
+          },
+        };
       },
+      inject: [ConfigService],
     }),
 
     // Import AuthModule để sử dụng JWT authentication
@@ -188,6 +199,8 @@ import { OwnerFundModule } from './owner-fund/owner-fund.module';
     CashflowControlModule,
     // Module Owner Fund Management (Quản lý Quỹ Owner & Phiếu Rút Tiền)
     OwnerFundModule,
+    // Module Emergency Action Logs (trạng thái task khẩn cấp Ads, verification, cảnh báo quá hạn)
+    EmergencyActionModule,
   ],
   controllers: [], // Không có controllers ở level app, chỉ có ở modules con
   providers: [],   // Không có providers chung ở level app

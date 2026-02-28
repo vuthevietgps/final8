@@ -4,12 +4,14 @@
  */
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { AdAccountService } from './ad-account.service';
 import { CreateAdAccountDto } from './dto/create-ad-account.dto';
 import { UpdateAdAccountDto } from './dto/update-ad-account.dto';
 
 @Controller('ad-accounts')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('ad-accounts')
 export class AdAccountController {
   constructor(private readonly adAccountService: AdAccountService) {}
 

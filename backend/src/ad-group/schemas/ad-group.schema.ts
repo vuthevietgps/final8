@@ -21,7 +21,7 @@ export class AdGroup {
   fanpageId: Types.ObjectId; // Tham chiếu fanpage
 
   @Prop({ type: Types.ObjectId, ref: 'ProductCategory', required: true, index: true })
-  productCategoryId: Types.ObjectId; // Tham chiếu nhóm sản phẩm
+  productCategoryId: Types.ObjectId; // Tham chiếu danh mục sản phẩm
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Product' }], default: [] })
   selectedProducts: Types.ObjectId[]; // Danh sách sản phẩm được chọn

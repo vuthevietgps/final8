@@ -21,6 +21,7 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -29,6 +30,7 @@ import { FileUploadService } from './file-upload.service';
 
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('products')
 export class ProductController {
   constructor(
     private readonly productService: ProductService,

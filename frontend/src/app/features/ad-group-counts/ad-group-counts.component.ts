@@ -5,7 +5,6 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ProductService } from '../product/product.service';
 import { AdGroupService } from '../ad-group/ad-group.service';
 
 interface Row {
@@ -33,7 +32,6 @@ export class AdGroupCountsComponent implements OnInit {
   totalProducts = computed(() => this.rows().length);
 
   constructor(
-    private productService: ProductService,
     private adGroupService: AdGroupService,
   ) {}
 
@@ -43,27 +41,22 @@ export class AdGroupCountsComponent implements OnInit {
 
   load(): void {
     this.isLoading.set(true);
-    // Fetch products and counts in parallel
-    this.productService.getAll().subscribe({
-      next: (products) => {
-        this.adGroupService.getCountsByProduct().subscribe({
-          next: (counts) => {
-            const map: Record<string, { active: number; inactive: number }> = {};
-            for (const c of counts || []) map[c.productId] = { active: c.active, inactive: c.inactive };
-            const rows: Row[] = (products || []).map((p: any) => ({
-              productId: p._id,
-              productName: p.name,
-              active: map[p._id]?.active || 0,
-              inactive: map[p._id]?.inactive || 0,
-              standardQuantity: 9, // Default standard quantity
-            }));
-            this.rows.set(rows);
-            this.isLoading.set(false);
-          },
-          error: () => { this.rows.set([]); this.isLoading.set(false); }
-        });
+    this.adGroupService.getCountsByProduct().subscribe({
+      next: (counts) => {
+        const rows: Row[] = (counts || []).map((c: any) => ({
+          productId: c.productId,
+          productName: (c.productName || '').trim() || 'Không xác định',
+          active: Number(c.active || 0),
+          inactive: Number(c.inactive || 0),
+          standardQuantity: 9,
+        }));
+        this.rows.set(rows);
+        this.isLoading.set(false);
       },
-      error: () => { this.rows.set([]); this.isLoading.set(false); }
+      error: () => {
+        this.rows.set([]);
+        this.isLoading.set(false);
+      }
     });
   }
 

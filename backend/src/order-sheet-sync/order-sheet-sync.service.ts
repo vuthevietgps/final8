@@ -84,8 +84,9 @@ export class OrderSheetSyncService {
       }
 
       // 2. Lấy đơn hàng của agent
+      const agentIdFilter = this.buildIdFilter('agentId', agentId);
       const orders = await this.orderModel
-        .find({ agentId, isActive: { $ne: false } })
+        .find({ ...agentIdFilter, isActive: { $ne: false } })
         .sort({ orderDate: -1 })
         .populate('productId')
         .lean();
@@ -128,8 +129,9 @@ export class OrderSheetSyncService {
       }
 
       // 2. Lấy đơn hàng của supplier
+      const supplierIdFilter = this.buildIdFilter('supplierId', supplierId);
       const orders = await this.orderModel
-        .find({ supplierId, isActive: { $ne: false } })
+        .find({ ...supplierIdFilter, isActive: { $ne: false } })
         .sort({ orderDate: -1 })
         .populate('productId')
         .lean();
@@ -300,7 +302,58 @@ export class OrderSheetSyncService {
   // Debounce maps để tránh sync quá nhiều lần
   private agentSyncTimers = new Map<string, NodeJS.Timeout>();
   private supplierSyncTimers = new Map<string, NodeJS.Timeout>();
-  private readonly DEBOUNCE_MS = 5000; // 5 giây
+  private readonly DEBOUNCE_MS = 30_000; // 30 giây - tránh vượt quota Google API
+
+  // Global rate limiter: tối đa 5 sync đồng thời
+  private readonly MAX_CONCURRENT_SYNCS = 5;
+  private activeSyncCount = 0;
+  private syncQueue: Array<() => Promise<void>> = [];
+
+  /** Chạy sync task qua rate limiter, nếu đầy thì xếp hàng chờ */
+  private async runWithRateLimit(task: () => Promise<void>): Promise<void> {
+    if (this.activeSyncCount >= this.MAX_CONCURRENT_SYNCS) {
+      // Xếp hàng chờ, không bỏ qua
+      return new Promise<void>((resolve, reject) => {
+        this.syncQueue.push(async () => {
+          try { await task(); resolve(); } catch (e) { reject(e); }
+        });
+      });
+    }
+
+    this.activeSyncCount++;
+    try {
+      await task();
+    } finally {
+      this.activeSyncCount--;
+      // Chạy task tiếp theo trong queue (nếu có)
+      if (this.syncQueue.length > 0) {
+        const next = this.syncQueue.shift()!;
+        this.runWithRateLimit(next).catch(err => {
+          this.logger.error(`Queued sync failed: ${err.message}`);
+        });
+      }
+    }
+  }
+
+  // Cache googleDriveLink để tránh query DB mỗi lần trigger
+  private userLinkCache = new Map<string, { link: string | null; expiry: number }>();
+  private readonly CACHE_TTL_MS = 60_000; // 1 phút
+
+  /** Kiểm tra nhanh user có googleDriveLink không (có cache) */
+  private async hasGoogleDriveLink(userId: string): Promise<boolean> {
+    const cached = this.userLinkCache.get(userId);
+    if (cached && cached.expiry > Date.now()) {
+      return !!cached.link;
+    }
+
+    const user = await this.userModel
+      .findById(userId)
+      .select('googleDriveLink')
+      .lean();
+    const link = user?.googleDriveLink || null;
+    this.userLinkCache.set(userId, { link, expiry: Date.now() + this.CACHE_TTL_MS });
+    return !!link;
+  }
 
   private scheduleSyncAgent(agentId: string) {
     // Clear existing timer if any
@@ -312,11 +365,18 @@ export class OrderSheetSyncService {
     // Schedule new sync after debounce period
     const timer = setTimeout(async () => {
       this.agentSyncTimers.delete(agentId);
-      try {
-        await this.syncAgentOrders(agentId);
-      } catch (error) {
-        this.logger.error(`Failed to sync agent ${agentId}: ${error.message}`);
-      }
+
+      // Kiểm tra googleDriveLink trước khi sync (tránh query + API call thừa)
+      const hasLink = await this.hasGoogleDriveLink(agentId);
+      if (!hasLink) return;
+
+      await this.runWithRateLimit(async () => {
+        try {
+          await this.syncAgentOrders(agentId);
+        } catch (error) {
+          this.logger.error(`Failed to sync agent ${agentId}: ${error.message}`);
+        }
+      });
     }, this.DEBOUNCE_MS);
 
     this.agentSyncTimers.set(agentId, timer);
@@ -332,11 +392,18 @@ export class OrderSheetSyncService {
     // Schedule new sync after debounce period
     const timer = setTimeout(async () => {
       this.supplierSyncTimers.delete(supplierId);
-      try {
-        await this.syncSupplierOrders(supplierId);
-      } catch (error) {
-        this.logger.error(`Failed to sync supplier ${supplierId}: ${error.message}`);
-      }
+
+      // Kiểm tra googleDriveLink trước khi sync (tránh query + API call thừa)
+      const hasLink = await this.hasGoogleDriveLink(supplierId);
+      if (!hasLink) return;
+
+      await this.runWithRateLimit(async () => {
+        try {
+          await this.syncSupplierOrders(supplierId);
+        } catch (error) {
+          this.logger.error(`Failed to sync supplier ${supplierId}: ${error.message}`);
+        }
+      });
     }, this.DEBOUNCE_MS);
 
     this.supplierSyncTimers.set(supplierId, timer);
@@ -366,7 +433,7 @@ export class OrderSheetSyncService {
         codAmount: order.codAmount || 0,
         shippingFee: order.shippingFee || 0,
         returnFee: order.returnFee || 0,
-        approvedQuotePrice: order.approvedQuotePrice || order.quotePrice || 0,
+        approvedQuotePrice: order.agentAppliedPrice || order.agentQuote || 0,
         agentPaymentStatus: order.agentPaymentStatus || 'n/a',
         agentPaymentBatchId: order.agentPaymentBatchId || '',
       };
@@ -394,7 +461,7 @@ export class OrderSheetSyncService {
         submitLink: order.submitLink || '',
         depositAmount: order.depositAmount || 0,
         codAmount: order.codAmount || 0,
-        approvedSupplierQuote: order.approvedSupplierQuote || order.supplierQuote || 0,
+        approvedSupplierQuote: order.supplierAppliedPrice || order.supplierQuote || 0,
         supplierPaymentStatus: order.supplierPaymentStatus || 'pending',
         supplierPaymentBatchId: order.supplierPaymentBatchId || '',
       };
@@ -584,6 +651,29 @@ export class OrderSheetSyncService {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * Build robust ID filter for data migrated across different BSON types.
+   * Some legacy records may store IDs as strings, while current schema uses ObjectId.
+   */
+  private buildIdFilter(field: 'agentId' | 'supplierId', id: string): Record<string, any> {
+    const normalized = String(id || '').trim();
+    if (!normalized) {
+      return { [field]: normalized };
+    }
+
+    if (!Types.ObjectId.isValid(normalized)) {
+      return { [field]: normalized };
+    }
+
+    const objectId = new Types.ObjectId(normalized);
+    return {
+      $or: [
+        { [field]: objectId },
+        { [field]: normalized },
+      ],
+    };
   }
 
   // ============================================

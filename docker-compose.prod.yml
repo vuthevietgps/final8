@@ -1,0 +1,62 @@
+services:
+  backend:
+    image: vutheviet/final8new:backend-${VERSION:-version16}
+    container_name: htxbachgia-shop-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:-smarterp_dev_secret_key_change_in_prod}
+      MONGODB_URI: ${MONGODB_URI:-mongodb+srv://dinhvigps07:NFHQx8go5hl9U45L@smarterp-dev.khsfdta.mongodb.net/management-system?appName=smarterp-dev}
+      BACKEND_ROOT: /app
+      MEDIA_DIR: /app/uploads/media
+      MEDIA_PUBLIC_BASE: /media
+      FB_SENDING_ENABLED: "${FB_SENDING_ENABLED:-1}"
+      AI_FB_SENDING_ENABLED: "${AI_FB_SENDING_ENABLED:-1}"
+      AI_FB_DELIVERY_RECOVERY_ENABLED: "${AI_FB_DELIVERY_RECOVERY_ENABLED:-1}"
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-https://htxbachgia.shop}"
+      MEDIA_ABSOLUTE_BASE: "${MEDIA_ABSOLUTE_BASE:-https://htxbachgia.shop}"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./media:/app/uploads/media
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - htxbachgia-net
+
+  frontend:
+    image: vutheviet/final8new:frontend-${VERSION:-version16}
+    container_name: htxbachgia-shop-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${PORT:-8090}:80"
+    volumes:
+      - ./media:/var/www/media:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - htxbachgia-net
+
+networks:
+  htxbachgia-net:
+    driver: bridge

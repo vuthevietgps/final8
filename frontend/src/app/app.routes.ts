@@ -20,6 +20,7 @@ export const routes: Routes = [
   {
     path: 'loans',
     canActivate: [AuthGuard],
+    data: { permissions: ['finance'] },
     // Tạm thời mở cho tất cả; sẽ phân quyền sau
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -32,6 +33,7 @@ export const routes: Routes = [
   {
     path: 'finance',
     canActivate: [AuthGuard],
+    data: { permissions: ['finance'] },
     children: [
       { path: 'financial-control', loadComponent: () => import('./features/finance/financial-control/financial-control.component').then(m => m.FinancialControlComponent) },
       { path: 'available-funds', loadComponent: () => import('./features/finance/available-funds.component').then(m => m.AvailableFundsComponent) },

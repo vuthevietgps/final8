@@ -1,4 +1,4 @@
-﻿/**
+/**
  * File: advertising-cost/advertising-cost.service.ts
  * Má»¥c Ä‘Ã­ch: Xá»­ lÃ½ nghiá»‡p vá»¥ CRUD cho Chi PhÃ­ Quáº£ng CÃ¡o.
  */
@@ -190,32 +190,31 @@ export class AdvertisingCostService {
   async getYesterdaySpentByAdGroups(): Promise<{ [adGroupId: string]: number }> {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
-    
-    const endOfYesterday = new Date(yesterday);
-    endOfYesterday.setHours(23, 59, 59, 999);
+    const startOfYesterday = this.toUtcStartOfDay(yesterday);
+    const endOfYesterday = new Date(startOfYesterday);
+    endOfYesterday.setUTCDate(endOfYesterday.getUTCDate() + 1);
 
-    console.log(`Querying advertising costs for yesterday: ${yesterday.toISOString()} to ${endOfYesterday.toISOString()}`);
+    this.logger.debug(`Querying advertising costs for yesterday UTC: ${startOfYesterday.toISOString()} to ${endOfYesterday.toISOString()}`);
 
     const results = await this.model
       .find({
         date: {
-          $gte: yesterday,
-          $lte: endOfYesterday
+          $gte: startOfYesterday,
+          $lt: endOfYesterday,
         }
       })
       .select('adGroupId spentAmount date')
       .lean()
       .exec();
 
-    console.log(`Found ${results.length} advertising cost records for yesterday`);
+    this.logger.debug(`Found ${results.length} advertising cost records for yesterday`);
 
     // Convert to map for easy lookup - default 0 if no data
     const spentMap: { [adGroupId: string]: number } = {};
     results.forEach(result => {
       const spentAmount = result.spentAmount || 0;
       spentMap[result.adGroupId] = spentAmount;
-      console.log(`AdGroup ${result.adGroupId}: spent ${spentAmount} on ${result.date}`);
+      this.logger.debug(`AdGroup ${result.adGroupId}: spent ${spentAmount} on ${result.date}`);
     });
 
     return spentMap;
@@ -293,11 +292,12 @@ export class AdvertisingCostService {
     // Chuáº©n hoÃ¡ má»‘c ngÃ y
     const day = new Date(date);
     if (isNaN(day.getTime())) throw new BadRequestException('NgÃ y khÃ´ng há»£p lá»‡');
-    const start = new Date(day); start.setHours(0,0,0,0);
-    const end = new Date(day); end.setHours(23,59,59,999);
+    const start = this.toUtcStartOfDay(day);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
 
     // 1) Láº¥y chi phÃ­ Ä‘Ã£ chi trong ngÃ y tá»« AdvertisingCost
-    const costDoc = await this.model.findOne({ adGroupId, date: { $gte: start, $lte: end } }).select('spentAmount').lean();
+    const costDoc = await this.model.findOne({ adGroupId, date: { $gte: start, $lt: end } }).select('spentAmount').lean();
     const spentAmount = Number(costDoc?.spentAmount || 0);
 
     // 2) Äáº¿m sá»‘ cuá»™c há»™i thoáº¡i báº¯t Ä‘áº§u trong ngÃ y (first inbound) cho adGroupId
@@ -309,7 +309,7 @@ export class AdvertisingCostService {
           firstIn: { $min: '$createdAt' },
         },
       },
-      { $match: { firstIn: { $gte: start, $lte: end } } },
+      { $match: { firstIn: { $gte: start, $lt: end } } },
       { $count: 'total' },
     ]);
     const conversationCount = Number(firstInbound?.[0]?.total || 0);
@@ -645,7 +645,7 @@ export class AdvertisingCostService {
     }));
 
     // Spend theo ad group (cho cap 20%) - thÃªm platform
-    const minStartBudget = 200000; // 200k VND
+    const minStartBudget = 60000; // 60k VND (thống nhất với CFO Spec)
     const spendByAdGroupAgg = await this.model.aggregate([
       { $match: { date: { $gte: this.toUtcStartOfDay(threeDaysAgo) } } },
       {

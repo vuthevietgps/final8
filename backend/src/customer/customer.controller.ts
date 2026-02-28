@@ -18,7 +18,7 @@ import {
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto, UpdateCustomerDto } from './dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
-import { Roles } from '../auth/decorators/auth.decorator';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -29,7 +29,7 @@ export class CustomerController {
    * Đồng bộ khách hàng từ TestOrder2
    */
   @Post('sync')
-  @Roles('customers')
+  @RequirePermissions('customers')
   @HttpCode(HttpStatus.OK)
   async syncFromOrders() {
     await this.customerService.syncCustomersFromOrders();
@@ -43,7 +43,7 @@ export class CustomerController {
    * Cập nhật thời gian còn lại cho tất cả khách hàng
    */
   @Post('update-remaining-days')
-  @Roles('customers')
+  @RequirePermissions('customers')
   @HttpCode(HttpStatus.OK)
   async updateRemainingDays() {
     await this.customerService.updateRemainingDays();
@@ -57,7 +57,7 @@ export class CustomerController {
    * Lấy thống kê khách hàng
    */
   @Get('stats')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async getStats() {
     return this.customerService.getStats();
   }
@@ -66,7 +66,7 @@ export class CustomerController {
    * Lấy danh sách khách hàng
    */
   @Get()
-  @Roles('customers')
+  @RequirePermissions('customers')
   async findAll(@Query() query: any) {
     return this.customerService.findAll(query);
   }
@@ -75,7 +75,7 @@ export class CustomerController {
    * Lấy khách hàng theo ID
    */
   @Get(':id')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async findOne(@Param('id') id: string) {
     return this.customerService.findOne(id);
   }
@@ -84,7 +84,7 @@ export class CustomerController {
    * Vô hiệu hóa khách hàng
    */
   @Patch(':id/disable')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async disable(@Param('id') id: string) {
     return this.customerService.disable(id);
   }
@@ -93,7 +93,7 @@ export class CustomerController {
    * Kích hoạt lại khách hàng
    */
   @Patch(':id/enable')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async enable(@Param('id') id: string) {
     return this.customerService.enable(id);
   }
@@ -102,7 +102,7 @@ export class CustomerController {
    * Cập nhật thông tin khách hàng
    */
   @Patch(':id')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async update(@Param('id') id: string, @Body() updateCustomerDto: UpdateCustomerDto) {
     return this.customerService.update(id, updateCustomerDto);
   }
@@ -111,7 +111,7 @@ export class CustomerController {
    * Xóa khách hàng
    */
   @Delete(':id')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async remove(@Param('id') id: string) {
     await this.customerService.remove(id);
     return {
@@ -127,7 +127,7 @@ export class CustomerController {
    * Cho nhân viên CSKH sử dụng
    */
   @Get('notifications/expiring')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async getExpiryNotifications(@Query('days') days?: string) {
     const daysThreshold = days ? parseInt(days, 10) : 10;
     return this.customerService.getExpiryNotificationSchedule(daysThreshold);
@@ -138,7 +138,7 @@ export class CustomerController {
    * Hiển thị KH hết hạn mỗi ngày trong 7 ngày tới
    */
   @Get('notifications/calendar')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async getWeeklyCalendar() {
     return this.customerService.getWeeklyNotificationCalendar();
   }
@@ -148,7 +148,7 @@ export class CustomerController {
    * Format phù hợp để in hoặc export
    */
   @Get('notifications/export')
-  @Roles('customers')
+  @RequirePermissions('customers')
   async exportContacts(@Query('days') days?: string) {
     const daysThreshold = days ? parseInt(days, 10) : 10;
     return this.customerService.exportContactList(daysThreshold);

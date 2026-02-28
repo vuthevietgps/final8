@@ -1,9 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdReportService } from './ad-report.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('ad-report')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('ad-groups')
 export class AdReportController {
   constructor(private readonly service: AdReportService) {}
 

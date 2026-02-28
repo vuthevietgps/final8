@@ -7,7 +7,6 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { AdGroupService } from './ad-group.service';
 import { AdGroup, CreateAdGroup, AdPlatform, AdGroupRecommendation } from './models/ad-group.model';
-import { ProductService } from '../product/product.service';
 import { FanpageService } from '../fanpage/fanpage.service';
 import { ProductCategoryService } from '../product-category/product-category.service';
 import { UserService } from '../user/user.service';
@@ -43,7 +42,6 @@ interface ProductCategory {
 })
 export class AdGroupComponent implements OnInit {
   private adGroupService = inject(AdGroupService);
-  private productService = inject(ProductService);
   private userService = inject(UserService);
   private adAccountService = inject(AdAccountService);
   private fanpageService = inject(FanpageService);
@@ -220,7 +218,7 @@ export class AdGroupComponent implements OnInit {
 
   private async loadProductCategories(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.productCategoryService.getAll().subscribe({
+      this.productCategoryService.getActiveCategories().subscribe({
         next: (cats) => { this.productCategories.set(cats as any); resolve(); },
         error: reject
       });
@@ -229,7 +227,7 @@ export class AdGroupComponent implements OnInit {
 
   private async loadAgents(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.userService.getAgents().subscribe({
+      this.userService.getAgentsForAds().subscribe({
         next: (agents) => { this.users.set(agents as any); resolve(); },
         error: reject
       });
@@ -263,16 +261,17 @@ export class AdGroupComponent implements OnInit {
   editItem(group: AdGroup): void {
     this.isEditing.set(true);
     this.editingId = group._id!;
+    const selectedCategoryId = this.extractId(group.productCategoryId);
     
     this.adGroupForm.patchValue({
       name: group.name,
       adGroupId: group.adGroupId,
-      fanpageId: group.fanpageId || '',
-      productCategoryId: group.productCategoryId || '',
-      agentId: (group as any).agentId || '',
-      adAccountId: (group as any).adAccountId || '',
+      fanpageId: this.extractId(group.fanpageId) || '',
+      productCategoryId: selectedCategoryId || '',
+      agentId: this.extractId((group as any).agentId) || '',
+      adAccountId: this.extractId((group as any).adAccountId) || '',
       platform: (group as any).platform || 'facebook',
-      selectedProducts: group.selectedProducts || [],
+      selectedProducts: (group.selectedProducts || []).map(p => this.extractId(p)).filter(Boolean),
       enableWebhook: group.enableWebhook || false,
       autoControlEnabled: group.autoControlEnabled || false,
       spendThresholdDaily: group.spendThresholdDaily || 0,
@@ -283,8 +282,8 @@ export class AdGroupComponent implements OnInit {
     });
 
     // Load products for selected category
-    if (group.productCategoryId) {
-      this.loadProductsByCategory(group.productCategoryId);
+    if (selectedCategoryId) {
+      this.loadProductsByCategory(selectedCategoryId);
     }
     
     this.showModal.set(true);
@@ -366,7 +365,7 @@ export class AdGroupComponent implements OnInit {
   }
 
   private loadProductsByCategory(categoryId: string): void {
-    this.productService.getByCategory(categoryId).subscribe({
+    this.adGroupService.getProductsByCategory(categoryId).subscribe({
       next: (products) => {
         this.availableProducts.set(products as any);
       },
@@ -398,15 +397,17 @@ export class AdGroupComponent implements OnInit {
   }
 
   // Utility methods
-  getFanpageName(fanpageId?: string): string {
-    if (!fanpageId) return 'Chưa chọn';
-    const fanpage = this.fanpages().find(f => f._id === fanpageId);
+  getFanpageName(fanpageId?: any): string {
+    const id = this.extractId(fanpageId);
+    if (!id) return 'Chưa chọn';
+    const fanpage = this.fanpages().find(f => f._id === id);
     return fanpage?.name || 'Không tìm thấy';
   }
 
-  getCategoryName(categoryId?: string): string {
-    if (!categoryId) return 'Chưa chọn';
-    const category = this.productCategories().find(c => c._id === categoryId);
+  getCategoryName(categoryId?: any): string {
+    const id = this.extractId(categoryId);
+    if (!id) return 'Chưa chọn';
+    const category = this.productCategories().find(c => c._id === id);
     return category?.name || 'Không tìm thấy';
   }
 
@@ -501,5 +502,15 @@ export class AdGroupComponent implements OnInit {
     if (!this.editingId) return null;
     const g = this.adGroups().find(x => x._id === this.editingId);
     return g?.autoPausedReason || null;
+  }
+
+  private extractId(value: any): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+      if (typeof value._id === 'string') return value._id;
+      if (typeof value.id === 'string') return value.id;
+    }
+    return '';
   }
 }

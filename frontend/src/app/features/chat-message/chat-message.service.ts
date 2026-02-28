@@ -43,6 +43,14 @@ export interface ConversationSummary {
 }
 
 export interface ConversationListResponse { items: ConversationSummary[]; total: number; page: number; limit: number; totalPages: number; }
+export interface ChatRealtimeEvent {
+  type: string;
+  fanpageId: string;
+  senderPsid: string;
+  direction: string;
+  snippet?: string;
+  createdAt?: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class ChatMessageService {
@@ -91,19 +99,22 @@ export class ChatMessageService {
   }
 
   // --- Realtime (SSE) notifications for new messages ---
-  connectEvents(onEvent: (e: { type: string; fanpageId: string; senderPsid: string; direction: string; snippet?: string; createdAt?: string; }) => void): EventSource | null {
+  connectEvents(
+    onEvent: (e: ChatRealtimeEvent) => void,
+    opts?: { onOpen?: () => void; onError?: (ev: Event) => void }
+  ): EventSource | null {
     try {
       const token = localStorage.getItem('access_token');
       const url = new URL(`${this.baseUrl}/events`);
       // For EventSource, add token as query param (Auth interceptor doesn't apply)
       if (token) url.searchParams.set('access_token', token);
       const es = new EventSource(url.toString());
+      es.onopen = () => { try { opts?.onOpen?.(); } catch {} };
       es.onmessage = (ev) => {
         try { const data = JSON.parse(ev.data); onEvent(data); } catch {}
       };
-      es.onerror = () => {
-        // auto-close on error; caller may retry later
-        es.close();
+      es.onerror = (ev) => {
+        try { opts?.onError?.(ev); } catch {}
       };
       return es;
     } catch {

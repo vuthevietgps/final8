@@ -14,6 +14,8 @@ import { ApiTokenService } from '../api-token/api-token.service';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import axios from 'axios';
 
+const FB_GRAPH_API_VERSION = process.env.FB_GRAPH_API_VERSION || 'v19.0';
+
 @Injectable()
 export class AdGroupAutoControlService {
   private readonly logger = new Logger(AdGroupAutoControlService.name);
@@ -42,10 +44,10 @@ export class AdGroupAutoControlService {
     const start = Date.now();
   const todayISO = new Date().toISOString().slice(0,10);
   // Cập nhật nhanh chi phí hôm nay (partial) trước khi đánh giá
-  try { await this.facebookSync.syncForDate(todayISO); } catch(err){ this.logger.warn(`Quick sync today failed: ${(err as any)?.message}`); }
-    // Chỉ Facebook + đang hoạt động để tránh pause lại nhóm đã dừng
-    const groups = await this.adGroupModel.find({ autoControlEnabled: true, platform: 'facebook', isActive: true })
-      .select('_id adGroupId name spendThresholdDaily cprThresholdDaily minConversations fanpageId adAccountId')
+  try { await this.facebookSync.syncForDate(todayISO, { trackFailure: false }); } catch(err){ this.logger.warn(`Quick sync today failed: ${(err as any)?.message}`); }
+    // Kiểm tra tất cả platform đang hoạt động (FB/Google/TikTok)
+    const groups = await this.adGroupModel.find({ autoControlEnabled: true, isActive: true })
+      .select('_id adGroupId name platform spendThresholdDaily cprThresholdDaily minConversations fanpageId adAccountId')
       .lean();
     if (!groups.length) return;
 
@@ -69,10 +71,14 @@ export class AdGroupAutoControlService {
           await this.adGroupModel.updateOne({ _id: (g as any)._id }, { 
             $set: { isActive: false, lastAutoControlAt: new Date(), autoPausedReason: reason }
           });
-          // Thử pause trực tiếp adset trên Facebook nếu có token hợp lệ
-          try{
-            await this.pauseFacebookAdsetByAdAccount(adGroupId, (g as any).adAccountId);
-          } catch(err){ this.logger.warn(`Pause FB adset failed for ${adGroupId}: ${(err as any)?.message}`); }
+          // Facebook: thử pause trực tiếp qua API, nền tảng khác: chỉ pause nội bộ trong hệ thống.
+          if ((g as any).platform === 'facebook') {
+            try{
+              await this.pauseFacebookAdsetByAdAccount(adGroupId, (g as any).adAccountId);
+            } catch(err){ this.logger.warn(`Pause FB adset failed for ${adGroupId}: ${(err as any)?.message}`); }
+          } else {
+            this.logger.warn(`Auto-control paused ${adGroupId} on ${(g as any).platform} locally (remote pause chưa hỗ trợ).`);
+          }
           paused++;
         }
       }catch(err){
@@ -100,7 +106,7 @@ export class AdGroupAutoControlService {
 
     const raw = await this.apiTokenService.getRawAccessTokenForAdsManagement(actId);
     if (!raw) { this.logger.warn(`No valid Facebook ads token available${actId?` for ${actId}`:''}`); return; }
-    const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adsetId)}`;
+    const url = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/${encodeURIComponent(adsetId)}`;
     const params = { access_token: raw, status: 'PAUSED' } as any;
     try{
       const res = await axios.post(url, null, { params });

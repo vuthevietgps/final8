@@ -2,7 +2,7 @@
  * File: advertising-cost/advertising-cost.module.ts
  * Mục đích: Module NestJS cho Chi Phí Quảng Cáo.
  */
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MulterModule } from '@nestjs/platform-express';
 import { AdvertisingCost, AdvertisingCostSchema } from './schemas/advertising-cost.schema';
@@ -13,9 +13,9 @@ import { AdvertisingCostService } from './advertising-cost.service';
 import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-sync.service';
 import { AdvertisingCostGoogleSyncService } from './advertising-cost.google-sync.service';
 import { AdvertisingCostTiktokSyncService } from './advertising-cost.tiktok-sync.service';
+import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
 import { ApiToken, ApiTokenSchema } from '../api-token/schemas/api-token.schema';
 import { AdvertisingCostController } from './advertising-cost.controller';
-import { forwardRef } from '@nestjs/common';
 import { TestOrder2Module } from '../test-order2/test-order2.module';
 
 @Module({
@@ -33,7 +33,19 @@ import { TestOrder2Module } from '../test-order2/test-order2.module';
     forwardRef(() => TestOrder2Module), // Import to access TestOrder2Service
   ],
   controllers: [AdvertisingCostController],
-  providers: [AdvertisingCostService, AdvertisingCostFacebookSyncService, AdvertisingCostGoogleSyncService, AdvertisingCostTiktokSyncService],
-  exports: [AdvertisingCostService, AdvertisingCostFacebookSyncService, AdvertisingCostGoogleSyncService, AdvertisingCostTiktokSyncService] // Export service để dùng ở module khác
+  providers: [
+    AdvertisingCostService,
+    AdvertisingCostFacebookSyncService,
+    AdvertisingCostGoogleSyncService,
+    AdvertisingCostTiktokSyncService,
+    AdvertisingCostRecalculationQueueService,
+  ],
+  exports: [
+    AdvertisingCostService,
+    AdvertisingCostFacebookSyncService,
+    AdvertisingCostGoogleSyncService,
+    AdvertisingCostTiktokSyncService,
+    AdvertisingCostRecalculationQueueService,
+  ],
 })
 export class AdvertisingCostModule {}

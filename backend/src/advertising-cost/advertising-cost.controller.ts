@@ -1,6 +1,6 @@
 /**
  * File: advertising-cost/advertising-cost.controller.ts
- * Mục đích: Cung cấp REST API CRUD cho Chi Phí Quảng Cáo.
+ * Purpose: Expose REST APIs for advertising cost CRUD and sync.
  */
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -43,8 +43,8 @@ export class AdvertisingCostController {
 
   /**
    * GET /advertising-cost/summary/cashflow
-   * Tổng hợp chi phí Ads cho Financial Control (Cash Out)
-   * Bao gồm spend theo ngày và theo ad group với cap 20%
+   * Aggregate ads spend for Financial Control (cash-out view).
+   * Includes spend-by-day and spend-by-ad-group baselines.
    */
   @Get('summary/cashflow')
   @RequirePermissions('advertising-costs')
@@ -54,7 +54,7 @@ export class AdvertisingCostController {
 
   /**
    * GET /advertising-cost/stats/daily-summary
-   * Tổng hợp chi phí ads theo ngày cho Financial Control
+   * Aggregate daily advertising spend metrics.
    */
   @Get('stats/daily-summary')
   @RequirePermissions('advertising-costs')
@@ -112,7 +112,21 @@ export class AdvertisingCostController {
     return this.service.processFacebookExcelUpload(file);
   }
 
-  // Manual trigger: đồng bộ chi phí từ Facebook theo ngày hoặc khoảng N ngày
+  @Get('sync/health')
+  @RequirePermissions('advertising-costs')
+  async getSyncHealth() {
+    const [facebook, google, tiktok] = await Promise.all([
+      this.fbSync.getSyncHealth(),
+      this.ggSync.getSyncHealth(),
+      this.tkSync.getSyncHealth(),
+    ]);
+    return {
+      checkedAt: new Date().toISOString(),
+      platforms: { facebook, google, tiktok },
+    };
+  }
+
+  // Manual trigger: sync Facebook advertising costs by date or day range.
   @Post('fetch/facebook')
   @RequirePermissions('advertising-costs')
   async fetchFacebook(@Query('date') date?: string, @Query('days') days?: string) {
@@ -120,7 +134,7 @@ export class AdvertisingCostController {
     return this.fbSync.syncRange({ date, days: n });
   }
 
-  // Manual trigger: đồng bộ chi phí Google Ads theo ngày hoặc khoảng N ngày
+  // Manual trigger: sync Google Ads costs by date or day range.
   @Post('fetch/google')
   @RequirePermissions('advertising-costs')
   async fetchGoogle(
@@ -138,7 +152,7 @@ export class AdvertisingCostController {
     return this.ggSync.syncRange({ date, days: n, customerIds: ids });
   }
 
-  // Manual trigger: đồng bộ chi phí TikTok theo ngày hoặc khoảng N ngày
+  // Manual trigger: sync TikTok costs by date or day range.
   @Post('fetch/tiktok')
   @RequirePermissions('advertising-costs')
   async fetchTiktok(
@@ -156,7 +170,7 @@ export class AdvertisingCostController {
     return this.tkSync.syncRange({ date, days: n, advertiserIds: ids });
   }
 
-  // Manual trigger: đồng bộ theo DANH SÁCH tài khoản quảng cáo
+  // Manual trigger: sync by explicit ad account list.
   // Body: { accounts: string[]; date?: string; days?: number; cleanup?: boolean }
   @Post('fetch/facebook/by-accounts')
   @RequirePermissions('advertising-costs')
@@ -168,3 +182,4 @@ export class AdvertisingCostController {
     return this.fbSync.syncRangeByAdAccounts({ accounts, date, days, cleanup });
   }
 }
+

@@ -36,6 +36,156 @@ export class ChatMessageController {
     return (origin.replace(/\/$/, '') + url).replace(/\s/g, '');
   }
 
+  private guessMimeType(filename: string): string {
+    const name = String(filename || '').toLowerCase();
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.gif')) return 'image/gif';
+    if (name.endsWith('.webp')) return 'image/webp';
+    if (name.endsWith('.bmp')) return 'image/bmp';
+    if (name.endsWith('.heic')) return 'image/heic';
+    if (name.endsWith('.heif')) return 'image/heif';
+    return 'image/jpeg';
+  }
+
+  private async isWithin24hWindow(fanpageId: string, senderPsid: string): Promise<boolean> {
+    const convData = await this.service.getConversation(fanpageId, senderPsid).catch(()=> null as any);
+    const latestInbound = convData?.messages?.find((m: any) => m?.direction === 'in');
+    const lastInboundAtMs = latestInbound
+      ? new Date((latestInbound as any).createdAt || (latestInbound as any).receivedAt || Date.now()).getTime()
+      : 0;
+    return lastInboundAtMs > 0 ? (Date.now() - lastInboundAtMs) < (24 * 60 * 60 * 1000) : false;
+  }
+
+  private async sendFacebookImageByUrl(accessToken: string, senderPsid: string, imageUrl: string): Promise<any> {
+    const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${encodeURIComponent(accessToken)}`;
+    const payload = {
+      recipient: { id: senderPsid },
+      messaging_type: 'RESPONSE',
+      message: { attachment: { type: 'image', payload: { is_reusable: true, url: imageUrl } } }
+    };
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
+  }
+
+  private async sendFacebookImageByBuffer(
+    accessToken: string,
+    senderPsid: string,
+    imageBuffer: Buffer,
+    mimeType: string,
+    filename: string,
+  ): Promise<any> {
+    const boundary = '----fbFormBoundary' + Math.random().toString(16).slice(2);
+    const pushField = (name: string, value: string) => Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      'utf8'
+    );
+    const fileHeader = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="filedata"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
+      'utf8'
+    );
+    const fileFooter = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+
+    const body = Buffer.concat([
+      pushField('recipient', JSON.stringify({ id: senderPsid })),
+      pushField('messaging_type', 'RESPONSE'),
+      pushField('message', JSON.stringify({ attachment: { type: 'image', payload: { is_reusable: true } } })),
+      fileHeader,
+      imageBuffer,
+      fileFooter,
+    ]);
+
+    const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${encodeURIComponent(accessToken)}`;
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body: body as any
+    }).then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
+  }
+
+  private readLocalMediaFromUrl(imageUrl: string): { buffer: Buffer; mimeType: string; filename: string } | null {
+    if (!imageUrl) return null;
+    const fs = require('fs');
+    const path = require('path');
+    let pathname = imageUrl;
+    if (/^https?:\/\//i.test(imageUrl)) {
+      try { pathname = new URL(imageUrl).pathname; } catch { return null; }
+    }
+    const cleanPath = String(pathname).split('?')[0].split('#')[0];
+    if (!cleanPath.startsWith('/media/')) return null;
+    const relRaw = decodeURIComponent(cleanPath.replace(/^\/media\/+/, ''));
+    const relNorm = path.normalize(relRaw).replace(/^([/\\])+/, '');
+    if (!relNorm || relNorm.startsWith('..')) return null;
+
+    const candidates = [
+      process.env.MEDIA_DIR,
+      path.join(process.cwd(), 'uploads', 'media'),
+      path.join(process.cwd(), '..', 'media'),
+      path.join(process.cwd(), '..', 'uploads', 'media'),
+    ].filter(Boolean);
+
+    for (const base of candidates) {
+      try {
+        const root = path.resolve(base);
+        const abs = path.resolve(root, relNorm);
+        if (!abs.startsWith(root)) continue;
+        if (!fs.existsSync(abs)) continue;
+        const stat = fs.statSync(abs);
+        if (!stat.isFile()) continue;
+        return {
+          buffer: fs.readFileSync(abs),
+          mimeType: this.guessMimeType(abs),
+          filename: path.basename(abs),
+        };
+      } catch {}
+    }
+    return null;
+  }
+
+  private async sendFacebookImageSmart(opts: {
+    accessToken: string;
+    senderPsid: string;
+    imageUrl?: string;
+    fallbackBuffer?: Buffer;
+    fallbackMimeType?: string;
+    fallbackFilename?: string;
+  }): Promise<any> {
+    const absoluteUrl = this.ensureAbsolute(opts.imageUrl || '');
+    let fromUrlRes: any = null;
+    if (absoluteUrl && /^https?:\/\//i.test(absoluteUrl)) {
+      fromUrlRes = await this.sendFacebookImageByUrl(opts.accessToken, opts.senderPsid, absoluteUrl);
+      if (fromUrlRes?.message_id) return fromUrlRes;
+    }
+
+    if (opts.fallbackBuffer && opts.fallbackBuffer.length > 0) {
+      return this.sendFacebookImageByBuffer(
+        opts.accessToken,
+        opts.senderPsid,
+        opts.fallbackBuffer,
+        opts.fallbackMimeType || 'image/jpeg',
+        opts.fallbackFilename || 'upload.jpg',
+      );
+    }
+
+    if (opts.imageUrl) {
+      const local = this.readLocalMediaFromUrl(opts.imageUrl);
+      if (local?.buffer?.length) {
+        return this.sendFacebookImageByBuffer(
+          opts.accessToken,
+          opts.senderPsid,
+          local.buffer,
+          local.mimeType,
+          local.filename,
+        );
+      }
+    }
+
+    if (fromUrlRes) return fromUrlRes;
+    return { ok: false, message: 'image_url_not_absolute' };
+  }
+
   // Individual message CRUD removed - use conversation-level operations instead
 
   // Conversation endpoints
@@ -122,7 +272,7 @@ export class ChatMessageController {
     // Send to Facebook if enabled, otherwise only record internally
     let responseJson: any = { ok: false, message: 'fb_sending_disabled' };
     let deliveryNote: string | null = null;
-    const FB_ENABLED = process.env.FB_SENDING_ENABLED === '1';
+    const FB_ENABLED = process.env.FB_SENDING_ENABLED !== '0';
     if (FB_ENABLED && (fanpage as any).accessToken) {
       try {
         const payload: any = {
@@ -382,34 +532,22 @@ export class ChatMessageController {
       sourceType: 'marketing'
     });
     // Try to send image to Facebook if enabled and within 24h
-    const FB_ENABLED = process.env.FB_SENDING_ENABLED === '1';
+    const FB_ENABLED = process.env.FB_SENDING_ENABLED !== '0';
     let sendResult: any = { ok: false, message: 'fb_sending_disabled' };
     try {
       if (FB_ENABLED && (fanpage as any).accessToken) {
-        // Verify 24h window based on last inbound
-        const convData = await this.service.getConversation(String(fanpage._id), senderPsid).catch(()=> null as any);
-        const latestInbound = convData?.messages?.find((m: any) => m?.direction === 'in');
-        const lastInboundAtMs = latestInbound ? new Date((latestInbound as any).createdAt || (latestInbound as any).receivedAt || Date.now()).getTime() : 0;
-        const within24h = lastInboundAtMs > 0 ? (Date.now() - lastInboundAtMs) < (24 * 60 * 60 * 1000) : false;
-        const PUBLIC_ORIGIN = process.env.MEDIA_ABSOLUTE_BASE || process.env.PUBLIC_ORIGIN || process.env.APP_PUBLIC_ORIGIN || '';
-        const ensureAbsolute = (url: string) => {
-          if(!url) return url;
-          if(/^https?:\/\//i.test(url)) return url;
-          if(!PUBLIC_ORIGIN) return url;
-          return (PUBLIC_ORIGIN.replace(/\/$/, '') + url).replace(/\s/g,'');
-        };
-        const imgUrl = ensureAbsolute(savedMedia.url);
-        if (within24h && /^https?:\/\//i.test(imgUrl)) {
-          const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${encodeURIComponent((fanpage as any).accessToken)}`;
-          const payload = {
-            recipient: { id: senderPsid },
-            messaging_type: 'RESPONSE',
-            message: { attachment: { type: 'image', payload: { is_reusable: true, url: imgUrl } } }
-          };
-          sendResult = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-            .then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
+        const within24h = await this.isWithin24hWindow(String(fanpage._id), senderPsid);
+        if (within24h) {
+          sendResult = await this.sendFacebookImageSmart({
+            accessToken: (fanpage as any).accessToken,
+            senderPsid,
+            imageUrl: savedMedia.url,
+            fallbackBuffer: buf,
+            fallbackMimeType: file.mimetype || this.guessMimeType(file.originalname || 'upload.jpg'),
+            fallbackFilename: file.originalname || 'upload.jpg',
+          });
         } else {
-          sendResult = { ok: false, message: within24h ? 'image_url_not_absolute' : 'blocked_outside_24h' };
+          sendResult = { ok: false, message: 'blocked_outside_24h' };
         }
       }
     } catch (e:any) {
@@ -431,33 +569,19 @@ export class ChatMessageController {
     if(!fanpage) fanpage = await this.fanpageModel.findOne({ pageId: body.fanpageId }).lean();
     if(!fanpage) throw new BadRequestException('Fanpage không tồn tại');
     // Attempt to send to Facebook (RESPONSE within 24h)
-    const FB_ENABLED = process.env.FB_SENDING_ENABLED === '1';
+    const FB_ENABLED = process.env.FB_SENDING_ENABLED !== '0';
     let sendResult: any = { ok: false, message: 'fb_sending_disabled' };
     try {
       if (FB_ENABLED && (fanpage as any).accessToken) {
-        const convData = await this.service.getConversation(String(fanpage._id), body.senderPsid).catch(()=> null as any);
-        const latestInbound = convData?.messages?.find((m: any) => m?.direction === 'in');
-        const lastInboundAtMs = latestInbound ? new Date((latestInbound as any).createdAt || (latestInbound as any).receivedAt || Date.now()).getTime() : 0;
-        const within24h = lastInboundAtMs > 0 ? (Date.now() - lastInboundAtMs) < (24 * 60 * 60 * 1000) : false;
-        const PUBLIC_ORIGIN = process.env.MEDIA_ABSOLUTE_BASE || process.env.PUBLIC_ORIGIN || process.env.APP_PUBLIC_ORIGIN || '';
-        const ensureAbsolute = (url: string) => {
-          if(!url) return url;
-          if(/^https?:\/\//i.test(url)) return url;
-          if(!PUBLIC_ORIGIN) return url;
-          return (PUBLIC_ORIGIN.replace(/\/$/, '') + url).replace(/\s/g,'');
-        };
-        const imgUrl = ensureAbsolute(body.imageUrl);
-        if (within24h && /^https?:\/\//i.test(imgUrl)) {
-          const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${encodeURIComponent((fanpage as any).accessToken)}`;
-          const payload = {
-            recipient: { id: body.senderPsid },
-            messaging_type: 'RESPONSE',
-            message: { attachment: { type: 'image', payload: { is_reusable: true, url: imgUrl } } }
-          };
-          sendResult = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-            .then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
+        const within24h = await this.isWithin24hWindow(String(fanpage._id), body.senderPsid);
+        if (within24h) {
+          sendResult = await this.sendFacebookImageSmart({
+            accessToken: (fanpage as any).accessToken,
+            senderPsid: body.senderPsid,
+            imageUrl: body.imageUrl,
+          });
         } else {
-          sendResult = { ok: false, message: within24h ? 'image_url_not_absolute' : 'blocked_outside_24h' };
+          sendResult = { ok: false, message: 'blocked_outside_24h' };
         }
       }
     } catch (e:any) {

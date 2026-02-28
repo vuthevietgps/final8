@@ -1,7 +1,11 @@
-import { Controller, Get, Post, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Query, Param, UseGuards } from '@nestjs/common';
 import { AdGroupProfitReportService } from './ad-group-profit-report.service';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('ad-group-profit-report')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('ads-budget')
 export class AdGroupProfitReportController {
   constructor(
     private readonly profitReportService: AdGroupProfitReportService

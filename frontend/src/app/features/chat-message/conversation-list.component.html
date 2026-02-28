@@ -80,7 +80,7 @@
         <div class="placeholder">Chọn một hội thoại từ danh sách bên trái</div>
       </ng-template>
 
-      <div class="thread" *ngIf="currentConv()">
+      <div class="thread" #threadScroll *ngIf="currentConv()">
         <div *ngIf="detailLoading() && messages().length === 0" class="loading-messages">
           <div class="loading-spinner">⏳</div>
           <div>Đang tải tin nhắn...</div>

@@ -6,6 +6,7 @@
 
 import { Controller, Get, Patch, Body, Logger, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { FinancialControlService } from './financial-control.service';
 import {
   FinancialControlDashboard,
@@ -17,6 +18,7 @@ import {
 
 @Controller('financial-control')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('finance')
 export class FinancialControlController {
   private readonly logger = new Logger(FinancialControlController.name);
 

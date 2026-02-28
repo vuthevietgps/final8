@@ -9,7 +9,7 @@ services:
       PORT: "3000"
       JWT_SECRET: ${JWT_SECRET:-smarterp_dev_secret_key_change_in_prod}
       # MongoDB connection string; uses Atlas by default, can override with MONGODB_URI env var
-      MONGODB_URI: ${MONGODB_URI:-mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system}
+      MONGODB_URI: ${MONGODB_URI:-mongodb+srv://dinhvigps07:NFHQx8go5hl9U45L@smarterp-dev.khsfdta.mongodb.net/management-system?appName=smarterp-dev}
       # If using Google credentials, prefer GOOGLE_CREDENTIALS_JSON env; file mounting removed during cleanup
       # GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON:-}
       # Optional hint for our path resolver
@@ -17,7 +17,9 @@ services:
       MEDIA_DIR: /app/uploads/media
       MEDIA_PUBLIC_BASE: /media
       # Optional: enable FB sending + absolute media origin for image attachments
-      FB_SENDING_ENABLED: "${FB_SENDING_ENABLED:-0}"
+      FB_SENDING_ENABLED: "${FB_SENDING_ENABLED:-1}"
+      AI_FB_SENDING_ENABLED: "${AI_FB_SENDING_ENABLED:-1}"
+      AI_FB_DELIVERY_RECOVERY_ENABLED: "${AI_FB_DELIVERY_RECOVERY_ENABLED:-1}"
       PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:8080}"
       MEDIA_ABSOLUTE_BASE: "${MEDIA_ABSOLUTE_BASE:-http://localhost:8080}"
     volumes:

@@ -12,18 +12,24 @@ import { AdvertisingCost, AdvertisingCostDocument } from './schemas/advertising-
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { ApiToken, ApiTokenDocument } from '../api-token/schemas/api-token.schema';
-import { TestOrder2Service } from '../test-order2/test-order2.service';
+import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
+
+const FB_GRAPH_API_VERSION = process.env.FB_GRAPH_API_VERSION || 'v19.0';
+const FB_SYNC_FAILURE_ALERT_THRESHOLD = Number(process.env.FB_SYNC_FAILURE_ALERT_THRESHOLD || 2);
 
 @Injectable()
 export class AdvertisingCostFacebookSyncService {
   private readonly logger = new Logger(AdvertisingCostFacebookSyncService.name);
+  private consecutiveSyncFailures = 0;
+  private lastSyncFailureAt?: Date;
+  private lastSyncFailureReason?: string;
 
   constructor(
     @InjectModel(AdvertisingCost.name) private readonly costModel: Model<AdvertisingCostDocument>,
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
     @InjectModel(AdAccount.name) private readonly adAccountModel: Model<AdAccountDocument>,
     @InjectModel(ApiToken.name) private readonly tokenModel: Model<ApiTokenDocument>,
-    private readonly testOrder2Service: TestOrder2Service,
+    private readonly recalculationQueue: AdvertisingCostRecalculationQueueService,
   ) {}
 
   /** Lấy access token Facebook ưu tiên từ env, sau đó từ ApiToken collection */
@@ -44,6 +50,78 @@ export class AdvertisingCostFacebookSyncService {
       }
     } catch {}
     return (fallback as any).token;
+  }
+
+  private markSyncFailure(reason: string): void {
+    this.consecutiveSyncFailures += 1;
+    this.lastSyncFailureAt = new Date();
+    this.lastSyncFailureReason = reason;
+
+    if (this.consecutiveSyncFailures >= FB_SYNC_FAILURE_ALERT_THRESHOLD) {
+      this.logger.error(
+        `Facebook sync has failed ${this.consecutiveSyncFailures} consecutive run(s). Last reason: ${reason}`,
+      );
+    } else {
+      this.logger.warn(`Facebook sync failed: ${reason}`);
+    }
+  }
+
+  private markSyncSuccess(): void {
+    if (this.consecutiveSyncFailures > 0) {
+      this.logger.log(`Facebook sync recovered after ${this.consecutiveSyncFailures} failed run(s).`);
+    }
+    this.consecutiveSyncFailures = 0;
+    this.lastSyncFailureAt = undefined;
+    this.lastSyncFailureReason = undefined;
+  }
+
+  async getSyncHealth() {
+    const now = Date.now();
+    const envToken = process.env.FB_ADS_ACCESS_TOKEN?.trim();
+    const dbToken = await this.tokenModel
+      .findOne({ provider: 'facebook', status: 'active' })
+      .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 })
+      .select('name isPrimary expireAt lastCheckStatus lastCheckMessage lastCheckedAt updatedAt')
+      .lean();
+
+    const latestRecord: any = await this.costModel
+      .findOne({ channel: 'facebook' })
+      .sort({ updatedAt: -1 })
+      .select('date updatedAt adGroupId spentAmount')
+      .lean();
+
+    const tokenExpireAt = dbToken?.expireAt ? new Date(dbToken.expireAt).toISOString() : undefined;
+    const tokenHoursToExpire = dbToken?.expireAt
+      ? Math.round((new Date(dbToken.expireAt).getTime() - now) / (1000 * 60 * 60))
+      : undefined;
+    const lastSyncAt = latestRecord?.updatedAt ? new Date(latestRecord.updatedAt).toISOString() : undefined;
+    const syncFreshnessHours = lastSyncAt ? Math.round((now - new Date(lastSyncAt).getTime()) / (1000 * 60 * 60)) : null;
+
+    return {
+      platform: 'facebook',
+      token: {
+        source: envToken ? 'env' : (dbToken ? 'database' : 'none'),
+        configured: Boolean(envToken || dbToken),
+        envToken: Boolean(envToken),
+        databaseTokenName: dbToken?.name || null,
+        lastCheckStatus: dbToken?.lastCheckStatus || null,
+        lastCheckMessage: dbToken?.lastCheckMessage || null,
+        lastCheckedAt: dbToken?.lastCheckedAt ? new Date(dbToken.lastCheckedAt).toISOString() : null,
+        expireAt: tokenExpireAt || null,
+        expiresInHours: tokenHoursToExpire ?? null,
+        isExpired: typeof tokenHoursToExpire === 'number' ? tokenHoursToExpire <= 0 : null,
+      },
+      sync: {
+        lastRecordDate: latestRecord?.date ? new Date(latestRecord.date).toISOString().slice(0, 10) : null,
+        lastSyncAt,
+        freshnessHours: syncFreshnessHours,
+      },
+      failures: {
+        consecutive: this.consecutiveSyncFailures,
+        lastFailureAt: this.lastSyncFailureAt ? this.lastSyncFailureAt.toISOString() : null,
+        lastFailureReason: this.lastSyncFailureReason || null,
+      },
+    };
   }
 
   /** Upsert 1 bản ghi chi phí cho adGroupId + date */
@@ -70,7 +148,7 @@ export class AdvertisingCostFacebookSyncService {
 
   /** Gọi Graph API lấy insights cho adset (adGroupId) trong 1 ngày */
   private async fetchAdsetInsights(adsetId: string, token: string, dayISO: string) {
-    const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adsetId)}/insights`;
+    const url = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/${encodeURIComponent(adsetId)}/insights`;
     const params = {
       // Use actions-based metrics to remain compatible with newer Marketing API versions
       // messaging_conversation_started_* and messaging_first_reply are exposed via actions/cost_per_action_type
@@ -139,7 +217,7 @@ export class AdvertisingCostFacebookSyncService {
 
     try {
       // Lấy insights cho toàn bộ thời gian hoạt động của adset
-      const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adsetId)}/insights`;
+      const url = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/${encodeURIComponent(adsetId)}/insights`;
       const params = {
         // Use actions to derive messaging conversation counts
         fields: 'spend,actions',
@@ -176,10 +254,12 @@ export class AdvertisingCostFacebookSyncService {
   }
 
   /** Đồng bộ cho 1 ngày cố định (YYYY-MM-DD). Trả về số adGroup được lưu. */
-  async syncForDate(dayISO: string): Promise<{ date: string; updated: number }> {
+  async syncForDate(dayISO: string, opts?: { trackFailure?: boolean }): Promise<{ date: string; updated: number }> {
+    const trackFailure = opts?.trackFailure !== false;
     const token = await this.getAccessToken();
     if (!token) {
-      this.logger.warn('Missing FB_ADS_ACCESS_TOKEN or active ApiToken for Facebook. Skip sync.');
+      if (trackFailure) this.markSyncFailure('Missing FB_ADS_ACCESS_TOKEN or active ApiToken for Facebook.');
+      else this.logger.warn('Missing FB_ADS_ACCESS_TOKEN or active ApiToken for Facebook. Skip sync.');
       return { date: dayISO, updated: 0 };
     }
 
@@ -190,6 +270,10 @@ export class AdvertisingCostFacebookSyncService {
     const activeAcc = await this.adAccountModel.find({ _id: { $in: accIds }, isActive: true, accountType: 'facebook' }).select('_id').lean();
     const activeAccSet = new Set(activeAcc.map(a => String(a._id)));
     const validGroups = groups.filter(g => activeAccSet.has(String(g.adAccountId)));
+    if (!validGroups.length) {
+      if (trackFailure) this.markSyncSuccess();
+      return { date: dayISO, updated: 0 };
+    }
 
     const day = new Date(dayISO);
     let updated = 0;
@@ -211,6 +295,11 @@ export class AdvertisingCostFacebookSyncService {
         messagingFirstReply: ins.messagingFirstReply
       } as any);
       updated++;
+    }
+    if (trackFailure && updated === 0) {
+      this.markSyncFailure(`No ad group updated for ${dayISO}.`);
+    } else if (trackFailure) {
+      this.markSyncSuccess();
     }
     return { date: dayISO, updated };
   }
@@ -357,13 +446,12 @@ export class AdvertisingCostFacebookSyncService {
       const res = await this.syncForDate(dayISO);
       this.logger.log(`Facebook Ads sync completed: updated ${res.updated} ad groups`);
       
-      // Recalculate all orders for this date after sync
-      if (res.updated > 0 && this.testOrder2Service) {
-        this.logger.log(`Recalculating orders for ${dayISO}...`);
-        const recalcResult = await this.testOrder2Service.recalculateOrdersForDate(dayISO);
-        this.logger.log(`Recalculation completed: ${recalcResult.updated} orders updated`);
+      // Debounce recalculation để tránh race với Google/TikTok cron sau đó.
+      if (res.updated > 0) {
+        this.recalculationQueue.scheduleRecalculation(dayISO, 'facebook-cron');
       }
     } catch (err) {
+      this.markSyncFailure((err as any)?.message || 'Cron daily sync failed');
       this.logger.error('Cron daily sync failed', err as any);
     }
   }

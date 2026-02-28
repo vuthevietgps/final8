@@ -236,6 +236,8 @@ services:
       - MEDIA_PUBLIC_BASE=/media
       - PUBLIC_ORIGIN=https://${DOMAIN}
       - FB_SENDING_ENABLED=1
+      - AI_FB_SENDING_ENABLED=1
+      - AI_FB_DELIVERY_RECOVERY_ENABLED=1
       - CHAT_WEBHOOK_DEBUG=1
     volumes:
       - ./backend/uploads:/app/uploads

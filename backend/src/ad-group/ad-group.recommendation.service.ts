@@ -31,7 +31,7 @@ export class AdGroupRecommendationService {
     const recs: AdGroupRecommendation[] = [];
 
     for (const g of groups) {
-      const current = Number((g as any).dailyBudget) || 200_000; // fallback mặc định
+      const current = Number((g as any).dailyBudget) || 60_000; // fallback mặc định (60k VND)
       const target = current * 1.1; // tăng 10% mặc định
       const minBudget = current * 0.8;
       const maxBudget = current * 1.2;

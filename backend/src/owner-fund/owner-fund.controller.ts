@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { OwnerFundService } from './owner-fund.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { UpdateOwnerDto } from './dto/update-owner.dto';
@@ -25,6 +26,7 @@ import { FundTransactionType, FundTransactionCategory } from './schemas/fund-tra
 
 @Controller('owner-fund')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('owner-fund')
 export class OwnerFundController {
   constructor(private readonly ownerFundService: OwnerFundService) {}
 

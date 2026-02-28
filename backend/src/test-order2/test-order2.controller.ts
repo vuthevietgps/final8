@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards, Res, Request } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TestOrder2Service } from './test-order2.service';
 import { CreateTestOrder2Dto } from './dto/create-test-order2.dto';
@@ -13,6 +14,7 @@ import { Response } from 'express';
 
 @Controller('test-order2')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('orders')
 export class TestOrder2Controller {
   constructor(
     private readonly service: TestOrder2Service,

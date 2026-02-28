@@ -20,11 +20,13 @@
  */
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { EmployeeAdsKpiService, EmployeeKpiSummary, AdGroupPerformance, KpiAlert } from './employee-ads-kpi.service';
 import { ConfirmAdjustmentDto, BulkConfirmDto, GetDailySuggestionsDto } from './dto/daily-adjustment.dto';
 
 @Controller('employee-ads-kpi')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('employee-ads-kpi')
 export class EmployeeAdsKpiController {
   constructor(private readonly kpiService: EmployeeAdsKpiService) {}
 

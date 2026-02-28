@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { AdGroupDailyReportService } from './ad-group-daily-report.service';
 import { GetAdGroupDailyReportDto } from './dto/ad-group-daily-report.dto';
-import { JwtAuthGuard } from '../auth/guards/auth.guard';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('ad-group-daily-report')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('ads-budget')
 export class AdGroupDailyReportController {
   constructor(private readonly service: AdGroupDailyReportService) {}
 

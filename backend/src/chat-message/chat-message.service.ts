@@ -8,10 +8,32 @@ import { UpdateChatMessageDto } from './dto/update-chat-message.dto';
 
 @Injectable()
 export class ChatMessageService {
+  private readonly hiddenRecoveryNotePrefixes = ['[AUTO-RECOVER FB]', '[DA GUI LAI RA FB]'];
+
   constructor(
     @InjectModel(ChatMessage.name) private model: Model<ChatMessageDocument>,
     @InjectModel(Conversation.name) private convModel: Model<ConversationDocument>,
   ) {}
+
+  private isHiddenRecoverySystemNote(content?: string | null): boolean {
+    const text = String(content || '').trim().toUpperCase();
+    return this.hiddenRecoveryNotePrefixes.some((prefix) => text.startsWith(prefix));
+  }
+
+  private hiddenRecoveryNoteFilter() {
+    return {
+      $nor: [
+        { content: { $regex: '^\\[AUTO-RECOVER FB\\]', $options: 'i' } },
+        { content: { $regex: '^\\[DA GUI LAI RA FB\\]', $options: 'i' } },
+      ],
+    } as any;
+  }
+
+  private normalizeFanpageRef(ref: any): any {
+    if (!ref) return ref;
+    if (typeof ref === 'object' && ref._id) return ref._id;
+    return ref;
+  }
 
   async create(dto: CreateChatMessageDto) {
     const payload: any = { ...dto };
@@ -27,6 +49,7 @@ export class ChatMessageService {
 
   // --- Conversation helpers ---
   private async upsertConversationForMessage(msg: ChatMessageDocument) {
+    if (this.isHiddenRecoverySystemNote((msg as any)?.content)) return;
     const base = { fanpageId: msg.fanpageId, senderPsid: msg.senderPsid } as any;
     const inc: any = { totalMessages: 1 };
     if (msg.direction === 'in') inc.inboundCount = 1; else inc.outboundCount = 1;
@@ -40,7 +63,10 @@ export class ChatMessageService {
   }
 
   private async recomputeConversation(fanpageId: any, senderPsid: string) {
-    const msgs = await this.model.find({ fanpageId, senderPsid }).sort({ createdAt: 1 }).lean();
+    const msgs = await this.model
+      .find({ fanpageId, senderPsid, ...this.hiddenRecoveryNoteFilter() })
+      .sort({ createdAt: 1 })
+      .lean();
     if (!msgs.length) {
       await this.convModel.deleteOne({ fanpageId, senderPsid }).exec();
       return;
@@ -90,19 +116,48 @@ export class ChatMessageService {
     const page = Math.max(1, parseInt(query.page)||1);
     const limit = Math.min(100, parseInt(query.limit)||20);
     const skip = (page-1)*limit;
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       this.convModel.find(filter).populate('fanpageId', 'pageId name').sort({ lastMessageAt: -1 }).skip(skip).limit(limit).lean(),
       this.convModel.countDocuments(filter),
     ]);
+    const items = await Promise.all(
+      (rawItems as any[]).map(async (item: any) => {
+        if (!this.isHiddenRecoverySystemNote(item?.lastMessageSnippet)) return item;
+        const latestVisible = await this.model
+          .findOne({
+            fanpageId: this.normalizeFanpageRef(item?.fanpageId),
+            senderPsid: item?.senderPsid,
+            ...this.hiddenRecoveryNoteFilter(),
+          })
+          .sort({ createdAt: -1 })
+          .lean();
+        if (!latestVisible) return item;
+        return {
+          ...item,
+          lastMessageSnippet: String((latestVisible as any).content || '').slice(0, 120),
+          lastDirection: (latestVisible as any).direction,
+          lastMessageAt: (latestVisible as any).createdAt || (latestVisible as any).receivedAt || item.lastMessageAt,
+        };
+      }),
+    );
     return { items, total, page, limit, totalPages: Math.ceil(total/limit) };
   }
 
   async getConversation(fanpageId: string, senderPsid: string) {
     let conv = await this.convModel.findOne({ fanpageId, senderPsid }).lean();
-    const messages = await this.model.find({ fanpageId, senderPsid }).sort({ createdAt: -1 }).limit(500).lean();
+    const messages = await this.model
+      .find({ fanpageId, senderPsid, ...this.hiddenRecoveryNoteFilter() })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
     
     // Nếu chưa có conversation nhưng có messages, tạo conversation từ messages
     if (!conv && messages.length > 0) {
+      await this.recomputeConversation(fanpageId, senderPsid);
+      conv = await this.convModel.findOne({ fanpageId, senderPsid }).lean();
+    }
+
+    if (conv && this.isHiddenRecoverySystemNote((conv as any).lastMessageSnippet)) {
       await this.recomputeConversation(fanpageId, senderPsid);
       conv = await this.convModel.findOne({ fanpageId, senderPsid }).lean();
     }
@@ -143,7 +198,10 @@ export class ChatMessageService {
 
   async extractOrderDraft(fanpageId: string, senderPsid: string) {
     // Lấy theo thời gian tăng dần để có thể lấy adGroupId cuối cùng (mới nhất)
-    const messages = await this.model.find({ fanpageId, senderPsid }).sort({ createdAt: 1 }).lean();
+    const messages = await this.model
+      .find({ fanpageId, senderPsid, ...this.hiddenRecoveryNoteFilter() })
+      .sort({ createdAt: 1 })
+      .lean();
     if(!messages.length) throw new NotFoundException('Không có tin nhắn để trích xuất');
     const textAll = messages.map(m=> m.content).join('\n');
     // Simple regex heuristics

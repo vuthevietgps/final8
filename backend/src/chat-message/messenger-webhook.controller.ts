@@ -58,6 +58,15 @@ export class MessengerWebhookController {
     @Req() req: Request
   ) {
     try {
+      // Runtime diagnostic: quickly identify which instance receives webhook
+      // and what FB sending flags are effective on that instance.
+      const firstEntry = Array.isArray(body?.entry) ? body.entry[0] : undefined;
+      const firstMsg = Array.isArray(firstEntry?.messaging) ? firstEntry.messaging[0] : undefined;
+      if (this.isDebugMode || process.env.NODE_ENV !== 'production') {
+        this.logger.log(
+          `[WebhookRecv] pid=${process.pid} pageId=${firstEntry?.id || 'n/a'} sender=${firstMsg?.sender?.id || 'n/a'} entries=${Array.isArray(body?.entry) ? body.entry.length : 0} AI_FB_SENDING_ENABLED=${process.env.AI_FB_SENDING_ENABLED ?? '<unset>'} FB_SENDING_ENABLED=${process.env.FB_SENDING_ENABLED ?? '<unset>'}`
+        );
+      }
       await this.webhookService.handle(body);
       return res.status(200).json({ status: 'ok' });
     } catch (error) {

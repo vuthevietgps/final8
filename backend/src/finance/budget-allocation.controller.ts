@@ -1,8 +1,11 @@
 import { Controller, Post, Get, Query, Body, UseGuards } from '@nestjs/common';
 import { BudgetAllocationService } from './budget-allocation.service';
-import { JwtAuthGuard } from '../auth/guards/auth.guard';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('budget-allocation')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('finance')
 export class BudgetAllocationController {
   constructor(private readonly budgetAllocationService: BudgetAllocationService) {}
 
@@ -11,7 +14,6 @@ export class BudgetAllocationController {
    * Tự động phân bổ nguồn vốn vào ad groups
    */
   @Post('auto')
-  @UseGuards(JwtAuthGuard)
   async autoAllocate(
     @Body() body: {
       dryRun?: boolean;
