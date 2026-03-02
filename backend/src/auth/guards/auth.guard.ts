@@ -56,7 +56,7 @@ export class RolesGuard implements CanActivate {
     const userRole = (user.role || '').toLowerCase();
     const rolePermissions: Record<string, string[]> = {
       'director': [
-        'users','orders','pending-orders','products','product-categories',
+        'users','orders','orders-test2','pending-orders','products','product-categories',
         'delivery-status','production-status','order-status',
         'ad-accounts','ad-groups','advertising-costs','media','api-tokens',
         'labor-costs','other-costs','salary-config',
@@ -69,12 +69,12 @@ export class RolesGuard implements CanActivate {
         'ads-budget','employee-ads-kpi'
       ],
       'employee': [
-        'orders','pending-orders','api-tokens'
+        'orders','orders-test2','pending-orders','api-tokens'
       ],
-      'internal_agent': ['orders','pending-orders','delivery-status','products','api-tokens'],
-      'external_agent': ['orders','pending-orders','delivery-status','api-tokens'],
-      'internal_supplier': ['products','quotes','api-tokens'],
-      'external_supplier': ['quotes','api-tokens']
+      'internal_agent': ['orders-test2'],
+      'external_agent': ['orders-test2'],
+      'internal_supplier': ['orders-test2'],
+      'external_supplier': ['orders-test2']
     };
 
   // Bổ sung mặc định quyền chat-messages cho director & manager để xem hội thoại

@@ -638,6 +638,99 @@ export class SupplierPayableService {
   }
 
   /**
+   * Tính aging buckets cho supplier pending payments.
+   * Dùng bởi OpsActionService để sinh cảnh báo quá hạn.
+   * Query trực tiếp TestOrder2 model (đã inject sẵn).
+   */
+  async getSupplierAgingSummary(): Promise<{
+    aging0_7: { orderCount: number; amount: number };
+    aging8_14: { orderCount: number; amount: number };
+    aging15plus: { orderCount: number; amount: number };
+    bySupplierOverThreshold: {
+      supplierId: string;
+      supplierName: string;
+      pendingAmount: number;
+      maxAgingDays: number;
+    }[];
+  }> {
+    const today = new Date();
+    const THRESHOLD = 5_000_000;
+
+    const pendingOrders = await this.orderModel.find({
+      supplierPaymentStatus: 'pending',
+      supplierId: { $exists: true, $ne: null },
+      orderStatus: { $in: ['Giao thành công', 'Hàng hoàn'] },
+      isActive: { $ne: false },
+    }).lean();
+
+    const aging = {
+      aging0_7: { orderCount: 0, amount: 0 },
+      aging8_14: { orderCount: 0, amount: 0 },
+      aging15plus: { orderCount: 0, amount: 0 },
+    };
+
+    const supplierMap = new Map<string, { amount: number; maxAgingDays: number }>();
+
+    for (const order of pendingOrders) {
+      const amount = ((order as any).supplierQuote || 0) * ((order as any).quantity || 1);
+      const dateRef = (order as any).updatedAt || (order as any).orderDate || today;
+      const agingDays = Math.floor((today.getTime() - new Date(dateRef).getTime()) / 86400000);
+      const supplierId = (order as any).supplierId?.toString() || '';
+
+      if (agingDays <= 7) {
+        aging.aging0_7.orderCount++;
+        aging.aging0_7.amount += amount;
+      } else if (agingDays <= 14) {
+        aging.aging8_14.orderCount++;
+        aging.aging8_14.amount += amount;
+      } else {
+        aging.aging15plus.orderCount++;
+        aging.aging15plus.amount += amount;
+      }
+
+      if (supplierId) {
+        const existing = supplierMap.get(supplierId) || { amount: 0, maxAgingDays: 0 };
+        supplierMap.set(supplierId, {
+          amount: existing.amount + amount,
+          maxAgingDays: Math.max(existing.maxAgingDays, agingDays),
+        });
+      }
+    }
+
+    // Lookup supplier names
+    const overThresholdIds = Array.from(supplierMap.entries())
+      .filter(([, v]) => v.amount > THRESHOLD)
+      .map(([id]) => id);
+
+    let supplierNames = new Map<string, string>();
+    if (overThresholdIds.length > 0) {
+      try {
+        const suppliersData = await this.orderModel.db
+          .collection('users')
+          .find({ _id: { $in: overThresholdIds.map((id) => new (require('mongoose').Types.ObjectId)(id)) } })
+          .toArray();
+        for (const s of suppliersData) {
+          supplierNames.set(s._id.toString(), s.fullName || s.email || 'NCC');
+        }
+      } catch {
+        // Fallback: use ID as name
+      }
+    }
+
+    const bySupplierOverThreshold = Array.from(supplierMap.entries())
+      .filter(([, v]) => v.amount > THRESHOLD)
+      .map(([id, v]) => ({
+        supplierId: id,
+        supplierName: supplierNames.get(id) || id,
+        pendingAmount: v.amount,
+        maxAgingDays: v.maxAgingDays,
+      }))
+      .sort((a, b) => b.pendingAmount - a.pendingAmount);
+
+    return { ...aging, bySupplierOverThreshold };
+  }
+
+  /**
    * @deprecated Use getCashflowSummary() instead
    * Kept for backward compatibility
    */

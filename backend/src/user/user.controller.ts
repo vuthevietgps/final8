@@ -70,11 +70,11 @@ export class UserController {
 
   /**
    * GET /users/agents - Danh sách đại lý đang hoạt động (tối giản) cho dropdown
-   * - Quyền: 'orders' (để nhân viên tạo đơn có thể tra cứu đại lý)
+   * - Quyền: 'orders-test2' (để người dùng module đơn thử nghiệm 2 có thể tra cứu đại lý)
    * - Trả về: _id, fullName, email, role
    */
   @Get('agents')
-  @RequirePermissions('orders')
+  @RequirePermissions('orders-test2')
   getActiveAgentsMinimal() {
     // Chỉ lấy đại lý nội bộ/ngoài và đang hoạt động
     return this.userService.findActiveAgentsMinimal([UserRole.INTERNAL_AGENT, UserRole.EXTERNAL_AGENT]);

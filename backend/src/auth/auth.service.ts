@@ -172,7 +172,7 @@ export class AuthService {
   hasPermission(userRole: string, requiredPermissions: string[]): boolean {
     const rolePermissions = {
       'director': [
-  'users', 'orders', 'products', 'product-categories',
+  'users', 'orders', 'orders-test2', 'products', 'product-categories',
         'delivery-status', 'production-status', 'order-status',
   'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
   'labor-costs', 'other-costs', 'salary-config',
@@ -187,12 +187,12 @@ export class AuthService {
         'ads-budget', 'employee-ads-kpi'
       ],
       'employee': [
-        'orders', 'api-tokens'
+        'orders', 'orders-test2', 'api-tokens'
       ],
-      'internal_agent': ['orders', 'pending-orders', 'delivery-status', 'products', 'api-tokens'],
-      'external_agent': ['orders', 'pending-orders', 'delivery-status', 'api-tokens'],
-      'internal_supplier': ['products', 'quotes', 'api-tokens'],
-      'external_supplier': ['quotes', 'api-tokens'],
+      'internal_agent': ['orders-test2'],
+      'external_agent': ['orders-test2'],
+      'internal_supplier': ['orders-test2'],
+      'external_supplier': ['orders-test2'],
       // Nhà đầu tư: chỉ xem báo cáo/finance (cấu hình chi tiết sau)
       'investor': ['finance', 'reports'],
       // Người cho vay: xem finance, hợp đồng vay

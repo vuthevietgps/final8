@@ -57,8 +57,18 @@ export const routes: Routes = [
     path: 'payments',
     canActivate: [AuthGuard],
     children: [
-      { path: 'supplier', loadComponent: () => import('./features/payment-management/supplier-payment.component').then(m => m.SupplierPaymentComponent) },
-      { path: 'agent', loadComponent: () => import('./features/payment-management/agent-payment.component').then(m => m.AgentPaymentComponent) },
+      {
+        path: 'supplier',
+        loadComponent: () => import('./features/payment-management/supplier-payment.component').then(m => m.SupplierPaymentComponent),
+        canActivate: [AuthGuard],
+        data: { permissions: ['purchase-costs'] }
+      },
+      {
+        path: 'agent',
+        loadComponent: () => import('./features/payment-management/agent-payment.component').then(m => m.AgentPaymentComponent),
+        canActivate: [AuthGuard],
+        data: { permissions: ['quotes'] }
+      },
       { path: '', redirectTo: 'supplier', pathMatch: 'full' }
     ]
   },
@@ -71,6 +81,12 @@ export const routes: Routes = [
   {
     path: 'supplier-quotes',
     loadComponent: () => import('./features/supplier-quote/supplier-quote.component').then(m => m.SupplierQuoteComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['purchase-costs'] }
+  },
+  {
+    path: 'ops-actions',
+    loadComponent: () => import('./features/ops-action/ops-action.component').then(m => m.OpsActionComponent),
     canActivate: [AuthGuard],
     data: { permissions: ['purchase-costs'] }
   },
@@ -162,12 +178,31 @@ export const routes: Routes = [
   {
     path: 'orders',
     canActivate: [AuthGuard],
-    data: { permissions: ['orders'] },
     children: [
-      { path: 'test2', loadComponent: () => import('./features/test-order2/test-order2.component').then(m => m.TestOrder2Component) },
-      { path: 'update', loadComponent: () => import('./features/order-update/order-update.component').then(m => m.OrderUpdateComponent) },
-      { path: 'google-sheet-sync', loadComponent: () => import('./features/google-sheet-sync/google-sheet-sync.component').then(m => m.GoogleSheetSyncComponent) },
-      { path: '', loadComponent: () => import('./features/order-status/order-status.component').then(m => m.OrderStatusComponent) }
+      {
+        path: 'test2',
+        loadComponent: () => import('./features/test-order2/test-order2.component').then(m => m.TestOrder2Component),
+        canActivate: [AuthGuard],
+        data: { permissions: ['orders-test2'] }
+      },
+      {
+        path: 'update',
+        loadComponent: () => import('./features/order-update/order-update.component').then(m => m.OrderUpdateComponent),
+        canActivate: [AuthGuard],
+        data: { permissions: ['orders'] }
+      },
+      {
+        path: 'google-sheet-sync',
+        loadComponent: () => import('./features/google-sheet-sync/google-sheet-sync.component').then(m => m.GoogleSheetSyncComponent),
+        canActivate: [AuthGuard],
+        data: { permissions: ['orders'] }
+      },
+      {
+        path: '',
+        loadComponent: () => import('./features/order-status/order-status.component').then(m => m.OrderStatusComponent),
+        canActivate: [AuthGuard],
+        data: { permissions: ['orders'] }
+      }
     ]
   },
   {

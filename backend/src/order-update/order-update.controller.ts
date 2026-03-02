@@ -9,13 +9,18 @@ import {
   UseInterceptors,
   BadRequestException,
   HttpStatus,
-  HttpCode
+  HttpCode,
+  UseGuards
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OrderUpdateService } from './order-update.service';
 import { ProcessResult } from './dto/update-order-from-excel.dto';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('order-update')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('orders')
 export class OrderUpdateController {
   constructor(private readonly orderUpdateService: OrderUpdateService) {}
 

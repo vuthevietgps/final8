@@ -66,6 +66,7 @@ import { AdsAlertsModule } from './ads-alerts/ads-alerts.module';
 import { CashflowControlModule } from './cashflow-control/cashflow-control.module';
 import { OwnerFundModule } from './owner-fund/owner-fund.module';
 import { EmergencyActionModule } from './emergency-action/emergency-action.module';
+import { OpsActionModule } from './ops-action/ops-action.module';
 
 @Module({
   imports: [
@@ -201,6 +202,8 @@ import { EmergencyActionModule } from './emergency-action/emergency-action.modul
     OwnerFundModule,
     // Module Emergency Action Logs (trạng thái task khẩn cấp Ads, verification, cảnh báo quá hạn)
     EmergencyActionModule,
+    // Module Ops Action (hành động khẩn cấp vận hành: NCC, đại lý, đơn hàng)
+    OpsActionModule,
   ],
   controllers: [], // Không có controllers ở level app, chỉ có ở modules con
   providers: [],   // Không có providers chung ở level app

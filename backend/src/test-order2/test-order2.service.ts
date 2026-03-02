@@ -49,6 +49,12 @@ export class TestOrder2Service {
     return rounded > 0 ? rounded : undefined;
   }
 
+  private getCurrentUserId(currentUser?: any): string | undefined {
+    const rawId = currentUser?.id ?? currentUser?._id ?? currentUser?.userId ?? currentUser?.sub;
+    if (!rawId) return undefined;
+    return rawId instanceof Types.ObjectId ? rawId.toString() : String(rawId);
+  }
+
   private async getProductUsageDurationMonths(productId?: Types.ObjectId | string): Promise<number | undefined> {
     if (!productId) return undefined;
     const id = typeof productId === 'string' ? productId : productId.toString();
@@ -274,8 +280,14 @@ export class TestOrder2Service {
     return saved;
   }
 
-  async findById(id: string) {
+  async findById(id: string, currentUser?: any) {
     const doc = await this.model.findById(id).lean();
+    if (doc && currentUser && SUPPLIER_ROLES.has(currentUser.role)) {
+      const currentUserId = this.getCurrentUserId(currentUser);
+      if (!currentUserId || doc.supplierId?.toString() !== currentUserId) {
+        throw new ForbiddenException('Bạn chỉ được phép xem đơn hàng của mình');
+      }
+    }
     return doc;
   }
 
@@ -285,7 +297,8 @@ export class TestOrder2Service {
 
     // --- Supplier access control ---
     if (currentUser && SUPPLIER_ROLES.has(currentUser.role)) {
-      if (doc.supplierId?.toString() !== currentUser.id) {
+      const currentUserId = this.getCurrentUserId(currentUser);
+      if (!currentUserId || doc.supplierId?.toString() !== currentUserId) {
         throw new ForbiddenException('Bạn chỉ được phép chỉnh sửa đơn hàng của mình');
       }
       const filtered: any = {};
@@ -460,11 +473,16 @@ export class TestOrder2Service {
 
     const query: FilterQuery<TestOrder2Document> = {};
 
+    const isSupplierUser = !!params.currentUser && SUPPLIER_ROLES.has(params.currentUser.role);
+
     if (params.currentUser) {
       const userRole = params.currentUser.role;
-      const userId = params.currentUser._id || params.currentUser.userId || params.currentUser.sub;
+      const userId = this.getCurrentUserId(params.currentUser);
 
       if (userRole === 'internal_supplier' || userRole === 'external_supplier') {
+        if (!userId || !Types.ObjectId.isValid(userId)) {
+          throw new ForbiddenException('Không xác định được tài khoản nhà cung cấp');
+        }
         query.supplierId = new Types.ObjectId(userId);
         this.logger.log(`Supplier ${userId} filtering orders by supplierId`);
       }
@@ -482,7 +500,7 @@ export class TestOrder2Service {
     }
     if (params.productId) query.productId = new Types.ObjectId(params.productId);
     if (params.agentId) query.agentId = new Types.ObjectId(params.agentId);
-    if (params.supplierId) query.supplierId = new Types.ObjectId(params.supplierId);
+    if (params.supplierId && !isSupplierUser) query.supplierId = new Types.ObjectId(params.supplierId);
     if (params.adGroupId) query.adGroupId = params.adGroupId;
     if (params.isActive !== undefined) {
       if (params.isActive === 'true' || params.isActive === '1') query.isActive = true;

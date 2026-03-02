@@ -28,7 +28,18 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
 .btn-outline:hover { background: #2563eb; color: white; }
 
 /* === SUPPLIER READ-ONLY CELL TEXT === */
-.cell-text { display: inline-block; padding: 4px 8px; font-size: 0.9rem; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cell-text {
+  display: inline-block;
+  height: 32px;
+  line-height: 32px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 
 /* === INPUTS === */
 .input, .select, select { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
@@ -44,7 +55,7 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
 /* Shared sizing variables for perfect alignment */
 .split-table { 
   --fixed-width: 510px; /* 110 + 200 + 200 */
-  --row-h: 46px;
+  --row-h: 44px;
   display: flex; 
   border: 1px solid #f0f0f0; 
   border-radius: 10px; 
@@ -62,8 +73,11 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
 /* Sum-wide min width so columns never overlap; adjust if you change column widths */
 .scroll-table { min-width: 3020px; }
 
-.fixed-table th, .scroll-table th, .fixed-table td, .scroll-table td { border: none; border-bottom: 1px solid #f1f5f9; padding: 10px 8px; vertical-align: middle; font-size: 0.875rem; box-sizing: border-box; }
+.fixed-table th, .scroll-table th, .fixed-table td, .scroll-table td { border: none; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 0.875rem; box-sizing: border-box; }
+.fixed-table th, .scroll-table th { padding: 10px 8px; }
+.fixed-table td, .scroll-table td { padding: 0 8px; }
 .fixed-table thead th, .scroll-table thead th { height: var(--row-h); line-height: calc(var(--row-h) - 2px); white-space: nowrap; }
+.fixed-table tbody tr, .scroll-table tbody tr { height: var(--row-h); }
 .fixed-table tbody td, .scroll-table tbody td { height: var(--row-h); }
 .fixed-table thead th, .scroll-table thead th { position: sticky; top: 0; z-index: 2; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; font-weight: 600; }
 
@@ -107,6 +121,8 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
   line-height: 32px !important;
   padding: 4px 8px !important;
   box-sizing: border-box !important;
+  margin: 0 !important;
+  display: block !important;
   width: 100% !important;
   max-width: 100% !important;
 }

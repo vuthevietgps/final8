@@ -264,6 +264,22 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   loadSuppliers(): void {
+    if (this.isSupplier()) {
+      const user = this.authService.user();
+      if (user && (user.role === 'internal_supplier' || user.role === 'external_supplier')) {
+        this.suppliers.set([{
+          _id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive
+        }]);
+      } else {
+        this.suppliers.set([]);
+      }
+      return;
+    }
+
     this.supplierService.list({ active: true, minimal: true }).subscribe({
       next: (items) => this.suppliers.set(items),
       error: (e) => console.error(e)
@@ -301,6 +317,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   onBlurUpdate(order: TestOrder2, field: keyof TestOrder2, value: any): void {
+    if (!this.canEditField(String(field))) return;
+
     const id = order._id;
     // Normalize payload values by field type to match backend expectations
     const normalizeValue = (f: keyof TestOrder2, v: any) => {
@@ -343,6 +361,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   onSelectUpdate(order: TestOrder2, field: keyof TestOrder2, event: Event): void {
+    if (!this.canEditField(String(field))) return;
+
     const target = event.target as HTMLSelectElement;
     let value = (target.value ?? '').toString().trim();
     
@@ -485,6 +505,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   onInputUpdate(order: TestOrder2, field: keyof TestOrder2, event: Event): void {
+    if (!this.canEditField(String(field))) return;
+
     const target = event.target as HTMLInputElement | HTMLTextAreaElement;
     let value: any = target.value;
     if (['quantity', 'depositAmount', 'codAmount'].includes(field as string)) {

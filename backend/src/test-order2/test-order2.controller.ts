@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards, Res, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, Res } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -14,7 +14,7 @@ import { Response } from 'express';
 
 @Controller('test-order2')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@RequirePermissions('orders')
+@RequirePermissions('orders-test2')
 export class TestOrder2Controller {
   constructor(
     private readonly service: TestOrder2Service,
@@ -66,6 +66,7 @@ export class TestOrder2Controller {
   }
 
   @Post('seed')
+  @RequirePermissions('orders')
   async seed(@Query('count') count?: string) {
     const c = Math.max(1, Math.min(100, Number(count) || 10));
     return this.service.seed(c);
@@ -78,6 +79,7 @@ export class TestOrder2Controller {
    * GET /test-order2/daily-profit-report?date=2026-01-29
    */
   @Get('daily-profit-report')
+  @RequirePermissions('orders')
   async getDailyProfitReport(@Query('date') date?: string) {
     return this.service.getDailyProfitReport(date);
   }
@@ -87,6 +89,7 @@ export class TestOrder2Controller {
    * GET /test-order2/product-profit-report?date=2026-01-29
    */
   @Get('product-profit-report')
+  @RequirePermissions('orders')
   async getProductProfitReport(
     @Query('date') date?: string,
     @Query('from') from?: string,
@@ -97,8 +100,8 @@ export class TestOrder2Controller {
 
   // Routes with :id params MUST be placed AFTER specific routes
   @Get(':id')
-  async findById(@Param('id') id: string) {
-    return this.service.findById(id);
+  async findById(@CurrentUser() currentUser: any, @Param('id') id: string) {
+    return this.service.findById(id, currentUser);
   }
 
   @Patch(':id')
@@ -108,8 +111,8 @@ export class TestOrder2Controller {
 
   // Patch only delivery/order status (to mirror docker v10.0 DTO)
   @Patch(':id/delivery-status')
-  async updateDeliveryStatus(@Param('id') id: string, @Body() dto: UpdateDeliveryStatusDto) {
-    return this.service.update(id, dto as any);
+  async updateDeliveryStatus(@CurrentUser() currentUser: any, @Param('id') id: string, @Body() dto: UpdateDeliveryStatusDto) {
+    return this.service.update(id, dto as any, currentUser);
   }
 
   @Delete(':id')
@@ -119,6 +122,7 @@ export class TestOrder2Controller {
 
   // Export JSON
   @Get('export/json')
+  @RequirePermissions('orders')
   async exportJson() {
     const { items, count } = await this.exportJsonService.exportJson();
     return { items, count };
@@ -126,6 +130,7 @@ export class TestOrder2Controller {
 
   // Export CSV (response as text/csv)
   @Get('export/csv')
+  @RequirePermissions('orders')
   async exportCsv(@Res() res: Response) {
     const { csv, count } = await this.exportService.exportCsv();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -135,6 +140,7 @@ export class TestOrder2Controller {
 
   // Import JSON
   @Post('import')
+  @RequirePermissions('orders')
   async importJson(@Body() body: { items: any[] }) {
     return this.importService.importJson(body);
   }
@@ -143,6 +149,7 @@ export class TestOrder2Controller {
 
   // Get supplier payment ops summary (dashboard + breakdown)
   @Get('supplier-payment/ops-summary')
+  @RequirePermissions('orders')
   async getSupplierPaymentOpsSummary(
     @Query('supplierId') supplierId?: string,
     @Query('fromDate') fromDate?: string,
@@ -157,6 +164,7 @@ export class TestOrder2Controller {
 
   // Get agent payment ops summary (dashboard + breakdown) - CFO Spec v2.0
   @Get('agent-payment/ops-summary')
+  @RequirePermissions('orders')
   async getAgentPaymentOpsSummary(
     @Query('agentId') agentId?: string,
     @Query('fromDate') fromDate?: string,
@@ -171,6 +179,7 @@ export class TestOrder2Controller {
 
   // Get orders pending supplier payment
   @Get('payment-pending/supplier')
+  @RequirePermissions('orders')
   async getOrdersPendingSupplierPayment(
     @Query('supplierId') supplierId?: string,
     @Query('from') from?: string,
@@ -187,6 +196,7 @@ export class TestOrder2Controller {
 
   // Get orders pending agent payment
   @Get('payment-pending/agent')
+  @RequirePermissions('orders')
   async getOrdersPendingAgentPayment(
     @Query('agentId') agentId?: string,
     @Query('from') from?: string,
@@ -201,12 +211,14 @@ export class TestOrder2Controller {
 
   // Create supplier payment batch
   @Post('supplier-payment-batch')
+  @RequirePermissions('orders')
   async createSupplierPaymentBatch(@Body() dto: CreateSupplierPaymentBatchDto) {
     return this.service.createSupplierPaymentBatch(dto);
   }
 
   // Create agent payment batch
   @Post('agent-payment-batch')
+  @RequirePermissions('orders')
   async createAgentPaymentBatch(@Body() dto: CreateAgentPaymentBatchDto) {
     return this.service.createAgentPaymentBatch(dto);
   }
@@ -214,12 +226,14 @@ export class TestOrder2Controller {
   // Create agent payment batch with atomic update (CFO Spec v2.0)
   // Chống double-pay, idempotency
   @Post('agent-payment-batch/atomic')
+  @RequirePermissions('orders')
   async createAgentPaymentBatchAtomic(@Body() dto: CreateAgentPaymentBatchDto) {
     return this.service.createAgentPaymentBatchAtomic(dto);
   }
 
   // Get supplier payment batches
   @Get('payment-batches/supplier')
+  @RequirePermissions('orders')
   async getSupplierPaymentBatches(
     @Query('supplierId') supplierId?: string,
     @Query('from') from?: string,
@@ -234,6 +248,7 @@ export class TestOrder2Controller {
 
   // Get agent payment batches
   @Get('payment-batches/agent')
+  @RequirePermissions('orders')
   async getAgentPaymentBatches(
     @Query('agentId') agentId?: string,
     @Query('from') from?: string,
@@ -248,6 +263,7 @@ export class TestOrder2Controller {
 
   // Get orders in a payment batch
   @Get('payment-batch/:batchId/:type')
+  @RequirePermissions('orders')
   async getOrdersInBatch(
     @Param('batchId') batchId: string,
     @Param('type') type: 'supplier' | 'agent'
@@ -257,6 +273,7 @@ export class TestOrder2Controller {
 
   // Recalculate profits for a single order
   @Post(':id/recalculate-profits')
+  @RequirePermissions('orders')
   async recalculateProfits(@Param('id') id: string) {
     return this.service.recalculateProfits(id);
   }
@@ -264,12 +281,14 @@ export class TestOrder2Controller {
   // Recalculate quotes for a single order (force refresh based on current orderDate)
   // Use this when orderDate changes and you want to apply the correct quote
   @Post(':id/recalculate-quotes')
+  @RequirePermissions('orders')
   async recalculateQuotes(@Param('id') id: string) {
     return this.service.recalculateQuotes(id);
   }
 
   // Recalculate profits for all orders (with filters)
   @Post('recalculate-all-profits')
+  @RequirePermissions('orders')
   async recalculateAllProfits(
     @Query('from') from?: string,
     @Query('to') to?: string,

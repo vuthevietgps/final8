@@ -116,6 +116,7 @@ export class DashboardComponent {
       'users': 'Quản lý người dùng',
       'products': 'Quản lý sản phẩm',
       'orders': 'Quản lý đơn hàng',
+      'orders-test2': 'Đơn hàng thử nghiệm 2',
       'delivery-status': 'Trạng thái giao hàng',
       'production-status': 'Trạng thái sản xuất',
       'ad-accounts': 'Tài khoản quảng cáo',
@@ -153,10 +154,10 @@ export class DashboardComponent {
       [UserRole.EMPLOYEE]: [
         'orders'
       ],
-      [UserRole.INTERNAL_AGENT]: ['orders', 'delivery-status', 'products'],
-      [UserRole.EXTERNAL_AGENT]: ['orders', 'delivery-status'],
-      [UserRole.INTERNAL_SUPPLIER]: ['products', 'quotes'],
-      [UserRole.EXTERNAL_SUPPLIER]: ['quotes']
+      [UserRole.INTERNAL_AGENT]: ['orders-test2'],
+      [UserRole.EXTERNAL_AGENT]: ['orders-test2'],
+      [UserRole.INTERNAL_SUPPLIER]: ['orders-test2'],
+      [UserRole.EXTERNAL_SUPPLIER]: ['orders-test2']
     };
 
     return rolePermissions[user.role] || [];
