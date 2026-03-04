@@ -21,6 +21,14 @@ export class ProductService {
     private mediaModel: Model<MediaDocument>
   ) {}
 
+  private normalizeAssumedReturnRatePercent(value: unknown, fallback: number = 20): number {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return fallback;
+    }
+    return Math.min(95, Math.max(0, num));
+  }
+
   async create(createProductDto: CreateProductDto): Promise<Product> {
     const payload: any = { ...createProductDto };
     payload.status = payload.status || 'Hoạt động';
@@ -40,6 +48,10 @@ export class ProductService {
     payload.maxStock = Number(payload.maxStock || 0);
     payload.estimatedDeliveryDays = Number(payload.estimatedDeliveryDays || 0);
     payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 1));
+    payload.assumedReturnRatePercent = this.normalizeAssumedReturnRatePercent(
+      payload.assumedReturnRatePercent,
+      20,
+    );
     payload.totalCost = payload.importPrice + payload.shippingCost + payload.packagingCost;
 
     const createdProduct = new this.productModel(payload);
@@ -95,11 +107,23 @@ export class ProductService {
       payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 1));
     }
 
-    // Ensure totalCost stays correct when updating (pre-save hook won't run)
+    if (payload.assumedReturnRatePercent !== undefined) {
+      payload.assumedReturnRatePercent = this.normalizeAssumedReturnRatePercent(
+        payload.assumedReturnRatePercent,
+      );
+    }
+
+    // Ensure totalCost stays correct when updating (pre-save hook won't run).
+    // Use existing values for fields that are not part of the partial update payload.
     if (payload.importPrice !== undefined || payload.shippingCost !== undefined || payload.packagingCost !== undefined) {
-      const importPrice = payload.importPrice ?? 0;
-      const shippingCost = payload.shippingCost ?? 0;
-      const packagingCost = payload.packagingCost ?? 0;
+      const existingProduct = await this.productModel.findById(id).select('importPrice shippingCost packagingCost').lean();
+      if (!existingProduct) {
+        throw new NotFoundException(`Product with ID ${id} not found`);
+      }
+
+      const importPrice = Number(payload.importPrice ?? existingProduct.importPrice ?? 0);
+      const shippingCost = Number(payload.shippingCost ?? existingProduct.shippingCost ?? 0);
+      const packagingCost = Number(payload.packagingCost ?? existingProduct.packagingCost ?? 0);
       payload.totalCost = importPrice + shippingCost + packagingCost;
     }
 

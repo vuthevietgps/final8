@@ -17,10 +17,12 @@ import { OrderUpdateService } from './order-update.service';
 import { ProcessResult } from './dto/update-order-from-excel.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('order-update')
 @Controller('order-update')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@RequirePermissions('orders')
+@RequirePermissions('order-update')
 export class OrderUpdateController {
   constructor(private readonly orderUpdateService: OrderUpdateService) {}
 

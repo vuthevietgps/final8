@@ -4,7 +4,7 @@
  */
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { AdGroupService } from './ad-group.service';
 import { AdGroup, CreateAdGroup, AdPlatform, AdGroupRecommendation } from './models/ad-group.model';
 import { FanpageService } from '../fanpage/fanpage.service';
@@ -92,7 +92,7 @@ export class AdGroupComponent implements OnInit {
       agentId: ['', Validators.required],
       adAccountId: ['', Validators.required],
       platform: ['facebook', Validators.required],
-      selectedProducts: [[]],
+      selectedProducts: [[], Validators.required],
       enableWebhook: [false],
       autoControlEnabled: [false],
       spendThresholdDaily: [0],
@@ -271,7 +271,7 @@ export class AdGroupComponent implements OnInit {
       agentId: this.extractId((group as any).agentId) || '',
       adAccountId: this.extractId((group as any).adAccountId) || '',
       platform: (group as any).platform || 'facebook',
-      selectedProducts: (group.selectedProducts || []).map(p => this.extractId(p)).filter(Boolean),
+      selectedProducts: (group.selectedProducts || []).map(p => this.extractId(p)).filter(Boolean).slice(0, 1),
       enableWebhook: group.enableWebhook || false,
       autoControlEnabled: group.autoControlEnabled || false,
       spendThresholdDaily: group.spendThresholdDaily || 0,
@@ -303,39 +303,57 @@ export class AdGroupComponent implements OnInit {
   }
 
   saveItem(): void {
-    if (this.adGroupForm.valid) {
-      this.isSaving.set(true);
-      const formData = this.adGroupForm.value;
-
-      if (this.isEditing() && this.editingId) {
-        this.adGroupService.update(this.editingId, formData).subscribe({
-          next: (updated) => {
-            this.adGroups.update(groups => 
-              groups.map(g => g._id === updated._id ? updated : g)
-            );
-            this.closeModal();
-            this.isSaving.set(false);
-          },
-          error: (error) => {
-            const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật';
-            this.error.set('Lỗi cập nhật: ' + msg);
-            this.isSaving.set(false);
-          }
-        });
-      } else {
-        this.adGroupService.create(formData).subscribe({
-          next: (created) => {
-            this.adGroups.update(groups => [created, ...groups]);
-            this.closeModal();
-            this.isSaving.set(false);
-          },
-          error: (error) => {
-            const msg = (error && (error.error?.message || error.message)) || 'Lỗi tạo mới';
-            this.error.set('Lỗi tạo mới: ' + msg);
-            this.isSaving.set(false);
-          }
-        });
+    if (!this.adGroupForm.valid) {
+      this.adGroupForm.markAllAsTouched();
+      if (!this.normalizeSingleProductSelection(this.adGroupForm.get('selectedProducts')?.value)) {
+        this.error.set('Mỗi nhóm quảng cáo phải chọn đúng 1 sản phẩm');
       }
+      return;
+    }
+
+    const selectedProducts = this.normalizeSingleProductSelection(
+      this.adGroupForm.get('selectedProducts')?.value,
+    );
+    if (!selectedProducts) {
+      this.error.set('Mỗi nhóm quảng cáo phải chọn đúng 1 sản phẩm');
+      this.adGroupForm.get('selectedProducts')?.markAsTouched();
+      return;
+    }
+
+    this.isSaving.set(true);
+    const formData = {
+      ...this.adGroupForm.value,
+      selectedProducts,
+    };
+
+    if (this.isEditing() && this.editingId) {
+      this.adGroupService.update(this.editingId, formData).subscribe({
+        next: (updated) => {
+          this.adGroups.update(groups =>
+            groups.map(g => g._id === updated._id ? updated : g)
+          );
+          this.closeModal();
+          this.isSaving.set(false);
+        },
+        error: (error) => {
+          const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật';
+          this.error.set('Lỗi cập nhật: ' + msg);
+          this.isSaving.set(false);
+        }
+      });
+    } else {
+      this.adGroupService.create(formData).subscribe({
+        next: (created) => {
+          this.adGroups.update(groups => [created, ...groups]);
+          this.closeModal();
+          this.isSaving.set(false);
+        },
+        error: (error) => {
+          const msg = (error && (error.error?.message || error.message)) || 'Lỗi tạo mới';
+          this.error.set('Lỗi tạo mới: ' + msg);
+          this.isSaving.set(false);
+        }
+      });
     }
   }
 
@@ -383,17 +401,16 @@ export class AdGroupComponent implements OnInit {
     return selected.includes(productId);
   }
 
-  toggleProductSelection(productId: string, event: Event): void {
-    const checkbox = event.target as HTMLInputElement;
-    const selected = this.adGroupForm.get('selectedProducts')?.value || [];
-    
-    if (checkbox.checked) {
-      this.adGroupForm.get('selectedProducts')?.setValue([...selected, productId]);
-    } else {
-      this.adGroupForm.get('selectedProducts')?.setValue(
-        selected.filter((id: string) => id !== productId)
-      );
-    }
+  selectSingleProduct(productId: string): void {
+    this.adGroupForm.get('selectedProducts')?.setValue([productId]);
+    this.adGroupForm.get('selectedProducts')?.markAsDirty();
+    this.adGroupForm.get('selectedProducts')?.markAsTouched();
+  }
+
+  clearSingleProductSelection(): void {
+    this.adGroupForm.get('selectedProducts')?.setValue([]);
+    this.adGroupForm.get('selectedProducts')?.markAsDirty();
+    this.adGroupForm.get('selectedProducts')?.markAsTouched();
   }
 
   // Utility methods
@@ -513,4 +530,18 @@ export class AdGroupComponent implements OnInit {
     }
     return '';
   }
+
+  private normalizeSingleProductSelection(value: any): string[] | null {
+    if (!Array.isArray(value)) return null;
+    const normalized = Array.from(
+      new Set(
+        value
+          .map((item: any) => String(item ?? '').trim())
+          .filter((item: string) => !!item),
+      ),
+    );
+    if (normalized.length !== 1) return null;
+    return normalized;
+  }
 }
+

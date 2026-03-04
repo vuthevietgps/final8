@@ -4,7 +4,9 @@ import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CreateReturnRequestDto } from './dto/create-return-request.dto';
 import { ResolveReturnRequestDto } from './dto/resolve-return-request.dto';
 import { ReturnRequestService } from './return-request.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('return-request')
 @Controller('returns')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReturnRequestController {

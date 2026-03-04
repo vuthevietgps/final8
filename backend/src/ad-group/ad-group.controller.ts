@@ -19,7 +19,9 @@ import { AdGroupRecommendationService } from './ad-group.recommendation.service'
 import { AdGroupSyncService } from './ad-group.sync.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('ad-group')
 @Controller('ad-groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('ad-groups')
@@ -235,7 +237,7 @@ export class AdGroupController {
 
   /**
    * Auto-import: Tự động tạo ad groups đã chọn vào hệ thống
-   * Body: { adAccountId, adGroupIds[], fanpageId, productCategoryId, agentId }
+   * Body: { adAccountId, adGroupIds[], fanpageId, productCategoryId, selectedProductId?, agentId }
    */
   @Post('import')
   async importAdGroups(@Body() body: {
@@ -243,6 +245,7 @@ export class AdGroupController {
     adGroupIds: string[];
     fanpageId: string;
     productCategoryId: string;
+    selectedProductId?: string;
     agentId: string;
   }) {
     if (!body.adAccountId || !body.adGroupIds?.length || !body.fanpageId || !body.productCategoryId || !body.agentId) {

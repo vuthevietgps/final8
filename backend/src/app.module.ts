@@ -13,6 +13,7 @@
  */
 
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -67,6 +68,8 @@ import { CashflowControlModule } from './cashflow-control/cashflow-control.modul
 import { OwnerFundModule } from './owner-fund/owner-fund.module';
 import { EmergencyActionModule } from './emergency-action/emergency-action.module';
 import { OpsActionModule } from './ops-action/ops-action.module';
+import { PlanModule } from './plan/plan.module';
+import { FeatureGateGuard } from './plan/feature-gate.guard';
 
 @Module({
   imports: [
@@ -204,8 +207,13 @@ import { OpsActionModule } from './ops-action/ops-action.module';
     EmergencyActionModule,
     // Module Ops Action (hành động khẩn cấp vận hành: NCC, đại lý, đơn hàng)
     OpsActionModule,
+    // Module Plan - Quản lý gói dịch vụ (Starter/Professional/Enterprise)
+    PlanModule,
   ],
-  controllers: [], // Không có controllers ở level app, chỉ có ở modules con
-  providers: [],   // Không có providers chung ở level app
+  controllers: [],
+  providers: [
+    // Global guard: kiểm tra module có được phép theo gói hay không
+    { provide: APP_GUARD, useClass: FeatureGateGuard },
+  ],
 })
 export class AppModule { }

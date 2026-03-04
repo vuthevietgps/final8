@@ -21,9 +21,44 @@ export class AdGroupService {
     @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
   ) {}
 
+  private normalizeSingleProductSelection(selectedProducts: unknown): string[] {
+    if (!Array.isArray(selectedProducts)) {
+      throw new BadRequestException('Phải chọn đúng 1 sản phẩm cho nhóm quảng cáo');
+    }
+
+    const normalized = Array.from(
+      new Set(
+        selectedProducts
+          .map((item) => String(item ?? '').trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (normalized.length !== 1) {
+      throw new BadRequestException('Mỗi nhóm quảng cáo phải gắn đúng 1 sản phẩm');
+    }
+
+    return normalized;
+  }
+
+  private async validateProductInCategory(productId: string, productCategoryId: string): Promise<void> {
+    const exists = await this.productModel.exists({
+      _id: productId,
+      categoryId: productCategoryId,
+    });
+
+    if (!exists) {
+      throw new BadRequestException('Sản phẩm đã chọn không thuộc danh mục sản phẩm của nhóm quảng cáo');
+    }
+  }
+
   async create(dto: CreateAdGroupDto): Promise<AdGroup> {
+    const selectedProducts = this.normalizeSingleProductSelection(dto.selectedProducts);
+    await this.validateProductInCategory(selectedProducts[0], dto.productCategoryId);
+
     const created = new this.adGroupModel({
       ...dto,
+      selectedProducts,
       isActive: dto.isActive ?? true,
     });
     try {
@@ -117,7 +152,35 @@ export class AdGroupService {
   }
 
   async update(id: string, dto: UpdateAdGroupDto): Promise<AdGroup> {
-    const updated = await this.adGroupModel.findByIdAndUpdate(id, dto, { new: true })
+    const existing = await this.adGroupModel
+      .findById(id)
+      .select('productCategoryId selectedProducts')
+      .lean();
+    if (!existing) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
+
+    const updatePayload: any = { ...dto };
+    const nextCategoryId = String(dto.productCategoryId ?? existing.productCategoryId ?? '');
+
+    let nextSelectedProducts: string[] | undefined;
+    if (dto.selectedProducts !== undefined) {
+      nextSelectedProducts = this.normalizeSingleProductSelection(dto.selectedProducts);
+      updatePayload.selectedProducts = nextSelectedProducts;
+    } else if (dto.productCategoryId !== undefined) {
+      // Khi đổi danh mục mà không truyền selectedProducts, thử giữ sản phẩm hiện tại nếu hợp lệ.
+      const currentSelected = this.normalizeSingleProductSelection(existing.selectedProducts || []);
+      nextSelectedProducts = currentSelected;
+      updatePayload.selectedProducts = currentSelected;
+    }
+
+    if (nextSelectedProducts) {
+      await this.validateProductInCategory(nextSelectedProducts[0], nextCategoryId);
+    }
+
+    const updated = await this.adGroupModel.findByIdAndUpdate(
+      id,
+      updatePayload,
+      { new: true, runValidators: true },
+    )
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description color icon')
       .populate('selectedProducts', 'name description price')

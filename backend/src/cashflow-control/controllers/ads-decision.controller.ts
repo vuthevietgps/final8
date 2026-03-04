@@ -14,7 +14,9 @@
 import { Controller, Get } from '@nestjs/common';
 import { AdsDecisionService } from '../services/ads-decision.service';
 import { AdsDecisionDto } from '../dto/ads-decision.dto';
+import { FeatureModule } from '../../plan/feature-module.decorator';
 
+@FeatureModule('cashflow-control')
 @Controller('cashflow/ads')
 export class AdsDecisionController {
   constructor(private readonly adsDecisionService: AdsDecisionService) {}

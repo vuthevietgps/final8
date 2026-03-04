@@ -23,7 +23,9 @@ import { CreateFundTransactionDto } from './dto/create-fund-transaction.dto';
 import { TransferToOwnerFundDto, TransferFromOwnerFundDto, OwnerWithdrawFromFundDto } from './dto/transfer.dto';
 import { WithdrawalStatus } from './schemas/withdrawal.schema';
 import { FundTransactionType, FundTransactionCategory } from './schemas/fund-transaction.schema';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('owner-fund')
 @Controller('owner-fund')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('owner-fund')

@@ -201,13 +201,25 @@ export class HorizontalScaleService {
     }
 
     const selectedStrategy = availableStrategies[0];
+    const parentSelectedProducts = (adGroup.selectedProducts || []).map((p) => p.toString());
+    if (!parentSelectedProducts.length) {
+      return {
+        action: 'CANNOT_SCALE',
+        reason: `Ad group ${adGroupId} chưa gắn sản phẩm nên không thể tạo nhóm scale mới`,
+      };
+    }
+    if (parentSelectedProducts.length > 1) {
+      this.logger.warn(
+        `Ad group ${adGroupId} đang có ${parentSelectedProducts.length} sản phẩm, sẽ lấy sản phẩm đầu tiên để tuân thủ rule 1 ad group = 1 product`,
+      );
+    }
 
     return {
       action: 'CREATE_NEW_AD_GROUP',
       reason: `Horizontal scaling: ${frequencyCheck.reason || 'ROI cao + Fund đủ'}`,
       newAdGroupConfig: {
         productCategoryId: adGroup.productCategoryId.toString(),
-        selectedProducts: adGroup.selectedProducts.map(p => p.toString()),
+        selectedProducts: [parentSelectedProducts[0]],
         initialBudget: newAdGroupBudget,
         testingPhase: 'TESTING',
         basedOnAdGroup: adGroupId,
@@ -232,6 +244,14 @@ export class HorizontalScaleService {
     config: NewAdGroupConfig
   ): Promise<AdGroupDocument | null> {
     try {
+      const normalizedSelectedProducts = Array.from(
+        new Set((config.selectedProducts || []).map((x) => String(x || '').trim()).filter(Boolean)),
+      );
+      if (normalizedSelectedProducts.length !== 1) {
+        this.logger.error('Horizontal scaling yêu cầu đúng 1 sản phẩm cho ad group mới');
+        return null;
+      }
+
       const timestamp = Date.now();
       const parentAdGroup = await this.adGroupModel.findOne({ 
         adGroupId: config.basedOnAdGroup 
@@ -254,7 +274,7 @@ export class HorizontalScaleService {
         adGroupId: `TEMP_${timestamp}`,  // Temporary ID, sẽ update sau khi tạo trên Facebook
         fanpageId: config.fanpageId,
         productCategoryId: config.productCategoryId,
-        selectedProducts: config.selectedProducts,
+        selectedProducts: normalizedSelectedProducts,
         agentId: config.agentId,
         adAccountId: config.adAccountId,
         platform: config.platform,

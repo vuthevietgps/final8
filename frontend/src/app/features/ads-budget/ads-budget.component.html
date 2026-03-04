@@ -110,6 +110,28 @@
           </select>
         </div>
         <div class="filter-group">
+          <label>Che do toi uu:</label>
+          <select [ngModel]="optimizationMode()" (ngModelChange)="onOptimizationModeChange($event)">
+            <option value="product-x">Theo X san pham (nhanh)</option>
+            <option value="legacy">Legacy (loi nhuan thuc te)</option>
+          </select>
+        </div>
+        @if (optimizationMode() === 'product-x') {
+          <div class="filter-group">
+            <label>X mac dinh (%):</label>
+            <input
+              type="number"
+              min="0"
+              max="95"
+              step="0.1"
+              [ngModel]="defaultAssumedReturnRatePercent()"
+              (ngModelChange)="onDefaultXChange($event)"
+              style="width: 90px;"
+            />
+            <button class="btn btn-secondary btn-sm" (click)="applyDefaultX()">Ap dung</button>
+          </div>
+        }
+        <div class="filter-group">
           <label>
             <input type="checkbox" [ngModel]="showAlertOnly()" (ngModelChange)="showAlertOnly.set($event)">
             ⚠️ Chỉ cảnh báo
@@ -229,6 +251,43 @@
   <!-- TAB 3: HÀNH ĐỘNG KHẨN CẤP -->
   <!-- ============================================= -->
   @if (activeTab() === 'emergency') {
+    <div class="tab-navigation emergency-mode-tabs">
+      <button
+        class="tab-btn"
+        [class.active]="emergencyMode() === 'product-x'"
+        (click)="onEmergencyModeChange('product-x')"
+      >
+        Theo X hang hoan
+      </button>
+      <button
+        class="tab-btn"
+        [class.active]="emergencyMode() === 'legacy'"
+        (click)="onEmergencyModeChange('legacy')"
+      >
+        Theo loi nhuan thuc te
+      </button>
+    </div>
+
+    @if (emergencyModeComparison(); as cmp) {
+      <div class="summary-cards emergency-compare-cards">
+        <div class="summary-card">
+          <span class="label">Task theo X</span>
+          <span class="value">{{ cmp.xTaskCount }}</span>
+        </div>
+        <div class="summary-card">
+          <span class="label">Task thực tế</span>
+          <span class="value">{{ cmp.legacyTaskCount }}</span>
+        </div>
+        <div class="summary-card" [class.alert]="cmp.taskDelta !== 0">
+          <span class="label">Chênh task</span>
+          <span class="value">{{ cmp.taskDelta > 0 ? '+' : '' }}{{ cmp.taskDelta }}</span>
+        </div>
+        <div class="summary-card" [class.alert]="cmp.requiredDailyDelta !== 0">
+          <span class="label">Chênh ngân sách/ngày</span>
+          <span class="value">{{ cmp.requiredDailyDelta > 0 ? '+' : '' }}{{ formatCurrency(cmp.requiredDailyDelta) }}</span>
+        </div>
+      </div>
+    }
     @if (emergencySummary(); as es) {
       <div class="progress-section emergency-progress">
         <div class="summary-cards">
@@ -274,7 +333,7 @@
 
     @if (!emergencyLoading() && !emergencyError()) {
       <div class="emergency-intro">
-        <h3>Checklist công việc Ads trong ngày</h3>
+        <h3>Checklist công việc Ads trong ngày - {{ getEmergencyModeLabel() }}</h3>
         <p>Làm theo thứ tự: <strong>Tạo mới</strong> -> <strong>Đổi chi phí</strong> -> <strong>Tắt nhóm</strong>.</p>
       </div>
 

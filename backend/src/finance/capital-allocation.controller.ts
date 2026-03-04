@@ -3,7 +3,9 @@ import { CapitalAllocationService } from './capital-allocation.service';
 import { CreateCapitalAllocationPolicyDto, UpdateCapitalAllocationPolicyDto } from './dto/create-capital-allocation-policy.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('capital-allocation')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('finance')

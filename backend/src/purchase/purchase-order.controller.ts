@@ -6,7 +6,9 @@ import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseDto } from './dto/receive-purchase.dto';
 import { PurchasePriceHistoryDto } from './dto/purchase-price-history.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('purchase')
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PurchaseOrderController {

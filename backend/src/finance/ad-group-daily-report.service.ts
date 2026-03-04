@@ -3,10 +3,85 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
 import { AdGroupDailyReport, AdGroupDailyReportDocument } from './schemas/ad-group-daily-report.schema';
 import { CapitalAllocationSnapshot, CapitalAllocationSnapshotDocument } from './schemas/capital-allocation-snapshot.schema';
 import { AdsDailySpending, AdsDailySpendingDocument } from './schemas/ads-daily-spending.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
+
+type OptimalSpendMode = 'legacy' | 'product-x';
+type ReturnAssumptionSource = 'product' | 'fallback' | 'mixed';
+
+interface SuggestionRecord {
+  date: string;
+  adsCost: number;
+  netProfit: number;
+}
+
+interface RawHistoryByAdGroup {
+  _id: string;
+  adGroupName?: string;
+  platform?: string;
+  records: SuggestionRecord[];
+  totalSpend: number;
+  totalProfit: number;
+  dayCount: number;
+}
+
+interface ProductXContext {
+  assumedReturnRatePercent: number;
+  assumptionSource: ReturnAssumptionSource;
+  appliedProducts: Array<{
+    productId: string;
+    productName: string;
+    assumedReturnRatePercent: number;
+  }>;
+  expectedReturnedOrders: number;
+  orderCount: number;
+}
+
+interface OptimalSpendSuggestionItem {
+  adGroupId: string;
+  adGroupName: string;
+  platform: string;
+  productCategoryId?: string;
+  productCategoryName?: string;
+  spendYesterday: number;
+  profitYesterday: number;
+  currentAvgSpend: number;
+  baselineSpend: number;
+  suggestedSpend: number;
+  suggestedSpendWithCap: number;
+  reason: string;
+  confidence: number;
+  consecutiveNegativeDays: number;
+  hasAlert: boolean;
+  marginalAnalysis: {
+    dataPoints: number;
+    lastMarginalProfit: number;
+    avgMarginalProfit: number;
+  };
+  assumedReturnRatePercent?: number;
+  assumptionSource?: ReturnAssumptionSource;
+  orderCount?: number;
+  expectedReturnedOrders?: number;
+  appliedProducts?: Array<{
+    productId: string;
+    productName: string;
+    assumedReturnRatePercent: number;
+  }>;
+  optimizationMode?: OptimalSpendMode;
+}
+
+interface OptimalSpendSuggestionResponse {
+  suggestions: Map<string, { suggestedSpend: number; suggestedSpendWithCap: number; reason: string; confidence: number }>;
+  adGroupSuggestions: OptimalSpendSuggestionItem[];
+  totalSuggestedSpend: number;
+  totalSuggestedSpendWithCap: number;
+  totalCurrentSpend: number;
+  mode: OptimalSpendMode;
+  defaultAssumedReturnRatePercent: number;
+}
 
 @Injectable()
 export class AdGroupDailyReportService {
@@ -15,6 +90,7 @@ export class AdGroupDailyReportService {
   constructor(
     @InjectModel(TestOrder2.name) private readonly orderModel: Model<TestOrder2Document>,
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
+    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
     @InjectModel(AdGroupDailyReport.name) private readonly reportModel: Model<AdGroupDailyReportDocument>,
     @InjectModel(CapitalAllocationSnapshot.name) private readonly snapshotModel: Model<CapitalAllocationSnapshotDocument>,
     @InjectModel(AdsDailySpending.name) private readonly adsSpendingModel: Model<AdsDailySpendingDocument>,
@@ -228,62 +304,496 @@ export class AdGroupDailyReportService {
   }
 
   /**
-   * Tính chi phí gợi ý tối ưu cho từng ad group
-   * Sử dụng thuật toán lợi nhuận biên giảm dần (Diminishing Marginal Profit)
-   * 
-   * Logic:
-   * 1. Lấy lịch sử chi phí và lợi nhuận theo ngày của từng ad group
-   * 2. Sắp xếp theo mức chi phí tăng dần
-   * 3. Tính marginal profit = Δ profit / Δ spend tại mỗi mức
-   * 4. Tìm điểm optimal: marginal profit gần 0 nhất (điểm tối ưu)
-   * 5. Nếu marginal > 0 ở tất cả các mức → có thể tăng chi phí
-   * 6. Nếu marginal < 0 → đang chi quá nhiều, cần giảm
+   * Optimized spend suggestions.
+   * - legacy: giu nguyen thuat toan cu theo net profit thuc te
+   * - product-x: uoc tinh nhanh theo X% hang hoan tren san pham
    */
-  async getOptimalSpendSuggestions(): Promise<{
-    suggestions: Map<string, { suggestedSpend: number; suggestedSpendWithCap: number; reason: string; confidence: number }>;
-    adGroupSuggestions: Array<{
-      adGroupId: string;
-      adGroupName: string;
-      platform: string;
-      productCategoryId?: string;
-      productCategoryName?: string;
-      spendYesterday: number;
-      profitYesterday: number;
-      currentAvgSpend: number;
-      /** CFO Spec v3.0: Baseline = max(spendYesterday, avgLast3Days, 200k) - dùng để tính cap */
-      baselineSpend: number;
-      suggestedSpend: number;
-      /** Chi phí gợi ý có áp dụng trần 20% tăng / 30% giảm từ baselineSpend */
-      suggestedSpendWithCap: number;
-      reason: string;
-      confidence: number;
-      consecutiveNegativeDays: number;
-      hasAlert: boolean;
-      marginalAnalysis: {
-        dataPoints: number;
-        lastMarginalProfit: number;
-        avgMarginalProfit: number;
-      };
-    }>;
-    totalSuggestedSpend: number;
-    /** Tổng chi phí gợi ý có áp dụng trần % - dùng cho Financial Control */
-    totalSuggestedSpendWithCap: number;
-    totalCurrentSpend: number;
-  }> {
-    // Lấy tất cả ad group có dữ liệu trong 30 ngày qua
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const dateStr = thirtyDaysAgo.toISOString().split('T')[0];
-    
-    // Lấy ngày hôm qua
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+  async getOptimalSpendSuggestions(options?: {
+    mode?: OptimalSpendMode;
+    defaultAssumedReturnRatePercent?: number;
+  }): Promise<OptimalSpendSuggestionResponse> {
+    const mode: OptimalSpendMode = options?.mode === 'product-x' ? 'product-x' : 'legacy';
+    const defaultAssumedReturnRatePercent = this.clampReturnRatePercent(
+      options?.defaultAssumedReturnRatePercent,
+      20,
+    );
 
-    // Aggregate: lấy lịch sử theo ngày cho từng ad group
-    const historyByAdGroup = await this.reportModel.aggregate([
-      { $match: { date: { $gte: dateStr } } },
-      { $sort: { date: -1 } }, // Sort by date desc để tính consecutive negative days
+    if (mode === 'product-x') {
+      return this.getOptimalSpendSuggestionsByProductX(defaultAssumedReturnRatePercent);
+    }
+
+    return this.getOptimalSpendSuggestionsLegacy(defaultAssumedReturnRatePercent);
+  }
+
+  private async getOptimalSpendSuggestionsLegacy(
+    defaultAssumedReturnRatePercent: number,
+  ): Promise<OptimalSpendSuggestionResponse> {
+    const dateStr = this.getDateStringDaysAgo(30);
+    const yesterdayStr = this.getDateStringDaysAgo(1);
+
+    const historyByAdGroup = await this.loadHistoricalReports(dateStr);
+    const adGroupIds = historyByAdGroup.map((ag) => ag._id);
+    const adGroups = await this.adGroupModel.find({ adGroupId: { $in: adGroupIds } })
+      .populate('productCategoryId', 'name')
+      .exec();
+    const adGroupMap = new Map(adGroups.map((ag) => [ag.adGroupId, ag]));
+
+    const result = this.buildSuggestionsFromHistory({
+      historyByAdGroup,
+      adGroupMap,
+      yesterdayStr,
+      mode: 'legacy',
+    });
+
+    return {
+      ...result,
+      mode: 'legacy',
+      defaultAssumedReturnRatePercent,
+    };
+  }
+
+  private async getOptimalSpendSuggestionsByProductX(
+    defaultAssumedReturnRatePercent: number,
+  ): Promise<OptimalSpendSuggestionResponse> {
+    const dateStr = this.getDateStringDaysAgo(30);
+    const yesterdayStr = this.getDateStringDaysAgo(1);
+    const startDate = this.getDateObjectDaysAgo(30);
+
+    const historyByAdGroup = await this.loadHistoricalReports(dateStr);
+    const adGroupIds = historyByAdGroup.map((ag) => ag._id);
+
+    if (!adGroupIds.length) {
+      return {
+        suggestions: new Map(),
+        adGroupSuggestions: [],
+        totalSuggestedSpend: 0,
+        totalSuggestedSpendWithCap: 0,
+        totalCurrentSpend: 0,
+        mode: 'product-x',
+        defaultAssumedReturnRatePercent,
+      };
+    }
+
+    const adGroups = await this.adGroupModel.find({ adGroupId: { $in: adGroupIds } })
+      .populate('productCategoryId', 'name')
+      .select('adGroupId name platform productCategoryId selectedProducts')
+      .lean();
+    const adGroupMap = new Map(adGroups.map((ag: any) => [ag.adGroupId, ag]));
+
+    const orderAggRows: Array<{
+      _id: {
+        adGroupId: string;
+        date: string;
+        productId?: string;
+        supplierIsReturnable: boolean;
+      };
+      orderCount: number;
+      codAmount: number;
+      supplierCost: number;
+      shippingFee: number;
+      returnFee: number;
+    }> = await this.orderModel.aggregate([
+      {
+        $match: {
+          orderDate: { $gte: startDate },
+          adGroupId: { $in: adGroupIds, $nin: [null, '', '0'] },
+        },
+      },
+      {
+        $project: {
+          adGroupId: 1,
+          date: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$orderDate',
+            },
+          },
+          productId: {
+            $cond: [
+              { $ifNull: ['$productId', false] },
+              { $toString: '$productId' },
+              null,
+            ],
+          },
+          supplierIsReturnable: { $ifNull: ['$supplierIsReturnableSnapshot', true] },
+          codAmount: { $ifNull: ['$codAmount', 0] },
+          supplierCost: {
+            $multiply: [
+              { $ifNull: ['$quantity', 1] },
+              { $ifNull: ['$supplierAppliedPrice', { $ifNull: ['$supplierQuote', 0] }] },
+            ],
+          },
+          shippingFee: { $ifNull: ['$shippingFee', 0] },
+          returnFee: { $ifNull: ['$returnFee', 0] },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            adGroupId: '$adGroupId',
+            date: '$date',
+            productId: '$productId',
+            supplierIsReturnable: '$supplierIsReturnable',
+          },
+          orderCount: { $sum: 1 },
+          codAmount: { $sum: '$codAmount' },
+          supplierCost: { $sum: '$supplierCost' },
+          shippingFee: { $sum: '$shippingFee' },
+          returnFee: { $sum: '$returnFee' },
+        },
+      },
+    ]).exec();
+
+    const productIds = new Set<string>();
+    for (const row of orderAggRows) {
+      if (row?._id?.productId) {
+        productIds.add(String(row._id.productId));
+      }
+    }
+    for (const adGroup of adGroups as any[]) {
+      for (const productId of adGroup?.selectedProducts || []) {
+        if (productId) {
+          productIds.add(String(productId));
+        }
+      }
+    }
+
+    const products = await this.productModel.find({
+      _id: { $in: Array.from(productIds) },
+    }).select('name assumedReturnRatePercent').lean();
+
+    const productMap = new Map(
+      products.map((p: any) => [
+        String(p._id),
+        {
+          productId: String(p._id),
+          productName: p.name || String(p._id),
+          assumedReturnRatePercent: this.clampReturnRatePercent(
+            p.assumedReturnRatePercent,
+            defaultAssumedReturnRatePercent,
+          ),
+        },
+      ]),
+    );
+
+    const adGroupDefaultX = new Map<string, ProductXContext>();
+    for (const adGroup of adGroups as any[]) {
+      const selected = (adGroup?.selectedProducts || []).map((id: any) => String(id));
+      const productItems = selected
+        .map((id: string) => productMap.get(id))
+        .filter(Boolean) as Array<{ productId: string; productName: string; assumedReturnRatePercent: number }>;
+
+      if (productItems.length > 0) {
+        const avgX = productItems.reduce((sum, p) => sum + p.assumedReturnRatePercent, 0) / productItems.length;
+        const assumptionSource: ReturnAssumptionSource = productItems.length === selected.length ? 'product' : 'mixed';
+        adGroupDefaultX.set(adGroup.adGroupId, {
+          assumedReturnRatePercent: Math.round(avgX * 100) / 100,
+          assumptionSource,
+          appliedProducts: productItems,
+          expectedReturnedOrders: 0,
+          orderCount: 0,
+        });
+      } else {
+        adGroupDefaultX.set(adGroup.adGroupId, {
+          assumedReturnRatePercent: defaultAssumedReturnRatePercent,
+          assumptionSource: 'fallback',
+          appliedProducts: [],
+          expectedReturnedOrders: 0,
+          orderCount: 0,
+        });
+      }
+    }
+
+    const estimatedGrossByAdGroupDate = new Map<string, number>();
+    const productXContextByAdGroup = new Map<string, ProductXContext>();
+
+    for (const row of orderAggRows) {
+      const adGroupId = row?._id?.adGroupId;
+      const date = row?._id?.date;
+      if (!adGroupId || !date) continue;
+
+      const productId = row?._id?.productId ? String(row._id.productId) : '';
+      const fromProduct = productId ? productMap.get(productId) : undefined;
+      const defaultProfile = adGroupDefaultX.get(adGroupId) || {
+        assumedReturnRatePercent: defaultAssumedReturnRatePercent,
+        assumptionSource: 'fallback' as ReturnAssumptionSource,
+        appliedProducts: [],
+        expectedReturnedOrders: 0,
+        orderCount: 0,
+      };
+
+      const usedXPercent = fromProduct?.assumedReturnRatePercent ?? defaultProfile.assumedReturnRatePercent;
+      const xRate = usedXPercent / 100;
+      const isSupplierReturnable = row?._id?.supplierIsReturnable !== false;
+
+      const expectedRevenue = (row.codAmount || 0) * (1 - xRate);
+      const expectedSupplierCost = isSupplierReturnable
+        ? (row.supplierCost || 0) * (1 - xRate)
+        : (row.supplierCost || 0);
+      const expectedReturnFee = (row.returnFee || 0) * xRate;
+      const expectedGrossProfit =
+        expectedRevenue
+        - expectedSupplierCost
+        - (row.shippingFee || 0)
+        - expectedReturnFee;
+
+      const key = `${adGroupId}|${date}`;
+      estimatedGrossByAdGroupDate.set(
+        key,
+        (estimatedGrossByAdGroupDate.get(key) || 0) + expectedGrossProfit,
+      );
+
+      const ctx = productXContextByAdGroup.get(adGroupId) || {
+        assumedReturnRatePercent: 0,
+        assumptionSource: defaultProfile.assumptionSource,
+        appliedProducts: [...defaultProfile.appliedProducts],
+        expectedReturnedOrders: 0,
+        orderCount: 0,
+      };
+
+      const rowOrders = row.orderCount || 0;
+      ctx.assumedReturnRatePercent =
+        ctx.orderCount + rowOrders > 0
+          ? ((ctx.assumedReturnRatePercent * ctx.orderCount) + (usedXPercent * rowOrders)) / (ctx.orderCount + rowOrders)
+          : usedXPercent;
+      ctx.expectedReturnedOrders += rowOrders * xRate;
+      ctx.orderCount += rowOrders;
+
+      if (fromProduct && !ctx.appliedProducts.some((p) => p.productId === fromProduct.productId)) {
+        ctx.appliedProducts.push(fromProduct);
+      }
+
+      productXContextByAdGroup.set(adGroupId, ctx);
+    }
+
+    for (const adGroupId of adGroupIds) {
+      if (!productXContextByAdGroup.has(adGroupId)) {
+        const fallback = adGroupDefaultX.get(adGroupId);
+        if (fallback) {
+          productXContextByAdGroup.set(adGroupId, fallback);
+        }
+      }
+    }
+
+    const estimatedHistory: RawHistoryByAdGroup[] = historyByAdGroup.map((ag) => {
+      const records = (ag.records || []).map((record) => {
+        const key = `${ag._id}|${record.date}`;
+        const adsCost = Number(record.adsCost || 0);
+        const estimatedGross = estimatedGrossByAdGroupDate.has(key)
+          ? Number(estimatedGrossByAdGroupDate.get(key) || 0)
+          : Number(record.netProfit || 0) + adsCost;
+        return {
+          date: record.date,
+          adsCost,
+          netProfit: estimatedGross - adsCost,
+        };
+      });
+
+      return {
+        ...ag,
+        records,
+        totalProfit: records.reduce((sum, r) => sum + (r.netProfit || 0), 0),
+      };
+    });
+
+    const result = this.buildSuggestionsFromHistory({
+      historyByAdGroup: estimatedHistory,
+      adGroupMap,
+      yesterdayStr,
+      mode: 'product-x',
+      productXContextByAdGroup,
+    });
+
+    return {
+      ...result,
+      mode: 'product-x',
+      defaultAssumedReturnRatePercent,
+    };
+  }
+
+  private buildSuggestionsFromHistory(params: {
+    historyByAdGroup: RawHistoryByAdGroup[];
+    adGroupMap: Map<string, any>;
+    yesterdayStr: string;
+    mode: OptimalSpendMode;
+    productXContextByAdGroup?: Map<string, ProductXContext>;
+  }): Omit<OptimalSpendSuggestionResponse, 'mode' | 'defaultAssumedReturnRatePercent'> {
+    const suggestions = new Map<string, { suggestedSpend: number; suggestedSpendWithCap: number; reason: string; confidence: number }>();
+    const adGroupSuggestions: OptimalSpendSuggestionItem[] = [];
+
+    for (const ag of params.historyByAdGroup) {
+      const adGroupId = ag._id;
+      const adGroupInfo = params.adGroupMap.get(adGroupId);
+      const adGroupName = ag.adGroupName || adGroupInfo?.name || adGroupId;
+      const platform = ag.platform || adGroupInfo?.platform || 'unknown';
+      const productCategoryId = adGroupInfo?.productCategoryId?._id?.toString?.() || '';
+      const productCategoryName = adGroupInfo?.productCategoryId?.name || '';
+      const productXContext = params.productXContextByAdGroup?.get(adGroupId);
+
+      const records = ag.records || [];
+      const dayCount = ag.dayCount || 1;
+      const currentAvgSpend = (ag.totalSpend || 0) / dayCount;
+
+      const yesterdayRecord = records.find((r) => r.date === params.yesterdayStr);
+      const spendYesterday = yesterdayRecord?.adsCost || 0;
+      const profitYesterday = yesterdayRecord?.netProfit || 0;
+
+      const MIN_START_BUDGET = 60000;
+      const sortedByDateDescForAvg = [...records].sort((a, b) => b.date.localeCompare(a.date));
+      const last3DaysRecords = sortedByDateDescForAvg.slice(0, 3);
+      const avgLast3Days = last3DaysRecords.length > 0
+        ? last3DaysRecords.reduce((sum, r) => sum + (r.adsCost || 0), 0) / last3DaysRecords.length
+        : 0;
+      const baselineSpend = Math.max(spendYesterday, avgLast3Days, MIN_START_BUDGET);
+
+      let consecutiveNegativeDays = 0;
+      const sortedByDateDesc = [...records].sort((a, b) => b.date.localeCompare(a.date));
+      for (const rec of sortedByDateDesc) {
+        if ((rec.netProfit || 0) < 0) {
+          consecutiveNegativeDays++;
+        } else {
+          break;
+        }
+      }
+
+      const baseSuggestionPayload = {
+        adGroupId,
+        adGroupName,
+        platform,
+        productCategoryId,
+        productCategoryName,
+        spendYesterday,
+        profitYesterday,
+        currentAvgSpend: Math.round(currentAvgSpend),
+        baselineSpend: Math.round(baselineSpend),
+        consecutiveNegativeDays,
+        hasAlert: consecutiveNegativeDays >= 3,
+        assumedReturnRatePercent: productXContext
+          ? Math.round((productXContext.assumedReturnRatePercent || 0) * 100) / 100
+          : undefined,
+        assumptionSource: productXContext?.assumptionSource,
+        orderCount: productXContext?.orderCount,
+        expectedReturnedOrders: productXContext
+          ? Math.round((productXContext.expectedReturnedOrders || 0) * 100) / 100
+          : undefined,
+        appliedProducts: productXContext?.appliedProducts,
+        optimizationMode: params.mode,
+      };
+
+      if (records.length < 3) {
+        const suggestedSpend = Math.round(currentAvgSpend);
+        const suggestedSpendWithCap = suggestedSpend;
+        const suggestion = {
+          suggestedSpend,
+          suggestedSpendWithCap,
+          reason: 'Khong du du lieu (can >=3 ngay)',
+          confidence: 30,
+        };
+        suggestions.set(adGroupId, suggestion);
+        adGroupSuggestions.push({
+          ...baseSuggestionPayload,
+          ...suggestion,
+          marginalAnalysis: { dataPoints: records.length, lastMarginalProfit: 0, avgMarginalProfit: 0 },
+        });
+        continue;
+      }
+
+      const sortedRecords = [...records].sort((a, b) => (a.adsCost || 0) - (b.adsCost || 0));
+      const marginalProfits: number[] = [];
+      for (let i = 1; i < sortedRecords.length; i++) {
+        const prev = sortedRecords[i - 1];
+        const curr = sortedRecords[i];
+        const deltaSpend = (curr.adsCost || 0) - (prev.adsCost || 0);
+        const deltaProfit = (curr.netProfit || 0) - (prev.netProfit || 0);
+        if (deltaSpend > 0) {
+          marginalProfits.push(deltaProfit / deltaSpend);
+        }
+      }
+
+      if (marginalProfits.length === 0) {
+        const suggestedSpend = Math.round(currentAvgSpend);
+        const suggestedSpendWithCap = suggestedSpend;
+        const suggestion = {
+          suggestedSpend,
+          suggestedSpendWithCap,
+          reason: 'Chi phi khong doi giua cac ngay',
+          confidence: 40,
+        };
+        suggestions.set(adGroupId, suggestion);
+        adGroupSuggestions.push({
+          ...baseSuggestionPayload,
+          ...suggestion,
+          marginalAnalysis: { dataPoints: records.length, lastMarginalProfit: 0, avgMarginalProfit: 0 },
+        });
+        continue;
+      }
+
+      const lastMarginalProfit = marginalProfits[marginalProfits.length - 1];
+      const avgMarginalProfit = marginalProfits.reduce((a, b) => a + b, 0) / marginalProfits.length;
+
+      let suggestedSpend: number;
+      let reason: string;
+      let confidence: number;
+
+      if (avgMarginalProfit > 1) {
+        suggestedSpend = Math.min(currentAvgSpend * 1.2, currentAvgSpend + 500000);
+        reason = `Marginal profit cao (${avgMarginalProfit.toFixed(2)}) -> co the TANG 20%`;
+        confidence = Math.min(85, 60 + marginalProfits.filter((m) => m > 1).length * 5);
+      } else if (avgMarginalProfit > 0) {
+        if (lastMarginalProfit > 0.5) {
+          suggestedSpend = currentAvgSpend * 1.1;
+          reason = `Marginal profit duong (${avgMarginalProfit.toFixed(2)}) -> co the TANG NHE 10%`;
+          confidence = 70;
+        } else if (lastMarginalProfit > 0) {
+          suggestedSpend = currentAvgSpend;
+          reason = `Dang o gan diem OPTIMAL (marginal ~ ${avgMarginalProfit.toFixed(2)})`;
+          confidence = 80;
+        } else {
+          suggestedSpend = currentAvgSpend * 0.9;
+          reason = 'Marginal cuoi am -> nen GIAM 10%';
+          confidence = 75;
+        }
+      } else {
+        suggestedSpend = currentAvgSpend * 0.7;
+        reason = `Marginal profit AM (${avgMarginalProfit.toFixed(2)}) -> can GIAM 30%`;
+        confidence = 85;
+      }
+
+      suggestedSpend = Math.max(0, Math.round(suggestedSpend));
+      const upperCap = Math.round(baselineSpend * 1.20);
+      const lowerCap = Math.round(baselineSpend * 0.70);
+      const suggestedSpendWithCap = Math.max(lowerCap, Math.min(upperCap, suggestedSpend));
+
+      const suggestion = { suggestedSpend, suggestedSpendWithCap, reason, confidence };
+      suggestions.set(adGroupId, suggestion);
+      adGroupSuggestions.push({
+        ...baseSuggestionPayload,
+        ...suggestion,
+        marginalAnalysis: {
+          dataPoints: marginalProfits.length,
+          lastMarginalProfit: Math.round(lastMarginalProfit * 100) / 100,
+          avgMarginalProfit: Math.round(avgMarginalProfit * 100) / 100,
+        },
+      });
+    }
+
+    const totalSuggestedSpend = adGroupSuggestions.reduce((sum, item) => sum + item.suggestedSpend, 0);
+    const totalSuggestedSpendWithCap = adGroupSuggestions.reduce((sum, item) => sum + item.suggestedSpendWithCap, 0);
+    const totalCurrentSpend = adGroupSuggestions.reduce((sum, item) => sum + item.currentAvgSpend, 0);
+
+    return {
+      suggestions,
+      adGroupSuggestions,
+      totalSuggestedSpend,
+      totalSuggestedSpendWithCap,
+      totalCurrentSpend,
+    };
+  }
+
+  private async loadHistoricalReports(fromDate: string): Promise<RawHistoryByAdGroup[]> {
+    return this.reportModel.aggregate([
+      { $match: { date: { $gte: fromDate } } },
+      { $sort: { date: -1 } },
       {
         $group: {
           _id: '$adGroupId',
@@ -293,234 +803,36 @@ export class AdGroupDailyReportService {
             $push: {
               date: '$date',
               adsCost: '$adsCost',
-              netProfit: '$netProfit'
-            }
+              netProfit: '$netProfit',
+            },
           },
           totalSpend: { $sum: '$adsCost' },
           totalProfit: { $sum: '$netProfit' },
-          dayCount: { $sum: 1 }
-        }
-      }
+          dayCount: { $sum: 1 },
+        },
+      },
     ]).exec();
+  }
 
-    // Lấy thông tin ad group (platform, productCategory)
-    const adGroupIds = historyByAdGroup.map(ag => ag._id);
-    const adGroups = await this.adGroupModel.find({ adGroupId: { $in: adGroupIds } })
-      .populate('productCategoryId', 'name')
-      .exec();
-    const adGroupMap = new Map(adGroups.map(ag => [ag.adGroupId, ag]));
+  private getDateStringDaysAgo(daysAgo: number): string {
+    const date = this.getDateObjectDaysAgo(daysAgo);
+    return date.toISOString().split('T')[0];
+  }
 
-    const suggestions = new Map<string, { suggestedSpend: number; suggestedSpendWithCap: number; reason: string; confidence: number }>();
-    const adGroupSuggestions: Array<any> = [];
+  private getDateObjectDaysAgo(daysAgo: number): Date {
+    const date = new Date();
+    date.setDate(date.getDate() - daysAgo);
+    return date;
+  }
 
-    for (const ag of historyByAdGroup) {
-      const adGroupId = ag._id;
-      const adGroupInfo = adGroupMap.get(adGroupId);
-      const adGroupName = ag.adGroupName || adGroupInfo?.name || adGroupId;
-      const platform = ag.platform || adGroupInfo?.platform || 'unknown';
-      const productCategoryId = adGroupInfo?.productCategoryId?._id?.toString() || '';
-      const productCategoryName = (adGroupInfo?.productCategoryId as any)?.name || '';
-      
-      const records = ag.records || [];
-      const dayCount = ag.dayCount || 1;
-      const currentAvgSpend = ag.totalSpend / dayCount;
-      
-      // Tìm dữ liệu hôm qua
-      const yesterdayRecord = records.find((r: any) => r.date === yesterdayStr);
-      const spendYesterday = yesterdayRecord?.adsCost || 0;
-      const profitYesterday = yesterdayRecord?.netProfit || 0;
-      
-      // CFO Spec v3.0: Tính baseline từ max(spendYesterday, avgLast3Days, minStartBudget)
-      const MIN_START_BUDGET = 60000; // Ngân sách tối thiểu 60k VNĐ
-      const sortedByDateDescForAvg = [...records].sort((a: any, b: any) => b.date.localeCompare(a.date));
-      const last3DaysRecords = sortedByDateDescForAvg.slice(0, 3);
-      const avgLast3Days = last3DaysRecords.length > 0 
-        ? last3DaysRecords.reduce((sum: number, r: any) => sum + (r.adsCost || 0), 0) / last3DaysRecords.length 
-        : 0;
-      const baselineSpend = Math.max(spendYesterday, avgLast3Days, MIN_START_BUDGET);
-      
-      // Tính số ngày liên tiếp có lợi nhuận âm (từ gần nhất)
-      let consecutiveNegativeDays = 0;
-      const sortedByDateDesc = [...records].sort((a: any, b: any) => b.date.localeCompare(a.date));
-      for (const rec of sortedByDateDesc) {
-        if (rec.netProfit < 0) {
-          consecutiveNegativeDays++;
-        } else {
-          break;
-        }
-      }
-
-      if (records.length < 3) {
-        // Không đủ dữ liệu - giữ nguyên
-        const suggestedSpend = Math.round(currentAvgSpend);
-        const suggestedSpendWithCap = suggestedSpend; // Không đổi
-        const hasAlert = consecutiveNegativeDays >= 3;
-        const suggestion = {
-          suggestedSpend,
-          suggestedSpendWithCap,
-          reason: 'Không đủ dữ liệu (cần ≥3 ngày)',
-          confidence: 30
-        };
-        suggestions.set(adGroupId, suggestion);
-        adGroupSuggestions.push({
-          adGroupId,
-          adGroupName,
-          platform,
-          productCategoryId,
-          productCategoryName,
-          spendYesterday,
-          profitYesterday,
-          currentAvgSpend: Math.round(currentAvgSpend),
-          suggestedSpend,
-          suggestedSpendWithCap,
-          reason: suggestion.reason,
-          confidence: suggestion.confidence,
-          consecutiveNegativeDays,
-          hasAlert,
-          marginalAnalysis: { dataPoints: records.length, lastMarginalProfit: 0, avgMarginalProfit: 0 }
-        });
-        continue;
-      }
-
-      // Sắp xếp theo mức chi phí tăng dần
-      const sortedRecords = [...records].sort((a, b) => a.adsCost - b.adsCost);
-
-      // Tính marginal profit tại mỗi mức
-      const marginalProfits: number[] = [];
-      for (let i = 1; i < sortedRecords.length; i++) {
-        const prev = sortedRecords[i - 1];
-        const curr = sortedRecords[i];
-        const deltaSpend = curr.adsCost - prev.adsCost;
-        const deltaProfit = curr.netProfit - prev.netProfit;
-
-        if (deltaSpend > 0) {
-          marginalProfits.push(deltaProfit / deltaSpend);
-        }
-      }
-
-      if (marginalProfits.length === 0) {
-        const suggestedSpend = Math.round(currentAvgSpend);
-        const suggestedSpendWithCap = suggestedSpend; // Không đổi
-        const hasAlert = consecutiveNegativeDays >= 3;
-        const suggestion = {
-          suggestedSpend,
-          suggestedSpendWithCap,
-          reason: 'Chi phí không đổi giữa các ngày',
-          confidence: 40
-        };
-        suggestions.set(adGroupId, suggestion);
-        adGroupSuggestions.push({
-          adGroupId,
-          adGroupName,
-          platform,
-          productCategoryId,
-          productCategoryName,
-          spendYesterday,
-          profitYesterday,
-          currentAvgSpend: Math.round(currentAvgSpend),
-          suggestedSpend,
-          suggestedSpendWithCap,
-          reason: suggestion.reason,
-          confidence: suggestion.confidence,
-          consecutiveNegativeDays,
-          hasAlert,
-          marginalAnalysis: { dataPoints: records.length, lastMarginalProfit: 0, avgMarginalProfit: 0 }
-        });
-        continue;
-      }
-
-      const lastMarginalProfit = marginalProfits[marginalProfits.length - 1];
-      const avgMarginalProfit = marginalProfits.reduce((a, b) => a + b, 0) / marginalProfits.length;
-
-      // Tìm điểm optimal dựa trên marginal profit
-      let suggestedSpend: number;
-      let reason: string;
-      let confidence: number;
-
-      if (avgMarginalProfit > 1) {
-        // Marginal profit > 1: mỗi đồng chi thêm mang về > 1 đồng lợi nhuận → TĂNG
-        suggestedSpend = Math.min(currentAvgSpend * 1.2, currentAvgSpend + 500000);
-        reason = `Marginal profit cao (${avgMarginalProfit.toFixed(2)}) → Có thể TĂNG 20%`;
-        confidence = Math.min(85, 60 + marginalProfits.filter(m => m > 1).length * 5);
-      } else if (avgMarginalProfit > 0) {
-        // 0 < Marginal < 1: đang gần điểm optimal
-        if (lastMarginalProfit > 0.5) {
-          suggestedSpend = currentAvgSpend * 1.1;
-          reason = `Marginal profit dương (${avgMarginalProfit.toFixed(2)}) → Có thể TĂNG NHẸ 10%`;
-          confidence = 70;
-        } else if (lastMarginalProfit > 0) {
-          suggestedSpend = currentAvgSpend;
-          reason = `Đang ở gần điểm OPTIMAL (marginal ≈ ${avgMarginalProfit.toFixed(2)})`;
-          confidence = 80;
-        } else {
-          suggestedSpend = currentAvgSpend * 0.9;
-          reason = `Marginal cuối âm → Nên GIẢM 10%`;
-          confidence = 75;
-        }
-      } else {
-        // Marginal < 0: chi thêm = lỗ thêm → GIẢM
-        suggestedSpend = currentAvgSpend * 0.7;
-        reason = `Marginal profit ÂM (${avgMarginalProfit.toFixed(2)}) → Cần GIẢM 30%`;
-        confidence = 85;
-      }
-
-      // Đảm bảo suggestedSpend không âm và có giới hạn
-      suggestedSpend = Math.max(0, Math.round(suggestedSpend));
-
-      // CFO Spec v3.0: Tính cap từ baselineSpend (không phải currentAvgSpend)
-      // baselineSpend = max(spendYesterday, avgLast3Days, 200k)
-      const upperCap = Math.round(baselineSpend * 1.20);
-      const lowerCap = Math.round(baselineSpend * 0.70);
-      const suggestedSpendWithCap = Math.max(lowerCap, Math.min(upperCap, suggestedSpend));
-      
-      // Alert khi lỗ liên tiếp ≥3 ngày
-      const hasAlert = consecutiveNegativeDays >= 3;
-
-      const suggestion = { suggestedSpend, suggestedSpendWithCap, reason, confidence };
-      suggestions.set(adGroupId, suggestion);
-      adGroupSuggestions.push({
-        adGroupId,
-        adGroupName,
-        platform,
-        productCategoryId,
-        productCategoryName,
-        spendYesterday,
-        profitYesterday,
-        currentAvgSpend: Math.round(currentAvgSpend),
-        baselineSpend: Math.round(baselineSpend), // CFO Spec v3.0: baseline để tính cap
-        suggestedSpend,
-        suggestedSpendWithCap,
-        reason,
-        confidence,
-        consecutiveNegativeDays,
-        hasAlert,
-        marginalAnalysis: {
-          dataPoints: marginalProfits.length,
-          lastMarginalProfit: Math.round(lastMarginalProfit * 100) / 100,
-          avgMarginalProfit: Math.round(avgMarginalProfit * 100) / 100
-        }
-      });
-    }
-
-    // Tính tổng chi phí quảng cáo đề xuất
-    const totalSuggestedSpend = adGroupSuggestions.reduce(
-      (sum, item) => sum + item.suggestedSpend, 
-      0
-    );
-    const totalSuggestedSpendWithCap = adGroupSuggestions.reduce(
-      (sum, item) => sum + item.suggestedSpendWithCap, 
-      0
-    );
-    const totalCurrentSpend = adGroupSuggestions.reduce(
-      (sum, item) => sum + item.currentAvgSpend, 
-      0
-    );
-
-    return { suggestions, adGroupSuggestions, totalSuggestedSpend, totalSuggestedSpendWithCap, totalCurrentSpend };
+  private clampReturnRatePercent(value: unknown, fallback: number): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(95, Math.max(0, n));
   }
 
   /**
-   * Báo cáo chi phí và lợi nhuận kèm chi phí gợi ý
+   * Bao cao chi phi va loi nhuan kem chi phi goi y
    */
   async getReportWithSuggestions(params: {
     fromDate?: string;
@@ -627,4 +939,7 @@ export class AdGroupDailyReportService {
     }
   }
 }
+
+
+
 

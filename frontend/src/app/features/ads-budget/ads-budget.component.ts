@@ -18,6 +18,8 @@ export interface OptimalSpendResponse {
   totalSuggestedSpend: number;
   totalSuggestedSpendWithCap: number;
   totalCurrentSpend: number;
+  mode?: 'legacy' | 'product-x';
+  defaultAssumedReturnRatePercent?: number;
 }
 
 export interface AdGroupSuggestion {
@@ -37,6 +39,11 @@ export interface AdGroupSuggestion {
   confidence: number;
   consecutiveNegativeDays: number;
   hasAlert: boolean;
+  assumedReturnRatePercent?: number;
+  assumptionSource?: 'product' | 'fallback' | 'mixed';
+  orderCount?: number;
+  expectedReturnedOrders?: number;
+  optimizationMode?: 'legacy' | 'product-x';
   marginalAnalysis: {
     dataPoints: number;
     lastMarginalProfit: number;
@@ -65,6 +72,11 @@ export interface DailyBudgetSuggestion {
   avgMarginalProfit: number;
   consecutiveNegativeDays: number;
   hasAlert: boolean;
+  assumedReturnRatePercent?: number;
+  assumptionSource?: 'product' | 'fallback' | 'mixed';
+  orderCount?: number;
+  expectedReturnedOrders?: number;
+  optimizationMode?: 'legacy' | 'product-x';
   recommendation: 'increase' | 'maintain' | 'decrease' | 'pause';
   actionDone: boolean; // Trạng thái hành động
 }
@@ -208,6 +220,12 @@ export interface EmergencyFundingPlan {
     sharePercent: number;
   }>;
 }
+type EmergencyOptimizationMode = 'product-x' | 'legacy';
+
+interface EmergencyModeFundingSnapshot {
+  byPlatform: EmergencyPlatformFundingNeed[];
+  requiredDaily: number;
+}
 
 @Component({
   selector: 'app-ads-budget',
@@ -237,6 +255,8 @@ export class AdsBudgetComponent implements OnInit {
   platformFilter = signal<string>('all');
   showAlertOnly = signal(false);
   showPendingOnly = signal(false);
+  optimizationMode = signal<'legacy' | 'product-x'>('product-x');
+  defaultAssumedReturnRatePercent = signal<number>(20);
 
   // Data
   suggestions = signal<DailyBudgetSuggestion[]>([]);
@@ -246,7 +266,16 @@ export class AdsBudgetComponent implements OnInit {
   // Emergency actions data
   emergencyLoading = signal(false);
   emergencyError = signal<string | null>(null);
+  emergencyMode = signal<EmergencyOptimizationMode>('product-x');
   emergencyTasks = signal<EmergencyTask[]>([]);
+  emergencyTasksByMode = signal<Record<EmergencyOptimizationMode, EmergencyTask[]>>({
+    'product-x': [],
+    legacy: [],
+  });
+  emergencyFundingByMode = signal<Record<EmergencyOptimizationMode, EmergencyModeFundingSnapshot>>({
+    'product-x': { byPlatform: [], requiredDaily: 0 },
+    legacy: { byPlatform: [], requiredDaily: 0 },
+  });
   emergencyTaskStatus = signal<Map<string, boolean>>(new Map());
   emergencyCoverageDays = signal<number>(3);
   emergencyCurrentBalance = signal<number>(0);
@@ -321,6 +350,24 @@ export class AdsBudgetComponent implements OnInit {
       createCount,
       budgetCount,
       pauseCount,
+    };
+  });
+
+  emergencyModeComparison = computed(() => {
+    const taskMap = this.emergencyTasksByMode();
+    const fundingMap = this.emergencyFundingByMode();
+    const xTasks = taskMap['product-x'] || [];
+    const legacyTasks = taskMap.legacy || [];
+    const xFunding = fundingMap['product-x']?.requiredDaily || 0;
+    const legacyFunding = fundingMap.legacy?.requiredDaily || 0;
+
+    return {
+      xTaskCount: xTasks.length,
+      legacyTaskCount: legacyTasks.length,
+      taskDelta: xTasks.length - legacyTasks.length,
+      xRequiredDaily: xFunding,
+      legacyRequiredDaily: legacyFunding,
+      requiredDailyDelta: xFunding - legacyFunding,
     };
   });
 
@@ -403,11 +450,67 @@ export class AdsBudgetComponent implements OnInit {
     this.loadSuggestions();
   }
 
+  onOptimizationModeChange(mode: 'legacy' | 'product-x'): void {
+    this.optimizationMode.set(mode);
+    this.refreshActiveTab();
+  }
+
+  onDefaultXChange(value: number | string): void {
+    const parsed = Number(value);
+    const normalized = Number.isFinite(parsed)
+      ? Math.max(0, Math.min(95, parsed))
+      : 20;
+    this.defaultAssumedReturnRatePercent.set(normalized);
+  }
+
+  applyDefaultX(): void {
+    this.refreshActiveTab();
+  }
+
+  onEmergencyModeChange(mode: EmergencyOptimizationMode): void {
+    this.emergencyMode.set(mode);
+    this.applyEmergencyModeData();
+    if (this.activeTab() === 'emergency' && this.emergencyTasksByMode()[mode].length === 0) {
+      this.loadEmergencyActions();
+    }
+  }
+
+  getEmergencyModeLabel(mode: EmergencyOptimizationMode = this.emergencyMode()): string {
+    return mode === 'product-x' ? 'Theo X hang hoan' : 'Theo loi nhuan thuc te';
+  }
+
+  private buildOptimalSpendQueryParams(): Record<string, string> {
+    return this.buildOptimalSpendQueryParamsForMode(this.optimizationMode());
+  }
+
+  private buildOptimalSpendQueryParamsForMode(mode: EmergencyOptimizationMode): Record<string, string> {
+    const params: Record<string, string> = {
+      mode,
+    };
+
+    if (mode === 'product-x') {
+      const normalized = Math.max(0, Math.min(95, Number(this.defaultAssumedReturnRatePercent()) || 20));
+      params['defaultX'] = String(normalized);
+    }
+
+    return params;
+  }
+
+  private fetchOptimalSpendResponse() {
+    return this.fetchOptimalSpendResponseByMode(this.optimizationMode());
+  }
+
+  private fetchOptimalSpendResponseByMode(mode: EmergencyOptimizationMode) {
+    return this.http.get<OptimalSpendResponse>(`${this.apiUrl}/optimal-spend`, {
+      params: this.buildOptimalSpendQueryParamsForMode(mode),
+    });
+  }
+
   loadSuggestions(): void {
     this.isLoading.set(true);
     this.error.set(null);
 
-    this.http.get<OptimalSpendResponse>(`${this.apiUrl}/optimal-spend`)
+    this.fetchOptimalSpendResponse()
       .subscribe({
         next: (data) => {
           const actionMap = this.actionStatus();
@@ -432,6 +535,11 @@ export class AdsBudgetComponent implements OnInit {
             avgMarginalProfit: ag.marginalAnalysis?.avgMarginalProfit || 0,
             consecutiveNegativeDays: ag.consecutiveNegativeDays || 0,
             hasAlert: ag.hasAlert || false,
+            assumedReturnRatePercent: ag.assumedReturnRatePercent,
+            assumptionSource: ag.assumptionSource,
+            orderCount: ag.orderCount,
+            expectedReturnedOrders: ag.expectedReturnedOrders,
+            optimizationMode: ag.optimizationMode || data.mode || this.optimizationMode(),
             recommendation: this.getRecommendationFromReason(ag.reason, ag.baselineSpend || ag.currentAvgSpend, ag.suggestedSpendWithCap),
             actionDone: actionMap.get(ag.adGroupId) || false
           }));
@@ -546,6 +654,7 @@ export class AdsBudgetComponent implements OnInit {
       }
       this.emergencyTaskStatus.set(map);
       this.emergencyVerificationData.set(verificationMap);
+      this.applyBackendEmergencyStateToTaskCaches();
     });
   }
 
@@ -611,6 +720,7 @@ export class AdsBudgetComponent implements OnInit {
   }
 
   toggleEmergencyTaskDone(taskId: string): void {
+    const mode = this.getEmergencyModeFromTaskId(taskId);
     const map = new Map(this.emergencyTaskStatus());
     const current = map.get(taskId) || false;
     const newDone = !current;
@@ -618,9 +728,7 @@ export class AdsBudgetComponent implements OnInit {
     // Optimistic UI update
     map.set(taskId, newDone);
     this.emergencyTaskStatus.set(map);
-    this.emergencyTasks.update(tasks =>
-      tasks.map(task => task.id === taskId ? { ...task, done: newDone } : task)
-    );
+    this.updateEmergencyTaskInMode(mode, taskId, (task) => ({ ...task, done: newDone }));
 
     // Call backend API
     const today = new Date().toISOString().split('T')[0];
@@ -635,9 +743,7 @@ export class AdsBudgetComponent implements OnInit {
         const rollbackMap = new Map(this.emergencyTaskStatus());
         rollbackMap.set(taskId, current);
         this.emergencyTaskStatus.set(rollbackMap);
-        this.emergencyTasks.update(tasks =>
-          tasks.map(task => task.id === taskId ? { ...task, done: current } : task)
-        );
+        this.updateEmergencyTaskInMode(mode, taskId, (task) => ({ ...task, done: current }));
         return of(null);
       })
     ).subscribe(res => {
@@ -653,15 +759,13 @@ export class AdsBudgetComponent implements OnInit {
         this.emergencyVerificationData.set(vMap);
 
         // Update task with verification info
-        this.emergencyTasks.update(tasks =>
-          tasks.map(task => task.id === taskId ? {
-            ...task,
-            verificationStatus: res.task.verificationStatus,
-            verificationDetails: res.task.verificationDetails,
-            doneByName: res.task.doneByName,
-            doneAt: res.task.doneAt,
-          } : task)
-        );
+        this.updateEmergencyTaskInMode(mode, taskId, (task) => ({
+          ...task,
+          verificationStatus: res.task.verificationStatus,
+          verificationDetails: res.task.verificationDetails,
+          doneByName: res.task.doneByName,
+          doneAt: res.task.doneAt,
+        }));
       }
     });
   }
@@ -770,12 +874,22 @@ export class AdsBudgetComponent implements OnInit {
     this.emergencyError.set(null);
 
     forkJoin({
-      optimal: this.http.get<OptimalSpendResponse>(`${this.apiUrl}/optimal-spend`).pipe(
+      optimalProductX: this.fetchOptimalSpendResponseByMode('product-x').pipe(
         catchError(() => of({
           adGroupSuggestions: [],
           totalSuggestedSpend: 0,
           totalSuggestedSpendWithCap: 0,
-          totalCurrentSpend: 0
+          totalCurrentSpend: 0,
+          mode: 'product-x',
+        } as OptimalSpendResponse))
+      ),
+      optimalLegacy: this.fetchOptimalSpendResponseByMode('legacy').pipe(
+        catchError(() => of({
+          adGroupSuggestions: [],
+          totalSuggestedSpend: 0,
+          totalSuggestedSpendWithCap: 0,
+          totalCurrentSpend: 0,
+          mode: 'legacy',
         } as OptimalSpendResponse))
       ),
       productSummary: this.http.get<ProductPlatformDailySummary[]>(
@@ -790,67 +904,39 @@ export class AdsBudgetComponent implements OnInit {
         catchError(() => of([] as EmergencyAdAccount[]))
       )
     }).subscribe({
-      next: ({ optimal, productSummary, adAccounts }) => {
-        const suggestions: DailyBudgetSuggestion[] = (optimal.adGroupSuggestions || []).map(ag => {
-          const baseline = ag.baselineSpend || ag.currentAvgSpend || 0;
-          return {
-            adGroupId: ag.adGroupId,
-            adGroupName: ag.adGroupName,
-            platform: (ag.platform || 'unknown').toLowerCase(),
-            productCategoryId: ag.productCategoryId,
-            productCategoryName: ag.productCategoryName || 'Chưa phân loại',
-            spendYesterday: ag.spendYesterday || 0,
-            profitYesterday: ag.profitYesterday || 0,
-            currentAvgSpend: ag.currentAvgSpend || 0,
-            baselineSpend: baseline,
-            suggestedSpend: ag.suggestedSpend || 0,
-            suggestedSpendWithCap: ag.suggestedSpendWithCap || 0,
-            reason: ag.reason || '',
-            confidence: ag.confidence || 0,
-            dataPoints: ag.marginalAnalysis?.dataPoints || 0,
-            lastMarginalProfit: ag.marginalAnalysis?.lastMarginalProfit || 0,
-            avgMarginalProfit: ag.marginalAnalysis?.avgMarginalProfit || 0,
-            consecutiveNegativeDays: ag.consecutiveNegativeDays || 0,
-            hasAlert: ag.hasAlert || false,
-            recommendation: this.getRecommendationFromReason(
-              ag.reason || '',
-              baseline,
-              ag.suggestedSpendWithCap || 0
-            ),
-            actionDone: false
-          };
-        });
+      next: ({ optimalProductX, optimalLegacy, productSummary, adAccounts }) => {
+        const commonProductSummary = productSummary || [];
+        const commonAdAccounts = adAccounts || [];
+        const doneMap = this.emergencyTaskStatus();
+        const verificationData = this.emergencyVerificationData();
 
-        this.updateEmergencyFundingNeeds(suggestions);
-
-        const tasks = this.buildEmergencyTasks(
-          suggestions,
-          productSummary || [],
-          adAccounts || [],
-          this.emergencyTaskStatus()
+        const scenarioX = this.buildEmergencyScenarioData(
+          'product-x',
+          optimalProductX,
+          commonProductSummary,
+          commonAdAccounts,
+          doneMap,
+          verificationData,
+        );
+        const scenarioLegacy = this.buildEmergencyScenarioData(
+          'legacy',
+          optimalLegacy,
+          commonProductSummary,
+          commonAdAccounts,
+          doneMap,
+          verificationData,
         );
 
-        // Merge verification data from backend
-        const vData = this.emergencyVerificationData();
-        const mergedTasks = tasks.map(t => {
-          const v = vData.get(t.id);
-          if (v) {
-            return {
-              ...t,
-              verificationStatus: v.verificationStatus,
-              verificationDetails: v.verificationDetails,
-              doneByName: v.doneByName,
-              doneAt: v.doneAt,
-            };
-          }
-          return t;
-        });
-
-        this.emergencyTasks.set(mergedTasks);
+        this.setEmergencyScenarioData('product-x', scenarioX.tasks, scenarioX.funding);
+        this.setEmergencyScenarioData('legacy', scenarioLegacy.tasks, scenarioLegacy.funding);
+        this.applyEmergencyModeData();
         this.emergencyLoading.set(false);
 
-        // Sync tasks to backend (upsert - tạo mới nếu chưa có, giữ done status nếu đã có)
-        this.syncEmergencyTasksToBackend(mergedTasks);
+        // Sync tasks to backend (upsert - create if missing, keep done if existing)
+        this.syncEmergencyTasksToBackend([
+          ...scenarioX.tasks,
+          ...scenarioLegacy.tasks,
+        ]);
       },
       error: (err) => {
         console.error('Failed to load emergency actions:', err);
@@ -860,7 +946,78 @@ export class AdsBudgetComponent implements OnInit {
     });
   }
 
-  private updateEmergencyFundingNeeds(suggestions: DailyBudgetSuggestion[]): void {
+  private buildEmergencyScenarioData(
+    mode: EmergencyOptimizationMode,
+    optimal: OptimalSpendResponse,
+    productSummary: ProductPlatformDailySummary[],
+    adAccounts: EmergencyAdAccount[],
+    doneMap: Map<string, boolean>,
+    verificationData: Map<string, any>,
+  ): { tasks: EmergencyTask[]; funding: EmergencyModeFundingSnapshot } {
+    const suggestions = this.mapOptimalToDailySuggestions(optimal, mode);
+    const funding = this.calculateEmergencyFundingNeeds(suggestions);
+    const tasks = this.buildEmergencyTasks(
+      mode,
+      suggestions,
+      productSummary,
+      adAccounts,
+      doneMap,
+    ).map(task => {
+      const verification = verificationData.get(task.id);
+      if (!verification) return task;
+      return {
+        ...task,
+        verificationStatus: verification.verificationStatus,
+        verificationDetails: verification.verificationDetails,
+        doneByName: verification.doneByName,
+        doneAt: verification.doneAt,
+      };
+    });
+
+    return { tasks, funding };
+  }
+
+  private mapOptimalToDailySuggestions(
+    optimal: OptimalSpendResponse,
+    mode: EmergencyOptimizationMode,
+  ): DailyBudgetSuggestion[] {
+    return (optimal.adGroupSuggestions || []).map(ag => {
+      const baseline = ag.baselineSpend || ag.currentAvgSpend || 0;
+      return {
+        adGroupId: ag.adGroupId,
+        adGroupName: ag.adGroupName,
+        platform: (ag.platform || 'unknown').toLowerCase(),
+        productCategoryId: ag.productCategoryId,
+        productCategoryName: ag.productCategoryName || 'Chua phan loai',
+        spendYesterday: ag.spendYesterday || 0,
+        profitYesterday: ag.profitYesterday || 0,
+        currentAvgSpend: ag.currentAvgSpend || 0,
+        baselineSpend: baseline,
+        suggestedSpend: ag.suggestedSpend || 0,
+        suggestedSpendWithCap: ag.suggestedSpendWithCap || 0,
+        reason: ag.reason || '',
+        confidence: ag.confidence || 0,
+        dataPoints: ag.marginalAnalysis?.dataPoints || 0,
+        lastMarginalProfit: ag.marginalAnalysis?.lastMarginalProfit || 0,
+        avgMarginalProfit: ag.marginalAnalysis?.avgMarginalProfit || 0,
+        consecutiveNegativeDays: ag.consecutiveNegativeDays || 0,
+        hasAlert: ag.hasAlert || false,
+        assumedReturnRatePercent: ag.assumedReturnRatePercent,
+        assumptionSource: ag.assumptionSource,
+        orderCount: ag.orderCount,
+        expectedReturnedOrders: ag.expectedReturnedOrders,
+        optimizationMode: ag.optimizationMode || optimal.mode || mode,
+        recommendation: this.getRecommendationFromReason(
+          ag.reason || '',
+          baseline,
+          ag.suggestedSpendWithCap || 0
+        ),
+        actionDone: false
+      };
+    });
+  }
+
+  private calculateEmergencyFundingNeeds(suggestions: DailyBudgetSuggestion[]): EmergencyModeFundingSnapshot {
     const pauseIds = new Set(
       suggestions
         .filter(s => s.recommendation === 'pause' || (s.hasAlert && s.consecutiveNegativeDays >= 3))
@@ -883,8 +1040,88 @@ export class AdsBudgetComponent implements OnInit {
       .map(([platform, requiredDaily]) => ({ platform, requiredDaily }))
       .sort((a, b) => b.requiredDaily - a.requiredDaily);
 
-    this.emergencyPlatformDailyNeeds.set(byPlatform);
-    this.emergencyRequiredDaily.set(totalRequiredDaily);
+    return {
+      byPlatform,
+      requiredDaily: totalRequiredDaily,
+    };
+  }
+
+  private setEmergencyScenarioData(
+    mode: EmergencyOptimizationMode,
+    tasks: EmergencyTask[],
+    funding: EmergencyModeFundingSnapshot,
+  ): void {
+    const taskMap = this.emergencyTasksByMode();
+    this.emergencyTasksByMode.set({
+      ...taskMap,
+      [mode]: tasks,
+    });
+
+    const fundingMap = this.emergencyFundingByMode();
+    this.emergencyFundingByMode.set({
+      ...fundingMap,
+      [mode]: funding,
+    });
+  }
+
+  private applyEmergencyModeData(): void {
+    const mode = this.emergencyMode();
+    const taskMap = this.emergencyTasksByMode();
+    const fundingMap = this.emergencyFundingByMode();
+
+    this.emergencyTasks.set(taskMap[mode] || []);
+    this.emergencyPlatformDailyNeeds.set(fundingMap[mode]?.byPlatform || []);
+    this.emergencyRequiredDaily.set(fundingMap[mode]?.requiredDaily || 0);
+  }
+
+  private getEmergencyModeFromTaskId(taskId: string): EmergencyOptimizationMode {
+    return taskId.startsWith('legacy:') ? 'legacy' : 'product-x';
+  }
+
+  private updateEmergencyTaskInMode(
+    mode: EmergencyOptimizationMode,
+    taskId: string,
+    updater: (task: EmergencyTask) => EmergencyTask,
+  ): void {
+    const taskMap = this.emergencyTasksByMode();
+    const currentTasks = taskMap[mode] || [];
+    const updatedTasks = currentTasks.map(task => task.id === taskId ? updater(task) : task);
+
+    this.emergencyTasksByMode.set({
+      ...taskMap,
+      [mode]: updatedTasks,
+    });
+
+    if (this.emergencyMode() === mode) {
+      this.emergencyTasks.set(updatedTasks);
+    }
+  }
+
+  private applyBackendEmergencyStateToTaskCaches(): void {
+    const doneMap = this.emergencyTaskStatus();
+    const verificationMap = this.emergencyVerificationData();
+    const taskMap = this.emergencyTasksByMode();
+    const updatedTaskMap: Record<EmergencyOptimizationMode, EmergencyTask[]> = {
+      'product-x': [],
+      legacy: [],
+    };
+
+    (Object.keys(taskMap) as EmergencyOptimizationMode[]).forEach((mode) => {
+      updatedTaskMap[mode] = (taskMap[mode] || []).map((task) => {
+        const verification = verificationMap.get(task.id);
+        return {
+          ...task,
+          done: doneMap.get(task.id) || false,
+          verificationStatus: verification?.verificationStatus ?? task.verificationStatus,
+          verificationDetails: verification?.verificationDetails ?? task.verificationDetails,
+          doneByName: verification?.doneByName ?? task.doneByName,
+          doneAt: verification?.doneAt ?? task.doneAt,
+        };
+      });
+    });
+
+    this.emergencyTasksByMode.set(updatedTaskMap);
+    this.applyEmergencyModeData();
   }
 
   getVerificationIcon(status?: string): string {
@@ -915,6 +1152,7 @@ export class AdsBudgetComponent implements OnInit {
   }
 
   private buildEmergencyTasks(
+    mode: EmergencyOptimizationMode,
     suggestions: DailyBudgetSuggestion[],
     productSummary: ProductPlatformDailySummary[],
     adAccounts: EmergencyAdAccount[],
@@ -959,7 +1197,7 @@ export class AdsBudgetComponent implements OnInit {
         : 'các sản phẩm đang chạy';
 
       addTask({
-        id: `create-account:${platform}`,
+        id: `${mode}:create-account:${platform}`,
         type: 'create-account',
         priority: 'critical',
         platform,
@@ -982,7 +1220,7 @@ export class AdsBudgetComponent implements OnInit {
         : baseAction;
 
       addTask({
-        id: `create-ad-group:${platform}:${item.productCategoryId || productName}`,
+        id: `${mode}:create-ad-group:${platform}:${item.productCategoryId || productName}`,
         type: 'create-ad-group',
         priority: needsAccountFirst ? 'critical' : 'high',
         platform,
@@ -1000,7 +1238,7 @@ export class AdsBudgetComponent implements OnInit {
     for (const item of pauseCandidates) {
       const reason = item.reason || `Lỗ liên tiếp ${item.consecutiveNegativeDays} ngày`;
       addTask({
-        id: `pause:${item.adGroupId}`,
+        id: `${mode}:pause:${item.adGroupId}`,
         type: 'pause-ad-group',
         priority: 'critical',
         platform: (item.platform || '').toLowerCase(),
@@ -1025,7 +1263,7 @@ export class AdsBudgetComponent implements OnInit {
     for (const item of budgetCandidates) {
       const targetSpend = item.suggestedSpendWithCap || item.suggestedSpend || 0;
       addTask({
-        id: `change-budget:${item.adGroupId}`,
+        id: `${mode}:change-budget:${item.adGroupId}`,
         type: 'change-budget',
         priority: item.hasAlert ? 'high' : 'medium',
         platform: (item.platform || '').toLowerCase(),
@@ -1206,3 +1444,4 @@ export class AdsBudgetComponent implements OnInit {
     return `${day}/${month}`;
   }
 }
+

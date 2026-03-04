@@ -18,11 +18,13 @@ import {
 import { OrderStatusService } from './order-status.service';
 import { CreateOrderStatusDto } from './dto/create-order-status.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
 /**
  * Controller xử lý các request HTTP cho trạng thái đơn hàng
  * Cung cấp các endpoint REST API đầy đủ cho CRUD operations
  */
+@FeatureModule('order-status')
 @Controller('order-status')
 export class OrderStatusController {
   constructor(private readonly orderStatusService: OrderStatusService) {}

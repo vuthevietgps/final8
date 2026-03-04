@@ -252,14 +252,25 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   loadProducts(): void {
-    this.productService.getAll().subscribe({
+    this.service.getProductsForOrders().subscribe({
       next: (items) => {
-        // keep suppliers info for source selection
+        // Keep suppliers info for source selection
         this.products.set(items as any);
-        // Precompute styles after products are loaded
         this.precomputeStyles();
       },
-      error: (e) => console.error(e)
+      error: (orderProductsErr) => {
+        // Backward-compat fallback when backend has not deployed the new endpoint yet.
+        console.warn('Order products endpoint failed, fallback to /products', orderProductsErr);
+        this.productService.getAll().subscribe({
+          next: (items) => {
+            this.products.set(items as any);
+            this.precomputeStyles();
+          },
+          error: (legacyErr) => {
+            console.error(legacyErr);
+          }
+        });
+      }
     });
   }
 

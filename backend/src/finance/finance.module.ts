@@ -45,6 +45,7 @@ import { ApiToken, ApiTokenSchema } from '../api-token/schemas/api-token.schema'
 import { LaborStatement, LaborStatementSchema } from '../labor-cost1/schemas/labor-statement.schema';
 import { OtherCost, OtherCostSchema } from '../other-cost/schemas/other-cost.schema';
 import { AdvertisingCost, AdvertisingCostSchema } from '../advertising-cost/schemas/advertising-cost.schema';
+import { Product, ProductSchema } from '../product/schemas/product.schema';
 // CFO Spec v3.1: Import modules for cashflow summary
 import { SupplierPayableModule } from '../supplier-payable/supplier-payable.module';
 import { AgentReceivableModule } from '../agent-receivable/agent-receivable.module';
@@ -80,6 +81,7 @@ import { QualityControlModule } from '../advertising-optimization/quality-contro
       { name: LaborStatement.name, schema: LaborStatementSchema },
       { name: OtherCost.name, schema: OtherCostSchema },
       { name: AdvertisingCost.name, schema: AdvertisingCostSchema },
+      { name: Product.name, schema: ProductSchema },
     ]),
     // TODO: Rebuild from OrderTest2
     forwardRef(() => AdGroupProfitReportModule),

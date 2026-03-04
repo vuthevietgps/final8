@@ -9,6 +9,7 @@ export interface Product {
   status: 'Hoạt động' | 'Tạm dừng';
   color: string;
   usageDurationMonths?: number;
+  assumedReturnRatePercent?: number;
   sku?: string;
   suppliers?: Array<{ supplierId?: string }>;
   createdAt?: string;
@@ -29,6 +30,7 @@ export interface CreateProductDto {
   status?: 'Hoạt động' | 'Tạm dừng';
   color?: string;
   usageDurationMonths?: number;
+  assumedReturnRatePercent?: number;
   supplierIds?: string[];
 }
 

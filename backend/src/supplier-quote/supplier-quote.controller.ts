@@ -3,7 +3,9 @@ import { CreateSupplierQuoteDto } from './dto/create-supplier-quote.dto';
 import { SupplierQuoteService } from './supplier-quote.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('supplier-quote')
 @Controller('supplier-quotes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SupplierQuoteController {

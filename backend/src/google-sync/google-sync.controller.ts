@@ -9,7 +9,9 @@
  */
 import { Controller, Get } from '@nestjs/common';
 import { GoogleSyncService } from './google-sync.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('google-sync')
 @Controller('google-sync')
 export class GoogleSyncController {
   constructor(private readonly svc: GoogleSyncService) {}

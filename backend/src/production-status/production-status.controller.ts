@@ -18,11 +18,13 @@ import {
 import { ProductionStatusService } from './production-status.service';
 import { CreateProductionStatusDto } from './dto/create-production-status.dto';
 import { UpdateProductionStatusDto } from './dto/update-production-status.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
 /**
  * Controller xử lý các request HTTP cho trạng thái sản xuất
  * Cung cấp các endpoint REST API đầy đủ cho CRUD operations
  */
+@FeatureModule('production-status')
 @Controller('production-status')
 export class ProductionStatusController {
   constructor(private readonly productionStatusService: ProductionStatusService) {}

@@ -2,7 +2,9 @@ import { Controller, Get, Post, Query, Param, UseGuards } from '@nestjs/common';
 import { AdGroupProfitReportService } from './ad-group-profit-report.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('ad-group-profit-report')
 @Controller('ad-group-profit-report')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('ads-budget')

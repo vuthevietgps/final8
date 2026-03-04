@@ -10,7 +10,9 @@ import { TestOpenAIKeyDto } from './dto/test-openai-key.dto';
 import { OpenAIConfigService } from './openai-config.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('openai-config')
 @Controller('openai-configs')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OpenAIConfigController {

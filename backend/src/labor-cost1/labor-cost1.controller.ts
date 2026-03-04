@@ -8,7 +8,9 @@ import { AddLaborPaymentDto } from './dto/add-labor-payment.dto';
 import { UpdateKpiDto } from './dto/update-kpi.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('labor-cost1')
 @Controller('labor-cost1')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class LaborCost1Controller {

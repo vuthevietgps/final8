@@ -2,7 +2,9 @@ import { Controller, Post, Get, Query, Body, UseGuards } from '@nestjs/common';
 import { BudgetAllocationService } from './budget-allocation.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('budget-allocation')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('finance')

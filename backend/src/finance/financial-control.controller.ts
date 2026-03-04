@@ -15,7 +15,9 @@ import {
   OptimalAdsSuggestionResult,
   FinancialControlConfig,
 } from './interfaces/financial-control.interface';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('financial-control')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('finance')

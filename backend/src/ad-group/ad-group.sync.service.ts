@@ -6,6 +6,7 @@ import { Model, Types } from 'mongoose';
 import { ApiTokenService } from '../api-token/api-token.service';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { AdGroup, AdGroupDocument } from './schemas/ad-group.schema';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
 
 interface FbAdAccountResponse {
   name?: string;
@@ -44,6 +45,7 @@ export class AdGroupSyncService {
   constructor(
     @InjectModel(AdAccount.name) private readonly adAccountModel: Model<AdAccountDocument>,
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
+    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
     private readonly apiTokenService: ApiTokenService,
   ) {}
 
@@ -172,6 +174,41 @@ export class AdGroupSyncService {
     return Number.isFinite(num) ? num : undefined;
   }
 
+  private async resolveSingleProductIdForImport(
+    productCategoryId: string,
+    selectedProductId?: string,
+  ): Promise<string> {
+    const categoryObjectId = new Types.ObjectId(productCategoryId);
+
+    if (selectedProductId) {
+      if (!Types.ObjectId.isValid(selectedProductId)) {
+        throw new Error('selectedProductId không hợp lệ');
+      }
+      const exists = await this.productModel.exists({
+        _id: new Types.ObjectId(selectedProductId),
+        categoryId: categoryObjectId,
+      });
+      if (!exists) {
+        throw new Error('selectedProductId không thuộc productCategoryId');
+      }
+      return selectedProductId;
+    }
+
+    // Ưu tiên sản phẩm đang hoạt động, fallback sang bất kỳ sản phẩm nào trong danh mục.
+    const activeProduct = await this.productModel.findOne({
+      categoryId: categoryObjectId,
+      status: 'Hoạt động',
+    }).select('_id').lean();
+    if (activeProduct?._id) return String(activeProduct._id);
+
+    const anyProduct = await this.productModel.findOne({
+      categoryId: categoryObjectId,
+    }).select('_id').lean();
+    if (anyProduct?._id) return String(anyProduct._id);
+
+    throw new Error('Danh mục chưa có sản phẩm để gán cho ad group');
+  }
+
   /**
    * Auto-discover: Lấy danh sách ad groups từ Facebook cho 1 ad account
    * Trả về danh sách để hiển thị, nhân viên chọn import
@@ -247,6 +284,7 @@ export class AdGroupSyncService {
     adGroupIds: string[];
     fanpageId: string;
     productCategoryId: string;
+    selectedProductId?: string;
     agentId: string;
   }): Promise<{ success: boolean; imported: number; skipped: number; errors: string[] }> {
     const acc = await this.adAccountModel.findOne({ 
@@ -270,6 +308,20 @@ export class AdGroupSyncService {
 
     const existingGroups = await this.adGroupModel.find({ adGroupId: { $in: params.adGroupIds } }).select('adGroupId').lean();
     const existingIds = new Set(existingGroups.map(g => g.adGroupId));
+    let selectedProductIdForImport: string;
+    try {
+      selectedProductIdForImport = await this.resolveSingleProductIdForImport(
+        params.productCategoryId,
+        params.selectedProductId,
+      );
+    } catch (error: any) {
+      return {
+        success: false,
+        imported: 0,
+        skipped: 0,
+        errors: [error?.message || 'Không xác định được sản phẩm để gán cho ad group'],
+      };
+    }
 
     let imported = 0;
     let skipped = 0;
@@ -292,6 +344,7 @@ export class AdGroupSyncService {
           adGroupId: adGroupId,
           fanpageId: new Types.ObjectId(params.fanpageId),
           productCategoryId: new Types.ObjectId(params.productCategoryId),
+          selectedProducts: [new Types.ObjectId(selectedProductIdForImport)],
           agentId: new Types.ObjectId(params.agentId),
           adAccountId: acc._id,
           platform: 'facebook',

@@ -9,7 +9,9 @@ import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('quote')
 @Controller('quotes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('quotes')

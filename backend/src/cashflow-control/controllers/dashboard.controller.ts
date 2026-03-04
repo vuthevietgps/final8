@@ -11,7 +11,9 @@
 import { Controller, Get } from '@nestjs/common';
 import { DashboardService } from '../services/dashboard.service';
 import { DashboardSummaryDto } from '../dto/dashboard-summary.dto';
+import { FeatureModule } from '../../plan/feature-module.decorator';
 
+@FeatureModule('cashflow-control')
 @Controller('cashflow/dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}

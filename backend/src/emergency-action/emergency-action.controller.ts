@@ -20,7 +20,9 @@ import {
 import { EmergencyActionService, BulkSyncTaskDto } from './emergency-action.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('emergency-action')
 @Controller('emergency-actions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EmergencyActionController {

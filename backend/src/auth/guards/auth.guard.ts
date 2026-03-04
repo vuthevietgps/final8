@@ -47,40 +47,33 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    // Permission mappings
-    // Policy:
-    // - director: thấy tất cả menu và thao tác tất cả
-    // - manager: chỉ Đơn hàng + Quảng cáo (và các menu con liên quan)
-    // - employee: chỉ Đơn hàng
     // Normalize role to lowercase to handle case mismatches
     const userRole = (user.role || '').toLowerCase();
     const rolePermissions: Record<string, string[]> = {
-      'director': [
-        'users','orders','orders-test2','pending-orders','products','product-categories',
-        'delivery-status','production-status','order-status',
-        'ad-accounts','ad-groups','advertising-costs','media','api-tokens',
-        'labor-costs','other-costs','salary-config',
-        'customers','purchase-costs','fanpages','openai-configs',
-        'quotes','reports','export','import','settings',
-        'ads-budget','employee-ads-kpi','owner-fund','finance'
+      director: [
+        'users', 'orders', 'orders-test2', 'pending-orders', 'products', 'product-categories',
+        'delivery-status', 'production-status', 'order-status',
+        'ad-accounts', 'ad-groups', 'advertising-costs', 'media', 'api-tokens',
+        'labor-costs', 'other-costs', 'salary-config',
+        'customers', 'purchase-costs', 'fanpages', 'openai-configs',
+        'quotes', 'reports', 'export', 'import', 'settings',
+        'ads-budget', 'employee-ads-kpi', 'owner-fund', 'finance',
+        'order-update', 'chat-messages',
       ],
-      'manager': [
-        'ad-accounts','ad-groups','advertising-costs','media','fanpages','openai-configs','api-tokens',
-        'ads-budget','employee-ads-kpi'
+      manager: [
+        'ad-accounts', 'ad-groups', 'advertising-costs', 'media', 'fanpages', 'openai-configs', 'api-tokens',
+        'ads-budget', 'employee-ads-kpi', 'chat-messages',
       ],
-      'employee': [
-        'orders','orders-test2','pending-orders','api-tokens'
+      employee: [
+        'orders-test2', 'order-update', 'chat-messages',
       ],
-      'internal_agent': ['orders-test2'],
-      'external_agent': ['orders-test2'],
-      'internal_supplier': ['orders-test2'],
-      'external_supplier': ['orders-test2']
+      internal_agent: ['orders-test2'],
+      external_agent: ['orders-test2'],
+      internal_supplier: ['orders-test2'],
+      external_supplier: ['orders-test2'],
     };
 
-  // Bổ sung mặc định quyền chat-messages cho director & manager để xem hội thoại
-  if(rolePermissions['director'] && !rolePermissions['director'].includes('chat-messages')) rolePermissions['director'].push('chat-messages');
-  if(rolePermissions['manager'] && !rolePermissions['manager'].includes('chat-messages')) rolePermissions['manager'].push('chat-messages');
-  const userPermissions = rolePermissions[userRole] || [];
+    const userPermissions = rolePermissions[userRole] || [];
     return requiredPermissions.every(permission => userPermissions.includes(permission));
   }
 }

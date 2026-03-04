@@ -2,7 +2,7 @@
  * File: ad-group/dto/create-ad-group.dto.ts
  * Mục đích: DTO tạo mới Nhóm Quảng Cáo (tối giản, không AI/khuyến mại)
  */
-import { IsBoolean, IsEnum, IsMongoId, IsOptional, IsString, Length, IsArray, IsNumber, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsMongoId, IsOptional, IsString, Length, IsArray, IsNumber, Min, ArrayMinSize, ArrayMaxSize } from 'class-validator';
 
 export class CreateAdGroupDto {
   @IsString()
@@ -20,10 +20,11 @@ export class CreateAdGroupDto {
   @IsMongoId()
   productCategoryId: string;
 
-  @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1)
   @IsMongoId({ each: true })
-  selectedProducts?: string[];
+  selectedProducts: string[];
 
   @IsMongoId()
   agentId: string;

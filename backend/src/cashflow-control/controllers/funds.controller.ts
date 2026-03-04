@@ -14,7 +14,9 @@
 import { Controller, Get } from '@nestjs/common';
 import { FundsService } from '../services/funds.service';
 import { FundsListResponseDto } from '../dto/fund-status.dto';
+import { FeatureModule } from '../../plan/feature-module.decorator';
 
+@FeatureModule('cashflow-control')
 @Controller('cashflow/funds')
 export class FundsController {
   constructor(private readonly fundsService: FundsService) {}

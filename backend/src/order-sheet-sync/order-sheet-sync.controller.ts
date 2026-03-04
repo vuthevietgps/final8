@@ -6,7 +6,9 @@ import { Controller, Post, Param, Get, UseGuards, Body } from '@nestjs/common';
 import { OrderSheetSyncService } from './order-sheet-sync.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('order-sheet-sync')
 @Controller('order-sheet-sync')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OrderSheetSyncController {

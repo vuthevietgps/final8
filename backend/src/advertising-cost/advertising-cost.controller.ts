@@ -12,7 +12,9 @@ import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-sync.service';
 import { AdvertisingCostGoogleSyncService } from './advertising-cost.google-sync.service';
 import { AdvertisingCostTiktokSyncService } from './advertising-cost.tiktok-sync.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('advertising-cost')
 @Controller('advertising-cost')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdvertisingCostController {

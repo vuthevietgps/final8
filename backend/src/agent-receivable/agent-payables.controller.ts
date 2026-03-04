@@ -11,7 +11,9 @@ import { AgentReceivableService } from './agent-receivable.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('agent-receivable')
 @Controller('agent-payables')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AgentPayablesController {

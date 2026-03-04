@@ -17,6 +17,7 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -27,7 +28,9 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { VisionAIService } from './vision-ai.service';
 import { FileUploadService } from './file-upload.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('product')
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('products')
@@ -61,6 +64,9 @@ export class ProductController {
   @Post('seed')
   @HttpCode(HttpStatus.CREATED)
   seedSampleData() {
+    if (String(process.env.ALLOW_DANGEROUS_SEED || '').toLowerCase() !== 'true') {
+      throw new ForbiddenException('Seed endpoint is disabled. Set ALLOW_DANGEROUS_SEED=true to enable.');
+    }
     return this.productService.seedSampleData();
   }
 

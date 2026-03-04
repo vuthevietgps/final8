@@ -19,6 +19,7 @@ import { User, UserDocument } from './user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserRole } from './user.enum';
+import { enforceActiveUserLimit } from '../plan/user-limit.util';
 
 @Injectable()
 export class UserService {
@@ -30,6 +31,11 @@ export class UserService {
    * @returns Promise<User> - User vừa được tạo
    */
   async create(createUserDto: CreateUserDto): Promise<User> {
+    // Kiem tra gioi han user theo goi (khong tinh user inactive)
+    if (createUserDto.isActive !== false) {
+      await enforceActiveUserLimit(() => this.userModel.countDocuments({ isActive: true }).exec());
+    }
+
     try {
       const createdUser = new this.userModel(createUserDto);
       const saved = await createdUser.save();
@@ -69,6 +75,14 @@ export class UserService {
    * @returns Promise<User> - User sau khi update
    */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    // Chi check quota khi update user tu inactive -> active
+    if (updateUserDto.isActive === true) {
+      const existing = await this.userModel.findById(id).select('isActive').lean();
+      if (existing && existing.isActive !== true) {
+        await enforceActiveUserLimit(() => this.userModel.countDocuments({ isActive: true }).exec());
+      }
+    }
+
     try {
       return await this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true }).select('-password').exec();
     } catch (error: any) {

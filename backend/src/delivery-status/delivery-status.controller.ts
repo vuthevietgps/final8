@@ -11,12 +11,15 @@ import {
   Param, 
   Delete,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  ForbiddenException
 } from '@nestjs/common';
 import { DeliveryStatusService } from './delivery-status.service';
 import { CreateDeliveryStatusDto } from './dto/create-delivery-status.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('delivery-status')
 @Controller('delivery-status')
 export class DeliveryStatusController {
   constructor(private readonly deliveryStatusService: DeliveryStatusService) {}
@@ -69,6 +72,9 @@ export class DeliveryStatusController {
   @Post('seed')
   @HttpCode(HttpStatus.CREATED)
   seedSampleData() {
+    if (String(process.env.ALLOW_DANGEROUS_SEED || '').toLowerCase() !== 'true') {
+      throw new ForbiddenException('Seed endpoint is disabled. Set ALLOW_DANGEROUS_SEED=true to enable.');
+    }
     return this.deliveryStatusService.seedSampleData();
   }
 

@@ -4,7 +4,9 @@
  */
 import { Controller, Get } from '@nestjs/common';
 import { AdvertisingCostService } from '../advertising-cost/advertising-cost.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('advertising-cost')
 @Controller('advertising-cost-public')
 export class AdvertisingCostPublicController {
   constructor(private readonly advertisingCostService: AdvertisingCostService) {}

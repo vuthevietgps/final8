@@ -3,6 +3,7 @@ import { CanActivate, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
+import { PlanService } from '../services/plan.service';
 
 @Injectable({
   providedIn: 'root'
@@ -10,6 +11,7 @@ import { AuthService } from '../services/auth.service';
 export class AuthGuard implements CanActivate {
   constructor(
     private authService: AuthService,
+    private planService: PlanService,
     private router: Router
   ) {}
 
@@ -48,14 +50,21 @@ export class AuthGuard implements CanActivate {
   }
 
   private validatePermissions(route: ActivatedRouteSnapshot): boolean {
+    // Kiểm tra module access theo gói (plan)
+    const featureModule = route.data?.['featureModule'] as string;
+    if (featureModule && !this.planService.hasModuleAccess(featureModule)) {
+      this.router.navigate(['/upgrade-plan']);
+      return false;
+    }
+
     const requiredPermissions = route.data?.['permissions'] as string[];
-    
+
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true; // No specific permissions required
     }
 
     const hasPermission = this.authService.hasAnyPermission(requiredPermissions);
-    
+
     if (!hasPermission) {
       this.router.navigate(['/unauthorized']);
       return false;

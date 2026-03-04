@@ -48,6 +48,7 @@ export class ProductComponent implements OnInit {
     status: 'Hoạt động',
     color: '#3B82F6',
     usageDurationMonths: 1,
+    assumedReturnRatePercent: 20,
     supplierIds: [],
   });
 
@@ -147,6 +148,7 @@ export class ProductComponent implements OnInit {
       status: 'Hoạt động',
       color: '#3B82F6',
       usageDurationMonths: 1,
+      assumedReturnRatePercent: 20,
       supplierIds: [],
     });
     this.isAddModalOpen.set(true);
@@ -164,6 +166,7 @@ export class ProductComponent implements OnInit {
       status: product.status,
       color: product.color || '#3B82F6',
       usageDurationMonths: product.usageDurationMonths || 1,
+      assumedReturnRatePercent: product.assumedReturnRatePercent ?? 20,
       supplierIds: (product.suppliers || []).map(s => s.supplierId || ''),
     });
     this.isEditModalOpen.set(true);
@@ -186,7 +189,13 @@ export class ProductComponent implements OnInit {
       return;
     }
 
-    const payload = { ...this.formData(), usageDurationMonths } as CreateProductDto;
+    const assumedReturnRatePercent = Number(this.formData().assumedReturnRatePercent ?? 20);
+    if (!Number.isFinite(assumedReturnRatePercent) || assumedReturnRatePercent < 0 || assumedReturnRatePercent > 95) {
+      this.error.set('Ty le hang hoan X phai trong khoang 0-95%');
+      return;
+    }
+
+    const payload = { ...this.formData(), usageDurationMonths, assumedReturnRatePercent } as CreateProductDto;
 
     this.isLoading.set(true);
     this.productService.create(payload).subscribe({
@@ -219,8 +228,14 @@ export class ProductComponent implements OnInit {
       return;
     }
 
+    const assumedReturnRatePercent = Number(this.formData().assumedReturnRatePercent ?? 20);
+    if (!Number.isFinite(assumedReturnRatePercent) || assumedReturnRatePercent < 0 || assumedReturnRatePercent > 95) {
+      this.error.set('Ty le hang hoan X phai trong khoang 0-95%');
+      return;
+    }
+
     this.isLoading.set(true);
-    const payload = { ...this.formData(), usageDurationMonths } as UpdateProductDto;
+    const payload = { ...this.formData(), usageDurationMonths, assumedReturnRatePercent } as UpdateProductDto;
     this.productService.update(product._id, payload).subscribe({
       next: (updatedProduct) => {
         this.products.update(products => 
@@ -277,6 +292,8 @@ export class ProductComponent implements OnInit {
     const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
     const value: any = field === 'usageDurationMonths'
       ? Math.max(0, Math.floor(Number(target.value) || 0))
+      : field === 'assumedReturnRatePercent'
+        ? Math.max(0, Math.min(95, Number(target.value) || 0))
       : target.value;
     this.updateFormField(field, value);
   }
@@ -300,3 +317,5 @@ export class ProductComponent implements OnInit {
     this.error.set(null);
   }
 }
+
+

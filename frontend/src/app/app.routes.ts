@@ -11,6 +11,12 @@ export const routes: Routes = [
   // Trailing-slash redirects to avoid dev-proxy collisions with /media/
   { path: 'media/', redirectTo: 'media', pathMatch: 'full' },
   { path: 'media-report/', redirectTo: 'media-report', pathMatch: 'full' },
+  // Trang thông báo nâng cấp gói
+  {
+    path: 'upgrade-plan',
+    loadComponent: () => import('./features/upgrade-plan/upgrade-plan.component').then(m => m.UpgradePlanComponent),
+    canActivate: [AuthGuard]
+  },
   // Authentication routes
   {
     path: 'login',
@@ -189,7 +195,7 @@ export const routes: Routes = [
         path: 'update',
         loadComponent: () => import('./features/order-update/order-update.component').then(m => m.OrderUpdateComponent),
         canActivate: [AuthGuard],
-        data: { permissions: ['orders'] }
+        data: { permissions: ['order-update'] }
       },
       {
         path: 'google-sheet-sync',

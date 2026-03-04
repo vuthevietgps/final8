@@ -74,6 +74,11 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   toasts = signal<{title: string; desc: string; meta?: string; at: number}[]>([]);
   // Bản đồ id/pageId -> thông tin fanpage để hiển thị tên và pageId
   fanpageInfoMap = signal<Record<string,{name:string; pageId:string}>>({});
+  fanpageDataMap = signal<Record<string, Fanpage>>({});
+  fanpageDescriptionDraft = signal('');
+  fanpageDescriptionBoundId = signal('');
+  fanpageDescriptionSaving = signal(false);
+  fanpageDescriptionMsg = signal<string|undefined>(undefined);
   // Bản đồ adGroupId -> tổng chi phí để hiển thị trong danh sách hội thoại
   adGroupCostMap = signal<Map<string, number>>(new Map());
   @ViewChild('threadScroll') private threadScroll?: ElementRef<HTMLDivElement>;
@@ -115,12 +120,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     // Load danh sách fanpage để hiển thị tên + pageId trong header
     this.fanpageSvc.list().subscribe({
       next: (pages: Fanpage[]) => {
-        const map: Record<string,{name:string; pageId:string}> = {};
-        for(const p of pages){
-          map[p.pageId] = { name: p.name, pageId: p.pageId };
-          map[p._id] = { name: p.name, pageId: p.pageId };
-        }
-        this.fanpageInfoMap.set(map);
+        this.setFanpagesCache(pages);
+        this.syncCurrentFanpageDescriptionDraft(true);
       },
       error: _ => {}
     });
@@ -300,6 +301,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     this.service.getConversation(fpId, c.senderPsid).subscribe({
       next: r => {
         this.currentConv.set(r.conversation);
+        this.upsertFanpageFromConversationPayload(r.conversation?.fanpageId as any);
+        this.syncCurrentFanpageDescriptionDraft();
         this.messages.set(r.messages.slice().sort((a,b)=> new Date(a.createdAt||'').getTime() - new Date(b.createdAt||'').getTime()));
         this.items.update(list => list.map(x => this.isSameConversation(x, fpId, c.senderPsid) ? r.conversation : x));
         const draft = this.orderDraft();
@@ -353,6 +356,147 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     return !!fanpageId && typeof fanpageId === 'object';
   }
 
+  private setFanpagesCache(pages: Fanpage[]): void {
+    const infoMap: Record<string, { name: string; pageId: string }> = {};
+    const dataMap: Record<string, Fanpage> = {};
+    for (const p of pages || []) {
+      const id = String(p._id || '');
+      const pageId = String(p.pageId || '');
+      const pageRef = pageId || id;
+      if (pageId) infoMap[pageId] = { name: p.name, pageId: pageRef };
+      if (id) infoMap[id] = { name: p.name, pageId: pageRef };
+      if (pageId) dataMap[pageId] = p;
+      if (id) dataMap[id] = p;
+    }
+    this.fanpageInfoMap.set(infoMap);
+    this.fanpageDataMap.set(dataMap);
+  }
+
+  private upsertFanpageFromConversationPayload(fp: any): void {
+    if(!fp || typeof fp !== 'object') return;
+    const id = String(fp._id || '');
+    const pageId = String(fp.pageId || '');
+    if(!id && !pageId) return;
+
+    const existing = this.fanpageDataMap()[id] || this.fanpageDataMap()[pageId];
+    const merged: Fanpage = {
+      ...(existing as any),
+      ...(fp as any),
+      _id: id || existing?._id || pageId,
+      pageId: pageId || existing?.pageId || id,
+      name: String(fp.name || existing?.name || ''),
+      status: (fp.status || existing?.status || 'active') as 'active' | 'inactive'
+    };
+
+    const infoMap = { ...this.fanpageInfoMap() } as Record<string,{name:string; pageId:string}>;
+    const dataMap = { ...this.fanpageDataMap() } as Record<string, Fanpage>;
+    const pageRef = merged.pageId || pageId || id;
+    if(merged.name){
+      if(pageId) infoMap[pageId] = { name: merged.name, pageId: pageRef };
+      if(id) infoMap[id] = { name: merged.name, pageId: pageRef };
+    }
+    if(merged._id) dataMap[merged._id] = merged;
+    if(merged.pageId) dataMap[merged.pageId] = merged;
+    this.fanpageInfoMap.set(infoMap);
+    this.fanpageDataMap.set(dataMap);
+  }
+
+  private getFanpageRecordByAnyKey(
+    fanpageId: string | {pageId?: string; name?: string; _id?: string} | null | undefined
+  ): Fanpage | undefined {
+    if(!fanpageId) return undefined;
+    if(typeof fanpageId === 'string') return this.fanpageDataMap()[fanpageId];
+    const fp = fanpageId as any;
+    return this.fanpageDataMap()[fp._id] || this.fanpageDataMap()[fp.pageId];
+  }
+
+  private syncCurrentFanpageDescriptionDraft(resetMessage = false): void {
+    const fanpage = this.getFanpageRecordByAnyKey(this.currentConv()?.fanpageId);
+    const boundId = fanpage?._id || '';
+    if(!boundId){
+      this.fanpageDescriptionBoundId.set('');
+      this.fanpageDescriptionDraft.set('');
+      if(resetMessage) this.fanpageDescriptionMsg.set(undefined);
+      return;
+    }
+
+    if(this.fanpageDescriptionBoundId() !== boundId){
+      this.fanpageDescriptionBoundId.set(boundId);
+      this.fanpageDescriptionDraft.set(fanpage?.description || '');
+      this.fanpageDescriptionMsg.set(undefined);
+      return;
+    }
+
+    if(resetMessage) this.fanpageDescriptionMsg.set(undefined);
+  }
+
+  canEditCurrentFanpageDescription(): boolean {
+    const fanpage = this.getFanpageRecordByAnyKey(this.currentConv()?.fanpageId);
+    return !!fanpage?._id;
+  }
+
+  getCurrentFanpageDescriptionDraft(): string {
+    this.syncCurrentFanpageDescriptionDraft();
+    return this.fanpageDescriptionDraft();
+  }
+
+  onCurrentFanpageDescriptionChange(value: string): void {
+    this.fanpageDescriptionDraft.set(value || '');
+    this.fanpageDescriptionMsg.set(undefined);
+  }
+
+  resetCurrentFanpageDescriptionDraft(): void {
+    const fanpage = this.getFanpageRecordByAnyKey(this.currentConv()?.fanpageId);
+    this.fanpageDescriptionDraft.set(fanpage?.description || '');
+    this.fanpageDescriptionMsg.set(undefined);
+  }
+
+  hasCurrentFanpageDescriptionChanges(): boolean {
+    const fanpage = this.getFanpageRecordByAnyKey(this.currentConv()?.fanpageId);
+    if(!fanpage?._id) return false;
+    return (this.fanpageDescriptionDraft() || '') !== (fanpage.description || '');
+  }
+
+  saveCurrentFanpageDescription(): void {
+    const conv = this.currentConv();
+    const fanpage = this.getFanpageRecordByAnyKey(conv?.fanpageId);
+    if(!fanpage?._id){
+      this.fanpageDescriptionMsg.set('KhÃ´ng xÃ¡c Ä‘á»‹nh Ä‘Æ°á»£c fanpage Ä‘á»ƒ cáº­p nháº­t.');
+      return;
+    }
+
+    const nextDescription = this.fanpageDescriptionDraft() || '';
+    if(nextDescription === (fanpage.description || '')){
+      this.fanpageDescriptionMsg.set('MÃ´ táº£ chÆ°a thay Ä‘á»•i.');
+      return;
+    }
+
+    this.fanpageDescriptionSaving.set(true);
+    this.fanpageDescriptionMsg.set(undefined);
+    this.fanpageSvc.update(fanpage._id, { description: nextDescription }).subscribe({
+      next: (updated: Fanpage) => {
+        this.fanpageDescriptionSaving.set(false);
+        this.upsertFanpageFromConversationPayload(updated as any);
+        this.fanpageDescriptionBoundId.set(updated._id);
+        this.fanpageDescriptionDraft.set(updated.description || '');
+        this.fanpageDescriptionMsg.set('ÄÃ£ cáº­p nháº­t mÃ´ táº£ fanpage.');
+
+        this.currentConv.update(old => {
+          if(!old || typeof old.fanpageId === 'string') return old;
+          const oldFp: any = old.fanpageId as any;
+          const oldKey = String(oldFp?._id || oldFp?.pageId || '');
+          const newKey = String(updated._id || updated.pageId || '');
+          if(oldKey && newKey && oldKey !== newKey) return old;
+          return { ...old, fanpageId: { ...oldFp, ...updated } as any };
+        });
+      },
+      error: e => {
+        this.fanpageDescriptionSaving.set(false);
+        this.fanpageDescriptionMsg.set(e?.error?.message || 'Cáº­p nháº­t mÃ´ táº£ tháº¥t báº¡i');
+      }
+    });
+  }
+
   load(){
     this.loading.set(true);
     const q: any = { page: this.page(), limit: this.limit() };
@@ -370,25 +514,45 @@ export class ConversationListComponent implements OnInit, OnDestroy {
         if(cur){
           const curFpId = this.getFanpageId(cur.fanpageId);
           const matched = resp.items.find(x => this.isSameConversation(x, curFpId, cur.senderPsid));
-          if(matched) this.currentConv.set(matched);
+          if(matched){
+            this.currentConv.set(matched);
+            this.syncCurrentFanpageDescriptionDraft();
+          }
         }
         
 
         
         // Thu tháº­p thÃ´ng tin fanpage tá»« dá»¯ liá»‡u list (náº¿u backend tráº£ object)
         const map = { ...this.fanpageInfoMap() } as Record<string,{name:string; pageId:string}>;
+        const dataMap = { ...this.fanpageDataMap() } as Record<string, Fanpage>;
         for(const it of resp.items){
           const fp: any = it.fanpageId as any;
           if(fp && typeof fp === 'object'){
-            const pid = fp.pageId || '';
-            const id = fp._id || '';
-            if((pid || id) && fp.name){
-              if(pid) map[pid] = { name: fp.name, pageId: pid };
-              if(id) map[id] = { name: fp.name, pageId: pid || id };
+            const pid = String(fp.pageId || '');
+            const id = String(fp._id || '');
+            const base = dataMap[id] || dataMap[pid];
+            const merged: Fanpage = {
+              ...(base as any),
+              ...(fp as any),
+              _id: id || base?._id || pid,
+              pageId: pid || base?.pageId || id,
+              name: String(fp.name || base?.name || ''),
+              status: (fp.status || base?.status || 'active') as 'active' | 'inactive'
+            };
+            if(pid || id){
+              const pageRef = merged.pageId || pid || id;
+              if(merged.name){
+                if(pid) map[pid] = { name: merged.name, pageId: pageRef };
+                if(id) map[id] = { name: merged.name, pageId: pageRef };
+              }
+              if(merged._id) dataMap[merged._id] = merged;
+              if(merged.pageId) dataMap[merged.pageId] = merged;
             }
           }
         }
         this.fanpageInfoMap.set(map);
+        this.fanpageDataMap.set(dataMap);
+        this.syncCurrentFanpageDescriptionDraft();
         
         // Load chi phÃ­ quáº£ng cÃ¡o cho cÃ¡c adGroupId cÃ³ trong danh sÃ¡ch
         this.loadAdvertisingCosts(resp.items);
@@ -401,6 +565,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     // Má»Ÿ modal ngay láº­p tá»©c vá»›i thÃ´ng tin cÃ³ sáºµn tá»« list
     this.showDetail.set(true);
     this.currentConv.set(conv);
+    this.upsertFanpageFromConversationPayload(conv?.fanpageId as any);
+    this.syncCurrentFanpageDescriptionDraft(true);
     this.error.set('');
     this.messages.set([]); // Clear messages cÅ©
     
@@ -426,13 +592,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
           this.messages.set(sortedMessages);
           this.currentConv.set(d.conversation);
           // Cáº­p nháº­t thÃ´ng tin fanpage náº¿u payload cÃ³ object
-          const fp: any = d.conversation?.fanpageId as any;
-          if(fp && typeof fp === 'object' && (fp.pageId || fp._id) && fp.name){
-            const map = { ...this.fanpageInfoMap() } as Record<string,{name:string; pageId:string}>;
-            if(fp.pageId) map[fp.pageId] = { name: fp.name, pageId: fp.pageId };
-            if(fp._id) map[fp._id] = { name: fp.name, pageId: fp.pageId || fp._id };
-            this.fanpageInfoMap.set(map);
-          }
+          this.upsertFanpageFromConversationPayload(d.conversation?.fanpageId as any);
+          this.syncCurrentFanpageDescriptionDraft();
           this.detailLoading.set(false);
           this.scrollMessagesToBottom();
           
@@ -465,7 +626,7 @@ export class ConversationListComponent implements OnInit, OnDestroy {
     const c = this.currentConv(); if(!c) return;
     const fpId = this.getFanpageId(c.fanpageId);
     this.service.resolveConversation(fpId, c.senderPsid).subscribe({
-      next: d=>{ this.currentConv.set(d.conversation); this.messages.set(d.messages.slice().sort((a,b)=> new Date(a.createdAt||'').getTime() - new Date(b.createdAt||'').getTime())); this.items.update(arr=> arr.map(x=> this.isSameConversation(x, fpId, c.senderPsid) ? d.conversation : x)); this.scrollMessagesToBottom(); },
+      next: d=>{ this.currentConv.set(d.conversation); this.upsertFanpageFromConversationPayload(d.conversation?.fanpageId as any); this.syncCurrentFanpageDescriptionDraft(); this.messages.set(d.messages.slice().sort((a,b)=> new Date(a.createdAt||'').getTime() - new Date(b.createdAt||'').getTime())); this.items.update(arr=> arr.map(x=> this.isSameConversation(x, fpId, c.senderPsid) ? d.conversation : x)); this.scrollMessagesToBottom(); },
     });
   }
 
@@ -505,6 +666,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
         // Reload conversation summary Ä‘á»ƒ cáº­p nháº­t last message / counts
         this.service.getConversation(fpId, c.senderPsid).subscribe(r=>{
           this.currentConv.set(r.conversation);
+          this.upsertFanpageFromConversationPayload(r.conversation?.fanpageId as any);
+          this.syncCurrentFanpageDescriptionDraft();
           this.items.update(list=> list.map(x=> this.isSameConversation(x, fpId, c.senderPsid) ? r.conversation : x));
         });
         this.sending.set(false);
@@ -539,6 +702,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
         // reload conversation summary
         this.service.getConversation(fpId, c.senderPsid).subscribe(r=>{
           this.currentConv.set(r.conversation);
+          this.upsertFanpageFromConversationPayload(r.conversation?.fanpageId as any);
+          this.syncCurrentFanpageDescriptionDraft();
           this.items.update(list=> list.map(x=> this.isSameConversation(x, fpId, c.senderPsid) ? r.conversation : x));
         });
         this.imageSending.set(false);
@@ -578,6 +743,8 @@ export class ConversationListComponent implements OnInit, OnDestroy {
         // reload summary
         this.service.getConversation(fpId, c.senderPsid).subscribe(r=>{
           this.currentConv.set(r.conversation);
+          this.upsertFanpageFromConversationPayload(r.conversation?.fanpageId as any);
+          this.syncCurrentFanpageDescriptionDraft();
           this.items.update(list=> list.map(x=> this.isSameConversation(x, fpId, c.senderPsid) ? r.conversation : x));
         });
         this.imageSending.set(false);

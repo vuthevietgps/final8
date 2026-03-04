@@ -10,6 +10,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SalaryConfig, SalaryConfigDocument } from '../salary-config/schemas/salary-config.schema';
 import { LaborCost1, LaborCost1Document } from '../labor-cost1/schemas/labor-cost1.schema';
+import { enforceActiveUserLimit } from '../plan/user-limit.util';
 
 @Injectable()
 export class AuthService {
@@ -145,8 +146,11 @@ export class AuthService {
     // Kiểm tra email đã tồn tại
     const existingUser = await this.userModel.findOne({ email: registerDto.email }).exec();
     if (existingUser) {
-      throw new UnauthorizedException('Email đã được sử dụng');
+      throw new UnauthorizedException('Email da duoc su dung');
     }
+    
+    // Register tao user active mac dinh -> phai check quota theo goi
+    await enforceActiveUserLimit(() => this.userModel.countDocuments({ isActive: true }).exec());
 
     // Hash password
     const hashedPassword = await bcrypt.hash(registerDto.password, 12);
@@ -172,14 +176,15 @@ export class AuthService {
   hasPermission(userRole: string, requiredPermissions: string[]): boolean {
     const rolePermissions = {
       'director': [
-  'users', 'orders', 'orders-test2', 'products', 'product-categories',
+        'users', 'orders', 'orders-test2', 'products', 'product-categories',
         'delivery-status', 'production-status', 'order-status',
-  'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
-  'labor-costs', 'other-costs', 'salary-config',
-  // Newly explicit permissions
-  'customers', 'purchase-costs',
-  'quotes', 'reports', 'export', 'import', 'settings',
-        'ads-budget', 'employee-ads-kpi', 'owner-fund', 'finance'
+        'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
+        'labor-costs', 'other-costs', 'salary-config',
+        // Newly explicit permissions
+        'customers', 'purchase-costs',
+        'quotes', 'reports', 'export', 'import', 'settings',
+        'ads-budget', 'employee-ads-kpi', 'owner-fund', 'finance',
+        'order-update', 'chat-messages'
       ],
       'manager': [
         'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Ads + media
@@ -187,7 +192,7 @@ export class AuthService {
         'ads-budget', 'employee-ads-kpi'
       ],
       'employee': [
-        'orders', 'orders-test2', 'api-tokens'
+        'orders-test2', 'order-update', 'chat-messages'
       ],
       'internal_agent': ['orders-test2'],
       'external_agent': ['orders-test2'],

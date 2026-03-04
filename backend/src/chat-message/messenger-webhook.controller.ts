@@ -1,21 +1,23 @@
 import { Body, Controller, Get, Post, Query, Req, Res, Logger } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { MessengerWebhookService } from './messenger-webhook.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
 // Heavy logic moved into MessengerWebhookService for maintainability
 
 /**
  * Facebook Messenger Webhook Controller
- * 
+ *
  * Handles:
  * - GET: Webhook verification for Facebook
  * - POST: Receives messages and triggers AI auto-reply
- * 
+ *
  * Features:
  * - Automatic AI response based on fanpage configuration
  * - Message persistence to database
  * - Conversation state management
  */
+@FeatureModule('chat-message')
 @Controller('webhook/messenger')
 export class MessengerWebhookController {
   private readonly logger = new Logger(MessengerWebhookController.name);

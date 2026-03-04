@@ -4,7 +4,9 @@ import { CreateFanpageDto } from './dto/create-fanpage.dto';
 import { UpdateFanpageDto } from './dto/update-fanpage.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('fanpage')
 @Controller('fanpages')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class FanpageController {

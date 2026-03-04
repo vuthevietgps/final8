@@ -19,6 +19,7 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from '../user/user.schema';
 import { UserRole } from '../user/user.enum';
 import { CreateUserDto } from '../user/dto/create-user.dto';
+import { enforceActiveUserLimit } from '../plan/user-limit.util';
 
 // Interface cho kết quả import
 export interface ImportResult {
@@ -75,6 +76,7 @@ export class ImportUserService {
       // Parse CSV content thành rows
       const rows = this.parseCSVContent(csvContent);
       result.total = rows.length;
+      let activeUsers = await this.userModel.countDocuments({ isActive: true }).exec();
 
       // Xử lý từng row
       for (let i = 0; i < rows.length; i++) {
@@ -87,6 +89,15 @@ export class ImportUserService {
           
           // Kiểm tra user đã tồn tại chưa (theo email)
           const existingUser = await this.userModel.findOne({ email: userData.email }).exec();
+          const existingIsActive = !!existingUser && existingUser.isActive !== false;
+          const nextIsActive = userData.isActive !== false;
+          const addsActiveUser =
+            (!existingUser && nextIsActive) || (existingUser && !existingIsActive && nextIsActive);
+          const removesActiveUser = existingUser && existingIsActive && !nextIsActive;
+
+          if (addsActiveUser) {
+            await enforceActiveUserLimit(async () => activeUsers);
+          }
           
           if (existingUser) {
             // Update existing user (ghi đè)
@@ -100,6 +111,12 @@ export class ImportUserService {
             const newUser = new this.userModel(userData);
             await newUser.save();
             result.success++;
+          }
+
+          if (addsActiveUser) {
+            activeUsers += 1;
+          } else if (removesActiveUser) {
+            activeUsers = Math.max(0, activeUsers - 1);
           }
 
         } catch (error) {

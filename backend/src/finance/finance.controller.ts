@@ -14,7 +14,9 @@ import { CaptureAvailableFundDto } from './dto/capture-available-fund.dto';
 import { CashflowSafetyService } from './cashflow-safety.service';
 import { AutoScaleDecisionService } from './auto-scale-decision.service';
 import { AutoScaleExecutionService } from './auto-scale-execution.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('finance')

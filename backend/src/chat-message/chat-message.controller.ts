@@ -14,7 +14,9 @@ import { OpenAIConfigService } from '../openai-config/openai-config.service';
 import { Model } from 'mongoose';
 import { map } from 'rxjs/operators';
 import { ChatEventsService } from './chat-events.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('chat-message')
 @Controller('chat-messages')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ChatMessageController {

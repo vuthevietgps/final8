@@ -1,7 +1,7 @@
-/**
+﻿/**
  * File: ad-group/schemas/ad-group.schema.ts
- * Mục đích: Định nghĩa schema Mongoose cho Nhóm Quảng Cáo (tối giản, không AI/khuyến mại)
- * Chức năng: Quản lý nhóm quảng cáo, sản phẩm và auto-control
+ * Má»¥c Ä‘Ã­ch: Äá»‹nh nghÄ©a schema Mongoose cho NhÃ³m Quáº£ng CÃ¡o (tá»‘i giáº£n, khÃ´ng AI/khuyáº¿n máº¡i)
+ * Chá»©c nÄƒng: Quáº£n lÃ½ nhÃ³m quáº£ng cÃ¡o, sáº£n pháº©m vÃ  auto-control
  */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
@@ -11,68 +11,75 @@ export type AdGroupDocument = AdGroup & Document;
 @Schema({ timestamps: true })
 export class AdGroup {
   @Prop({ required: true, trim: true })
-  name: string; // Tên nhóm quảng cáo
+  name: string; // TÃªn nhÃ³m quáº£ng cÃ¡o
 
   @Prop({ required: true, trim: true, unique: true, index: true })
-  adGroupId: string; // ID nhóm quảng cáo (nhập tay)
+  adGroupId: string; // ID nhÃ³m quáº£ng cÃ¡o (nháº­p tay)
 
-  // Tham chiếu các entity chính
+  // Tham chiáº¿u cÃ¡c entity chÃ­nh
   @Prop({ type: Types.ObjectId, ref: 'Fanpage', required: true, index: true })
-  fanpageId: Types.ObjectId; // Tham chiếu fanpage
+  fanpageId: Types.ObjectId; // Tham chiáº¿u fanpage
 
   @Prop({ type: Types.ObjectId, ref: 'ProductCategory', required: true, index: true })
-  productCategoryId: Types.ObjectId; // Tham chiếu danh mục sản phẩm
+  productCategoryId: Types.ObjectId; // Tham chiáº¿u danh má»¥c sáº£n pháº©m
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Product' }], default: [] })
-  selectedProducts: Types.ObjectId[]; // Danh sách sản phẩm được chọn
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'Product' }],
+    required: true,
+    validate: {
+      validator: (products: Types.ObjectId[]) => Array.isArray(products) && products.length === 1,
+      message: 'Mỗi nhóm quảng cáo phải gắn đúng 1 sản phẩm',
+    },
+  })
+  selectedProducts: Types.ObjectId[]; // Danh sÃ¡ch sáº£n pháº©m Ä‘Æ°á»£c chá»n
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
-  agentId: Types.ObjectId; // Tham chiếu đại lý (user role: agent)
+  agentId: Types.ObjectId; // Tham chiáº¿u Ä‘áº¡i lÃ½ (user role: agent)
 
   @Prop({ type: Types.ObjectId, ref: 'AdAccount', required: true, index: true })
-  adAccountId: Types.ObjectId; // Tham chiếu tài khoản quảng cáo
+  adAccountId: Types.ObjectId; // Tham chiáº¿u tÃ i khoáº£n quáº£ng cÃ¡o
 
   @Prop({ type: Types.ObjectId, ref: 'User', index: true })
-  assignedEmployeeId?: Types.ObjectId; // Nhân viên phụ trách nhóm quảng cáo này
+  assignedEmployeeId?: Types.ObjectId; // NhÃ¢n viÃªn phá»¥ trÃ¡ch nhÃ³m quáº£ng cÃ¡o nÃ y
 
-  // Thông tin mô tả và nội dung
+  // ThÃ´ng tin mÃ´ táº£ vÃ  ná»™i dung
   @Prop({ trim: true })
-  description?: string; // Mô tả nhóm quảng cáo
+  description?: string; // MÃ´ táº£ nhÃ³m quáº£ng cÃ¡o
 
-  // Thông tin quảng cáo
+  // ThÃ´ng tin quáº£ng cÃ¡o
   @Prop({ required: true, enum: ['facebook', 'google', 'tiktok'], index: true })
-  platform: 'facebook' | 'google' | 'tiktok'; // Nền tảng quảng cáo
+  platform: 'facebook' | 'google' | 'tiktok'; // Ná»n táº£ng quáº£ng cÃ¡o
 
   @Prop({ default: true, index: true })
-  isActive: boolean; // Trạng thái hoạt động
+  isActive: boolean; // Tráº¡ng thÃ¡i hoáº¡t Ä‘á»™ng
 
   @Prop({ trim: true })
-  notes?: string; // Ghi chú (không bắt buộc)
+  notes?: string; // Ghi chÃº (khÃ´ng báº¯t buá»™c)
 
-  // Webhook và AI processing
+  // Webhook vÃ  AI processing
   @Prop({ default: false })
-  enableWebhook?: boolean; // Bật webhook cho nhóm này
+  enableWebhook?: boolean; // Báº­t webhook cho nhÃ³m nÃ y
 
-  // Tự động kiểm soát chi tiêu/hiệu quả
+  // Tá»± Ä‘á»™ng kiá»ƒm soÃ¡t chi tiÃªu/hiá»‡u quáº£
   @Prop({ default: false })
-  autoControlEnabled?: boolean; // Bật theo dõi tự động và tạm dừng nếu vượt ngưỡng
+  autoControlEnabled?: boolean; // Báº­t theo dÃµi tá»± Ä‘á»™ng vÃ  táº¡m dá»«ng náº¿u vÆ°á»£t ngÆ°á»¡ng
 
   @Prop({ type: Number, min: 0 })
-  spendThresholdDaily?: number; // Ngưỡng chi tiêu/ngày (VND). Vượt sẽ tạm dừng
+  spendThresholdDaily?: number; // NgÆ°á»¡ng chi tiÃªu/ngÃ y (VND). VÆ°á»£t sáº½ táº¡m dá»«ng
 
   @Prop({ type: Number, min: 0 })
-  cprThresholdDaily?: number; // Ngưỡng chi phí trên mỗi hội thoại/ngày (VND)
+  cprThresholdDaily?: number; // NgÆ°á»¡ng chi phÃ­ trÃªn má»—i há»™i thoáº¡i/ngÃ y (VND)
 
   @Prop({ type: Number, min: 0, default: 3 })
-  minConversations?: number; // Số hội thoại tối thiểu để tính CPR (tránh pause vì mẫu quá nhỏ)
+  minConversations?: number; // Sá»‘ há»™i thoáº¡i tá»‘i thiá»ƒu Ä‘á»ƒ tÃ­nh CPR (trÃ¡nh pause vÃ¬ máº«u quÃ¡ nhá»)
 
   @Prop({ type: Date })
-  lastAutoControlAt?: Date; // Lần cuối hệ thống tự động can thiệp
+  lastAutoControlAt?: Date; // Láº§n cuá»‘i há»‡ thá»‘ng tá»± Ä‘á»™ng can thiá»‡p
 
   @Prop({ trim: true })
-  autoPausedReason?: string; // Lý do tự dừng gần nhất
+  autoPausedReason?: string; // LÃ½ do tá»± dá»«ng gáº§n nháº¥t
 
-  // Metadata đồng bộ từ provider
+  // Metadata Ä‘á»“ng bá»™ tá»« provider
   @Prop({ trim: true })
   remoteStatus?: string;
 
@@ -88,7 +95,7 @@ export class AdGroup {
   @Prop({ trim: true })
   campaignId?: string;
 
-  // Nhật ký đồng bộ
+  // Nháº­t kÃ½ Ä‘á»“ng bá»™
   @Prop() lastSyncAt?: Date;
 
   @Prop({ trim: true }) lastSyncStatus?: 'ok' | 'error';
@@ -98,7 +105,7 @@ export class AdGroup {
   @Prop({ type: Number }) lastSyncDurationMs?: number;
 
   // =============================================
-  // 🚀 AUTO-SCALE TESTING PHASE & HORIZONTAL SCALING
+  // ðŸš€ AUTO-SCALE TESTING PHASE & HORIZONTAL SCALING
   // =============================================
 
   @Prop({ 
@@ -110,67 +117,68 @@ export class AdGroup {
   testingPhase?: 'TESTING' | 'GROWTH' | 'MATURE' | 'STABLE'; // Testing phase cho auto-scale
 
   @Prop({ type: Date })
-  testingStartDate?: Date; // Ngày bắt đầu testing phase
+  testingStartDate?: Date; // NgÃ y báº¯t Ä‘áº§u testing phase
 
   @Prop({ type: Number, default: 0 })
-  daysSinceLaunch?: number; // Số ngày kể từ khi launch (auto-calculated)
+  daysSinceLaunch?: number; // Sá»‘ ngÃ y ká»ƒ tá»« khi launch (auto-calculated)
 
   @Prop({ default: false })
-  isManualOverride?: boolean; // Nếu true, không áp dụng auto-scale
+  isManualOverride?: boolean; // Náº¿u true, khÃ´ng Ã¡p dá»¥ng auto-scale
 
   @Prop({ type: String })
-  manualOverrideReason?: string; // Lý do manual override
+  manualOverrideReason?: string; // LÃ½ do manual override
 
-  // Frequency metrics (sync từ Facebook API)
+  // Frequency metrics (sync tá»« Facebook API)
   @Prop({ type: Number })
-  frequency?: number; // Số lần trung bình 1 người thấy ad
-
-  @Prop({ type: Number })
-  reach?: number; // Số người unique đã thấy ad
+  frequency?: number; // Sá»‘ láº§n trung bÃ¬nh 1 ngÆ°á»i tháº¥y ad
 
   @Prop({ type: Number })
-  audienceSize?: number; // Kích thước audience targeting
+  reach?: number; // Sá»‘ ngÆ°á»i unique Ä‘Ã£ tháº¥y ad
+
+  @Prop({ type: Number })
+  audienceSize?: number; // KÃ­ch thÆ°á»›c audience targeting
 
   @Prop({ type: Date })
-  lastFrequencyUpdateAt?: Date; // Lần cuối update frequency metrics
+  lastFrequencyUpdateAt?: Date; // Láº§n cuá»‘i update frequency metrics
 
   // Horizontal scaling metadata
   @Prop({ type: String })
-  basedOnAdGroup?: string; // Nếu ad group này là horizontal scale từ ad group khác
+  basedOnAdGroup?: string; // Náº¿u ad group nÃ y lÃ  horizontal scale tá»« ad group khÃ¡c
 
   @Prop({ default: false })
-  autoCreated?: boolean; // Được tạo tự động bởi horizontal scaling
+  autoCreated?: boolean; // ÄÆ°á»£c táº¡o tá»± Ä‘á»™ng bá»Ÿi horizontal scaling
 
   @Prop({ type: String })
-  autoCreatedReason?: string; // Lý do tạo tự động
+  autoCreatedReason?: string; // LÃ½ do táº¡o tá»± Ä‘á»™ng
 
   @Prop({ 
     type: String, 
     enum: ['LOOKALIKE_1', 'LOOKALIKE_2_3', 'INTEREST_TARGETING', 'BROAD_TARGETING'] 
   })
-  targetingStrategy?: string; // Chiến lược targeting (cho horizontal scaling)
+  targetingStrategy?: string; // Chiáº¿n lÆ°á»£c targeting (cho horizontal scaling)
 
   @Prop({ default: false })
-  preferHorizontalScaling?: boolean; // Ưu tiên horizontal scaling thay vì vertical
+  preferHorizontalScaling?: boolean; // Æ¯u tiÃªn horizontal scaling thay vÃ¬ vertical
 
   @Prop({ type: Number })
-  maxDailyScaleRate?: number; // Max scale rate cho ad group này (override global)
+  maxDailyScaleRate?: number; // Max scale rate cho ad group nÃ y (override global)
 
   // Gradual scaling tracking
   @Prop({ type: Number })
-  pendingBudgetIncrease?: number; // Budget còn lại cần scale (cho multi-day gradual scale)
+  pendingBudgetIncrease?: number; // Budget cÃ²n láº¡i cáº§n scale (cho multi-day gradual scale)
 
   @Prop({ type: Date })
-  nextScheduledScaleDate?: Date; // Ngày scale tiếp theo (cho gradual scale)
+  nextScheduledScaleDate?: Date; // NgÃ y scale tiáº¿p theo (cho gradual scale)
 
   @Prop({ type: Number })
-  targetBudget?: number; // Budget mục tiêu cuối cùng (cho gradual scale)
+  targetBudget?: number; // Budget má»¥c tiÃªu cuá»‘i cÃ¹ng (cho gradual scale)
 }
 
 export const AdGroupSchema = SchemaFactory.createForClass(AdGroup);
 
-// Indexes phục vụ truy vấn phổ biến và chatbot
+// Indexes phá»¥c vá»¥ truy váº¥n phá»• biáº¿n vÃ  chatbot
 AdGroupSchema.index({ createdAt: -1 });
 AdGroupSchema.index({ fanpageId: 1, isActive: 1 });
 AdGroupSchema.index({ enableWebhook: 1 });
 AdGroupSchema.index({ adGroupId: 1, fanpageId: 1 }); // Composite index cho webhook lookup
+

@@ -2,7 +2,9 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards, ValidationPipe } 
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { InventoryService } from './inventory.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('inventory')
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InventoryController {

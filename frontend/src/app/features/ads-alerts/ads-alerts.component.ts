@@ -5,7 +5,7 @@
  * - Dropdown drawer với danh sách alerts
  * - Actions: mark read, dismiss, navigate
  */
-import { Component, OnInit, OnDestroy, signal, computed, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, HostListener, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AdsAlertsService, AdsAlert, AlertType, AlertCategory, OptimalSpendSuggestion } from './ads-alerts.service';
@@ -19,7 +19,7 @@ import { Subscription } from 'rxjs';
   template: `
     <div class="ads-alerts-container">
       <!-- Notification Bell -->
-      <button class="notification-bell" 
+      <button #bellTrigger class="notification-bell" 
               [class.has-unread]="service.hasUnread()" 
               (click)="toggleDrawer($event)">
         <span class="bell-icon">🔔</span>
@@ -32,7 +32,7 @@ import { Subscription } from 'rxjs';
 
       <!-- Alerts Drawer -->
       @if (isDrawerOpen()) {
-        <div class="alerts-drawer" (click)="$event.stopPropagation()">
+        <div class="alerts-drawer" [ngStyle]="drawerStyle()" (click)="$event.stopPropagation()">
           <div class="drawer-header">
             <h3>🔔 Thông Báo Quảng Cáo</h3>
             <div class="header-actions">
@@ -316,15 +316,16 @@ import { Subscription } from 'rxjs';
     }
 
     .alerts-drawer {
-      position: absolute;
-      top: 100%;
-      right: 0;
+      position: fixed;
+      top: 72px;
+      left: 12px;
+      right: auto;
       width: 450px;
       max-height: 80vh;
       background: white;
       border-radius: 12px;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-      z-index: 1000;
+      z-index: 1200;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -893,7 +894,9 @@ export class AdsAlertsComponent implements OnInit, OnDestroy {
   filterType = signal<AlertType | null>(null);
   isChecking = signal(false);
   activeTab = signal<'alerts' | 'suggestions'>('alerts');
+  drawerStyle = signal<Record<string, string>>({});
   Math = Math;
+  @ViewChild('bellTrigger') bellTrigger?: ElementRef<HTMLButtonElement>;
 
   private newAlertSub?: Subscription;
 
@@ -940,9 +943,64 @@ export class AdsAlertsComponent implements OnInit, OnDestroy {
     }
   }
 
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (this.isDrawerOpen()) {
+      this.updateDrawerPosition();
+    }
+  }
+
   toggleDrawer(event: Event): void {
     event.stopPropagation();
-    this.isDrawerOpen.update(v => !v);
+    const willOpen = !this.isDrawerOpen();
+    this.isDrawerOpen.set(willOpen);
+
+    if (willOpen) {
+      setTimeout(() => this.updateDrawerPosition(), 0);
+    }
+  }
+
+  private updateDrawerPosition(): void {
+    const margin = 12;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 768;
+    const isMobile = viewportWidth <= 480;
+    const desiredWidth = isMobile
+      ? viewportWidth
+      : Math.max(280, Math.min(450, viewportWidth - margin * 2));
+
+    let left = margin;
+    let top = 72;
+
+    if (isMobile) {
+      left = 0;
+      top = 60;
+    } else {
+      const rect = this.bellTrigger?.nativeElement?.getBoundingClientRect();
+      if (rect) {
+        left = rect.right - desiredWidth;
+        top = rect.bottom + 8;
+      }
+    }
+
+    if (isMobile) {
+      left = 0;
+      top = 60;
+    } else {
+      left = Math.max(margin, Math.min(left, viewportWidth - desiredWidth - margin));
+      top = Math.max(margin, top);
+    }
+
+    const maxHeight = isMobile
+      ? Math.max(280, viewportHeight - 60)
+      : Math.max(280, viewportHeight - top - margin);
+
+    this.drawerStyle.set({
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${desiredWidth}px`,
+      maxHeight: `${maxHeight}px`,
+    });
   }
 
   toggleFilter(type: AlertType): void {

@@ -9,6 +9,40 @@ export class TestOrder2Service {
   private http = inject(HttpClient);
   private baseUrl = `${environment.apiUrl}/test-order2`;
 
+  getProductsForOrders(): Observable<Array<{
+    _id: string;
+    name: string;
+    color?: string;
+    status?: string;
+    suppliers?: Array<{
+      supplierId?: string;
+      price1?: number;
+      price2?: number;
+      price3?: number;
+      appliedLevel?: number;
+      appliedPrice?: number;
+      priority?: number;
+      isDefault?: boolean;
+    }>;
+  }>> {
+    return this.http.get<Array<{
+      _id: string;
+      name: string;
+      color?: string;
+      status?: string;
+      suppliers?: Array<{
+        supplierId?: string;
+        price1?: number;
+        price2?: number;
+        price3?: number;
+        appliedLevel?: number;
+        appliedPrice?: number;
+        priority?: number;
+        isDefault?: boolean;
+      }>;
+    }>>(`${this.baseUrl}/products`);
+  }
+
   getAll(params?: { 
     q?: string; 
     productId?: string; 

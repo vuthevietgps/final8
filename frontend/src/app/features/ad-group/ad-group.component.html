@@ -296,15 +296,16 @@
 
           <!-- Product Selection -->
           <div class="form-group" *ngIf="availableProducts().length > 0">
-            <label>Chọn sản phẩm (có thể chọn nhiều)</label>
+            <label>Chọn sản phẩm (bắt buộc đúng 1 sản phẩm)</label>
             <div class="product-grid">
               <div *ngFor="let product of availableProducts()" class="product-card">
                 <label class="product-checkbox">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="radio"
+                    name="selectedProduct"
                     [value]="product._id"
                     [checked]="isProductSelected(product._id)"
-                    (change)="toggleProductSelection(product._id, $event)">
+                    (change)="selectSingleProduct(product._id)">
                   <div class="product-info">
                     <div class="product-name">{{ product.name }}</div>
                     <div class="product-price">{{ getProductPrice(product) }}</div>
@@ -312,8 +313,14 @@
                 </label>
               </div>
             </div>
+            <button type="button" class="btn btn-secondary" (click)="clearSingleProductSelection()">Bỏ chọn sản phẩm</button>
+            <div *ngIf="adGroupForm.get('selectedProducts')?.touched && !(adGroupForm.get('selectedProducts')?.value?.length === 1)" class="error-message">
+              Bắt buộc chọn đúng 1 sản phẩm
+            </div>
           </div>
         </div>
+
+
 
         
 

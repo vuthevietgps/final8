@@ -23,7 +23,9 @@ import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { EmployeeAdsKpiService, EmployeeKpiSummary, AdGroupPerformance, KpiAlert } from './employee-ads-kpi.service';
 import { ConfirmAdjustmentDto, BulkConfirmDto, GetDailySuggestionsDto } from './dto/daily-adjustment.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('employee-ads-kpi')
 @Controller('employee-ads-kpi')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('employee-ads-kpi')

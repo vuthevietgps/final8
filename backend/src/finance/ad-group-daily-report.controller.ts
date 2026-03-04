@@ -3,7 +3,9 @@ import { AdGroupDailyReportService } from './ad-group-daily-report.service';
 import { GetAdGroupDailyReportDto } from './dto/ad-group-daily-report.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('ad-group-daily-report')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('ads-budget')
@@ -39,8 +41,15 @@ export class AdGroupDailyReportController {
    * Dựa trên thuật toán lợi nhuận biên giảm dần
    */
   @Get('optimal-spend')
-  getOptimalSpendSuggestions() {
-    return this.service.getOptimalSpendSuggestions();
+  getOptimalSpendSuggestions(
+    @Query('mode') mode?: 'legacy' | 'product-x',
+    @Query('defaultX') defaultX?: string,
+  ) {
+    const parsedDefaultX = defaultX !== undefined ? Number(defaultX) : undefined;
+    return this.service.getOptimalSpendSuggestions({
+      mode: mode === 'product-x' ? 'product-x' : 'legacy',
+      defaultAssumedReturnRatePercent: Number.isFinite(parsedDefaultX) ? parsedDefaultX : undefined,
+    });
   }
 
   /**

@@ -8,7 +8,9 @@ import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { AdAccountService } from './ad-account.service';
 import { CreateAdAccountDto } from './dto/create-ad-account.dto';
 import { UpdateAdAccountDto } from './dto/update-ad-account.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('ad-account')
 @Controller('ad-accounts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('ad-accounts')

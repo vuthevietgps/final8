@@ -11,7 +11,9 @@ import * as path from 'path';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('media')
 @Controller('media')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MediaController {

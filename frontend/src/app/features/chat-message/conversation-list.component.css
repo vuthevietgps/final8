@@ -143,8 +143,18 @@ body:not(.dark) .msg.ai{background:#a7f3d0;border-color:#10b981;color:#065f46;}
 .reply-box textarea{width:100%;background:var(--color-surface);border:1px solid var(--color-border-soft);color:var(--color-text);padding:10px 12px;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;min-height:80px;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.1);}
 .reply-box textarea:focus{outline:2px solid var(--color-primary);outline-offset:1px;border-color:var(--color-primary);}
 .reply-actions{display:flex;justify-content:flex-end;gap:8px;} 
+.fanpage-description-box{margin-top:8px;border-top:1px solid var(--color-border-soft);padding:10px 12px;background:var(--color-surface);border-radius:8px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.fanpage-description-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+.fanpage-description-head strong{font-size:13px;color:var(--color-text);}
+.fanpage-description-sub{font-size:12px;color:var(--color-text-muted);}
+.fanpage-description-input{width:100%;border:1px solid var(--color-border-soft);border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.4;background:var(--color-surface);color:var(--color-text);resize:vertical;min-height:86px;}
+.fanpage-description-input:focus{outline:2px solid var(--color-primary);outline-offset:1px;border-color:var(--color-primary);}
+.fanpage-description-input:disabled{opacity:.65;cursor:not-allowed;background:var(--color-surface-alt);}
+.fanpage-description-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.fanpage-description-actions .mini-hint{margin:0;flex:1;min-width:260px;}
 .thread-layout{display:none;} /* not used in page layout */
 .mini-hint{font-size:11px;color:var(--color-text-muted);margin-bottom:8px;padding:6px 8px;background:var(--color-surface);border-radius:6px;border:1px solid var(--color-border-soft);}
+.mini-hint.warning{color:#b45309;background:#fffbeb;border-color:#f59e0b;}
 .form-grid{display:flex;flex-direction:column;gap:10px;}
 .form-grid label{display:flex;flex-direction:column;font-size:11px;font-weight:600;color:var(--color-text);gap:4px;}
 .form-grid input,.form-grid textarea,.form-grid select{border:1px solid var(--color-border-soft);border-radius:4px;padding:6px 8px;font-size:12px;background:var(--color-surface);color:var(--color-text);transition:border-color 0.2s;}

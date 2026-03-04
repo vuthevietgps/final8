@@ -12,7 +12,9 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ProfitService } from '../services/profit.service';
 import { ProfitSummaryDto } from '../dto/profit-summary.dto';
+import { FeatureModule } from '../../plan/feature-module.decorator';
 
+@FeatureModule('cashflow-control')
 @Controller('cashflow/profit')
 export class ProfitController {
   constructor(private readonly profitService: ProfitService) {}

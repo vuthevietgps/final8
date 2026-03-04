@@ -15,7 +15,7 @@ import { AuthService } from './core/services/auth.service';
   styleUrl: './app.css'
 })
 export class App {
-  protected readonly title = signal('management-frontend');
+  protected readonly title = signal('erp-fulfilment-version1');
   
   private router = inject(Router);
   private authService = inject(AuthService);
@@ -41,6 +41,20 @@ export class App {
     console.log('showSidebar computed:', { url, isLoginPage, hasToken, isAuth, result: hasToken && isAuth });
     return hasToken && isAuth;
   });
+
+  private cleanupGlobalOverlays(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    // Remove stale Bootstrap backdrop that can block all clicks after route change.
+    document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+
+    // Reset Bootstrap body lock styles/classes.
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+  }
   
   constructor() {
     // QUAN TRỌNG: Nếu đang ở trang login, clear localStorage ngay
@@ -51,12 +65,16 @@ export class App {
         localStorage.removeItem('current_user');
       }
     }
+
+    // Cleanup any stale global overlay on first paint.
+    this.cleanupGlobalOverlays();
     
     // Listen to route changes
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd)
     ).subscribe((event: NavigationEnd) => {
       this.currentUrl.set(event.urlAfterRedirects || event.url);
+      this.cleanupGlobalOverlays();
     });
   }
 }

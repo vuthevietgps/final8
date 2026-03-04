@@ -9,7 +9,9 @@ import { CreateOtherCostDto } from './dto/create-other-cost.dto';
 import { UpdateOtherCostDto } from './dto/update-other-cost.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('other-cost')
 @Controller('other-cost')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OtherCostController {

@@ -11,7 +11,9 @@
 import { Controller, Get } from '@nestjs/common';
 import { AlertsService } from '../services/alerts.service';
 import { AlertsResponseDto } from '../dto/alert.dto';
+import { FeatureModule } from '../../plan/feature-module.decorator';
 
+@FeatureModule('cashflow-control')
 @Controller('cashflow/alerts')
 export class AlertsController {
   constructor(private readonly alertsService: AlertsService) {}

@@ -280,6 +280,32 @@ export class TestOrder2Service {
     return saved;
   }
 
+  /**
+   * Product list dedicated for Order Test2 screen.
+   * Uses orders-test2 permission scope (not products module permission),
+   * so restricted employee accounts can still resolve product names/options.
+   */
+  async listProductsForOrderModule() {
+    const products = await this.productModel
+      .find({}, { name: 1, color: 1, status: 1, suppliers: 1 })
+      .sort({ name: 1 })
+      .lean()
+      .exec();
+
+    return products.map((product: any) => ({
+      _id: String(product._id),
+      name: product.name,
+      color: product.color || '#3B82F6',
+      status: product.status,
+      suppliers: Array.isArray(product.suppliers)
+        ? product.suppliers.map((supplier: any) => ({
+            ...supplier,
+            supplierId: supplier?.supplierId ? String(supplier.supplierId) : undefined,
+          }))
+        : [],
+    }));
+  }
+
   async findById(id: string, currentUser?: any) {
     const doc = await this.model.findById(id).lean();
     if (doc && currentUser && SUPPLIER_ROLES.has(currentUser.role)) {

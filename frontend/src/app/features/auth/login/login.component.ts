@@ -10,89 +10,176 @@ import { LoginRequest } from '../../../core/models/auth.interface';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div class="max-w-md w-full space-y-8">
-        <div>
-          <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Đăng nhập hệ thống
-          </h2>
-          <p class="mt-2 text-center text-sm text-gray-600">
-            Management System V4-4.1
-          </p>
+    <div class="login-page">
+      <div class="login-card">
+        <div class="login-header">
+          <h1>Đăng nhập hệ thống</h1>
+          <p class="welcome-text">Chào mừng bạn đăng nhập hệ thống ERP Fulfillment</p>
+          <p class="version-text">ERP Fulfilment Version1</p>
         </div>
-        
-        <form class="mt-8 space-y-6" (ngSubmit)="onLogin($event)">
+
+        <form class="login-form" (ngSubmit)="onLogin($event)">
           @if (errorMessage()) {
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            <div class="login-error">
               {{ errorMessage() }}
             </div>
           }
-          
-          <div class="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label for="email" class="sr-only">Email</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autocomplete="email"
-                required
-                class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Email"
-                [(ngModel)]="loginData.email"
-              />
-            </div>
-            <div>
-              <label for="password" class="sr-only">Mật khẩu</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                required
-                class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Mật khẩu"
-                [(ngModel)]="loginData.password"
-              />
-            </div>
+
+          <div class="input-group">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              class="login-input"
+              placeholder="Email"
+              [(ngModel)]="loginData.email"
+            />
           </div>
 
-          <div>
-            <button
-              type="submit"
-              class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-              [disabled]="authService.isLoading()"
-            >
-              @if (authService.isLoading()) {
-                <span class="absolute left-0 inset-y-0 flex items-center pl-3">
-                  <svg class="animate-spin h-5 w-5 text-indigo-300" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                </span>
-                Đang đăng nhập...
-              } @else {
-                Đăng nhập
-              }
-            </button>
+          <div class="input-group">
+            <label for="password">Mật khẩu</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="login-input"
+              placeholder="Mật khẩu"
+              [(ngModel)]="loginData.password"
+            />
           </div>
 
-          <div class="text-center">
-            <p class="text-sm text-gray-600">
-              Demo accounts:<br>
-              <span class="text-xs">Director: vutheviet@gmail.com / 123456</span><br>
-              <span class="text-xs">Director: admin@dropshipping.com / 123456</span><br>
-              <span class="text-xs">Manager: phamthanhmai@gmail.com / 123456</span><br>
-              <span class="text-xs">Employee: nhanvien@gmail.com / 123456</span>
-            </p>
-          </div>
+          <button
+            type="submit"
+            class="login-button"
+            [disabled]="authService.isLoading()"
+          >
+            @if (authService.isLoading()) {
+              Đang đăng nhập...
+            } @else {
+              Đăng nhập
+            }
+          </button>
         </form>
       </div>
     </div>
   `,
   styles: [`
-    .min-h-screen {
+    :host {
+      display: block;
+    }
+
+    .login-page {
       min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, #f3f6fb 0%, #e8eef9 100%);
+      position: relative;
+      z-index: 2000;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.15);
+      padding: 28px;
+      border: 1px solid #dce4f2;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .login-header h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .welcome-text {
+      margin: 10px 0 6px;
+      font-size: 15px;
+      color: #1d4ed8;
+      font-weight: 600;
+    }
+
+    .version-text {
+      margin: 0;
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .login-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    .login-error {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #b91c1c;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 14px;
+      color: #334155;
+      font-weight: 600;
+    }
+
+    .login-input {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #0f172a;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .login-input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .login-button {
+      margin-top: 4px;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      background: #2563eb;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .login-button:hover {
+      background: #1d4ed8;
+    }
+
+    .login-button:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
     }
   `]
 })
@@ -109,39 +196,63 @@ export class LoginComponent {
     private router: Router,
     private route: ActivatedRoute
   ) {
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    }
+
     // Khi vào trang login, clear auth data cũ để tránh race condition
-    // Các request API từ component khác sẽ không có token → không gây 401 logout loop
+    // Các request API từ component khác sẽ không có token -> không gây 401 logout loop
     if (typeof window !== 'undefined') {
       localStorage.removeItem('access_token');
       localStorage.removeItem('current_user');
     }
   }
 
+  private extractBackendErrorMessage(error: any): string | null {
+    const payload = error?.error ?? error?.response ?? null;
+    const candidates = [payload, payload?.message, payload?.error, error?.message];
+
+    for (const value of candidates) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+      }
+      if (Array.isArray(value) && value.length > 0) {
+        const first = String(value[0] ?? '').trim();
+        if (first) return first;
+      }
+    }
+
+    return null;
+  }
+
   onLogin(event: Event): void {
     event.preventDefault();
-    
+
     if (!this.loginData.email || !this.loginData.password) {
       this.errorMessage.set('Vui lòng nhập đầy đủ email và mật khẩu');
       return;
     }
 
     this.errorMessage.set('');
-    
+
     this.authService.login(this.loginData).subscribe({
-      next: (response: any) => {
+      next: () => {
         // Get return URL or default to dashboard
         const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
         this.router.navigate([returnUrl]);
       },
       error: (error: any) => {
         console.error('Login error:', error);
-        
-        if (error.status === 401) {
-          this.errorMessage.set('Email hoặc mật khẩu không đúng');
-        } else if (error.status === 0) {
+        const backendMessage = this.extractBackendErrorMessage(error);
+
+        if (error.status === 0) {
           this.errorMessage.set('Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.');
         } else {
-          this.errorMessage.set(error.error?.message || 'Đã xảy ra lỗi. Vui lòng thử lại.');
+          this.errorMessage.set(backendMessage || ('Đăng nhập thất bại (' + (error.status ?? 'unknown') + ')'));
         }
       }
     });

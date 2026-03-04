@@ -4,7 +4,9 @@ import { CreatePendingOrderDto } from './dto/create-pending-order.dto';
 import { UpdatePendingOrderDto } from './dto/update-pending-order.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('pending-order')
 @Controller('pending-orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PendingOrderController {

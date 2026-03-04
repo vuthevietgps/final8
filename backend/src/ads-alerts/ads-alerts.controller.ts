@@ -17,7 +17,9 @@ import { AdsAlertsService } from './ads-alerts.service';
 import { AdsAlertsEventsService } from './ads-alerts-events.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('ads-alerts')
 @Controller('ads-alerts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdsAlertsController {

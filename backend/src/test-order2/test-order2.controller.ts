@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, Res, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -11,7 +11,9 @@ import { TestOrder2ExportService } from './test-order2-export.service';
 import { TestOrder2ExportJsonService } from './test-order2-export-json.service';
 import { TestOrder2ImportService } from './test-order2-import.service';
 import { Response } from 'express';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('test-order2')
 @Controller('test-order2')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequirePermissions('orders-test2')
@@ -68,8 +70,16 @@ export class TestOrder2Controller {
   @Post('seed')
   @RequirePermissions('orders')
   async seed(@Query('count') count?: string) {
+    if (String(process.env.ALLOW_DANGEROUS_SEED || '').toLowerCase() !== 'true') {
+      throw new ForbiddenException('Seed endpoint is disabled. Set ALLOW_DANGEROUS_SEED=true to enable.');
+    }
     const c = Math.max(1, Math.min(100, Number(count) || 10));
     return this.service.seed(c);
+  }
+
+  @Get('products')
+  async listProductsForOrderModule() {
+    return this.service.listProductsForOrderModule();
   }
 
   // ============ DAILY PROFIT REPORT ============

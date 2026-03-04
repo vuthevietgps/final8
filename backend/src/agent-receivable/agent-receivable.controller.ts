@@ -4,6 +4,7 @@ import { AgentReceivableService } from './agent-receivable.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
 /**
  * @deprecated Use /api/agent-payables instead
@@ -11,6 +12,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
  * CFO Spec v3.1: Route này vẫn hoạt động nhưng nên migrate sang /api/agent-payables
  * vì "payables" đúng góc nhìn công ty (tiền mình phải trả agent).
  */
+@FeatureModule('agent-receivable')
 @Controller('agent-receivables')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AgentReceivableController {

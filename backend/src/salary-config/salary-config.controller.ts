@@ -4,7 +4,9 @@ import { CreateSalaryConfigDto } from './dto/create-salary-config.dto';
 import { UpdateSalaryConfigDto } from './dto/update-salary-config.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('salary-config')
 @Controller('salary-config')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SalaryConfigController {

@@ -10,7 +10,9 @@ import { CreateStatementDto } from './dto/create-statement.dto';
 import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { RolesGuard as CustomRolesGuard } from './guards/roles.guard';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('supplier-payable')
 @Controller('supplier-payables')
 @UseGuards(JwtAuthGuard, RolesGuard, CustomRolesGuard)
 export class SupplierPayableController {

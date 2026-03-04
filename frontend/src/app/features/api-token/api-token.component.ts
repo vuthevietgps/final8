@@ -16,6 +16,7 @@ export class ApiTokenComponent implements OnInit {
   tokens = signal<ApiToken[]>([]);
   loading = signal(false);
   error = signal<string|undefined>(undefined);
+  activeTab = signal<'list' | 'guide'>('list');
 
   showModal = signal(false);
   rotating = signal<ApiToken|undefined>(undefined);

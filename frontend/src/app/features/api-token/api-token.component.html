@@ -1,98 +1,242 @@
-<div class="api-token-container">
+﻿<div class="api-token-container">
   <div class="header-row">
-    <h2>🔐 API & Tokens</h2>
-    <div class="actions">
-      <button class="btn" (click)="openCreate()">➕ Thêm Token</button>
-  <button class="btn secondary" (click)="load()" [disabled]="loading()">⟳ Tải lại</button>
-  <button class="btn secondary" (click)="sync()" [disabled]="syncLoading()" title="Nhập token trực tiếp; nút này chỉ dùng khi muốn nhập từ Tài khoản quảng cáo">⇅ Đồng bộ từ Tài khoản quảng cáo</button>
+    <h2>API & Tokens</h2>
+    <div class="actions" *ngIf="activeTab() === 'list'">
+      <button class="btn" (click)="openCreate()">Thêm Token</button>
+      <button class="btn secondary" (click)="load()" [disabled]="loading()">Tải lại</button>
+      <button
+        class="btn secondary"
+        (click)="sync()"
+        [disabled]="syncLoading()"
+        title="Nhập token trực tiếp; nút này chỉ dùng khi muốn nhập từ Tài khoản quảng cáo"
+      >
+        Đồng bộ từ Tài khoản quảng cáo
+      </button>
     </div>
   </div>
 
-  <div *ngIf="error()" class="error-box">{{ error() }}</div>
-  <div *ngIf="loading()" class="loading">Đang tải...</div>
+  <div class="tab-row">
+    <button
+      class="tab-btn"
+      [class.active]="activeTab() === 'list'"
+      (click)="activeTab.set('list')"
+      type="button"
+    >
+      Danh sách token
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="activeTab() === 'guide'"
+      (click)="activeTab.set('guide')"
+      type="button"
+    >
+      Hướng dẫn API Ads
+    </button>
+  </div>
 
-  <table class="token-table" *ngIf="!loading() && tokens().length">
-    <thead>
-      <tr>
-        <th>Tài khoản QC (Tên)</th>
-        <th>ID Tài khoản QC</th>
-        <th>Nền tảng</th>
-        <th>Chính</th>
-        <th>Trạng thái</th>
-        <th>Lần kiểm tra</th>
-        <th>Kết quả</th>
-        <th>Thao tác</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let t of tokens()">
-        <td>
-          <strong>{{ t.adAccountName || adAccountNames[t._id] || '—' }}</strong>
-          <div class="sub">Token: {{ t.name }}</div>
-          <div class="sub" *ngIf="t.notes">{{ t.notes }}</div>
-        </td>
-        <td>{{ t.adAccountId || adAccountIds[t._id] || testAdAccountId[t._id] || '—' }}</td>
-        <td>{{ t.provider }}</td>
-        <td>{{ t.isPrimary ? '⭐' : '' }}</td>
-        <td>{{ t.status }}</td>
-        <td>{{ t.lastCheckedAt ? (t.lastCheckedAt | date:'short') : '-' }}</td>
-        <td>
-          <span class="badge" [class.valid]="t.lastCheckStatus==='valid'" [class.invalid]="t.lastCheckStatus==='invalid'" [class.expired]="t.lastCheckStatus==='expired'">
-            {{ t.lastCheckStatus || 'chưa' }}
-          </span>
-        </td>
-        <td class="op-col">
-          <button class="mini" (click)="validate(t)" title="Kiểm tra">✔</button>
-          <button class="mini" (click)="setPrimary(t)" [disabled]="!t.fanpageId" title="Đặt làm chính">★</button>
-          <button class="mini" (click)="startRotate(t)" title="Xoay token">⟳</button>
-          <button class="mini danger" (click)="delete(t)" title="Xóa">🗑</button>
-          <div class="inline-test">
-            <input placeholder="ID tài khoản quảng cáo" [value]="testAdAccountId[t._id] || ''" (input)="setTestId(t, $any($event.target).value)" />
-            <button class="mini" (click)="runTest(t)" [disabled]="testing[t._id]" title="Test kết nối">🧪</button>
-            <div class="sub" *ngIf="testResult[t._id]">{{ testResult[t._id] }}</div>
-          </div>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-  <div *ngIf="!loading() && !tokens().length" class="empty">Chưa có token nào.</div>
+  <ng-container *ngIf="activeTab() === 'list'">
+    <div *ngIf="error()" class="error-box">{{ error() }}</div>
+    <div *ngIf="loading()" class="loading">Đang tải...</div>
 
-  <!-- Modal tạo token -->
-  <div class="modal-backdrop" *ngIf="showModal()" (click)="showModal.set(false)">
-    <div class="modal" (click)="$event.stopPropagation()">
-      <h3>Thêm Token</h3>
-      <label>Tên<input [ngModel]="form().name" (ngModelChange)="updateForm('name',$event)"/></label>
-      <label>Token<input [ngModel]="form().token" (ngModelChange)="updateForm('token',$event)"/></label>
-      <label>Nền tảng
-        <select [ngModel]="form().provider" (ngModelChange)="updateForm('provider',$event)">
-          <option value="facebook">Facebook</option>
-          <option value="google">Google</option>
-          <option value="tiktok">TikTok</option>
-          <option value="zalo">Zalo</option>
-          <option value="other">Khác</option>
-        </select>
-      </label>
-      <label>ID Tài khoản quảng cáo<input placeholder="act_123456... hoặc 123456..." [ngModel]="form().adAccountId" (ngModelChange)="updateForm('adAccountId',$event)"/></label>
-      <label>Tên tài khoản quảng cáo (tùy chọn)<input [ngModel]="form().adAccountName" (ngModelChange)="updateForm('adAccountName',$event)"/></label>
-      <label>Ghi chú<textarea rows="2" [ngModel]="form().notes" (ngModelChange)="updateForm('notes',$event)"></textarea></label>
-      <div class="modal-actions">
-        <button class="btn" (click)="save()">Lưu</button>
-        <button class="btn secondary" (click)="showModal.set(false)">Đóng</button>
+    <table class="token-table" *ngIf="!loading() && tokens().length">
+      <thead>
+        <tr>
+          <th>Tài khoản QC (Tên)</th>
+          <th>ID Tài khoản QC</th>
+          <th>Nền tảng</th>
+          <th>Chính</th>
+          <th>Trạng thái</th>
+          <th>Lần kiểm tra</th>
+          <th>Kết quả</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let t of tokens()">
+          <td>
+            <strong>{{ t.adAccountName || adAccountNames[t._id] || '—' }}</strong>
+            <div class="sub">Token: {{ t.name }}</div>
+            <div class="sub" *ngIf="t.notes">{{ t.notes }}</div>
+          </td>
+          <td>{{ t.adAccountId || adAccountIds[t._id] || testAdAccountId[t._id] || '—' }}</td>
+          <td>{{ t.provider }}</td>
+          <td>{{ t.isPrimary ? '⭐' : '' }}</td>
+          <td>{{ t.status }}</td>
+          <td>{{ t.lastCheckedAt ? (t.lastCheckedAt | date:'short') : '-' }}</td>
+          <td>
+            <span
+              class="badge"
+              [class.valid]="t.lastCheckStatus === 'valid'"
+              [class.invalid]="t.lastCheckStatus === 'invalid'"
+              [class.expired]="t.lastCheckStatus === 'expired'"
+            >
+              {{ t.lastCheckStatus || 'chưa' }}
+            </span>
+          </td>
+          <td class="op-col">
+            <button class="mini" (click)="validate(t)" title="Kiểm tra">✔</button>
+            <button class="mini" (click)="setPrimary(t)" [disabled]="!t.fanpageId" title="Đặt làm chính">★</button>
+            <button class="mini" (click)="startRotate(t)" title="Xoay token">⟳</button>
+            <button class="mini danger" (click)="delete(t)" title="Xóa">🗑</button>
+            <div class="inline-test">
+              <input
+                placeholder="ID tài khoản quảng cáo"
+                [value]="testAdAccountId[t._id] || ''"
+                (input)="setTestId(t, $any($event.target).value)"
+              />
+              <button class="mini" (click)="runTest(t)" [disabled]="testing[t._id]" title="Test kết nối">🧪</button>
+              <div class="sub" *ngIf="testResult[t._id]">{{ testResult[t._id] }}</div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div *ngIf="!loading() && !tokens().length" class="empty">Chưa có token nào.</div>
+
+    <div class="modal-backdrop" *ngIf="showModal()" (click)="showModal.set(false)">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h3>Thêm Token</h3>
+        <label>Tên<input [ngModel]="form().name" (ngModelChange)="updateForm('name', $event)" /></label>
+        <label>Token<input [ngModel]="form().token" (ngModelChange)="updateForm('token', $event)" /></label>
+        <label>
+          Nền tảng
+          <select [ngModel]="form().provider" (ngModelChange)="updateForm('provider', $event)">
+            <option value="facebook">Facebook</option>
+            <option value="google">Google</option>
+            <option value="tiktok">TikTok</option>
+            <option value="zalo">Zalo</option>
+            <option value="other">Khác</option>
+          </select>
+        </label>
+        <label>
+          ID Tài khoản quảng cáo
+          <input
+            placeholder="act_123456... hoặc 123456..."
+            [ngModel]="form().adAccountId"
+            (ngModelChange)="updateForm('adAccountId', $event)"
+          />
+        </label>
+        <label>
+          Tên tài khoản quảng cáo (tùy chọn)
+          <input [ngModel]="form().adAccountName" (ngModelChange)="updateForm('adAccountName', $event)" />
+        </label>
+        <label>
+          Ghi chú
+          <textarea rows="2" [ngModel]="form().notes" (ngModelChange)="updateForm('notes', $event)"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button class="btn" (click)="save()">Lưu</button>
+          <button class="btn secondary" (click)="showModal.set(false)">Đóng</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Modal rotate -->
-  <div class="modal-backdrop" *ngIf="rotating()" (click)="cancelRotate()">
-    <div class="modal" (click)="$event.stopPropagation()">
-      <h3>Rotate Token: {{ rotating()?.name }}</h3>
-      <p class="help">Token cũ sẽ được đánh dấu đã rotate và liên kết token mới.</p>
-  <label>Token mới<input [ngModel]="rotateForm().newToken" (ngModelChange)="updateRotateForm('newToken',$event)"/></label>
-  <label>Ghi chú<textarea rows="2" [ngModel]="rotateForm().notes" (ngModelChange)="updateRotateForm('notes',$event)"></textarea></label>
-      <div class="modal-actions">
-        <button class="btn" (click)="doRotate()">Rotate</button>
-        <button class="btn secondary" (click)="cancelRotate()">Hủy</button>
+    <div class="modal-backdrop" *ngIf="rotating()" (click)="cancelRotate()">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h3>Rotate Token: {{ rotating()?.name }}</h3>
+        <p class="help">Token cũ sẽ được đánh dấu đã rotate và liên kết token mới.</p>
+        <label>Token mới<input [ngModel]="rotateForm().newToken" (ngModelChange)="updateRotateForm('newToken', $event)" /></label>
+        <label>
+          Ghi chú
+          <textarea rows="2" [ngModel]="rotateForm().notes" (ngModelChange)="updateRotateForm('notes', $event)"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button class="btn" (click)="doRotate()">Rotate</button>
+          <button class="btn secondary" (click)="cancelRotate()">Hủy</button>
+        </div>
       </div>
     </div>
-  </div>
+  </ng-container>
+
+  <section class="guide-wrap" *ngIf="activeTab() === 'guide'">
+    <div class="guide-card">
+      <h3>Mục tiêu</h3>
+      <p>
+        Tab này hướng dẫn cấu hình API theo từng nền tảng để hệ thống lấy được chi phí quảng cáo về UI,
+        phục vụ theo dõi lợi nhuận và cảnh báo hành động khẩn cấp.
+      </p>
+    </div>
+
+    <div class="guide-card">
+      <h3>1) Điều kiện dữ liệu bắt buộc trước khi đồng bộ</h3>
+      <ul>
+        <li>Mỗi nhóm quảng cáo gắn đúng 1 sản phẩm (đã khóa cứng theo nghiệp vụ hiện tại).</li>
+        <li>Mỗi bản ghi nhóm quảng cáo cần có mã định danh duy nhất từ nền tảng (Meta adset_id, Google ad_group_id, TikTok adgroup_id).</li>
+        <li>Token phải gắn đúng tài khoản quảng cáo để đối soát chi phí theo ngày.</li>
+        <li>Múi giờ báo cáo cần thống nhất với hệ thống (khuyến nghị Asia/Ho_Chi_Minh).</li>
+      </ul>
+    </div>
+
+    <div class="guide-card">
+      <h3>2) Cấu hình Facebook (Meta)</h3>
+      <ol>
+        <li>Tạo App tại Meta for Developers và bật quyền Marketing API.</li>
+        <li>Xin quyền tối thiểu: <code>ads_management</code>, <code>ads_read</code>, <code>business_management</code>.</li>
+        <li>Lấy Access Token dài hạn cho user hệ thống hoặc system user của Business.</li>
+        <li>Trong tab Danh sách token, bấm Thêm Token và nhập đúng <code>act_XXXXXXXX</code>.</li>
+        <li>Dùng nút Test kết nối để xác thực tài khoản quảng cáo trước khi chạy đồng bộ tự động.</li>
+      </ol>
+      <p class="guide-note">
+        API tham chiếu: <code>GET /act_&#123;ad_account_id&#125;/insights?level=adset&time_range...</code> để lấy spend theo ad group.
+      </p>
+    </div>
+
+    <div class="guide-card">
+      <h3>3) Cấu hình Google Ads</h3>
+      <ol>
+        <li>Tạo OAuth Client trên Google Cloud, bật Google Ads API.</li>
+        <li>Tạo Developer Token trong Google Ads Manager.</li>
+        <li>Lấy <code>refresh_token</code> và lưu theo cơ chế token của hệ thống.</li>
+        <li>Liên kết đúng <code>customer_id</code> của tài khoản chạy quảng cáo.</li>
+        <li>Đồng bộ dữ liệu qua báo cáo ad group để lấy cost theo ngày.</li>
+      </ol>
+      <p class="guide-note">
+        Trường cần lấy: <code>ad_group.id</code>, <code>ad_group.name</code>, <code>metrics.cost_micros</code>, <code>segments.date</code>.
+      </p>
+    </div>
+
+    <div class="guide-card">
+      <h3>4) Cấu hình TikTok Ads</h3>
+      <ol>
+        <li>Tạo App trong TikTok for Business và xin quyền truy cập Ads API.</li>
+        <li>Lấy access token hợp lệ cho advertiser.</li>
+        <li>Khai báo advertiser_id trong token record để map đúng nguồn chi phí.</li>
+        <li>Đồng bộ dữ liệu cấp adgroup để ghép với nhóm quảng cáo nội bộ.</li>
+      </ol>
+      <p class="guide-note">
+        Trường cần đồng bộ: <code>adgroup_id</code>, <code>adgroup_name</code>, <code>stat_cost</code>, <code>stat_time_day</code>.
+      </p>
+    </div>
+
+    <div class="guide-card">
+      <h3>5) Quy trình đưa dữ liệu về UI</h3>
+      <ol>
+        <li>Thêm token và kiểm tra trạng thái hợp lệ trong tab Danh sách token.</li>
+        <li>Map ad group nền tảng với nhóm quảng cáo nội bộ (1 nhóm quảng cáo = 1 sản phẩm).</li>
+        <li>Chạy tác vụ đồng bộ định kỳ theo ngày để ghi chi phí vào MongoDB.</li>
+        <li>UI ngân sách/quản trị sẽ đọc dữ liệu đã chuẩn hóa từ backend để hiển thị thực tế và dự kiến theo X hoàn.</li>
+      </ol>
+    </div>
+
+    <div class="guide-card">
+      <h3>6) Kiểm tra nhanh khi lỗi dữ liệu</h3>
+      <ul>
+        <li>Token hết hạn hoặc thiếu scope: chi phí trả về rỗng/403.</li>
+        <li>Sai ad account id: test token báo không truy cập được tài khoản.</li>
+        <li>Lệch múi giờ: dữ liệu ngày hiện tại thiếu hoặc lệch 1 ngày.</li>
+        <li>Chưa map ad group: có chi phí API nhưng không ghép được vào nhóm quảng cáo nội bộ.</li>
+      </ul>
+    </div>
+
+    <div class="guide-card">
+      <h3>7) Bảo mật và vận hành an toàn</h3>
+      <ul>
+        <li>Không lưu token trong mã nguồn; chỉ lưu trong cơ sở dữ liệu và biến môi trường an toàn.</li>
+        <li>Bật cơ chế xoay token định kỳ, ghi chú ngày đổi để dễ truy vết.</li>
+        <li>Giới hạn quyền tài khoản chỉ đủ đọc chi phí quảng cáo.</li>
+        <li>Luôn có backup MongoDB trước khi chỉnh mapping hoặc chạy job đồng bộ lớn.</li>
+      </ul>
+    </div>
+  </section>
 </div>

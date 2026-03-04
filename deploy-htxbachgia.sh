@@ -10,7 +10,21 @@ SSH_USER="${SSH_USER:-admin-001}"
 SSH_HOST="${SSH_HOST:-192.168.100.237}"
 SSH_PORT="${SSH_PORT:-22}"
 TARGET="${SSH_USER}@${SSH_HOST}"
-SSH_OPTS=("-4" "-o" "ConnectTimeout=10" "-p" "${SSH_PORT}")
+SSH_KEY_PATH="${SSH_KEY_PATH:-}"
+SSH_STRICT_HOST_KEY_CHECKING="${SSH_STRICT_HOST_KEY_CHECKING:-accept-new}"
+SSH_BATCH_MODE="${SSH_BATCH_MODE:-no}"
+SSH_OPTS=(
+  "-4"
+  "-o" "ConnectTimeout=10"
+  "-o" "StrictHostKeyChecking=${SSH_STRICT_HOST_KEY_CHECKING}"
+  "-p" "${SSH_PORT}"
+)
+if [ -n "${SSH_KEY_PATH}" ]; then
+  SSH_OPTS+=("-i" "${SSH_KEY_PATH}")
+fi
+if [ "${SSH_BATCH_MODE}" = "yes" ]; then
+  SSH_OPTS+=("-o" "BatchMode=yes")
+fi
 
 REMOTE_DIR="${REMOTE_DIR:-/opt/websites/sites/htxbachgia-shop}"
 REMOTE_COMPOSE="${REMOTE_COMPOSE:-docker-compose.yml}"
@@ -29,6 +43,9 @@ Usage:
 Environment overrides:
   REPO, PORT
   SSH_USER, SSH_HOST, SSH_PORT
+  SSH_KEY_PATH
+  SSH_STRICT_HOST_KEY_CHECKING
+  SSH_BATCH_MODE=yes   # disable password prompt, fail fast if key auth fails
   REMOTE_DIR, REMOTE_COMPOSE, REMOTE_OVERRIDE
 EOF
   exit 0
@@ -70,6 +87,10 @@ echo "Repo          : ${REPO}"
 echo "Remote dir    : ${REMOTE_DIR}"
 echo "Compose file  : ${REMOTE_COMPOSE}"
 echo "Override file : ${REMOTE_OVERRIDE}"
+if [ -n "${SSH_KEY_PATH}" ]; then
+  echo "SSH key       : ${SSH_KEY_PATH}"
+fi
+echo "SSH batch     : ${SSH_BATCH_MODE}"
 echo "=========================================="
 
 echo "[1/6] Verify Docker Hub tags exist..."
@@ -119,5 +140,9 @@ echo "Backend health  : ${BACKEND_HEALTH:-unknown}"
 echo "Frontend health : ${FRONTEND_HEALTH:-unknown}"
 echo "Frontend HTTP   : ${FRONTEND_HTTP:-000}"
 echo "Logs command:"
-echo "  ssh -4 -p ${SSH_PORT} ${TARGET} \"cd '${REMOTE_DIR}' && docker-compose -f '${REMOTE_COMPOSE}' -f '${REMOTE_OVERRIDE}' logs -f\""
+if [ -n "${SSH_KEY_PATH}" ]; then
+  echo "  ssh -4 -p ${SSH_PORT} -i '${SSH_KEY_PATH}' ${TARGET} \"cd '${REMOTE_DIR}' && docker-compose -f '${REMOTE_COMPOSE}' -f '${REMOTE_OVERRIDE}' logs -f\""
+else
+  echo "  ssh -4 -p ${SSH_PORT} ${TARGET} \"cd '${REMOTE_DIR}' && docker-compose -f '${REMOTE_COMPOSE}' -f '${REMOTE_OVERRIDE}' logs -f\""
+fi
 echo "=========================================="

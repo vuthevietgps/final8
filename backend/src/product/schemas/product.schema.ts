@@ -60,6 +60,9 @@ export class Product {
   @Prop({ type: Boolean, default: true })
   isReturnable: boolean;
 
+  @Prop({ type: Number, min: 0, max: 95, default: 20 })
+  assumedReturnRatePercent: number;
+
   // AI-Enhanced Product Images
   @Prop([{
     url: { type: String, required: true },

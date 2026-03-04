@@ -119,6 +119,7 @@ export class AdGroupService {
     adGroupIds: string[];
     fanpageId: string;
     productCategoryId: string;
+    selectedProductId?: string;
     agentId: string;
   }): Observable<{ success: boolean; imported: number; skipped: number; errors: string[] }> {
     return this.http.post<any>(`${this.apiUrl}/import`, params, { withCredentials: true });

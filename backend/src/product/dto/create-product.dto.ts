@@ -13,6 +13,7 @@ import {
   IsBoolean,
   IsNumber,
   Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Types } from 'mongoose';
@@ -45,6 +46,13 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isReturnable?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(95)
+  @Type(() => Number)
+  assumedReturnRatePercent?: number;
 
   // Thêm các trường giá và chi phí
   @IsOptional()

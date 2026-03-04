@@ -10,7 +10,9 @@ import { UpdateApiTokenDto } from './dto/update-api-token.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { ValidateTokenDto, RotateTokenDto, SetPrimaryTokenDto } from './dto/token-actions.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('api-token')
 @Controller('api-tokens')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ApiTokenController {

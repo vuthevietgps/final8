@@ -7,7 +7,9 @@
 import { Controller, Get, Post, Param, Body, Query, Logger } from '@nestjs/common';
 import { LoanManagementService } from './loan-management.service';
 import { CreateLoanPaymentDto } from './dto/loan-management.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('loan-management')
 export class LoanManagementController {
   private readonly logger = new Logger(LoanManagementController.name);

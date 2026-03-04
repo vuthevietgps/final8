@@ -1908,6 +1908,18 @@ input[type="month"]:focus {
   border-left: 4px solid #ef4444;
 }
 
+.emergency-mode-tabs {
+  margin-bottom: 12px;
+}
+
+.emergency-compare-cards {
+  margin-bottom: 12px;
+}
+
+.emergency-compare-cards .summary-card {
+  min-width: 170px;
+}
+
 .emergency-intro {
   margin-bottom: 16px;
   padding: 14px 16px;

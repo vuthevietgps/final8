@@ -38,7 +38,7 @@ import { UserRole } from '../../core/models/auth.interface';
         <div class="px-4 py-6 sm:px-0">
           <div class="border-4 border-dashed border-gray-200 rounded-lg p-4">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Chào mừng đến với Hệ thống Quản lý</h2>
-            
+
             @if (authService.user(); as user) {
               <div class="bg-white overflow-hidden shadow rounded-lg">
                 <div class="px-4 py-5 sm:p-6">
@@ -117,6 +117,8 @@ export class DashboardComponent {
       'products': 'Quản lý sản phẩm',
       'orders': 'Quản lý đơn hàng',
       'orders-test2': 'Đơn hàng thử nghiệm 2',
+      'order-update': 'Cập nhật đơn hàng',
+      'chat-messages': 'Hội thoại',
       'delivery-status': 'Trạng thái giao hàng',
       'production-status': 'Trạng thái sản xuất',
       'ad-accounts': 'Tài khoản quảng cáo',
@@ -130,7 +132,14 @@ export class DashboardComponent {
       'salary-config': 'Cấu hình lương',
       'reports': 'Báo cáo',
       'export': 'Xuất dữ liệu',
-      'import': 'Nhập dữ liệu'
+      'import': 'Nhập dữ liệu',
+      'fanpages': 'Fanpage',
+      'openai-configs': 'Cấu hình OpenAI',
+      'api-tokens': 'API Tokens',
+      'ads-budget': 'Ngân sách Ads',
+      'employee-ads-kpi': 'KPI nhân viên Ads',
+      'finance': 'Tài chính',
+      'owner-fund': 'Quỹ Owner'
     };
     return permissionNames[permission] || permission;
   }
@@ -138,21 +147,25 @@ export class DashboardComponent {
   getAvailablePermissions(): string[] {
     const user = this.authService.user();
     if (!user) return [];
-    
+
     const rolePermissions: Record<UserRole, string[]> = {
       [UserRole.DIRECTOR]: [
-        'users', 'orders', 'products', 'product-categories',
+        'users', 'orders', 'orders-test2', 'products', 'product-categories', 'media',
         'delivery-status', 'production-status', 'order-status',
         'ad-accounts', 'ad-groups', 'advertising-costs',
         'labor-costs', 'other-costs', 'salary-config',
-        'quotes', 'reports', 'export', 'import', 'settings'
+        'customers', 'purchase-costs', 'fanpages', 'openai-configs', 'api-tokens', 'chat-messages', 'pending-orders',
+        'quotes', 'reports', 'export', 'import', 'settings',
+        'ads-budget', 'employee-ads-kpi', 'finance', 'owner-fund',
+        'order-update'
       ],
       [UserRole.MANAGER]: [
-        'orders',
-        'ad-accounts', 'ad-groups', 'advertising-costs'
+        'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
+        'fanpages', 'openai-configs', 'api-tokens', 'chat-messages',
+        'ads-budget', 'employee-ads-kpi'
       ],
       [UserRole.EMPLOYEE]: [
-        'orders'
+        'orders-test2', 'order-update', 'chat-messages'
       ],
       [UserRole.INTERNAL_AGENT]: ['orders-test2'],
       [UserRole.EXTERNAL_AGENT]: ['orders-test2'],

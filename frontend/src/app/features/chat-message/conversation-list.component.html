@@ -113,6 +113,44 @@
           <button class="btn" (click)="sendReply()" [disabled]="sending() || !replyText().trim()">Gửi</button>
         </div>
       </div>
+      <div class="fanpage-description-box" *ngIf="currentConv()">
+        <div class="fanpage-description-head">
+          <strong>Mô tả fanpage / lĩnh vực kinh doanh</strong>
+          <span class="fanpage-description-sub">
+            {{ getFanpageName(currentConv()?.fanpageId) || 'Fanpage' }} • {{ getFanpagePageId(currentConv()?.fanpageId || '') }}
+          </span>
+        </div>
+        <textarea
+          rows="3"
+          class="fanpage-description-input"
+          placeholder="Nhập mô tả fanpage để nhân viên dùng làm căn cứ trả lời nhanh..."
+          [ngModel]="getCurrentFanpageDescriptionDraft()"
+          (ngModelChange)="onCurrentFanpageDescriptionChange($event)"
+          [disabled]="!canEditCurrentFanpageDescription()"
+        ></textarea>
+        <div class="fanpage-description-actions">
+          <span class="mini-hint warning" *ngIf="!canEditCurrentFanpageDescription()">
+            Không tìm thấy fanpage trong dữ liệu quản lý fanpage để cập nhật.
+          </span>
+          <button
+            class="mini secondary"
+            type="button"
+            (click)="resetCurrentFanpageDescriptionDraft()"
+            [disabled]="fanpageDescriptionSaving() || !hasCurrentFanpageDescriptionChanges()"
+          >
+            Hoàn tác
+          </button>
+          <button
+            class="btn"
+            type="button"
+            (click)="saveCurrentFanpageDescription()"
+            [disabled]="fanpageDescriptionSaving() || !canEditCurrentFanpageDescription() || !hasCurrentFanpageDescriptionChanges()"
+          >
+            {{ fanpageDescriptionSaving() ? 'Đang cập nhật...' : 'Cập nhật mô tả' }}
+          </button>
+        </div>
+        <div class="mini-hint" *ngIf="fanpageDescriptionMsg()">{{ fanpageDescriptionMsg() }}</div>
+      </div>
     </section>
 
     <!-- Right: order panel -->

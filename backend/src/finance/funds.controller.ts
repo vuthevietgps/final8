@@ -4,7 +4,9 @@
 
 import { Controller, Get, Logger } from '@nestjs/common';
 import { FundsService, FundsOverview } from './funds.service';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('finance')
 @Controller('funds')
 export class FundsController {
   private readonly logger = new Logger(FundsController.name);

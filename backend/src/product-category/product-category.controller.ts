@@ -11,12 +11,15 @@ import {
   Param, 
   Delete,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  ForbiddenException
 } from '@nestjs/common';
 import { ProductCategoryService } from './product-category.service';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
+import { FeatureModule } from '../plan/feature-module.decorator';
 
+@FeatureModule('product-category')
 @Controller('product-category')
 export class ProductCategoryController {
   constructor(private readonly productCategoryService: ProductCategoryService) {}
@@ -44,6 +47,9 @@ export class ProductCategoryController {
   @Post('seed')
   @HttpCode(HttpStatus.CREATED)
   seedSampleData() {
+    if (String(process.env.ALLOW_DANGEROUS_SEED || '').toLowerCase() !== 'true') {
+      throw new ForbiddenException('Seed endpoint is disabled. Set ALLOW_DANGEROUS_SEED=true to enable.');
+    }
     return this.productCategoryService.seedSampleData();
   }
 
