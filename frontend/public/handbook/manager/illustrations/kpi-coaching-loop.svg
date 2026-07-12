@@ -1,0 +1,26 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="40" fill="#F6FEF9"/>
+  <rect x="40" y="40" width="1120" height="640" rx="32" fill="#FCFFFD" stroke="#D6F0E1" stroke-width="2"/>
+  <text x="88" y="118" fill="#166534" font-family="Segoe UI, Arial, sans-serif" font-size="46" font-weight="700">KPI coaching loop</text>
+  <text x="88" y="160" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22">KPI chi co gia tri khi dan den coaching, doi owner hoac doi quy trinh</text>
+  <circle cx="600" cy="382" r="190" stroke="#A7F3D0" stroke-width="28"/>
+  <circle cx="600" cy="382" r="94" fill="#FFFFFF" stroke="#D6F0E1" stroke-width="6"/>
+  <text x="538" y="374" fill="#166534" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">24h</text>
+  <text x="500" y="408" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22">vong nhin lai</text>
+  <rect x="206" y="292" width="250" height="110" rx="28" fill="#FFFFFF" stroke="#D6F0E1" stroke-width="2"/>
+  <text x="244" y="338" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">1. Doc KPI</text>
+  <text x="244" y="372" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Ai dang tut? Tut o dau?</text>
+  <rect x="472" y="150" width="256" height="110" rx="28" fill="#FFFFFF" stroke="#D6F0E1" stroke-width="2"/>
+  <text x="510" y="196" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">2. Tim goc</text>
+  <text x="510" y="230" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Thieu ky nang, qua tai hay thieu uu tien?</text>
+  <rect x="756" y="294" width="250" height="110" rx="28" fill="#FFFFFF" stroke="#D6F0E1" stroke-width="2"/>
+  <text x="794" y="340" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">3. Hanh dong</text>
+  <text x="794" y="374" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Kem cap, doi owner, doi checklist</text>
+  <rect x="468" y="498" width="264" height="110" rx="28" fill="#FFFFFF" stroke="#D6F0E1" stroke-width="2"/>
+  <text x="506" y="544" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">4. Kiem chung</text>
+  <text x="506" y="578" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Sau 24h van con lap lai hay da on?</text>
+  <path d="M456 346C484 286 510 258 554 244" stroke="#16A34A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M730 244C774 258 802 286 830 346" stroke="#16A34A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M836 416C804 470 774 498 732 516" stroke="#16A34A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M468 516C424 496 396 468 364 416" stroke="#16A34A" stroke-width="8" stroke-linecap="round"/>
+</svg>

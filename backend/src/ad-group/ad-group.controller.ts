@@ -8,7 +8,7 @@ export class AdGroupController {
  * Mục đích: REST API cho Nhóm Quảng Cáo với tích hợp chatbot
  * Chức năng: CRUD ad groups, lấy products theo category, webhook lookup, auto-discover
  */
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, BadRequestException, Inject, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, BadRequestException, UseGuards } from '@nestjs/common';
 import { AdGroupService } from './ad-group.service';
 import { CreateAdGroupDto } from './dto/create-ad-group.dto';
 import { UpdateAdGroupDto } from './dto/update-ad-group.dto';
@@ -54,19 +54,32 @@ export class AdGroupController {
     return { exists };
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.adGroupService.findOne(id);
-  }
+  /**
+   * Lấy danh sách sản phẩm cho dropdown chọn 1 sản phẩm / ad group
+   */
+  @Get('products')
+  async getProducts(@Query('status') status?: string) {
+    try {
+      const filter: any = {};
+      if (status) {
+        filter.status = status;
+      }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateAdGroupDto) {
-    return this.adGroupService.update(id, dto);
-  }
+      const products = await this.productModel
+        .find(filter)
+        .populate('categoryId', 'name')
+        .select('name categoryId status importPrice')
+        .sort({ name: 1 })
+        .lean();
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.adGroupService.remove(id);
+      return {
+        success: true,
+        data: products,
+        count: products.length
+      };
+    } catch (error: any) {
+      throw new BadRequestException(`Lỗi lấy danh sách sản phẩm: ${error?.message || 'UNKNOWN_ERROR'}`);
+    }
   }
 
   // Đề xuất chi phí quảng cáo (AI gợi ý)
@@ -227,6 +240,15 @@ export class AdGroupController {
   }
 
   /**
+   * Auto-discover: Lấy toàn bộ ad groups đang ACTIVE từ tất cả ad account Facebook.
+   * Dùng để điền nhanh màn hình nhóm quảng cáo trước khi chỉ định sản phẩm/fanpage.
+   */
+  @Get('discover/all-active')
+  async discoverAllActiveAdGroups() {
+    return this.syncService.discoverActiveAdGroupsFromAllAccounts();
+  }
+
+  /**
    * Auto-discover: Lấy danh sách ad groups từ Facebook cho 1 ad account
    * Trả về danh sách để nhân viên xem và chọn import
    */
@@ -237,19 +259,19 @@ export class AdGroupController {
 
   /**
    * Auto-import: Tự động tạo ad groups đã chọn vào hệ thống
-   * Body: { adAccountId, adGroupIds[], fanpageId, productCategoryId, selectedProductId?, agentId }
+   * Body: { adAccountId, adGroupIds[], fanpageId, selectedProductId?, productCategoryId?, agentId }
    */
   @Post('import')
   async importAdGroups(@Body() body: {
     adAccountId: string;
     adGroupIds: string[];
     fanpageId: string;
-    productCategoryId: string;
+    productCategoryId?: string;
     selectedProductId?: string;
     agentId: string;
   }) {
-    if (!body.adAccountId || !body.adGroupIds?.length || !body.fanpageId || !body.productCategoryId || !body.agentId) {
-      throw new BadRequestException('Thiếu thông tin bắt buộc: adAccountId, adGroupIds, fanpageId, productCategoryId, agentId');
+    if (!body.adAccountId || !body.adGroupIds?.length || !body.fanpageId || !body.agentId) {
+      throw new BadRequestException('Thiếu thông tin bắt buộc: adAccountId, adGroupIds, fanpageId, agentId');
     }
     return this.syncService.autoImportAdGroups(body);
   }
@@ -262,5 +284,20 @@ export class AdGroupController {
     // Trigger sync cho account này
     await this.syncService.cronSyncFacebook();
     return { success: true, message: 'Đã trigger sync' };
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.adGroupService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateAdGroupDto) {
+    return this.adGroupService.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.adGroupService.remove(id);
   }
 }

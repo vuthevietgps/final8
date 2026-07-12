@@ -1,0 +1,166 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-3B-H1",
+    "status": "completed_hardening_with_transport_integration_blocked",
+    "code_changed": true,
+    "provider_calls": false,
+    "real_sync_performed": false,
+    "provider_mutation": false,
+    "provider_validate_only": false,
+    "public_endpoint_added": false,
+    "official_or_partial_export_added": false,
+    "exportjob_integration_added": false,
+    "blocked_by_scope": false,
+    "distributed_lock_runtime": "implemented_mongo",
+    "transport_allowlist_enforcement": "runtime_wrapper",
+    "blocked_by_transport_integration": true,
+    "adapter_audit_persistence": "implemented",
+    "assessment_port_binding": "bound",
+    "local_write_allowlist_enforcement": "instrumented",
+    "local_write_allowlist_limitation_documented": true,
+    "permission_binding": "broad_role_not_bound",
+    "ready_for_exportjob_integration": false,
+    "missing_input_files": []
+  },
+  "lock_runtime": {
+    "collection": "ai_data_pack_source_sync_locks",
+    "acquire": "atomic_findOneAndUpdate_with_unique_lockKey",
+    "duplicate_active_lock": "denied",
+    "expired_lock_takeover": "allowed_by_atomic_expiry_filter",
+    "release": "owner_and_ownerToken_only",
+    "ttl_cleanup": "expiresAt_single_field_TTL_index",
+    "production_runtime": "MongoDB",
+    "in_memory_lock_claimed": false
+  },
+  "transport_enforcement": {
+    "wrapper": "GoogleAdsReadonlyTransportService",
+    "origin": "https://googleads.googleapis.com",
+    "method": "POST",
+    "path_family": "/v*/customers/{allowlistedCustomerId}/googleAds:searchStream",
+    "query_source": "adapter_owned_static_templates",
+    "request_timeout_enforced": true,
+    "absolute_deadline_enforced": true,
+    "separate_socket_connection_timeout_enforced": false,
+    "mutation_allowed": false,
+    "validate_only_allowed": false,
+    "legacy_sync_service_integrated": false,
+    "adapter_raw_sync_port": "fail_closed_blocker",
+    "blocked_by_transport_integration": true
+  },
+  "audit_persistence": {
+    "status": "implemented",
+    "collection": "ai_data_pack_source_sync_audits",
+    "immutable_create": true,
+    "fields": [
+      "exportJobId",
+      "correlationId",
+      "sourceKey",
+      "policyVersion",
+      "scopeHash",
+      "customerIds",
+      "dateFrom",
+      "dateTo",
+      "lockKey",
+      "lockOwner",
+      "lockAcquired",
+      "attempts",
+      "retryClassifications",
+      "providerSyncAttempted",
+      "mutationAttempted",
+      "status",
+      "perAccountStatus",
+      "preAssessmentRef",
+      "postAssessmentRef",
+      "sanitizedErrors",
+      "startedAt",
+      "completedAt"
+    ],
+    "errors_bounded_and_sanitized": true,
+    "decision_invariants": {
+      "mutationAttempted": false,
+      "canImportActionFile": false,
+      "canDryRun": false,
+      "canExecuteLive": false
+    }
+  },
+  "assessment_binding": {
+    "status": "bound",
+    "port": "GOOGLE_ADS_READONLY_ASSESSMENT_PORT",
+    "implementation": "FreshnessGateService",
+    "dependencies": [
+      "SourceRegistryService",
+      "DbWatermarkService",
+      "CoverageGateService"
+    ],
+    "db_only": true,
+    "provider_calls": false
+  },
+  "local_write_allowlist": {
+    "status": "instrumented",
+    "limitation_documented": true,
+    "adapter_rejects_missing_telemetry": true,
+    "adapter_rejects_forbidden_targets": true,
+    "audit_target": "ai_data_pack_source_sync_audits",
+    "complete_actual_write_interception": false,
+    "limitation": "The legacy sync service does not expose actual-write telemetry and is disconnected until a separate refactor."
+  },
+  "permission": {
+    "execute": "ai-data-pack.source-sync.google-ads.readonly.execute",
+    "sync_detail_read": "ai-data-pack.export.sync-detail.read",
+    "broad_role_bound": false,
+    "google_ads_read_alone_sufficient": false
+  },
+  "tests_run": [
+    {
+      "command": "npm run build",
+      "result": "pass"
+    },
+    {
+      "command": "npm test -- --runInBand google-ads-readonly",
+      "result": "pass",
+      "suites": 8,
+      "tests": 38
+    },
+    {
+      "command": "npm test -- --runInBand source-sync",
+      "result": "pass",
+      "suites": 1,
+      "tests": 5
+    },
+    {
+      "command": "npm test -- --runInBand source-registry",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand export-job",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "pass",
+      "suites": 12,
+      "tests": 80
+    },
+    {
+      "command": "npx prettier --check scoped Prompt 8 TypeScript",
+      "result": "pass"
+    }
+  ],
+  "risks_and_assumptions": [
+    "Legacy GoogleAdsReadonlySyncService still owns its Axios calls and is intentionally disconnected from the adapter.",
+    "Complete actual-write interception requires a separately approved narrow persistence/telemetry refactor.",
+    "Axios request timeout and absolute deadline are enforced; a separate socket-connect timeout is not claimed.",
+    "Mongo code-first unique and TTL indexes must be created and monitored in deployed environments.",
+    "Narrow permission constants remain unbound to broad roles."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "recommended_next_pr": "PR-2.3B-3B-H2 - Legacy Google Ads read-only sync transport refactor and actual-write interception",
+    "integration_pr_allowed_now": false,
+    "do_not_create_prompt9": true
+  }
+}

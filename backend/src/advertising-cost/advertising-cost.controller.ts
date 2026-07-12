@@ -138,7 +138,7 @@ export class AdvertisingCostController {
 
   // Manual trigger: sync Google Ads costs by date or day range.
   @Post('fetch/google')
-  @RequirePermissions('advertising-costs')
+  @RequirePermissions('google-ads.read')
   async fetchGoogle(
     @Query('date') date?: string,
     @Query('days') days?: string,

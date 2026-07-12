@@ -4,6 +4,7 @@
 export interface OtherCost {
   _id?: string;
   date: string; // ISO string
+  dueDate?: string;
   amount: number;
   notes?: string;
   documentLink?: string;
@@ -13,7 +14,7 @@ export interface OtherCost {
   updatedAt?: string;
 }
 
-export type CreateOtherCost = Pick<OtherCost, 'date' | 'amount' | 'notes' | 'documentLink'>;
+export type CreateOtherCost = Pick<OtherCost, 'date' | 'dueDate' | 'amount' | 'notes' | 'documentLink'>;
 export type UpdateOtherCost = Partial<CreateOtherCost>;
 
 export interface OtherCostSummary {

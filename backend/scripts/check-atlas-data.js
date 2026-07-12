@@ -3,7 +3,7 @@ Script to check actual data in MongoDB Atlas collections
 */
 const mongoose = require('mongoose');
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const MONGO_URI = process.env.MONGODB_URI;
 
 async function checkCollections() {
   try {

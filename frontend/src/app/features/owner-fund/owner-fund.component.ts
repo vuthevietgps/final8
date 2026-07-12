@@ -2,11 +2,12 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
 import { OwnerFundService } from './owner-fund.service';
-import { 
-  Owner, 
-  Withdrawal, 
-  WithdrawalStatus, 
+import {
+  Owner,
+  Withdrawal,
+  WithdrawalStatus,
   WithdrawalType,
   FundTransaction,
   FundTransactionType,
@@ -31,7 +32,7 @@ export class OwnerFundComponent implements OnInit {
   fundAccountInfo = signal<FundAccountInfo | null>(null);
   selectedOwner = signal<Owner | null>(null);
   systemStats = signal<any>(null);
-  
+
   // UI State
   activeTab: 'overview' | 'fund-account' | 'owners' | 'withdrawals' | 'transactions' | 'statistics' = 'overview';
   showOwnerForm = false;
@@ -40,7 +41,7 @@ export class OwnerFundComponent implements OnInit {
   showTransferModal = false;
   showWithdrawModal = false;
   editingOwner: Owner | null = null;
-  
+
   // Transfer Form
   transferForm = {
     amount: 0,
@@ -52,18 +53,18 @@ export class OwnerFundComponent implements OnInit {
     bankAccount: '',
     bankName: '',
   };
-  
+
   // Filter
   statusFilter: WithdrawalStatus | 'all' = 'all';
   ownerFilter = '';
   transactionTypeFilter = '';
   transactionOwnerFilter = '';
-  
+
   // Form Models
   ownerForm: Partial<Owner> = this.getEmptyOwnerForm();
   withdrawalForm: Partial<Withdrawal> = this.getEmptyWithdrawalForm();
   transactionForm: any = this.getEmptyTransactionForm();
-  
+
   // Enums for template
   WithdrawalStatus = WithdrawalStatus;
   WithdrawalType = WithdrawalType;
@@ -73,6 +74,7 @@ export class OwnerFundComponent implements OnInit {
   constructor(
     private ownerFundService: OwnerFundService,
     private router: Router,
+    private authService: AuthService,
   ) {}
 
   ngOnInit(): void {
@@ -214,7 +216,11 @@ export class OwnerFundComponent implements OnInit {
   approveWithdrawal(withdrawal: Withdrawal): void {
     const notes = prompt('Ghi chú duyệt (tùy chọn):');
     if (notes !== null) {
-      const currentUserId = '000000000000000000000001'; // TODO: Get from auth service
+      const currentUserId = this.getCurrentUserId();
+      if (!currentUserId) {
+        alert('Khong xac dinh duoc user hien tai');
+        return;
+      }
       this.ownerFundService.approveWithdrawal(withdrawal._id!, currentUserId, notes).subscribe({
         next: () => {
           this.loadWithdrawals();
@@ -228,7 +234,11 @@ export class OwnerFundComponent implements OnInit {
   rejectWithdrawal(withdrawal: Withdrawal): void {
     const notes = prompt('Lý do từ chối:');
     if (notes) {
-      const currentUserId = '000000000000000000000001'; // TODO: Get from auth service
+      const currentUserId = this.getCurrentUserId();
+      if (!currentUserId) {
+        alert('Khong xac dinh duoc user hien tai');
+        return;
+      }
       this.ownerFundService.rejectWithdrawal(withdrawal._id!, currentUserId, notes).subscribe({
         next: () => this.loadWithdrawals(),
         error: (err) => alert('Lỗi từ chối phiếu: ' + err.error?.message)
@@ -498,7 +508,10 @@ export class OwnerFundComponent implements OnInit {
     return new Date(date).toLocaleDateString('vi-VN');
   }
 
-  getOwnerName(ownerId: string | Owner): string {
+  getOwnerName(ownerId: string | Owner | null | undefined): string {
+    if (!ownerId) {
+      return 'N/A';
+    }
     if (typeof ownerId === 'object' && ownerId.name) {
       return ownerId.name;
     }
@@ -506,19 +519,40 @@ export class OwnerFundComponent implements OnInit {
     return owner?.name || 'N/A';
   }
 
+  private getCurrentUserId(): string {
+    const currentUser = this.authService.user() as any;
+    const currentUserId = currentUser?._id || currentUser?.id || '';
+    if (currentUserId) {
+      return currentUserId;
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('current_user');
+        if (!stored) return '';
+        const parsed = JSON.parse(stored);
+        return parsed?._id || parsed?.id || '';
+      } catch {
+        return '';
+      }
+    }
+
+    return '';
+  }
+
   get filteredWithdrawals(): Withdrawal[] {
     let filtered = this.withdrawals();
-    
+
     if (this.statusFilter !== 'all') {
       filtered = filtered.filter(w => w.status === this.statusFilter);
     }
-    
+
     if (this.ownerFilter) {
-      filtered = filtered.filter(w => 
+      filtered = filtered.filter(w =>
         typeof w.ownerId === 'string' ? w.ownerId === this.ownerFilter : w.ownerId._id === this.ownerFilter
       );
     }
-    
+
     return filtered;
   }
 

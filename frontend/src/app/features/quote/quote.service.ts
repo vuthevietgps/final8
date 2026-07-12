@@ -87,7 +87,7 @@ export class QuoteService {
           // Optional fields may be absent in minimal payload
           phone: user.phone || '',
           address: user.address || '',
-          isActive: true
+          isActive: user.isActive !== false
         }))),
         catchError(this.handleError)
       );

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "2.0",
+  "planId": "PLAN-20260612-INVALID04",
+  "sourceExportId": "EXP-20260612-001",
+  "targetProvider": "google",
+  "currency": "VND",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "executionMode": "pending_approval",
+  "analysisSummary": {
+    "mainConclusion": "Invalid keyword match type.",
+    "dataQuality": "good"
+  },
+  "actions": [
+    {
+      "actionId": "ACT104",
+      "provider": "google",
+      "actionType": "create_keyword",
+      "customerId": "1234567890",
+      "resourceType": "keyword",
+      "operation": "create",
+      "typedPayload": {
+        "adGroupId": "9876543210",
+        "keywordText": "sample product",
+        "matchType": "SMART",
+        "negative": false
+      },
+      "reason": "Invalid fixture.",
+      "evidence": {},
+      "confidence": 0.5,
+      "risk": "medium",
+      "dataQuality": "good",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-INVALID04:ACT104",
+      "rollbackIf": []
+    }
+  ]
+}

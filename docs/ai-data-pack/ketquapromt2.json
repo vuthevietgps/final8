@@ -1,0 +1,137 @@
+{
+  "summary": {
+    "phase": "PR-2.2",
+    "status": "completed_pending_review",
+    "build": "passed",
+    "focused_tests": "2 suites, 20 tests passed",
+    "sample_v2": "generated",
+    "blocked_by_scope": false
+  },
+  "scope": {
+    "included": [
+      "compile repair",
+      "empty XLSX quality metadata",
+      "generated-by normalization",
+      "deterministic data content checksum",
+      "finance quality split",
+      "value-state distinction",
+      "focused tests and sample-v2 verification"
+    ],
+    "excluded": [
+      "new BA sheets or domains",
+      "migration",
+      "pre-export sync",
+      "OpenAI or upload normalization",
+      "action import or general dry-run",
+      "live execution",
+      "provider mutation",
+      "PR-2.3 and Phase 3"
+    ]
+  },
+  "files_changed": [
+    "backend/src/ai-data-pack/export/json-exporter.service.ts",
+    "backend/src/ai-data-pack/export/xlsx-exporter.service.ts",
+    "backend/src/ai-data-pack/data-pack-metadata.service.ts",
+    "backend/src/ai-data-pack/queries/finance-data.query.ts",
+    "backend/src/ai-data-pack/queries/order-profit.query.ts",
+    "backend/src/ai-data-pack/director-data-pack.service.ts",
+    "backend/src/ai-data-pack/data-quality-report.service.ts",
+    "backend/src/ai-data-pack/mapping-report.service.ts",
+    "backend/src/ai-data-pack/ai-data-pack.service.spec.ts"
+  ],
+  "tests_run": [
+    {
+      "command": "cd backend; npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "cd backend; npm test -- --runInBand ai-data-pack",
+      "status": "passed",
+      "summary": "2 suites, 20 tests"
+    },
+    {
+      "command": "7 required read-only endpoint calls",
+      "status": "passed",
+      "summary": "7 HTTP 200 responses"
+    },
+    {
+      "command": "sample verification scripts",
+      "status": "passed",
+      "summary": "empty XLSX, deterministic checksum, redaction, actor metadata, gates, and file hashes accepted"
+    }
+  ],
+  "fixes": [
+    {
+      "id": 1,
+      "name": "XLSX empty sheet quality metadata",
+      "status": "passed",
+      "evidence": "16/16 empty sample sheets retain complete quality columns"
+    },
+    {
+      "id": 2,
+      "name": "generated_by normalization",
+      "status": "passed",
+      "evidence": "0 actor/redaction findings"
+    },
+    {
+      "id": 3,
+      "name": "deterministic data_content_checksum",
+      "status": "passed",
+      "evidence": "repeated Director content checksum stable and runtime checksum changed"
+    },
+    {
+      "id": 4,
+      "name": "finance quality split",
+      "status": "passed",
+      "evidence": "cash ok while debt weak and overall partial/cautious"
+    },
+    {
+      "id": 5,
+      "name": "value-state distinction",
+      "status": "passed",
+      "evidence": "required states covered by tests and sample outputs"
+    }
+  ],
+  "acceptance": {
+    "build_pass": true,
+    "ai_data_pack_tests_pass": true,
+    "empty_xlsx_quality_pass": true,
+    "actor_normalization_pass": true,
+    "deterministic_content_checksum_pass": true,
+    "finance_quality_split_pass": true,
+    "value_state_pass": true,
+    "redaction_pass": true,
+    "safe_decision_gates_pass": true,
+    "sample_v2_generated": true
+  },
+  "sample_exports": [
+    "docs/ai-data-pack/sample-exports/20260612-v2/director-data-pack-20260612.json",
+    "docs/ai-data-pack/sample-exports/20260612-v2/director-data-pack-20260612.xlsx",
+    "docs/ai-data-pack/sample-exports/20260612-v2/marketer-data-pack-20260612.json",
+    "docs/ai-data-pack/sample-exports/20260612-v2/marketer-data-pack-20260612.xlsx",
+    "docs/ai-data-pack/sample-exports/20260612-v2/data-quality-report-20260612.json",
+    "docs/ai-data-pack/sample-exports/20260612-v2/mapping-report-20260612.json",
+    "docs/ai-data-pack/sample-exports/20260612-v2/decision-history-20260612.json",
+    "docs/ai-data-pack/sample-exports/20260612-v2/checksums.json",
+    "docs/ai-data-pack/sample-exports/20260612-v2/sample-export-verification-20260612-v2.md"
+  ],
+  "decision_gates": {
+    "can_generate_action_draft": true,
+    "can_import_action_file": false,
+    "can_dry_run": false,
+    "can_execute_live": false,
+    "can_recommend_ads_scale": false,
+    "can_use_ltv_strongly": false
+  },
+  "remaining_risks": [
+    "sample has no report-date orders, leads, ads metrics, or sync runs",
+    "ChatGPT Web upload not performed",
+    "full repository test suite not run",
+    "worktree contains unrelated pre-existing user changes"
+  ],
+  "final_recommendation": {
+    "proceed_automatically": false,
+    "next_phase": "PR-2.3A only after explicit approval",
+    "chatgpt_web_pro_extended_review_required": true
+  }
+}

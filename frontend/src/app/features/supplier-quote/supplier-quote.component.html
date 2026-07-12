@@ -69,6 +69,15 @@
         <option *ngFor="let s of suppliers()" [value]="s._id">{{ s.fullName }}</option>
       </select>
     </label>
+    <label>
+      Trạng thái duyệt
+      <select [ngModel]="filterApprovalStatus()" (ngModelChange)="filterApprovalStatus.set($event); refresh()">
+        <option value="">Tất cả</option>
+        <option value="pending">Chờ duyệt</option>
+        <option value="approved">Đã duyệt</option>
+        <option value="rejected">Từ chối</option>
+      </select>
+    </label>
     <button class="btn" (click)="refresh()">Tải lại</button>
   </div>
 
@@ -84,8 +93,11 @@
           <th>Phí giao</th>
           <th>Phí hoàn</th>
           <th>Hiệu lực</th>
+          <th>Trạng thái</th>
+          <th>Quyết định</th>
           <th>Tạo lúc</th>
           <th>Ghi chú</th>
+          <th>Thao tác</th>
         </tr>
       </thead>
       <tbody>
@@ -98,11 +110,50 @@
           <td>{{ (q.shippingFee || 0) | number:'1.0-0' }}</td>
           <td>{{ (q.returnFee || 0) | number:'1.0-0' }}</td>
           <td>{{ q.effectiveAt ? (q.effectiveAt | date:'yyyy-MM-dd') : '-' }}</td>
+          <td>
+            <span class="status-badge" [class]="'status-badge ' + approvalStatus(q)">
+              {{ approvalLabel(q) }}
+            </span>
+          </td>
+          <td class="decision-cell">
+            <span *ngIf="approvalStatus(q) === 'approved'">
+              {{ q.approvedAt ? (q.approvedAt | date:'yyyy-MM-dd HH:mm') : '-' }}
+            </span>
+            <span *ngIf="approvalStatus(q) === 'rejected'">
+              {{ q.rejectedAt ? (q.rejectedAt | date:'yyyy-MM-dd HH:mm') : '-' }}
+            </span>
+            <span *ngIf="approvalStatus(q) === 'pending'">Chưa có quyết định</span>
+            <small *ngIf="lastDecisionActor(q)">{{ lastDecisionActor(q) }}</small>
+            <small class="rejection-reason" *ngIf="q.rejectionReason">{{ q.rejectionReason }}</small>
+            <small class="sod-warning" *ngIf="decisionBlockReason(q)">{{ decisionBlockReason(q) }}</small>
+          </td>
           <td>{{ q.createdAt ? (q.createdAt | date:'yyyy-MM-dd HH:mm') : '-' }}</td>
           <td>{{ q.note || '' }}</td>
+          <td>
+            <div class="decision-actions">
+              <button
+                class="btn claim"
+                *ngIf="!hasTrustedProvenance(q)"
+                (click)="claimProvenance(q)"
+                [disabled]="!!actionQuoteId()"
+              >Nhận bàn giao</button>
+              <button
+                class="btn approve"
+                *ngIf="canApprove() && approvalStatus(q) !== 'approved'"
+                (click)="approveQuote(q)"
+                [disabled]="!!actionQuoteId() || !canDecideQuote(q)"
+              >Duyệt</button>
+              <button
+                class="btn reject"
+                *ngIf="canApprove() && approvalStatus(q) !== 'rejected'"
+                (click)="rejectQuote(q)"
+                [disabled]="!!actionQuoteId() || !canDecideQuote(q)"
+              >Từ chối</button>
+            </div>
+          </td>
         </tr>
         <tr *ngIf="quotes().length===0">
-          <td colspan="10" class="muted center">Chưa có báo giá</td>
+          <td colspan="13" class="muted center">Chưa có báo giá</td>
         </tr>
       </tbody>
     </table>

@@ -11,8 +11,8 @@ import { Supplier, SupplierService } from './supplier.service';
   <div class="page">
     <h2>🤝 Nhà Cung Cấp</h2>
     <div class="filters">
-  <input [ngModel]="q()" (ngModelChange)="q.set($event); refresh()" placeholder="Tìm tên/email/điện thoại/địa chỉ" />
-  <label><input type="checkbox" [ngModel]="onlyActive()" (ngModelChange)="onlyActive.set($event); refresh()"/> Chỉ nhà cung cấp đang hoạt động</label>
+  <input [ngModel]="q()" (ngModelChange)="q.set($event)" placeholder="Tìm tên/email/điện thoại/địa chỉ" />
+  <label><input type="checkbox" [ngModel]="onlyActive()" (ngModelChange)="onlyActive.set($event)"/> Chỉ nhà cung cấp đang hoạt động</label>
     </div>
     <div class="summary">Tổng: {{ suppliers().length }}</div>
     <div class="table-wrapper">

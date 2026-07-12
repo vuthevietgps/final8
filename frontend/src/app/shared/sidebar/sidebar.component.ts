@@ -44,6 +44,11 @@ export class SidebarComponent implements OnInit {
 
   menuItems: MenuItem[] = [
     {
+      icon: "🧭",
+      label: "Trợ Lý Quản Trị",
+      route: "/ai-assistant"
+    },
+    {
       icon: "👥",
       label: "Quản Lý Người Dùng",
       route: "/users",
@@ -95,6 +100,7 @@ export class SidebarComponent implements OnInit {
       children: [
         { icon: "📦", label: "Nhóm Sản Phẩm", route: "/product-category" },
         { icon: "🛍️", label: "Quản Lý Sản Phẩm", route: "/product" },
+        { icon: "📊", label: "Tồn Kho", route: "/inventory" },
         { icon: "📷", label: "Media", route: "/media" },
         { icon: "📊", label: "Báo cáo ảnh sản phẩm", route: "/media-report" }
       ]
@@ -112,14 +118,21 @@ export class SidebarComponent implements OnInit {
       route: "/employee-ads-kpi"
     },
     {
+      icon: "📘",
+      label: "Sổ Tay Manager",
+      route: "/manager-handbook"
+    },
+    {
       icon: "📢",
       label: "Quảng Cáo",
       route: "/advertising",
       children: [
         { icon: "🎯", label: "Tài Khoản Quảng Cáo", route: "/ad-accounts" },
         { icon: "📊", label: "Nhóm Quảng Cáo", route: "/ad-groups" },
-  { icon: "💰", label: "Chi Phí Quảng Cáo", route: "/costs/advertising" },
-        { icon: "🔑", label: "Token BM", route: "/api-tokens" },
+        { icon: "💰", label: "Chi Phí Quảng Cáo", route: "/costs/advertising" },
+        { icon: "⚙️", label: "Cài Đặt Ads", route: "/ads-settings" },
+        { icon: "📝", label: "Ngữ Cảnh Kinh Doanh Ads", route: "/ads-business-context" },
+        { icon: "🔑", label: "Token API Ads", route: "/api-tokens" },
         { icon: "📊📊", label: "Đề xuất SL nhóm quảng cáo theo SP", route: "/ad-group-counts" }
       ]
     },
@@ -128,11 +141,14 @@ export class SidebarComponent implements OnInit {
       label: "AI & Chat",
       route: "/ai",
       children: [
+        { icon: "📈", label: "AI Marketing", route: "/ai-marketing" },
+        { icon: "EV", label: "Bằng Chứng Duyệt Ads", route: "/ai/ads-approval-evidence-reviewer" },
+        { icon: "FD", label: "Tài Liệu Nền Ads", route: "/ai/ads-foundation-reviewer-docs" },
+        { icon: "SS", label: "Trạng Thái Nguồn Ads", route: "/ai/ads-platform-source-sync-status-reviewer" },
         { icon: "📘", label: "Fanpage", route: "/fanpages" },
-        { icon: "⚙️", label: "Cấu Hình OpenAI", route: "/openai-configs" },
+        { icon: "⚙️", label: "API Key & Prompt AI", route: "/openai-configs" },
         { icon: "💬", label: "Hội Thoại", route: "/conversations" },
-        { icon: "🔐", label: "API & Token", route: "/api-tokens" },
-        { icon: "📡", label: "Cấu Hình Sync Ads", route: "/ads-settings" }
+        { icon: "🔐", label: "Token API Ads", route: "/api-tokens" }
       ]
     },
     {
@@ -150,6 +166,7 @@ export class SidebarComponent implements OnInit {
       route: "/finance",
       children: [
         { icon: "🎛️", label: "Financial Control", route: "/finance/financial-control" },
+        { icon: "🪣", label: "Budget Buckets", route: "/finance/budget-buckets" },
         { icon: "💼", label: "Quỹ Owner", route: "/owner-fund" },
         { icon: "📊", label: "Chi Phí & Lợi Nhuận Nhóm QC", route: "/finance/ad-group-daily-report" },
 { icon: "💳", label: "Quản lý khoản vay", route: "/loans" }
@@ -234,16 +251,25 @@ export class SidebarComponent implements OnInit {
     "/costs/advertising": "advertising-cost",
     "/ads-budget": "employee-ads-kpi",
     "/employee-ads-kpi": "employee-ads-kpi",
+    "/manager-handbook": "employee-ads-kpi",
     "/supplier-quotes": "supplier-quote",
+    "/inventory": "inventory",
     "/payments/supplier": "supplier-payable",
     "/payments/agent": "agent-receivable",
     "/finance/financial-control": "finance",
     "/finance/available-funds": "finance",
     "/finance/budget-allocation": "finance",
+    "/finance/budget-buckets": "finance",
     "/finance/capital-allocation": "finance",
     "/finance/ad-group-daily-report": "finance",
     "/loans": "finance",
     "/owner-fund": "owner-fund",
+    "/ai-assistant": "ai-operator",
+    "/ai-marketing": "ai-marketing",
+    "/ads-business-context": "ai-marketing",
+    "/ai/ads-approval-evidence-reviewer": "ai-marketing",
+    "/ai/ads-foundation-reviewer-docs": "ai-marketing",
+    "/ai/ads-platform-source-sync-status-reviewer": "ai-marketing",
     "/fanpages": "fanpage",
     "/openai-configs": "openai-config",
     "/conversations": "chat-message",
@@ -251,7 +277,6 @@ export class SidebarComponent implements OnInit {
     "/reports/daily-profit": "ad-group-profit-report",
     "/reports/return-report": "return-report",
     "/reports/product-profit": "ad-group-profit-report",
-    "/ads-settings": "api-token",
   };
 
   canShow(item: MenuItem): boolean {
@@ -264,14 +289,9 @@ export class SidebarComponent implements OnInit {
     if (featureModule && !this.planService.hasModuleAccess(featureModule)) {
       return false;
     }
-        const managerHiddenRoutes = new Set<string>([
-      '/conversations',
+    const managerHiddenRoutes = new Set<string>([
       '/finance/financial-control',
       '/loans',
-      '/profit',
-      '/reports/daily-profit',
-      '/reports/return-report',
-      '/reports/product-profit',
       '/payments/supplier',
       '/payments/agent',
       '/orders',
@@ -280,9 +300,7 @@ export class SidebarComponent implements OnInit {
       '/orders/google-sheet-sync',
       '/products',
       '/product-category',
-      '/product',
-      '/media',
-      '/media-report'
+      '/product'
     ]);
     if (this.authService.user()?.role === 'manager' && managerHiddenRoutes.has(item.route)) {
       return false;
@@ -300,6 +318,7 @@ export class SidebarComponent implements OnInit {
       "/products": "products",
       "/product-category": "product-categories",
       "/product": "products",
+      "/inventory": "purchase-costs",
   "/media": "media",
     "/media-report": "media",
       "/customers": "customers",
@@ -326,19 +345,27 @@ export class SidebarComponent implements OnInit {
       "/reports/product-profit": "reports",
       "/profit": "reports",
       "/fanpages": "fanpages",
+      "/ai-assistant": "ai-assistant",
+      "/ai-marketing": "google-ads.read",
+      "/ai/ads-approval-evidence-reviewer": "ai-data-pack.marketer.read",
+      "/ai/ads-foundation-reviewer-docs": "ai-data-pack.marketer.read",
+      "/ai/ads-platform-source-sync-status-reviewer": "ai-data-pack.marketer.read",
       "/openai-configs": "openai-configs",
 	"/conversations": "chat-messages",
-  "/api-tokens": "api-tokens",
-      "/ads-settings": "api-tokens",
+  "/api-tokens": "google-ads.credentials.read",
+      "/ads-settings": "google-ads.credentials.read",
+      "/ads-business-context": "google-ads.read",
       "/finance/financial-control": "finance",
       "/loans": "finance",
       "/reports/daily-profit": "reports",
       "/finance/available-funds": "finance",
       "/finance/budget-allocation": "finance",
+      "/finance/budget-buckets": "finance.budget-buckets.manage",
       "/finance/capital-allocation": "finance",
       "/finance/ad-group-daily-report": "finance",
       "/ads-budget": "ads-budget",
       "/employee-ads-kpi": "employee-ads-kpi",
+      "/manager-handbook": "manager-handbook",
       "/owner-fund": "owner-fund",
       "/settings": "settings"
     };

@@ -21,6 +21,19 @@ export class OrderPaymentService {
     private readonly orderSheetSyncService: OrderSheetSyncService,
   ) {}
 
+  private async getCompletedOrderStatuses(): Promise<string[]> {
+    const statuses = await this.calculationService.getPaymentTriggerStatuses();
+    return statuses.length > 0 ? statuses : [...COMPLETED_ORDER_STATUSES];
+  }
+
+  private calculateSupplierUiAmount(
+    order: Pick<TestOrder2, 'supplierQuote' | 'quantity'>,
+  ): number {
+    const supplierQuote = order.supplierQuote || 0;
+    const quantity = order.quantity || 1;
+    return supplierQuote * quantity;
+  }
+
   // ============ PAYMENT BATCH METHODS ============
 
   /**
@@ -36,39 +49,62 @@ export class OrderPaymentService {
   }) {
     const orderObjectIds = dto.orderIds.map(id => new Types.ObjectId(id));
     const paidAt = new Date(dto.paidDate);
+    const completedStatuses = await this.getCompletedOrderStatuses();
 
-    const orders = await this.model.find({
+    const existingBatch = await this.model.findOne({ supplierPaymentBatchId: dto.batchId });
+    if (existingBatch) {
+      throw new Error(`Batch ${dto.batchId} đã tồn tại. Vui lòng sử dụng mã khác.`);
+    }
+
+    const payableQuery: FilterQuery<TestOrder2Document> = {
       _id: { $in: orderObjectIds },
-      orderStatus: { $in: COMPLETED_ORDER_STATUSES }
-    });
+      orderStatus: { $in: completedStatuses },
+      supplierPaymentStatus: PaymentStatus.PENDING,
+      $or: [
+        { supplierPaymentBatchId: { $exists: false } },
+        { supplierPaymentBatchId: null },
+      ],
+    };
+
+    const orders = await this.model.find(payableQuery);
 
     if (orders.length === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ. Chỉ thanh toán được đơn đã "Giao thành công" hoặc "Hàng hoàn"');
+      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
     }
 
     if (orders.length < dto.orderIds.length) {
-      this.logger.warn(`${dto.orderIds.length - orders.length} đơn hàng bị bỏ qua vì chưa hoàn thành`);
+      this.logger.warn(`${dto.orderIds.length - orders.length} đơn hàng bị bỏ qua vì chưa hoàn thành hoặc đã được thanh toán`);
     }
 
-    const updatePromises = orders.map(async (order) => {
-      order.supplierPaymentStatus = PaymentStatus.PAID;
-      order.supplierPaymentBatchId = dto.batchId;
-      order.supplierPaidAt = paidAt;
-      order.supplierPaymentNote = dto.note;
-      order.supplierPaymentAttachments = dto.attachments || [];
+    const atomicResult = await this.model.updateMany(
+      payableQuery,
+      {
+        $set: {
+          supplierPaymentStatus: PaymentStatus.PAID,
+          supplierPaymentBatchId: dto.batchId,
+          supplierPaidAt: paidAt,
+          supplierPaymentNote: dto.note,
+          supplierPaymentAttachments: dto.attachments || [],
+        },
+      },
+    );
 
+    const updatedCount = atomicResult.modifiedCount;
+    if (updatedCount === 0) {
+      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
+    }
+
+    const updatedOrders = await this.model.find({ supplierPaymentBatchId: dto.batchId });
+    for (const order of updatedOrders) {
       await this.calculationService.calculateRealizedProfitIfReady(order);
+      await order.save();
+    }
 
-      return order.save();
-    });
+    this.logger.log(`Created supplier payment batch ${dto.batchId} with ${updatedCount} orders`);
 
-    await Promise.all(updatePromises);
+    const totalAmount = updatedOrders.reduce((sum, o) => sum + this.calculateSupplierUiAmount(o), 0);
 
-    this.logger.log(`Created supplier payment batch ${dto.batchId} with ${orders.length} orders`);
-
-    const totalAmount = orders.reduce((sum, o) => sum + (o.supplierPaidAmount || 0), 0);
-
-    const supplierIds = [...new Set(orders.map(o => o.supplierId?.toString()).filter(Boolean))] as string[];
+    const supplierIds = [...new Set(updatedOrders.map(o => o.supplierId?.toString()).filter(Boolean))] as string[];
     this.orderSheetSyncService.triggerSyncOnSupplierPayment(supplierIds).catch(err => {
       this.logger.error('Failed to trigger sheet sync after supplier payment', err);
     });
@@ -76,7 +112,7 @@ export class OrderPaymentService {
     return {
       batchId: dto.batchId,
       paidDate: paidAt,
-      orderCount: orders.length,
+      orderCount: updatedCount,
       totalAmount,
       note: dto.note
     };
@@ -95,43 +131,66 @@ export class OrderPaymentService {
   }) {
     const orderObjectIds = dto.orderIds.map(id => new Types.ObjectId(id));
     const paidAt = new Date(dto.paidDate);
+    const completedStatuses = await this.getCompletedOrderStatuses();
+
+    const existingBatch = await this.model.findOne({ agentPaymentBatchId: dto.batchId });
+    if (existingBatch) {
+      throw new Error(`Batch ${dto.batchId} đã tồn tại. Vui lòng sử dụng mã khác.`);
+    }
 
     const externalAgents = await this.model.db.collection('users').find({
       role: AgentRole.EXTERNAL
     }).toArray();
     const externalAgentIds = externalAgents.map(a => a._id);
 
-    const orders = await this.model.find({
+    const payableQuery: FilterQuery<TestOrder2Document> = {
       _id: { $in: orderObjectIds },
       agentId: { $in: externalAgentIds },
-      orderStatus: { $in: COMPLETED_ORDER_STATUSES }
-    });
+      orderStatus: { $in: completedStatuses },
+      agentPaymentStatus: PaymentStatus.PENDING,
+      $or: [
+        { agentPaymentBatchId: { $exists: false } },
+        { agentPaymentBatchId: null },
+      ],
+    };
+
+    const orders = await this.model.find(payableQuery);
 
     if (orders.length === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ. Chỉ thanh toán được đơn của EXTERNAL AGENT đã "Giao thành công" hoặc "Hàng hoàn"');
+      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
     }
 
     if (orders.length < dto.orderIds.length) {
-      this.logger.warn(`${dto.orderIds.length - orders.length} đơn hàng bị bỏ qua (không phải external agent hoặc chưa hoàn thành)`);
+      this.logger.warn(`${dto.orderIds.length - orders.length} đơn hàng bị bỏ qua (không phải external agent, chưa hoàn thành, hoặc đã được thanh toán)`);
     }
 
-    const updatePromises = orders.map(async (order) => {
-      order.agentPaymentStatus = PaymentStatus.PAID;
-      order.agentPaymentBatchId = dto.batchId;
-      order.agentPaidAt = paidAt;
-      order.agentPaymentNote = dto.note;
-      order.agentPaymentAttachments = dto.attachments || [];
+    const atomicResult = await this.model.updateMany(
+      payableQuery,
+      {
+        $set: {
+          agentPaymentStatus: PaymentStatus.PAID,
+          agentPaymentBatchId: dto.batchId,
+          agentPaidAt: paidAt,
+          agentPaymentNote: dto.note,
+          agentPaymentAttachments: dto.attachments || [],
+        },
+      },
+    );
 
+    const updatedCount = atomicResult.modifiedCount;
+    if (updatedCount === 0) {
+      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
+    }
+
+    const updatedOrders = await this.model.find({ agentPaymentBatchId: dto.batchId });
+    for (const order of updatedOrders) {
       await this.calculationService.calculateRealizedProfitIfReady(order);
+      await order.save();
+    }
 
-      return order.save();
-    });
+    this.logger.log(`Created agent payment batch ${dto.batchId} with ${updatedCount} orders`);
 
-    await Promise.all(updatePromises);
-
-    this.logger.log(`Created agent payment batch ${dto.batchId} with ${orders.length} orders`);
-
-    const agentIds = [...new Set(orders.map(o => o.agentId?.toString()).filter(Boolean))] as string[];
+    const agentIds = [...new Set(updatedOrders.map(o => o.agentId?.toString()).filter(Boolean))] as string[];
     this.orderSheetSyncService.triggerSyncOnAgentPayment(agentIds).catch(err => {
       this.logger.error('Failed to trigger sheet sync after agent payment', err);
     });
@@ -139,8 +198,8 @@ export class OrderPaymentService {
     return {
       batchId: dto.batchId,
       paidDate: paidAt,
-      orderCount: orders.length,
-      totalAmount: orders.reduce((sum, o) => sum + (o.agentPaidAmount || 0), 0),
+      orderCount: updatedCount,
+      totalAmount: updatedOrders.reduce((sum, o) => sum + (o.agentPaidAmount || 0), 0),
       note: dto.note
     };
   }
@@ -156,18 +215,15 @@ export class OrderPaymentService {
     to?: string;
     orderStatus?: string;
   }) {
+    const completedStatuses = await this.getCompletedOrderStatuses();
     const query: FilterQuery<TestOrder2Document> = {
       supplierPaymentStatus: PaymentStatus.PENDING,
       supplierId: { $exists: true, $ne: null },
-      orderStatus: { $in: COMPLETED_ORDER_STATUSES }
+      orderStatus: filters?.orderStatus || { $in: completedStatuses }
     };
 
     if (filters?.supplierId) {
       query.supplierId = new Types.ObjectId(filters.supplierId);
-    }
-
-    if (filters?.orderStatus) {
-      query.orderStatus = filters.orderStatus;
     }
 
     if (filters?.from || filters?.to) {
@@ -178,21 +234,7 @@ export class OrderPaymentService {
 
     const orders = await this.model.find(query).sort({ orderDate: -1 });
 
-    const totalAmount = orders.reduce((sum, o) => {
-      const codAmount = o.codAmount || 0;
-      const supplierQuote = o.supplierQuote || 0;
-      const quantity = o.quantity || 1;
-      const shippingFee = o.shippingFee || 0;
-      const returnFee = o.returnFee || 0;
-
-      let amount: number;
-      if (o.orderStatus === OrderStatus.RETURNED) {
-        amount = 0 - (supplierQuote * quantity) - shippingFee - returnFee;
-      } else {
-        amount = codAmount - (supplierQuote * quantity) - shippingFee;
-      }
-      return sum + amount;
-    }, 0);
+    const totalAmount = orders.reduce((sum, o) => sum + this.calculateSupplierUiAmount(o), 0);
 
     return {
       orders,
@@ -243,14 +285,14 @@ export class OrderPaymentService {
       const codAmount = o.codAmount || 0;
       const agentQuote = o.agentQuote || 0;
       const quantity = o.quantity || 1;
-      const shippingFee = o.shippingFee || 0;
-      const returnFee = o.returnFee || 0;
 
+      // ✅ Agent Commission = COD - agentQuote×qty  (xác nhận PO 15/03/2026)
+      // Phí vận chuyển do CÔNG TY chịu, không trừ vào hoa hồng đại lý.
       let commission: number;
       if (o.orderStatus === OrderStatus.RETURNED) {
-        commission = 0 - (agentQuote * quantity) - shippingFee - returnFee;
+        commission = 0 - (agentQuote * quantity);
       } else {
-        commission = codAmount - (agentQuote * quantity) - shippingFee;
+        commission = codAmount - (agentQuote * quantity);
       }
       return sum + commission;
     }, 0);
@@ -293,7 +335,14 @@ export class OrderPaymentService {
           _id: '$supplierPaymentBatchId',
           paidDate: { $first: '$supplierPaidAt' },
           orderCount: { $sum: 1 },
-          totalAmount: { $sum: '$supplierPaidAmount' },
+          totalAmount: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$supplierQuote', 0] },
+                { $ifNull: ['$quantity', 1] },
+              ],
+            },
+          },
           note: { $first: '$supplierPaymentNote' },
           attachments: { $first: '$supplierPaymentAttachments' }
         }
@@ -394,10 +443,11 @@ export class OrderPaymentService {
     const THRESHOLD = 5_000_000;
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
+    const completedStatuses = await this.getCompletedOrderStatuses();
 
     const baseQuery: FilterQuery<TestOrder2Document> = {
       supplierId: { $exists: true, $ne: null },
-      orderStatus: { $in: COMPLETED_ORDER_STATUSES }
+      orderStatus: { $in: completedStatuses }
     };
 
     if (filters?.supplierId) {
@@ -417,9 +467,7 @@ export class OrderPaymentService {
     const pendingSummary = {
       orderCount: pendingOrders.length,
       amount: pendingOrders.reduce((sum, o) => {
-        const supplierQuote = o.supplierQuote || 0;
-        const quantity = o.quantity || 1;
-        return sum + (supplierQuote * quantity);
+        return sum + this.calculateSupplierUiAmount(o);
       }, 0)
     };
 
@@ -437,7 +485,7 @@ export class OrderPaymentService {
 
     const paidSummary = {
       orderCount: paidOrders.length,
-      amount: paidOrders.reduce((sum, o) => sum + (o.supplierPaidAmount || 0), 0)
+      amount: paidOrders.reduce((sum, o) => sum + this.calculateSupplierUiAmount(o), 0)
     };
 
     // 3. Calculate aging buckets
@@ -448,7 +496,7 @@ export class OrderPaymentService {
     };
 
     for (const order of pendingOrders) {
-      const supplierAmount = (order.supplierQuote || 0) * (order.quantity || 1);
+      const supplierAmount = this.calculateSupplierUiAmount(order);
       const completedDate = order.updatedAt || order.orderDate;
       const agingDays = completedDate
         ? Math.floor((today.getTime() - new Date(completedDate).getTime()) / (1000 * 60 * 60 * 24))
@@ -521,7 +569,7 @@ export class OrderPaymentService {
       }
 
       const entry = supplierMap.get(supplierId)!;
-      const supplierAmount = (order.supplierQuote || 0) * (order.quantity || 1);
+      const supplierAmount = this.calculateSupplierUiAmount(order);
       entry.pendingOrderCount++;
       entry.pendingAmount += supplierAmount;
 
@@ -562,7 +610,7 @@ export class OrderPaymentService {
 
       const entry = supplierMap.get(supplierId)!;
       entry.paidOrderCount++;
-      entry.paidAmount += order.supplierPaidAmount || 0;
+      entry.paidAmount += this.calculateSupplierUiAmount(order);
     }
 
     const bySupplier = Array.from(supplierMap.values())
@@ -916,13 +964,14 @@ export class OrderPaymentService {
     paymentNote?: string;
   }): Promise<{ updated: number }> {
     const { supplierId, periodFrom, periodTo, batchId, paidAt, paymentNote } = params;
+    const completedStatuses = await this.getCompletedOrderStatuses();
 
     this.logger.log(`Syncing supplier payment from statement: ${batchId}`);
 
     const orders = await this.model.find({
       supplierId: new Types.ObjectId(supplierId),
       orderDate: { $gte: periodFrom, $lte: periodTo },
-      orderStatus: { $in: COMPLETED_ORDER_STATUSES },
+      orderStatus: { $in: completedStatuses },
       supplierPaymentStatus: { $ne: PaymentStatus.PAID },
     });
 
@@ -1126,15 +1175,15 @@ export class OrderPaymentService {
       const codAmount = order.codAmount || 0;
       const agentQuote = order.agentQuote || 0;
       const quantity = order.quantity || 1;
-      const shippingFee = order.shippingFee || 0;
-      const returnFee = order.returnFee || 0;
 
+      // ✅ Agent Commission = COD - agentQuote×qty  (xác nhận PO 15/03/2026)
+      // Phí vận chuyển do CÔNG TY chịu, không trừ vào hoa hồng đại lý.
       let commission: number;
       if (order.orderStatus === OrderStatus.RETURNED) {
-        commission = 0 - (agentQuote * quantity) - shippingFee - returnFee;
+        commission = 0 - (agentQuote * quantity);
         totalClawback += Math.abs(commission);
       } else {
-        commission = codAmount - (agentQuote * quantity) - shippingFee;
+        commission = codAmount - (agentQuote * quantity);
         if (commission > 0) {
           totalPayable += commission;
         } else {

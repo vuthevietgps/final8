@@ -1,0 +1,53 @@
+﻿{
+    "failDetails":  [
+
+                    ],
+    "fcFinal":  {
+                    "committedCash":  6290670,
+                    "bankBalance":  256990000,
+                    "freeCash":  250699330
+                },
+    "orderIds":  [
+                     "6992d12dccdecb30eda7fd62",
+                     "6992d12eccdecb30eda7fd70",
+                     "6992d130ccdecb30eda7fd8a",
+                     "6992d131ccdecb30eda7fdaf",
+                     "6992d133ccdecb30eda7fddb",
+                     "6992d134ccdecb30eda7fe10",
+                     "6992d136ccdecb30eda7fe49",
+                     "6992d137ccdecb30eda7fe82",
+                     "6992d138ccdecb30eda7febd",
+                     "6992d139ccdecb30eda7fef0"
+                 ],
+    "pass":  129,
+    "fcBefore":  {
+                     "committedCash":  6220670,
+                     "monthlyBurn":  115000,
+                     "bankBalance":  252680000,
+                     "ownerWithdrawable":  246114330,
+                     "freeCash":  246459330
+                 },
+    "statements":  {
+                       "agentExtAgent1":  "6992d1b153931d7adab0d5d3",
+                       "supplierIntSupp1":  "6992d197ccdecb30eda808bf",
+                       "supplierExtSupp1":  "6992d199ccdecb30eda808d2",
+                       "agentExtAgent2":  "6992d1b453931d7adab0d5d4"
+                   },
+    "timestamp":  "2026-02-16 15:14:36",
+    "fail":  0,
+    "fcAfter":  {
+                    "committedCash":  6290670,
+                    "monthlyBurn":  115000,
+                    "bankBalance":  256990000,
+                    "ownerWithdrawable":  250354330,
+                    "freeCash":  250699330
+                },
+    "userIds":  [
+                    "6992d11accdecb30eda7fc49",
+                    "6992d11bccdecb30eda7fc4c",
+                    "6992d11cccdecb30eda7fc4f",
+                    "6992d11dccdecb30eda7fc52",
+                    "6992d11dccdecb30eda7fc55",
+                    "6992d11eccdecb30eda7fc58"
+                ]
+}

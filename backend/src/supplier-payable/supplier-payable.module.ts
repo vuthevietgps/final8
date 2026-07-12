@@ -13,6 +13,7 @@ import { TestOrder2, TestOrder2Schema } from '../test-order2/schemas/test-order2
 import { User, UserSchema } from '../user/user.schema';
 import { RolesGuard } from './guards/roles.guard';
 import { Reflector } from '@nestjs/core';
+import { SystemSettings, SystemSettingsSchema } from '../finance/schemas/system-settings.schema';
 
 @Module({
   imports: [
@@ -21,6 +22,8 @@ import { Reflector } from '@nestjs/core';
       { name: SupplierStatement.name, schema: SupplierStatementSchema },
       { name: TestOrder2.name, schema: TestOrder2Schema },
       { name: User.name, schema: UserSchema },
+      // Canonical owner of SupplierCashCycleDays; no supplier-local policy copy.
+      { name: SystemSettings.name, schema: SystemSettingsSchema },
     ]),
     // Use same JWT config as AuthModule to ensure token compatibility
     JwtModule.register({

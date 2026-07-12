@@ -1,0 +1,263 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-5B",
+    "status": "completed_download_endpoint_implementation",
+    "code_changed": true,
+    "docs_changed": true,
+    "download_endpoint_added": true,
+    "download_route": "GET /ai-data-pack/exports/:jobId/artifacts/:artifactId/download",
+    "download_token_added": false,
+    "download_token_route_added": false,
+    "artifact_bytes_streaming_implemented": true,
+    "artifact_rendering_implemented": false,
+    "raw_internal_artifact_download_allowed": false,
+    "manifest_only_download_allowed": false,
+    "official_partial_deferred_returns_not_ready": true,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "phase_3_started": false
+  },
+  "inputs_reviewed": {
+    "mandatory_missing": [],
+    "optional_missing": [
+      {
+        "file": "docs/ai-ads-v2/00-index.md",
+        "impact": "Workspace AGENTS references this AI Ads V2 index, but Prompt 24 is scoped to AI Data Pack download implementation and available AI Data Pack inputs were sufficient.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/ba-master-addendum-prompt23-review-prompt24-download-implementation-20260614.md",
+        "impact": "Optional addendum unavailable; Prompt 24 and Prompt 23 review result provided strict constraints.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v22.md",
+        "impact": "Optional ledger unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/lo-trinh-ai-data-pack-roadmap-v22.md",
+        "impact": "Optional roadmap unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v19.md",
+        "impact": "Optional guardrail unavailable; Prompt 23 and review constraints were used.",
+        "can_continue": true
+      },
+      {
+        "file": "promt23.md",
+        "impact": "Repo-local copy unavailable; downloaded Prompt 23 was available.",
+        "can_continue": true
+      },
+      {
+        "file": "promtchatgptweb23.md",
+        "impact": "Optional file unavailable; no scope expansion performed.",
+        "can_continue": true
+      }
+    ]
+  },
+  "endpoint": {
+    "route": "GET /ai-data-pack/exports/:jobId/artifacts/:artifactId/download",
+    "implementation": "Option A direct authenticated download/proxy",
+    "controller": "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.ts",
+    "service": "backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+    "authenticated": true,
+    "raw_response_streaming": true,
+    "public_url_allowed": false,
+    "download_token_route_added": false,
+    "openai_upload_added": false,
+    "action_import_added": false
+  },
+  "artifact_eligibility": {
+    "allowed_when_all_true": [
+      "job exists",
+      "job status is completed or completed_with_warnings",
+      "artifact exists in job artifact list",
+      "artifact belongs to job",
+      "artifact format is json or xlsx",
+      "artifact is not blocked by official/partial artifactRendering=deferred",
+      "artifact is not blocked by official/partial redactionRuntime=manifest_only",
+      "file exists under configured artifact root",
+      "file size matches artifact metadata",
+      "sha256 checksum matches artifact metadata"
+    ],
+    "blocked_when_any_true": [
+      "job not completed",
+      "manifest-only artifact",
+      "artifact_rendering=deferred",
+      "redaction_runtime=manifest_only",
+      "artifact missing",
+      "checksum mismatch",
+      "size mismatch",
+      "unsupported format",
+      "profile mismatch",
+      "owner or assignment mismatch",
+      "section access mismatch",
+      "system_internal_worker human download",
+      "unassigned reviewer",
+      "manager official artifact download",
+      "investor director pack download"
+    ],
+    "current_official_partial_download_ready": false,
+    "official_partial_deferred_returns_not_ready": true
+  },
+  "rbac_redaction": {
+    "fail_closed": true,
+    "legacy_broad_download_permission_sufficient": false,
+    "granular_permissions": [
+      "ai-data-pack.export.artifact.download",
+      "ai-data-pack.export.artifact.download.cached",
+      "ai-data-pack.export.artifact.download.official",
+      "ai-data-pack.export.artifact.download.partial",
+      "ai-data-pack.export.artifact.download.audit.read"
+    ],
+    "role_mapping_changed": true,
+    "role_mapping_note": "Minimal exception allowed by Prompt 24: director gets base/cached/official/partial granular download permissions; manager gets base/cached/partial only; investor/internal agents get no download permission.",
+    "redaction_boundary": {
+      "pre_rendered_redacted_artifact_required": true,
+      "client_redaction_override_allowed": false,
+      "forbidden_query_inputs_rejected": true,
+      "raw_internal_artifact_download_allowed": false,
+      "manifest_only_download_allowed": false
+    }
+  },
+  "audit_rate_limit": {
+    "audit_events": [
+      "artifact_download_requested",
+      "artifact_download_denied",
+      "artifact_download_started",
+      "artifact_download_completed",
+      "artifact_download_failed"
+    ],
+    "audit_sanitized": true,
+    "observability_metrics_added": true,
+    "rate_limits": [
+      "per actor download attempts",
+      "per actor/job download attempts",
+      "per artifact download attempts",
+      "download denied throttling",
+      "max download file size",
+      "max concurrent downloads per actor"
+    ],
+    "high_volume_public_ready_claimed": false
+  },
+  "error_denial_behavior": {
+    "403": [
+      "missing permission",
+      "profile mismatch",
+      "manager official/full denied",
+      "system worker human download denied"
+    ],
+    "404": [
+      "unknown job",
+      "owner/assignment mismatch",
+      "unassigned reviewer",
+      "unknown artifact when safe"
+    ],
+    "409": [
+      "job not completed",
+      "official/partial deferred",
+      "manifest-only artifact",
+      "checksum mismatch",
+      "size mismatch",
+      "file missing or unavailable"
+    ],
+    "413": [
+      "artifact exceeds configured download file size limit"
+    ],
+    "429": [
+      "download/rbac-denial rate limit",
+      "download concurrency limit"
+    ],
+    "must_not_leak": [
+      "storage key",
+      "storage location",
+      "public URL",
+      "artifact bytes in JSON",
+      "raw provider payload",
+      "credentials or tokens",
+      "stack trace"
+    ]
+  },
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts --runInBand",
+      "status": "passed"
+    },
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/export-jobs/export-job.service.spec.ts --runInBand",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "static_safety_checks": [
+    {
+      "check": "No download-token route, tokenized download integration, OpenAI upload, action import, execution service, provider mutation, or provider validateOnly integration in endpoint controller/service.",
+      "status": "passed"
+    },
+    {
+      "check": "Direct GET /ai-data-pack/exports/:jobId/artifacts/:artifactId/download route exists and no POST download route exists.",
+      "status": "passed"
+    },
+    {
+      "check": "Download response headers do not set storage/public/token/debug/provider/credential metadata.",
+      "status": "passed"
+    }
+  ],
+  "files_changed": [
+    "backend/src/ai-data-pack/export-jobs/export-job.types.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-artifact.service.ts",
+    "backend/src/ai-data-pack/rbac/export-endpoint-policy.service.ts",
+    "backend/src/ai-data-pack/audit/export-endpoint-audit.service.ts",
+    "backend/src/ai-data-pack/observability/export-endpoint-observability.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-endpoint-rate-limit.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts",
+    "backend/src/auth/role-permissions.ts",
+    "docs/ai-data-pack/ketquapromt24.md",
+    "docs/ai-data-pack/ketquapromt24.json",
+    "docs/ai-data-pack/review-packets/promt24/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt24/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt24/02_endpoint_implementation.md",
+    "docs/ai-data-pack/review-packets/promt24/03_artifact_eligibility_gates.md",
+    "docs/ai-data-pack/review-packets/promt24/04_rbac_redaction_boundary.md",
+    "docs/ai-data-pack/review-packets/promt24/05_response_headers_audit_rate_limit.md",
+    "docs/ai-data-pack/review-packets/promt24/06_error_denial_behavior.md",
+    "docs/ai-data-pack/review-packets/promt24/07_tests_run.md",
+    "docs/ai-data-pack/review-packets/promt24/08_static_safety_checks.md",
+    "docs/ai-data-pack/review-packets/promt24/09_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt24/10_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt24/11_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "Official/partial exports remain not downloadable until a later phase implements actual rendered redacted artifacts.",
+    "No explicit expired/revoked/quarantined artifact state exists in the current schema; Prompt 24 did not add a migration.",
+    "Rate limits still use the existing in-module/cache-manager pattern and are not claimed to be high-volume multi-pod ready.",
+    "Tenant scoping is represented by current job owner/profile/section checks; no new tenant model was added."
+  ],
+  "next_recommendation": {
+    "stop_after_prompt24": true,
+    "if_accepted": "PR-2.3B-5C - Download Endpoint Security Hardening & Acceptance, No OpenAI, No Action Import",
+    "if_rendering_is_main_blocker": "PR-2.3B-5C - Downloadable Redacted Artifact Rendering Implementation, No OpenAI, No Action Import",
+    "still_forbidden": [
+      "OpenAI upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "provider validateOnly",
+      "new provider adapter",
+      "Phase 3"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "decisions": [],
+  "evaluations": [],
+  "metadata": {
+    "company_id": null,
+    "company_name": null,
+    "currency": "VND",
+    "data_content_checksum": "c7aa67ab45fb261b675fc3739bc890900caa683ad8557788c2024f1dd7a78262",
+    "data_pack_id": "decision_history-2026-06-12",
+    "data_pack_type": "decision_history",
+    "data_sources": [],
+    "date_range": {
+      "from": "2026-06-12",
+      "to": "2026-06-12"
+    },
+    "export_format": "json",
+    "exported_at": "2026-06-13T01:28:26.575Z",
+    "generated_by_display": "Regression Director",
+    "generated_by_role": "director",
+    "generated_by_user_id": "69dee199ab4e375cb670fd47",
+    "report_date": "2026-06-12",
+    "runtime_export_checksum": "afd942b4187f401651e8d1e4d3396d6a4e8dc6741eeb4f810fcd7e9447c36ad2",
+    "schema_version": "1.0",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "warnings": [
+      "company_id and company_name are not configured in a canonical source."
+    ]
+  },
+  "quality": {
+    "can_use_for_decision": "no",
+    "confidence": "low",
+    "data_quality_status": "missing",
+    "missing_fields": [
+      "unified_cross_domain_decision_history"
+    ],
+    "source": "Google Ads and legacy ads read-only decision/evaluation logs",
+    "warning": [
+      "Google decision history is stronger than other domains."
+    ]
+  }
+}

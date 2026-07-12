@@ -12,15 +12,20 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
-  ForbiddenException
+  ForbiddenException,
+  UseGuards
 } from '@nestjs/common';
 import { ProductCategoryService } from './product-category.service';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @FeatureModule('product-category')
 @Controller('product-category')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('product-categories')
 export class ProductCategoryController {
   constructor(private readonly productCategoryService: ProductCategoryService) {}
 

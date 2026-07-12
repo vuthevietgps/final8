@@ -1,0 +1,13 @@
+$env:MONGODB_URI = ''mongodb://127.0.0.1:27017/htxbachgia_authhardening''
+$env:PLAN_TYPE = ''enterprise''
+$env:JWT_SECRET = ''qa-auth-hardening-secret''
+$env:MESSENGER_VERIFY_TOKEN = ''dev-verify-token''
+$env:FB_VERIFY_TOKEN = ''dev-verify-token''
+$env:FB_SENDING_ENABLED = ''0''
+$env:AI_FB_SENDING_ENABLED = ''0''
+$env:AI_FB_DELIVERY_RECOVERY_ENABLED = ''0''
+$env:AUTO_SYNC_ORDERS_ENABLED = ''false''
+$env:PUBLIC_ORIGIN = ''http://localhost''
+$env:PORT = ''3999''
+$env:AUTH_ENABLE_IP_RESTRICTION = ''false''
+Write-Output "URI=$env:MONGODB_URI PORT=$env:PORT AUTH=$env:AUTH_ENABLE_IP_RESTRICTION"

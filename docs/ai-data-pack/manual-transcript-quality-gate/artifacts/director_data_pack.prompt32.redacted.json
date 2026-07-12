@@ -1,0 +1,2932 @@
+{
+  "metadata": {
+    "artifact_class": "downloadable_redacted_artifact",
+    "artifact_rendering": "rendered",
+    "cached_export": false,
+    "can_dry_run": false,
+    "can_execute_live": false,
+    "can_import_action_file": false,
+    "company_id": null,
+    "company_name": null,
+    "currency": "VND",
+    "data_content_checksum": "3e744a0ef5f2a5eb26d600db5f15c5ddb04861b720ce2228f5461d3633a091f2",
+    "data_pack_id": "director-2026-06-14",
+    "data_pack_type": "director",
+    "data_sources": [
+      {
+        "confidence": "medium",
+        "domain": "finance",
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "freshness_status": "ok",
+        "note": "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections.",
+        "source_name": "finance",
+        "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings"
+      },
+      {
+        "confidence": "medium",
+        "domain": "orders",
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "freshness_status": "ok",
+        "note": "Estimated and realized profit are exported separately.",
+        "source_name": "orders",
+        "source_table_or_service": "ordertest2"
+      },
+      {
+        "confidence": "medium",
+        "domain": "crm",
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "freshness_status": "ok",
+        "note": "Some MarketingLead rows may be inferred from chat, pending orders or final orders.",
+        "source_name": "marketing_leads",
+        "source_table_or_service": "marketing_leads"
+      },
+      {
+        "confidence": "medium",
+        "domain": "ads",
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "freshness_status": "ok",
+        "note": "Multi-channel campaign/ad/keyword detail is partial.",
+        "source_name": "ads",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts"
+      },
+      {
+        "confidence": "low",
+        "domain": "operations",
+        "freshness_at": "2026-06-14T14:00:00.000Z",
+        "freshness_status": "ok",
+        "note": "Current data cannot determine remaining operation capacity.; Surfaced operational risk finding: high_sales_late_payment_agent; Surfaced operational risk finding: return_rate_above_policy_for_single_offer; Surfaced operational risk finding: inventory_movement_without_matching_purchase_order",
+        "source_name": "operations",
+        "source_table_or_service": "ordertest2, agentstatements, returnrequests, inventorytransactions, purchaseorders"
+      }
+    ],
+    "date_from": "2026-06-14",
+    "date_to": "2026-06-14",
+    "download_ready": true,
+    "export_format": "json",
+    "export_job_id": "AIDP-20260614045658-a295d333",
+    "export_mode": "partial_export",
+    "exported_at": "2026-06-14T04:56:59.123Z",
+    "freshness_gate_evaluated": true,
+    "generated_by_display": "Prompt 32 Demo Director",
+    "generated_by_role": "director",
+    "generated_by_user_id": "prompt32-demo-director",
+    "live_execution": false,
+    "policy_version": "official-partial-export-lifecycle-v1",
+    "provider_sync_attempted": false,
+    "redaction_profile": "director_redacted",
+    "redaction_runtime": "pre_rendered",
+    "report_date": "2026-06-14",
+    "runtime_export_checksum": "2d775c78d54a4e1c66425fffc9d97c07a6ddcc4188c56b5886431b0d466a2c6b",
+    "schema_version": "1.0",
+    "section_access_profile": "director-demo",
+    "sync_policy": "sync_if_stale",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "warnings": [
+      "company_id and company_name are not configured in a canonical source."
+    ]
+  },
+  "sections": {
+    "00_README": {
+      "data": [
+        {
+          "field": "data_pack_name",
+          "value": "Director Data Pack V1"
+        },
+        {
+          "field": "schema_version",
+          "value": "1.0"
+        },
+        {
+          "field": "report_date",
+          "value": "2026-06-14"
+        },
+        {
+          "field": "intended_reader",
+          "value": "Director and ChatGPT Web"
+        },
+        {
+          "field": "analysis_goal",
+          "value": "Daily management analysis using read-only ERP data"
+        },
+        {
+          "field": "do_not_execute_actions",
+          "value": true
+        },
+        {
+          "field": "read_order",
+          "value": "00_README -> 01_metadata -> 02_chatgpt_web_reading_rules -> 03_chatgpt_web_research_rules -> 04_director_manual_inputs -> 05_financial_context -> 06_financing_context -> 07_cashflow_scenarios -> 08_business_summary -> 09_marketing_profitability -> 10_service_group_performance -> 11_product_variant_performance -> 12_unit_economics -> 13_ltv_summary -> 14_sales_funnel -> 15_sales_team -> 16_operation_capacity -> 17_decision_history -> 18_alerts -> 19_data_quality -> 20_mapping_report -> 21_decision_options -> 22_permission_risk_limits -> 23_external_market_summary -> 24_field_aliases"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "01_metadata": {
+      "data": {
+        "artifact_class": "downloadable_redacted_artifact",
+        "artifact_rendering": "rendered",
+        "cached_export": false,
+        "can_dry_run": false,
+        "can_execute_live": false,
+        "can_import_action_file": false,
+        "company_id": null,
+        "company_name": null,
+        "currency": "VND",
+        "data_content_checksum": "3e744a0ef5f2a5eb26d600db5f15c5ddb04861b720ce2228f5461d3633a091f2",
+        "data_pack_id": "director-2026-06-14",
+        "data_pack_type": "director",
+        "data_sources": [
+          {
+            "confidence": "medium",
+            "domain": "finance",
+            "freshness_at": "2026-06-14T07:00:00.000Z",
+            "freshness_status": "ok",
+            "note": "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections.",
+            "source_name": "finance",
+            "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings"
+          },
+          {
+            "confidence": "medium",
+            "domain": "orders",
+            "freshness_at": "2026-06-14T00:00:00.000Z",
+            "freshness_status": "ok",
+            "note": "Estimated and realized profit are exported separately.",
+            "source_name": "orders",
+            "source_table_or_service": "ordertest2"
+          },
+          {
+            "confidence": "medium",
+            "domain": "crm",
+            "freshness_at": "2026-06-14T00:00:00.000Z",
+            "freshness_status": "ok",
+            "note": "Some MarketingLead rows may be inferred from chat, pending orders or final orders.",
+            "source_name": "marketing_leads",
+            "source_table_or_service": "marketing_leads"
+          },
+          {
+            "confidence": "medium",
+            "domain": "ads",
+            "freshness_at": "2026-06-14T07:00:00.000Z",
+            "freshness_status": "ok",
+            "note": "Multi-channel campaign/ad/keyword detail is partial.",
+            "source_name": "ads",
+            "source_table_or_service": "google_ads_* + adgroups + adaccounts"
+          },
+          {
+            "confidence": "low",
+            "domain": "operations",
+            "freshness_at": "2026-06-14T14:00:00.000Z",
+            "freshness_status": "ok",
+            "note": "Current data cannot determine remaining operation capacity.; Surfaced operational risk finding: high_sales_late_payment_agent; Surfaced operational risk finding: return_rate_above_policy_for_single_offer; Surfaced operational risk finding: inventory_movement_without_matching_purchase_order",
+            "source_name": "operations",
+            "source_table_or_service": "ordertest2, agentstatements, returnrequests, inventorytransactions, purchaseorders"
+          }
+        ],
+        "date_from": "2026-06-14",
+        "date_to": "2026-06-14",
+        "download_ready": true,
+        "export_format": "json",
+        "export_job_id": "AIDP-20260614045658-a295d333",
+        "export_mode": "partial_export",
+        "exported_at": "2026-06-14T04:56:59.123Z",
+        "freshness_gate_evaluated": true,
+        "generated_by_display": "Prompt 32 Demo Director",
+        "generated_by_role": "director",
+        "generated_by_user_id": "prompt32-demo-director",
+        "live_execution": false,
+        "policy_version": "official-partial-export-lifecycle-v1",
+        "provider_sync_attempted": false,
+        "redaction_profile": "director_redacted",
+        "redaction_runtime": "pre_rendered",
+        "report_date": "2026-06-14",
+        "runtime_export_checksum": "2d775c78d54a4e1c66425fffc9d97c07a6ddcc4188c56b5886431b0d466a2c6b",
+        "schema_version": "1.0",
+        "section_access_profile": "director-demo",
+        "sync_policy": "sync_if_stale",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "warnings": [
+          "company_id and company_name are not configured in a canonical source."
+        ]
+      },
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "02_chatgpt_web_reading_rules": {
+      "data": [
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-01",
+          "rule_text": "Không kết luận mạnh nếu data quality thấp.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-02",
+          "rule_text": "Không scale ads nếu mapping campaign → service thấp.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-03",
+          "rule_text": "Không tăng ngân sách mạnh nếu chưa rõ dòng tiền.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-04",
+          "rule_text": "Không dùng khoản vay giả định như tiền mặt thật.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-05",
+          "rule_text": "Không dùng LTV theo campaign nếu customer mapping chưa bền.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-06",
+          "rule_text": "Không kết luận sale kém nếu thiếu call/activity log.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-07",
+          "rule_text": "Không đề xuất tăng lead nếu vận hành đang quá tải hoặc capacity không rõ.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-08",
+          "rule_text": "Không đề xuất tắt campaign chủ lực nếu chưa đủ mẫu và chưa có duyệt.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-09",
+          "rule_text": "Luôn phân biệt estimated profit và realized profit.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-10",
+          "rule_text": "Luôn ghi rõ dữ liệu thiếu và việc cần kiểm tra thêm.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-11",
+          "rule_text": "Khi cần dữ liệu thị trường/đối thủ/pháp lý, ChatGPT Web phải nghiên cứu web và ghi nguồn.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-12",
+          "rule_text": "File hành động do ChatGPT Web tạo chỉ là nháp, ERP chưa được thực thi ngay.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "03_chatgpt_web_research_rules": {
+      "data": [
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "market_demand",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "competitor",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "ads_platform",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "legal_policy",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "customer_voice",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "seasonality",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "04_director_manual_inputs": {
+      "data": [
+        {
+          "_id": {
+            "buffer": {
+              "0": 13,
+              "1": 229,
+              "2": 115,
+              "3": 247,
+              "4": 120,
+              "5": 204,
+              "6": 200,
+              "7": 32,
+              "8": 189,
+              "9": 38,
+              "10": 245,
+              "11": 107
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "minimum_cash_reserve",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 50000000
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 72,
+              "1": 170,
+              "2": 201,
+              "3": 153,
+              "4": 162,
+              "5": 209,
+              "6": 98,
+              "7": 211,
+              "8": 110,
+              "9": 194,
+              "10": 80,
+              "11": 231
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "target_survival_months",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 3
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 89,
+              "1": 37,
+              "2": 149,
+              "3": 197,
+              "4": 12,
+              "5": 168,
+              "6": 226,
+              "7": 193,
+              "8": 151,
+              "9": 8,
+              "10": 216,
+              "11": 246
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "max_daily_ads_budget",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 8000000
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 204,
+              "1": 27,
+              "2": 181,
+              "3": 38,
+              "4": 73,
+              "5": 18,
+              "6": 130,
+              "7": 3,
+              "8": 14,
+              "9": 48,
+              "10": 72,
+              "11": 190
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "max_budget_increase_percent",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 15
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 100,
+              "1": 98,
+              "2": 109,
+              "3": 215,
+              "4": 108,
+              "5": 209,
+              "6": 74,
+              "7": 221,
+              "8": 127,
+              "9": 77,
+              "10": 222,
+              "11": 110
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "max_test_budget",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 20000000
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 233,
+              "1": 189,
+              "2": 95,
+              "3": 207,
+              "4": 180,
+              "5": 212,
+              "6": 93,
+              "7": 14,
+              "8": 25,
+              "9": 175,
+              "10": 128,
+              "11": 134
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "max_test_loss",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 6000000
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 108,
+              "1": 187,
+              "2": 104,
+              "3": 196,
+              "4": 21,
+              "5": 124,
+              "6": 244,
+              "7": 35,
+              "8": 142,
+              "9": 119,
+              "10": 135,
+              "11": 157
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "monthly_revenue_target",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 1200000000
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 72,
+              "1": 143,
+              "2": 96,
+              "3": 221,
+              "4": 35,
+              "5": 56,
+              "6": 66,
+              "7": 17,
+              "8": 65,
+              "9": 146,
+              "10": 245,
+              "11": 235
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "monthly_profit_target",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": 180000000
+          }
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 222,
+              "1": 114,
+              "2": 155,
+              "3": 67,
+              "4": 15,
+              "5": 146,
+              "6": 37,
+              "7": 72,
+              "8": 128,
+              "9": 123,
+              "10": 68,
+              "11": 216
+            }
+          },
+          "description": "DEMO_AIDP28 director manual input",
+          "key": "director_note_today",
+          "updatedAt": "2026-06-14T00:00:00.000Z",
+          "updatedBy": "synthetic_seed",
+          "value": {
+            "prefix": "DEMO_AIDP28",
+            "source": "synthetic_seed",
+            "value": "DEMO_AIDP28 watch cash gap, overdue agents, ad spend spike"
+          }
+        }
+      ],
+      "quality": {
+        "calculation_method": "Prompt32 minimal read-only harness over seeded local demo collections.",
+        "can_use_for_decision": "cautious",
+        "confidence": "low",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [],
+        "period": "current",
+        "source": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "warning": [
+          "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections.",
+          "SystemSettings is only a V1 manual-input alias; no dedicated approved/versioned model exists."
+        ]
+      }
+    },
+    "05_financial_context": {
+      "data": {
+        "ads_fund_remaining": 12000000,
+        "bank_balance": 85000000,
+        "cash_available": 85000000,
+        "committed_cash": 73000000,
+        "debt_service_next_30d": 41270000,
+        "debt_service_next_90d": 56780000,
+        "expected_cash_inflow_from_approved_loans": 70000000,
+        "forecast_7d": null,
+        "free_cash": 85000000,
+        "quality": {
+          "calculation_method": "Prompt32 minimal read-only harness over seeded local demo collections.",
+          "can_use_for_decision": "cautious",
+          "confidence": "medium",
+          "data_quality_status": "partial",
+          "data_state": "available",
+          "empty_reason": null,
+          "freshness_at": "2026-06-14T07:00:00.000Z",
+          "missing_fields": [],
+          "period": "current",
+          "source": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+          "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+          "warning": [
+            "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections."
+          ]
+        },
+        "quality_dimensions": {
+          "cash_balance_quality": {
+            "can_use_for_decision": "cautious",
+            "source": "available_fund_snapshots.available",
+            "status": "ok",
+            "value_state": "available"
+          },
+          "debt_schedule_quality": {
+            "can_use_for_decision": "cautious",
+            "source": "loanrepayments",
+            "status": "partial",
+            "value_state": "available"
+          },
+          "overall_financial_context_quality": {
+            "can_use_for_decision": "cautious",
+            "status": "partial",
+            "value_state": "available"
+          }
+        },
+        "survival_buffer": 16000000
+      },
+      "quality": {
+        "calculation_method": "Prompt32 minimal read-only harness over seeded local demo collections.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [],
+        "period": "current",
+        "source": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "warning": [
+          "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections."
+        ]
+      }
+    },
+    "06_financing_context": {
+      "data": [
+        {
+          "allowed_for_ads": false,
+          "amount": 50000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 35000000,
+          "disbursement_date": "2026-02-24T12:00:00.000Z",
+          "financing_id": "069f8a680346394baeb5dc45",
+          "interest_rate_year": 10,
+          "name": "DEMO_AIDP28 Loan 0001",
+          "risk_note": "DEMO_AIDP28 ads_financing",
+          "status": "partial",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 65000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 65000000,
+          "disbursement_date": "2026-02-25T12:00:00.000Z",
+          "financing_id": "bbe7663af9a4eca15b5e87d2",
+          "interest_rate_year": 11.5,
+          "name": "DEMO_AIDP28 Loan 0002",
+          "risk_note": "DEMO_AIDP28 inventory_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 80000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 80000000,
+          "disbursement_date": "2026-02-26T12:00:00.000Z",
+          "financing_id": "8684159fc0d3b2df57a263a8",
+          "interest_rate_year": 13,
+          "name": "DEMO_AIDP28 Loan 0003",
+          "risk_note": "DEMO_AIDP28 inventory_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 95000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 95000000,
+          "disbursement_date": "2026-02-27T12:00:00.000Z",
+          "financing_id": "a9ee3ebb43e51ea5e3e7b5b8",
+          "interest_rate_year": 14.5,
+          "name": "DEMO_AIDP28 Loan 0004",
+          "risk_note": "DEMO_AIDP28 ads_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 110000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 110000000,
+          "disbursement_date": "2026-02-28T12:00:00.000Z",
+          "financing_id": "f232df70dc0dbbc8f5a581c7",
+          "interest_rate_year": 16,
+          "name": "DEMO_AIDP28 Loan 0005",
+          "risk_note": "DEMO_AIDP28 inventory_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": false,
+          "amount": 125000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 125000000,
+          "disbursement_date": "2026-03-01T12:00:00.000Z",
+          "financing_id": "2ef0287e9865ba974b7bb0d5",
+          "interest_rate_year": 10,
+          "name": "DEMO_AIDP28 Loan 0006",
+          "risk_note": "DEMO_AIDP28 inventory_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 140000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 98000000,
+          "disbursement_date": "2026-03-02T12:00:00.000Z",
+          "financing_id": "da77304d51f1e09d8e95bb81",
+          "interest_rate_year": 11.5,
+          "name": "DEMO_AIDP28 Loan 0007",
+          "risk_note": "DEMO_AIDP28 ads_financing",
+          "status": "partial",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 155000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 155000000,
+          "disbursement_date": "2026-03-03T12:00:00.000Z",
+          "financing_id": "146a19d9a4390a4961f80004",
+          "interest_rate_year": 13,
+          "name": "DEMO_AIDP28 Loan 0008",
+          "risk_note": "DEMO_AIDP28 inventory_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 170000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 170000000,
+          "disbursement_date": "2026-03-04T12:00:00.000Z",
+          "financing_id": "e03703a8a9de4e6345d30504",
+          "interest_rate_year": 14.5,
+          "name": "DEMO_AIDP28 Loan 0009",
+          "risk_note": "DEMO_AIDP28 inventory_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        },
+        {
+          "allowed_for_ads": null,
+          "amount": 185000000,
+          "confidence": "medium",
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "disbursed_amount": 185000000,
+          "disbursement_date": "2026-03-05T12:00:00.000Z",
+          "financing_id": "970be9982cd0e62dba3678d4",
+          "interest_rate_year": 16,
+          "name": "DEMO_AIDP28 Loan 0010",
+          "risk_note": "DEMO_AIDP28 ads_financing",
+          "status": "fully",
+          "term_months": null,
+          "type": "loan"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Prompt32 minimal read-only harness over seeded local demo collections.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [],
+        "period": "current",
+        "source": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "warning": [
+          "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections."
+        ]
+      }
+    },
+    "07_cashflow_scenarios": {
+      "data": [
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "cash gap pressure",
+          "scenario": "labor",
+          "survival_buffer": 16000000
+        },
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "normal",
+          "scenario": "labor",
+          "survival_buffer": 16000000
+        },
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "cash gap pressure",
+          "scenario": "labor",
+          "survival_buffer": 16000000
+        },
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "normal",
+          "scenario": "ops",
+          "survival_buffer": 16000000
+        },
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "cash gap pressure",
+          "scenario": "agent",
+          "survival_buffer": 16000000
+        },
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "normal",
+          "scenario": "supplier",
+          "survival_buffer": 16000000
+        },
+        {
+          "cash_available": 85000000,
+          "committed_cash": 73000000,
+          "debt_service_next_30d": 41270000,
+          "debt_service_next_90d": 56780000,
+          "expected_cash_inflow": 70000000,
+          "quality_flag": "cash gap pressure",
+          "scenario": "debt",
+          "survival_buffer": 16000000
+        }
+      ],
+      "quality": {
+        "calculation_method": "Prompt32 minimal read-only harness over seeded local demo collections.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [],
+        "period": "current",
+        "source": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "warning": [
+          "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections."
+        ]
+      }
+    },
+    "08_business_summary": {
+      "data": {
+        "estimated_net_profit": -5916,
+        "estimated_net_profit_value_state": "estimated",
+        "gross_profit": 414084,
+        "orders": 10,
+        "realized_net_profit": 0,
+        "realized_net_profit_value_state": "missing",
+        "revenue": 1533884
+      },
+      "quality": {
+        "calculation_method": "Revenue and profit aggregated by Product; ProductCategory is V1 service_group alias.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "missing_fields": [
+          "durable_customer_id",
+          "durable_lead_id",
+          "cost_allocation_completion_status"
+        ],
+        "period": "custom",
+        "source": "ordertest2 + products + productcategories",
+        "source_table_or_service": "ordertest2",
+        "warning": [
+          "Estimated and realized profit are exported separately."
+        ]
+      }
+    },
+    "09_marketing_profitability": {
+      "data": [
+        {
+          "_id": {
+            "buffer": {
+              "0": 193,
+              "1": 251,
+              "2": 134,
+              "3": 44,
+              "4": 241,
+              "5": 254,
+              "6": 142,
+              "7": 225,
+              "8": 178,
+              "9": 146,
+              "10": 17,
+              "11": 2
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 1,
+          "costVnd": 4200000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 1117200,
+          "impressions": 1000,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": -1260000,
+          "orders": 1,
+          "revenue": 2940000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 83,
+              "1": 112,
+              "2": 44,
+              "3": 101,
+              "4": 180,
+              "5": 191,
+              "6": 3,
+              "7": 194,
+              "8": 98,
+              "9": 110,
+              "10": 121,
+              "11": 237
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 555000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 379620,
+          "impressions": 1180,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 194000,
+          "orders": 2,
+          "revenue": 999000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 95,
+              "1": 197,
+              "2": 28,
+              "3": 154,
+              "4": 4,
+              "5": 51,
+              "6": 21,
+              "7": 95,
+              "8": 192,
+              "9": 16,
+              "10": 146,
+              "11": 209
+            }
+          },
+          "adGroupId": "9100000036",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 960000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 656640,
+          "impressions": 1360,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 693000,
+          "orders": 2,
+          "revenue": 1728000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 31,
+              "1": 118,
+              "2": 194,
+              "3": 167,
+              "4": 217,
+              "5": 164,
+              "6": 107,
+              "7": 196,
+              "8": 102,
+              "9": 244,
+              "10": 255,
+              "11": 30
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 510000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 348840,
+          "impressions": 1540,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 83000,
+          "orders": 2,
+          "revenue": 918000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 194,
+              "1": 142,
+              "2": 60,
+              "3": 83,
+              "4": 194,
+              "5": 31,
+              "6": 118,
+              "7": 87,
+              "8": 197,
+              "9": 4,
+              "10": 56,
+              "11": 84
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 915000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 625860,
+          "impressions": 1720,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 582000,
+          "orders": 2,
+          "revenue": 1647000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 73,
+              "1": 196,
+              "2": 63,
+              "3": 212,
+              "4": 245,
+              "5": 5,
+              "6": 113,
+              "7": 233,
+              "8": 8,
+              "9": 73,
+              "10": 118,
+              "11": 120
+            }
+          },
+          "adGroupId": "9100000036",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 465000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 318060,
+          "impressions": 1900,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": -28000,
+          "orders": 2,
+          "revenue": 837000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 201,
+              "1": 7,
+              "2": 21,
+              "3": 184,
+              "4": 171,
+              "5": 106,
+              "6": 167,
+              "7": 203,
+              "8": 46,
+              "9": 252,
+              "10": 172,
+              "11": 218
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 870000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 595080,
+          "impressions": 2080,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 471000,
+          "orders": 2,
+          "revenue": 1566000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 195,
+              "1": 76,
+              "2": 110,
+              "3": 35,
+              "4": 253,
+              "5": 239,
+              "6": 27,
+              "7": 25,
+              "8": 158,
+              "9": 18,
+              "10": 248,
+              "11": 46
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 420000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 287280,
+          "impressions": 2260,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 286000,
+          "orders": 2,
+          "revenue": 756000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 213,
+              "1": 221,
+              "2": 197,
+              "3": 191,
+              "4": 126,
+              "5": 128,
+              "6": 24,
+              "7": 188,
+              "8": 17,
+              "9": 5,
+              "10": 117,
+              "11": 224
+            }
+          },
+          "adGroupId": "9100000036",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 825000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 564300,
+          "impressions": 2440,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 360000,
+          "orders": 2,
+          "revenue": 1485000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 130,
+              "1": 141,
+              "2": 248,
+              "3": 119,
+              "4": 238,
+              "5": 77,
+              "6": 65,
+              "7": 0,
+              "8": 66,
+              "9": 234,
+              "10": 52,
+              "11": 212
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 375000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 256500,
+          "impressions": 2620,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 175000,
+          "orders": 2,
+          "revenue": 675000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 93,
+              "1": 45,
+              "2": 225,
+              "3": 132,
+              "4": 58,
+              "5": 105,
+              "6": 35,
+              "7": 93,
+              "8": 221,
+              "9": 101,
+              "10": 222,
+              "11": 78
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 780000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 533520,
+          "impressions": 2800,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 249000,
+          "orders": 2,
+          "revenue": 1404000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 33,
+              "1": 106,
+              "2": 22,
+              "3": 30,
+              "4": 139,
+              "5": 8,
+              "6": 77,
+              "7": 220,
+              "8": 115,
+              "9": 76,
+              "10": 44,
+              "11": 113
+            }
+          },
+          "adGroupId": "9100000036",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 330000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 225720,
+          "impressions": 2980,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 64000,
+          "orders": 2,
+          "revenue": 594000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 20,
+              "1": 63,
+              "2": 52,
+              "3": 161,
+              "4": 87,
+              "5": 106,
+              "6": 182,
+              "7": 16,
+              "8": 3,
+              "9": 90,
+              "10": 24,
+              "11": 234
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 735000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 502740,
+          "impressions": 3160,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 563000,
+          "orders": 2,
+          "revenue": 1323000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 225,
+              "1": 180,
+              "2": 51,
+              "3": 197,
+              "4": 68,
+              "5": 164,
+              "6": 252,
+              "7": 205,
+              "8": 206,
+              "9": 234,
+              "10": 76,
+              "11": 14
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 285000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 194940,
+          "impressions": 3340,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": -47000,
+          "orders": 2,
+          "revenue": 513000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 96,
+              "1": 168,
+              "2": 8,
+              "3": 118,
+              "4": 224,
+              "5": 40,
+              "6": 185,
+              "7": 155,
+              "8": 27,
+              "9": 85,
+              "10": 14,
+              "11": 117
+            }
+          },
+          "adGroupId": "9100000036",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 690000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 471960,
+          "impressions": 3520,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 452000,
+          "orders": 2,
+          "revenue": 1242000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 97,
+              "1": 16,
+              "2": 13,
+              "3": 55,
+              "4": 116,
+              "5": 159,
+              "6": 187,
+              "7": 34,
+              "8": 184,
+              "9": 98,
+              "10": 183,
+              "11": 93
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 240000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 164160,
+          "impressions": 3700,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": -158000,
+          "orders": 2,
+          "revenue": 432000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 3,
+              "1": 250,
+              "2": 25,
+              "3": 66,
+              "4": 12,
+              "5": 132,
+              "6": 80,
+              "7": 199,
+              "8": 49,
+              "9": 143,
+              "10": 145,
+              "11": 140
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 645000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 441180,
+          "impressions": 3880,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 341000,
+          "orders": 2,
+          "revenue": 1161000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 208,
+              "1": 201,
+              "2": 11,
+              "3": 235,
+              "4": 51,
+              "5": 82,
+              "6": 145,
+              "7": 230,
+              "8": 11,
+              "9": 169,
+              "10": 93,
+              "11": 186
+            }
+          },
+          "adGroupId": "9100000036",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 195000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 133380,
+          "impressions": 4060,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 156000,
+          "orders": 2,
+          "revenue": 351000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 226,
+              "1": 10,
+              "2": 185,
+              "3": 202,
+              "4": 107,
+              "5": 240,
+              "6": 224,
+              "7": 55,
+              "8": 24,
+              "9": 219,
+              "10": 21,
+              "11": 89
+            }
+          },
+          "adGroupId": "9100000000",
+          "campaignId": "9000000000",
+          "clicks": 20,
+          "conversions": 3,
+          "costVnd": 600000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 410400,
+          "impressions": 4240,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 230000,
+          "orders": 2,
+          "revenue": 1080000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 182,
+              "1": 102,
+              "2": 165,
+              "3": 153,
+              "4": 97,
+              "5": 119,
+              "6": 138,
+              "7": 160,
+              "8": 189,
+              "9": 191,
+              "10": 214,
+              "11": 184
+            }
+          },
+          "adGroupId": "9100000018",
+          "campaignId": "9000000000",
+          "clicks": 80,
+          "conversions": 7,
+          "costVnd": 150000,
+          "customerId": "2800000000",
+          "date": "2026-06-14",
+          "grossProfit": 102600,
+          "impressions": 4420,
+          "lastSyncAt": "2026-06-14T07:00:00.000Z",
+          "level": "ad_group",
+          "netProfit": 45000,
+          "orders": 2,
+          "revenue": 270000
+        }
+      ],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "10_service_group_performance": {
+      "data": [
+        {
+          "gross_profit": 414084,
+          "net_profit": -5916,
+          "orders": 10,
+          "revenue": 1533884,
+          "service_group_id": "b9369ce97634aa80f83810d0",
+          "service_group_name": "DEMO_AIDP28 Service Card 0001"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Revenue and profit aggregated by Product; ProductCategory is V1 service_group alias.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "missing_fields": [
+          "durable_customer_id",
+          "durable_lead_id",
+          "cost_allocation_completion_status"
+        ],
+        "period": "custom",
+        "source": "ordertest2 + products + productcategories",
+        "source_table_or_service": "ordertest2",
+        "warning": [
+          "Estimated and realized profit are exported separately."
+        ]
+      }
+    },
+    "11_product_variant_performance": {
+      "data": [
+        {
+          "gross_profit": 414084,
+          "net_profit": -5916,
+          "orders": 10,
+          "product_variant_id": "eefba5e1ff2a1602b60debb7",
+          "product_variant_name": "DEMO_AIDP28 Service Card 12M",
+          "quantity": 10,
+          "realized_net_profit": 0,
+          "revenue": 1533884,
+          "service_group_id": "b9369ce97634aa80f83810d0",
+          "service_group_name": "DEMO_AIDP28 Service Card 0001",
+          "sku": "DEMO_AIDP28_SKU_0001"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Revenue and profit aggregated by Product; ProductCategory is V1 service_group alias.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "missing_fields": [
+          "durable_customer_id",
+          "durable_lead_id",
+          "cost_allocation_completion_status"
+        ],
+        "period": "custom",
+        "source": "ordertest2 + products + productcategories",
+        "source_table_or_service": "ordertest2",
+        "warning": [
+          "Estimated and realized profit are exported separately."
+        ]
+      }
+    },
+    "12_unit_economics": {
+      "data": [
+        {
+          "average_net_profit_per_order": -591.6,
+          "average_revenue_per_order": 153388.4,
+          "gross_profit": 414084,
+          "net_profit": -5916,
+          "orders": 10,
+          "product_variant_id": "eefba5e1ff2a1602b60debb7",
+          "product_variant_name": "DEMO_AIDP28 Service Card 12M",
+          "quantity": 10,
+          "realized_net_profit": 0,
+          "revenue": 1533884,
+          "service_group_id": "b9369ce97634aa80f83810d0",
+          "service_group_name": "DEMO_AIDP28 Service Card 0001",
+          "sku": "DEMO_AIDP28_SKU_0001"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Revenue and profit aggregated by Product; ProductCategory is V1 service_group alias.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "missing_fields": [
+          "durable_customer_id",
+          "durable_lead_id",
+          "cost_allocation_completion_status"
+        ],
+        "period": "custom",
+        "source": "ordertest2 + products + productcategories",
+        "source_table_or_service": "ordertest2",
+        "warning": [
+          "Estimated and realized profit are exported separately."
+        ]
+      }
+    },
+    "13_ltv_summary": {
+      "data": [
+        {
+          "customer_records": 1400,
+          "ltv": null,
+          "status": "unavailable"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Count only; no strong LTV because orders lack durable customerId.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "weak",
+        "data_state": "weak_mapping",
+        "empty_reason": "weak_mapping",
+        "freshness_at": "2026-06-14T08:00:00.000Z",
+        "missing_fields": [
+          "durable_order_customer_relation",
+          "customer_source_campaign_relation",
+          "repeat_order_history_link"
+        ],
+        "period": "current",
+        "source": "customers derived from orders",
+        "source_table_or_service": "customers",
+        "warning": [
+          "Do not use campaign LTV strongly. Customer mapping is approximate."
+        ]
+      }
+    },
+    "14_sales_funnel": {
+      "data": [
+        {
+          "count": 3,
+          "status": "no_response"
+        },
+        {
+          "count": 2,
+          "status": "lost"
+        },
+        {
+          "count": 2,
+          "status": "quoted"
+        },
+        {
+          "count": 2,
+          "status": "contacted"
+        },
+        {
+          "count": 2,
+          "status": "won"
+        },
+        {
+          "count": 2,
+          "status": "qualified"
+        },
+        {
+          "count": 1,
+          "status": "new"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Read-only aggregation of lead status/source/mapping fields.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "missing_fields": [
+          "product_or_service_interest",
+          "assignment_history",
+          "call_activity_log",
+          "status_history"
+        ],
+        "period": "custom",
+        "source": "marketing_leads",
+        "source_table_or_service": "marketing_leads",
+        "warning": [
+          "Some MarketingLead rows may be inferred from chat, pending orders or final orders."
+        ]
+      }
+    },
+    "15_sales_team": {
+      "data": [
+        {
+          "lead_count": 14,
+          "sale_id": "a8653371f4d5d85990841673"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Read-only aggregation of lead status/source/mapping fields.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T00:00:00.000Z",
+        "missing_fields": [
+          "product_or_service_interest",
+          "assignment_history",
+          "call_activity_log",
+          "status_history"
+        ],
+        "period": "custom",
+        "source": "marketing_leads",
+        "source_table_or_service": "marketing_leads",
+        "warning": [
+          "Some MarketingLead rows may be inferred from chat, pending orders or final orders."
+        ]
+      }
+    },
+    "16_operation_capacity": {
+      "data": [
+        {
+          "capacity_remaining": null,
+          "count": 1635,
+          "status": "Completed / completed"
+        },
+        {
+          "capacity_remaining": null,
+          "count": 126,
+          "status": "Returned / returned"
+        },
+        {
+          "affected_count": 62,
+          "capacity_remaining": null,
+          "evidence_note": "late_payment_agent",
+          "finding_key": "high_sales_late_payment_agent",
+          "max_closing_balance": 1695000,
+          "max_period_collected": 9040000,
+          "source_collection": "agentstatements",
+          "status": "risk_signal"
+        },
+        {
+          "affected_count": 100,
+          "alias": "return_rate_above_policy",
+          "capacity_remaining": null,
+          "evidence_note": "high_return_product",
+          "finding_key": "return_rate_above_policy_for_single_offer",
+          "pending_count": 20,
+          "source_collection": "returnrequests",
+          "status": "risk_signal"
+        },
+        {
+          "affected_count": 54,
+          "alias": "inventory_movement_gap",
+          "capacity_remaining": null,
+          "evidence_note": "inventory_movement_without_matching_purchase_order",
+          "finding_key": "inventory_movement_without_matching_purchase_order",
+          "sample_product_id": "eefba5e1ff2a1602b60debb7",
+          "source_collection": "inventorytransactions",
+          "status": "risk_signal"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Open order counts by current status plus deterministic operational risk signals surfaced for Director demo review.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "weak",
+        "data_state": "weak_mapping",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T14:00:00.000Z",
+        "missing_fields": [
+          "capacity_baseline",
+          "deadline_sla",
+          "status_history",
+          "staff_availability"
+        ],
+        "period": "current",
+        "source": "ordertest2 status counts + agent statements + return requests + inventory movement checks",
+        "source_table_or_service": "ordertest2, agentstatements, returnrequests, inventorytransactions, purchaseorders",
+        "warning": [
+          "Current data cannot determine remaining operation capacity.",
+          "Surfaced operational risk finding: high_sales_late_payment_agent",
+          "Surfaced operational risk finding: return_rate_above_policy_for_single_offer",
+          "Surfaced operational risk finding: inventory_movement_without_matching_purchase_order"
+        ]
+      }
+    },
+    "17_decision_history": {
+      "data": {
+        "decisions": [],
+        "evaluations": [],
+        "metadata": {
+          "company_id": null,
+          "company_name": null,
+          "currency": "VND",
+          "data_content_checksum": "1e93ee749a2dfb09edff6de6e1d80c0a7ee94bdd582ec066085ad8fe4ef809b8",
+          "data_pack_id": "decision_history-2026-06-14",
+          "data_pack_type": "decision_history",
+          "data_sources": [],
+          "date_range": {
+            "from": "2026-06-14",
+            "to": "2026-06-14"
+          },
+          "export_format": "json",
+          "exported_at": "2026-06-14T04:56:59.093Z",
+          "generated_by_display": "Prompt 32 Demo Director",
+          "generated_by_role": "director",
+          "generated_by_user_id": "prompt32-demo-director",
+          "report_date": "2026-06-14",
+          "runtime_export_checksum": "0c2ce28661ec93accafe3f63c13af8e6d1790406330fc182cc47c5f7a55141bc",
+          "schema_version": "1.0",
+          "timezone": "Asia/Ho_Chi_Minh",
+          "warnings": [
+            "company_id and company_name are not configured in a canonical source."
+          ]
+        },
+        "quality": {
+          "can_use_for_decision": "no",
+          "confidence": "low",
+          "data_quality_status": "missing",
+          "missing_fields": [
+            "unified_cross_domain_decision_history"
+          ],
+          "source": "Google Ads and legacy ads read-only decision/evaluation logs",
+          "warning": [
+            "Google decision history is stronger than other domains."
+          ]
+        }
+      },
+      "quality": {
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "missing_fields": [
+          "unified_cross_domain_decision_history"
+        ],
+        "source": "Google Ads and legacy ads read-only decision/evaluation logs",
+        "warning": [
+          "Google decision history is stronger than other domains."
+        ]
+      }
+    },
+    "18_alerts": {
+      "data": [
+        {
+          "_id": {
+            "buffer": {
+              "0": 21,
+              "1": 236,
+              "2": 123,
+              "3": 181,
+              "4": 220,
+              "5": 126,
+              "6": 40,
+              "7": 83,
+              "8": 239,
+              "9": 1,
+              "10": 222,
+              "11": 119
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0001",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding supplier_cost_up_15_percent_without_matching_dealer_price_update",
+          "severity": "CRITICAL",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 1000000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 53,
+              "1": 197,
+              "2": 214,
+              "3": 146,
+              "4": 255,
+              "5": 41,
+              "6": 227,
+              "7": 170,
+              "8": 253,
+              "9": 231,
+              "10": 17,
+              "11": 13
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0002",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding ad_spend_spike_with_lower_lead_volume",
+          "severity": "DANGER",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 1500000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 37,
+              "1": 117,
+              "2": 59,
+              "3": 234,
+              "4": 151,
+              "5": 22,
+              "6": 99,
+              "7": 125,
+              "8": 111,
+              "9": 196,
+              "10": 19,
+              "11": 53
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0003",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding cash_gap_next_7_days_from_agent_receivable_delay",
+          "severity": "WARNING",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 2000000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 135,
+              "1": 240,
+              "2": 67,
+              "3": 172,
+              "4": 211,
+              "5": 232,
+              "6": 197,
+              "7": 227,
+              "8": 198,
+              "9": 10,
+              "10": 91,
+              "11": 78
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0004",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding overdue_dealer_receivables_for_high_revenue_agent",
+          "severity": "CRITICAL",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 2500000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 218,
+              "1": 99,
+              "2": 20,
+              "3": 54,
+              "4": 245,
+              "5": 126,
+              "6": 95,
+              "7": 251,
+              "8": 176,
+              "9": 105,
+              "10": 20,
+              "11": 59
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0005",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding best_selling_product_low_inventory",
+          "severity": "DANGER",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 3000000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 22,
+              "1": 25,
+              "2": 199,
+              "3": 114,
+              "4": 164,
+              "5": 151,
+              "6": 177,
+              "7": 72,
+              "8": 241,
+              "9": 225,
+              "10": 232,
+              "11": 205
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0006",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding labor_overtime_high_without_matching_revenue_growth",
+          "severity": "WARNING",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 3500000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 147,
+              "1": 225,
+              "2": 98,
+              "3": 172,
+              "4": 133,
+              "5": 90,
+              "6": 67,
+              "7": 135,
+              "8": 106,
+              "9": 226,
+              "10": 171,
+              "11": 141
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0007",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding negative_margin_product_group",
+          "severity": "CRITICAL",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 4000000
+        },
+        {
+          "_id": {
+            "buffer": {
+              "0": 174,
+              "1": 111,
+              "2": 186,
+              "3": 27,
+              "4": 68,
+              "5": 222,
+              "6": 113,
+              "7": 163,
+              "8": 63,
+              "9": 112,
+              "10": 244,
+              "11": 253
+            }
+          },
+          "code": "DEMO_AIDP28_ALERT_0008",
+          "createdAt": "2026-06-14T07:00:00.000Z",
+          "isResolved": false,
+          "message": "DEMO_AIDP28 expected AI finding slow_reliability_supplier_with_good_cost",
+          "severity": "DANGER",
+          "threshold": 800000,
+          "updatedAt": "2026-06-14T07:00:00.000Z",
+          "value": 4500000
+        }
+      ],
+      "quality": {
+        "calculation_method": "Prompt32 minimal read-only harness over seeded local demo collections.",
+        "can_use_for_decision": "cautious",
+        "confidence": "medium",
+        "data_quality_status": "partial",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [],
+        "period": "current",
+        "source": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "source_table_or_service": "available_fund_snapshots + loancontracts + finance_alert_events + system_settings",
+        "warning": [
+          "Full FinanceModule runtime was not used; values are sourced read-only from demo Mongo collections."
+        ]
+      }
+    },
+    "19_data_quality": {
+      "data": {
+        "decision_gate": {
+          "blocking_reasons": [
+            "order_lead_mapping_rate: order_lead_mapping_rate is below 80.",
+            "order_customer_mapping_rate: Order has no durable customerId field.",
+            "attribution_confidence: Durable order-customer and full attribution links are missing."
+          ],
+          "can_conclude_profit": true,
+          "can_dry_run": false,
+          "can_execute_live": false,
+          "can_generate_action_draft": true,
+          "can_import_action_file": false,
+          "can_recommend_ads_scale": false,
+          "can_use_ltv_strongly": false,
+          "warnings": [
+            "estimated_vs_realized_profit_rate: estimated_vs_realized_profit_rate is below 80."
+          ]
+        },
+        "metadata": {
+          "company_id": null,
+          "company_name": null,
+          "currency": "VND",
+          "data_content_checksum": "7065ff33e5d71f92d6573934b688bf235ca84c4e92f6fabb925c7e03c44b5463",
+          "data_pack_id": "data_quality-2026-06-14",
+          "data_pack_type": "data_quality",
+          "data_sources": [],
+          "export_format": "json",
+          "exported_at": "2026-06-14T04:56:59.059Z",
+          "generated_by_display": "Prompt 32 Demo Director",
+          "generated_by_role": "director",
+          "generated_by_user_id": "prompt32-demo-director",
+          "report_date": "2026-06-14",
+          "runtime_export_checksum": "714c0c7d0f58a30aeb6daed719efe525f936965da029895c1ef86e5e35fbcc91",
+          "schema_version": "1.0",
+          "timezone": "Asia/Ho_Chi_Minh",
+          "warnings": [
+            "company_id and company_name are not configured in a canonical source."
+          ]
+        },
+        "metrics": [
+          {
+            "denominator": 14,
+            "metric": "lead_source_mapping_rate",
+            "numerator": 14,
+            "status": "ok",
+            "threshold": 90,
+            "unit": "percent",
+            "value": 100,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": 14,
+            "metric": "lead_campaign_mapping_rate",
+            "numerator": 14,
+            "status": "ok",
+            "threshold": 80,
+            "unit": "percent",
+            "value": 100,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": 10,
+            "metric": "order_lead_mapping_rate",
+            "numerator": 0,
+            "status": "blocked",
+            "threshold": 80,
+            "unit": "percent",
+            "value": 0,
+            "value_state": "zero_value",
+            "warning": "order_lead_mapping_rate is below 80."
+          },
+          {
+            "denominator": 10,
+            "metric": "order_service_mapping_rate",
+            "numerator": 10,
+            "status": "ok",
+            "threshold": 90,
+            "unit": "percent",
+            "value": 100,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": 10,
+            "metric": "order_customer_mapping_rate",
+            "numerator": 0,
+            "status": "blocked",
+            "threshold": 90,
+            "unit": "percent",
+            "value": 0,
+            "value_state": "zero_value",
+            "warning": "Order has no durable customerId field."
+          },
+          {
+            "denominator": 10,
+            "metric": "order_profit_completion_rate",
+            "numerator": 10,
+            "status": "ok",
+            "threshold": 80,
+            "unit": "percent",
+            "value": 100,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": 54,
+            "metric": "campaign_service_mapping_rate",
+            "numerator": 54,
+            "status": "ok",
+            "threshold": 80,
+            "unit": "percent",
+            "value": 100,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": 1,
+            "metric": "ads_sync_success_rate",
+            "numerator": 1,
+            "status": "ok",
+            "threshold": 95,
+            "unit": "percent",
+            "value": 100,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": null,
+            "metric": "ads_data_freshness_hours",
+            "numerator": null,
+            "status": "ok",
+            "threshold": 24,
+            "unit": "hours",
+            "value": -2.05,
+            "value_state": "available",
+            "warning": null
+          },
+          {
+            "denominator": null,
+            "metric": "attribution_confidence",
+            "numerator": null,
+            "status": "blocked",
+            "threshold": 0.8,
+            "unit": "score",
+            "value": 0.55,
+            "value_state": "weak_mapping",
+            "warning": "Durable order-customer and full attribution links are missing."
+          },
+          {
+            "denominator": 10,
+            "metric": "estimated_vs_realized_profit_rate",
+            "numerator": 0,
+            "status": "warning",
+            "threshold": 80,
+            "unit": "percent",
+            "value": 0,
+            "value_state": "zero_value",
+            "warning": "estimated_vs_realized_profit_rate is below 80."
+          }
+        ],
+        "quality": {
+          "calculation_method": "Deterministic V1 mapping/completeness/freshness formulas.",
+          "can_use_for_decision": "cautious",
+          "confidence": "low",
+          "data_quality_status": "weak",
+          "data_state": "weak_mapping",
+          "empty_reason": null,
+          "freshness_at": "2026-06-14T07:00:00.000Z",
+          "missing_fields": [],
+          "period": "custom",
+          "source": "AI Data Pack quality calculator",
+          "source_table_or_service": "ordertest2, marketing_leads, adgroups, google_ads_sync_runs",
+          "warning": [
+            "order_lead_mapping_rate: order_lead_mapping_rate is below 80.",
+            "order_customer_mapping_rate: Order has no durable customerId field.",
+            "attribution_confidence: Durable order-customer and full attribution links are missing.",
+            "estimated_vs_realized_profit_rate: estimated_vs_realized_profit_rate is below 80."
+          ]
+        }
+      },
+      "quality": {
+        "calculation_method": "Deterministic V1 mapping/completeness/freshness formulas.",
+        "can_use_for_decision": "cautious",
+        "confidence": "low",
+        "data_quality_status": "weak",
+        "data_state": "weak_mapping",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [],
+        "period": "custom",
+        "source": "AI Data Pack quality calculator",
+        "source_table_or_service": "ordertest2, marketing_leads, adgroups, google_ads_sync_runs",
+        "warning": [
+          "order_lead_mapping_rate: order_lead_mapping_rate is below 80.",
+          "order_customer_mapping_rate: Order has no durable customerId field.",
+          "attribution_confidence: Durable order-customer and full attribution links are missing.",
+          "estimated_vs_realized_profit_rate: estimated_vs_realized_profit_rate is below 80."
+        ]
+      }
+    },
+    "20_mapping_report": {
+      "data": {
+        "metadata": {
+          "company_id": null,
+          "company_name": null,
+          "currency": "VND",
+          "data_content_checksum": "35d37843af5a0ee5d7d675a20fc1a8e33da7ce7b3ec3796c38883450dd58d3ea",
+          "data_pack_id": "mapping_report-2026-06-14",
+          "data_pack_type": "mapping_report",
+          "data_sources": [],
+          "export_format": "json",
+          "exported_at": "2026-06-14T04:56:59.067Z",
+          "generated_by_display": "Prompt 32 Demo Director",
+          "generated_by_role": "director",
+          "generated_by_user_id": "prompt32-demo-director",
+          "report_date": "2026-06-14",
+          "runtime_export_checksum": "17893b0bfa53f59973d2d00936b554f05e4942cc780b955159273c3520d8b094",
+          "schema_version": "1.0",
+          "timezone": "Asia/Ho_Chi_Minh",
+          "warnings": [
+            "company_id and company_name are not configured in a canonical source."
+          ]
+        },
+        "overall_attribution_confidence": 0.55,
+        "quality": {
+          "calculation_method": "Segment completeness rates plus capped weighted attribution confidence.",
+          "can_use_for_decision": "no",
+          "confidence": "medium",
+          "data_quality_status": "weak",
+          "data_state": "weak_mapping",
+          "empty_reason": null,
+          "freshness_at": "2026-06-14T07:00:00.000Z",
+          "missing_fields": [
+            "ad_creative_to_keyword_search_term",
+            "keyword_search_term_to_utm_landing",
+            "utm_landing_to_lead",
+            "lead_to_order",
+            "order_to_customer",
+            "customer_to_order"
+          ],
+          "period": "custom",
+          "source": "AI Data Pack mapping calculator",
+          "source_table_or_service": "ads, marketing_leads, ordertest2, products",
+          "warning": [
+            "Attribution confidence is below 0.8; ads scale/live decisions are blocked."
+          ]
+        },
+        "segments": [
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "ads_platform_to_ads_account",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ads_platform",
+            "target_entity": "ads_account"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "ads_account_to_campaign",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ads_account",
+            "target_entity": "campaign"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "platform_account_to_campaign",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ads_account",
+            "target_entity": "campaign"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "campaign_to_ad_group",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "campaign",
+            "target_entity": "ad_group"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "ad_group_to_ad_creative",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "ad_group",
+            "target_entity": "ad_or_creative"
+          },
+          {
+            "broken_reason": "Search term to ad/lead mapping is unavailable.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": 0,
+            "mapping_segment": "ad_creative_to_keyword_search_term",
+            "missing_count": 54,
+            "required_fix_priority": "P1",
+            "source_entity": "ad_or_creative",
+            "target_entity": "keyword_or_search_term"
+          },
+          {
+            "broken_reason": "UTM/search-term tracking is unavailable.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": 0,
+            "mapping_segment": "keyword_search_term_to_utm_landing",
+            "missing_count": 54,
+            "required_fix_priority": "P0",
+            "source_entity": "keyword_or_search_term",
+            "target_entity": "utm_or_landing_page"
+          },
+          {
+            "broken_reason": "Lead has no durable UTM/landing-page relation.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": 0,
+            "mapping_segment": "utm_landing_to_lead",
+            "missing_count": 14,
+            "required_fix_priority": "P0",
+            "source_entity": "utm_or_landing_page",
+            "target_entity": "lead"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "ad_group_to_lead",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ad_group",
+            "target_entity": "lead"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "lead_to_sale",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "lead",
+            "target_entity": "sale"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "lead_to_customer",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "lead",
+            "target_entity": "customer"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "sale_to_customer",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "sale",
+            "target_entity": "customer"
+          },
+          {
+            "broken_reason": "Many orders do not retain a durable lead relation.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": 0,
+            "mapping_segment": "lead_to_order",
+            "missing_count": 14,
+            "required_fix_priority": "P0",
+            "source_entity": "lead",
+            "target_entity": "order"
+          },
+          {
+            "broken_reason": "TestOrder2 has no durable customerId.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": 0,
+            "mapping_segment": "order_to_customer",
+            "missing_count": 10,
+            "required_fix_priority": "P0",
+            "source_entity": "order",
+            "target_entity": "customer"
+          },
+          {
+            "broken_reason": "TestOrder2 has no durable customerId and Customer only retains latestOrderId.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": 0,
+            "mapping_segment": "customer_to_order",
+            "missing_count": 10,
+            "required_fix_priority": "P0",
+            "source_entity": "customer",
+            "target_entity": "order"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "order_to_product_variant",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "order",
+            "target_entity": "product_variant"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "product_variant_to_service_group",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "product_variant",
+            "target_entity": "service_group"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "ad_group_to_service_group",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ad_group",
+            "target_entity": "service_group"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "order_to_profit",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "order",
+            "target_entity": "gross_and_net_profit"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "product_variant_to_revenue",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "product_variant",
+            "target_entity": "revenue"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "revenue_to_gross_profit",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "revenue",
+            "target_entity": "gross_profit"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "gross_profit_to_net_profit",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "gross_profit",
+            "target_entity": "net_profit"
+          }
+        ]
+      },
+      "quality": {
+        "calculation_method": "Segment completeness rates plus capped weighted attribution confidence.",
+        "can_use_for_decision": "no",
+        "confidence": "medium",
+        "data_quality_status": "weak",
+        "data_state": "weak_mapping",
+        "empty_reason": null,
+        "freshness_at": "2026-06-14T07:00:00.000Z",
+        "missing_fields": [
+          "ad_creative_to_keyword_search_term",
+          "keyword_search_term_to_utm_landing",
+          "utm_landing_to_lead",
+          "lead_to_order",
+          "order_to_customer",
+          "customer_to_order"
+        ],
+        "period": "custom",
+        "source": "AI Data Pack mapping calculator",
+        "source_table_or_service": "ads, marketing_leads, ordertest2, products",
+        "warning": [
+          "Attribution confidence is below 0.8; ads scale/live decisions are blocked."
+        ]
+      }
+    },
+    "21_decision_options": {
+      "data": [],
+      "quality": {
+        "calculation_method": null,
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "data_state": "schema_only",
+        "empty_reason": "schema_only",
+        "freshness_at": null,
+        "missing_fields": [
+          "approved_business_targets",
+          "protected_and_test_allowlists"
+        ],
+        "period": "current",
+        "source": "decision options",
+        "source_table_or_service": null,
+        "warning": [
+          "No cross-domain decision option contract is populated in V1."
+        ]
+      }
+    },
+    "22_permission_risk_limits": {
+      "data": [
+        {
+          "enabled": true,
+          "rule": "read_only_export"
+        },
+        {
+          "enabled": false,
+          "rule": "action_file_import"
+        },
+        {
+          "enabled": false,
+          "rule": "generic_dry_run"
+        },
+        {
+          "enabled": false,
+          "rule": "live_execution"
+        },
+        {
+          "enabled": false,
+          "rule": "openai_integration"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "23_external_market_summary": {
+      "data": [],
+      "quality": {
+        "calculation_method": null,
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "data_state": "schema_only",
+        "empty_reason": "schema_only",
+        "freshness_at": null,
+        "missing_fields": [
+          "researched_sources"
+        ],
+        "period": "current",
+        "source": "external market research",
+        "source_table_or_service": null,
+        "warning": [
+          "ERP does not research the web in the read-only export layer."
+        ]
+      }
+    },
+    "24_field_aliases": {
+      "data": [
+        {
+          "confidence": "medium",
+          "erp_entity": "ProductCategory",
+          "note": "V1 alias; cần xác nhận taxonomy.",
+          "standard_entity": "service_group"
+        },
+        {
+          "confidence": "medium",
+          "erp_entity": "Product",
+          "note": "Order và profit tính theo Product.",
+          "standard_entity": "product_variant"
+        },
+        {
+          "confidence": "medium",
+          "erp_entity": "MarketingLead",
+          "note": "Một phần lead được suy diễn.",
+          "standard_entity": "lead"
+        },
+        {
+          "confidence": "high",
+          "erp_entity": "TestOrder2",
+          "note": "Nguồn order/profit chính.",
+          "standard_entity": "order"
+        },
+        {
+          "confidence": "medium",
+          "erp_entity": "AdGroup",
+          "note": "Multi-channel mapping ở cấp ad group.",
+          "standard_entity": "ad_group"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "data_state": "available",
+        "empty_reason": null,
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    }
+  }
+}

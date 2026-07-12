@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { FinanceService } from './finance.service';
@@ -10,6 +10,7 @@ import { CreateCashflowEntryDto } from './dto/create-cashflow-entry.dto';
 import { CreateLoanContractDto } from './dto/create-loan-contract.dto';
 import { UpdateLoanContractDto } from './dto/update-loan-contract.dto';
 import { CreateLoanRepaymentDto } from './dto/create-loan-repayment.dto';
+import { MarkRepaymentPaidDto } from './dto/mark-repayment-paid.dto';
 import { CaptureAvailableFundDto } from './dto/capture-available-fund.dto';
 import { CashflowSafetyService } from './cashflow-safety.service';
 import { AutoScaleDecisionService } from './auto-scale-decision.service';
@@ -30,6 +31,7 @@ export class FinanceController {
 
   // Funding sources (vay vốn / góp vốn / nội bộ)
   @Post('funding-sources')
+  @RequirePermissions('finance.cashflow.manage')
   createFundingSource(@Body() dto: CreateFundingSourceDto) {
     return this.financeService.createFundingSource(dto);
   }
@@ -40,29 +42,37 @@ export class FinanceController {
   }
 
   @Patch('funding-sources/:id')
+  @RequirePermissions('finance.cashflow.manage')
   updateFundingSource(@Param('id') id: string, @Body() dto: UpdateFundingSourceDto) {
     return this.financeService.updateFundingSource(id, dto);
   }
 
   // Budget buckets (ngân sách theo nhóm sản phẩm / kênh)
   @Post('budget-buckets')
+  @RequirePermissions('finance', 'finance.budget-buckets.manage')
   createBudgetBucket(@Body() dto: CreateBudgetBucketDto) {
     return this.financeService.createBudgetBucket(dto);
   }
 
   @Get('budget-buckets')
-  listBudgetBuckets() {
-    return this.financeService.listBudgetBuckets();
+  listBudgetBuckets(@Query('active') active?: string) {
+    const activeFilter = active === 'true' ? true : active === 'false' ? false : undefined;
+    return this.financeService.listBudgetBuckets(activeFilter);
   }
 
   @Patch('budget-buckets/:id')
+  @RequirePermissions('finance', 'finance.budget-buckets.manage')
   updateBudgetBucket(@Param('id') id: string, @Body() dto: UpdateBudgetBucketDto) {
     return this.financeService.updateBudgetBucket(id, dto);
   }
 
   // Cashflow entries (tiền vào/ra)
   @Post('cashflows')
+  @RequirePermissions('finance.cashflow.manage')
   createCashflow(@Body() dto: CreateCashflowEntryDto) {
+    if (!String(dto.idempotencyKey || '').trim()) {
+      throw new BadRequestException('idempotencyKey is required for cashflow creation');
+    }
     return this.financeService.createCashflow(dto);
   }
 
@@ -71,8 +81,9 @@ export class FinanceController {
     @Query('direction') direction?: string,
     @Query('sourceType') sourceType?: string,
     @Query('bucketId') bucketId?: string,
+    @Query('category') category?: string,
   ) {
-    return this.financeService.listCashflows({ direction, sourceType, bucketId });
+    return this.financeService.listCashflows({ direction, sourceType, bucketId, category });
   }
 
   // Tổng quan ngân sách và nguồn vốn
@@ -97,12 +108,14 @@ export class FinanceController {
   }
 
   @Post('available-funds/capture')
+  @RequirePermissions('finance.cashflow.manage')
   captureAvailable(@Body() dto: CaptureAvailableFundDto) {
     return this.financeService.captureAvailableFunds(dto);
   }
 
   // Loan management
   @Post('loans')
+  @RequirePermissions('finance.loan.manage')
   createLoan(@Body() dto: CreateLoanContractDto) {
     return this.financeService.createLoanContract(dto);
   }
@@ -123,6 +136,7 @@ export class FinanceController {
   }
 
   @Patch('loans/:id')
+  @RequirePermissions('finance.loan.manage')
   updateLoan(@Param('id') id: string, @Body() dto: UpdateLoanContractDto) {
     return this.financeService.updateLoanContract(id, dto);
   }
@@ -133,6 +147,7 @@ export class FinanceController {
   }
 
   @Post('loans/:id/repayments')
+  @RequirePermissions('finance.loan.manage')
   createRepayment(@Param('id') id: string, @Body() dto: CreateLoanRepaymentDto) {
     return this.financeService.createLoanRepayment({ ...dto, loanId: id });
   }
@@ -156,9 +171,10 @@ export class FinanceController {
    * Ghi nhận giải ngân khoản vay (tiền VÀO Bank Balance)
    */
   @Post('loans/:id/disburse')
+  @RequirePermissions('finance.loan.manage')
   recordDisbursement(
     @Param('id') id: string,
-    @Body() dto: { amount: number; date?: string; notes?: string },
+    @Body() dto: { amount: number; date?: string; notes?: string; idempotencyKey?: string },
   ) {
     return this.financeService.recordDisbursement(id, dto);
   }
@@ -168,9 +184,10 @@ export class FinanceController {
    * Đánh dấu một kỳ trả nợ đã trả
    */
   @Post('repayments/:id/pay')
+  @RequirePermissions('finance.loan.manage')
   markRepaymentPaid(
     @Param('id') id: string,
-    @Body() dto: { paidDate?: string; referenceId?: string; notes?: string },
+    @Body() dto: MarkRepaymentPaidDto,
   ) {
     return this.financeService.markRepaymentPaid(id, dto);
   }
@@ -201,7 +218,24 @@ export class FinanceController {
    */
   @Get('cashflow-health')
   async getCashflowHealth() {
-    return await this.cashflowSafety.getCashflowHealthDashboard();
+    const health = await this.cashflowSafety.getCashflowHealthDashboard();
+
+    return {
+      csi: health.csi ?? health.CSI,
+      dso: health.dso ?? health.DSO,
+      dpo: health.dpo ?? health.DPO,
+      returnRate: health.returnRate,
+      availableCash: health.availableCash,
+      dailyBurn: health.dailyCashBurn,
+      runwayDays: health.runwayDays ?? health.daysUntilCashout,
+      status: health.status ?? this.mapStatus(health.cashflowRiskLevel),
+      alerts: health.alerts ?? [],
+      activeWarnings: health.activeWarnings,
+      cashflowRiskLevel: health.cashflowRiskLevel,
+      projectedCashIn7Days: health.projectedCashIn7Days,
+      projectedCashOut7Days: health.projectedCashOut7Days,
+      netCashFlow7Days: health.netCashFlow7Days,
+    };
   }
 
   /**
@@ -222,6 +256,12 @@ export class FinanceController {
         returnRate: health.returnRate,
         totalCash: health.availableCash,
         dailyBurn: health.dailyCashBurn,
+      },
+      metrics: {
+        csi: health.csi ?? health.CSI,
+        dso: health.dso ?? health.DSO,
+        dpo: health.dpo ?? health.DPO,
+        returnRate: health.returnRate / 100,
       },
       health: {
         overall: this.getOverallHealth(health),
@@ -278,9 +318,14 @@ export class FinanceController {
     
     return {
       adGroupId,
-      decision,
+      decision: decision.action,
+      action: decision.protectionAction || decision.action,
+      reason: decision.reason,
+      newBudget: decision.newBudget,
+      systemLocked: decision.systemLocked ?? !!decision.cashflowProtection,
       explanation: this.explainDecision(decision),
       safeToExecute: !decision.cashflowProtection,
+      details: decision,
     };
   }
 
@@ -481,6 +526,19 @@ export class FinanceController {
         return `🚀 Scale up ${scaleRate}% (aggressive). ${reason}.`;
       default:
         return `Action: ${action}. Reason: ${reason}.`;
+    }
+  }
+
+  private mapStatus(level: string): string {
+    switch ((level || '').toUpperCase()) {
+      case 'CRITICAL':
+        return 'critical';
+      case 'DANGER':
+        return 'danger';
+      case 'WARNING':
+        return 'warning';
+      default:
+        return 'safe';
     }
   }
 }

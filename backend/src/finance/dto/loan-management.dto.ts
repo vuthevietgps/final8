@@ -1,10 +1,14 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { LoanPaymentType, PaymentSource } from '../schemas/loan-payment.schema';
 
 /**
  * DTO tạo thanh toán khoản vay
  */
 export class CreateLoanPaymentDto {
+  @IsString()
+  @MaxLength(200)
+  idempotencyKey: string;
+
   @IsEnum(LoanPaymentType)
   paymentType: LoanPaymentType;
 

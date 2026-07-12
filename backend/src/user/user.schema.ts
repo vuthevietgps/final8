@@ -71,6 +71,9 @@ export class User {
   allowedLoginIps?: string[];
 
   // Timestamps sẽ được Mongoose tự động thêm do timestamps: true
+  @Prop({ default: 0 })
+  tokenVersion?: number;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

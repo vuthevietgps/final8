@@ -4,7 +4,7 @@ Uses MONGODB_URI env var if provided, otherwise falls back to the same default i
 */
 const mongoose = require('mongoose');
 
-const DEFAULT_CONN = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const DEFAULT_CONN = process.env.MONGODB_URI;
 
 async function run() {
   const uri = DEFAULT_CONN;

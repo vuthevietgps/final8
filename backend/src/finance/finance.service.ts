@@ -1,16 +1,25 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { FundingSource, FundingSourceDocument } from './schemas/funding-source.schema';
 import { BudgetBucket, BudgetBucketDocument } from './schemas/budget-bucket.schema';
 import { CashflowEntry, CashflowEntryDocument } from './schemas/cashflow-entry.schema';
 import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
-import { LoanRepayment, LoanRepaymentDocument } from './schemas/loan-repayment.schema';
+import { LoanRepayment, LoanRepaymentDocument, LoanRepaymentFundingSource } from './schemas/loan-repayment.schema';
+import { LoanPayment, LoanPaymentDocument, PaymentSource } from './schemas/loan-payment.schema';
+import { SystemSettings, SystemSettingsDocument } from './schemas/system-settings.schema';
 import { AvailableFundSnapshot, AvailableFundSnapshotDocument } from './schemas/available-fund-snapshot.schema';
 import { SupplierPayable, SupplierPayableDocument } from '../supplier-payable/schemas/supplier-payable.schema';
 import { AgentStatement, AgentStatementDocument } from '../agent-receivable/schemas/agent-statement.schema';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
+import { LaborStatement, LaborStatementDocument } from '../labor-cost1/schemas/labor-statement.schema';
+import { OtherCost, OtherCostDocument } from '../other-cost/schemas/other-cost.schema';
+import { AdvertisingCost, AdvertisingCostDocument } from '../advertising-cost/schemas/advertising-cost.schema';
+import { ProductCategory, ProductCategoryDocument } from '../product-category/schemas/product-category.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateFundingSourceDto } from './dto/create-funding-source.dto';
 import { UpdateFundingSourceDto } from './dto/update-funding-source.dto';
 import { CreateBudgetBucketDto } from './dto/create-budget-bucket.dto';
@@ -19,20 +28,31 @@ import { CreateCashflowEntryDto } from './dto/create-cashflow-entry.dto';
 import { CreateLoanContractDto } from './dto/create-loan-contract.dto';
 import { UpdateLoanContractDto } from './dto/update-loan-contract.dto';
 import { CreateLoanRepaymentDto } from './dto/create-loan-repayment.dto';
+import { MarkRepaymentPaidDto } from './dto/mark-repayment-paid.dto';
+import { FinanceEvents } from './events/finance-events.constants';
 
 @Injectable()
 export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
+  private static readonly CACHE_KEY_MASTER_BANK_BALANCE = 'finance:master_bank_balance';
+  private static readonly CACHE_TTL_MASTER_BANK_BALANCE = 15_000;
+  private pendingMasterBankBalance: Promise<number> | null = null;
 
   constructor(
     @InjectModel(FundingSource.name)
     private readonly fundingSourceModel: Model<FundingSourceDocument>,
     @InjectModel(BudgetBucket.name)
     private readonly budgetBucketModel: Model<BudgetBucketDocument>,
+    @InjectModel(ProductCategory.name)
+    private readonly productCategoryModel: Model<ProductCategoryDocument>,
     @InjectModel(CashflowEntry.name)
     private readonly cashflowModel: Model<CashflowEntryDocument>,
     @InjectModel(LoanContract.name)
     private readonly loanModel: Model<LoanContractDocument>,
+    @InjectModel(LoanPayment.name)
+    private readonly loanPaymentModel: Model<LoanPaymentDocument>,
+    @InjectModel(SystemSettings.name)
+    private readonly systemSettingsModel: Model<SystemSettingsDocument>,
     @InjectModel(LoanRepayment.name)
     private readonly repaymentModel: Model<LoanRepaymentDocument>,
     @InjectModel(AvailableFundSnapshot.name)
@@ -43,6 +63,15 @@ export class FinanceService {
     private readonly agentStatementModel: Model<AgentStatementDocument>,
     @InjectModel(TestOrder2.name)
     private readonly orderModel: Model<TestOrder2Document>,
+    @InjectModel(LaborStatement.name)
+    private readonly laborStatementModel: Model<LaborStatementDocument>,
+    @InjectModel(OtherCost.name)
+    private readonly otherCostModel: Model<OtherCostDocument>,
+    @InjectModel(AdvertisingCost.name)
+    private readonly adsCostModel: Model<AdvertisingCostDocument>,
+    private readonly eventEmitter: EventEmitter2,
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
   ) {}
 
   // Available funds: compute and snapshot
@@ -108,8 +137,8 @@ export class FinanceService {
     return doc.save();
   }
 
-  // Chạy tự động mỗi ngày 01:00 (Asia/Ho_Chi_Minh) để chụp snapshot vốn khả dụng
-  @Cron('0 1 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  // Chạy tự động mỗi ngày 08:15 AM (Asia/Ho_Chi_Minh) để chụp snapshot vốn khả dụng
+  @Cron('15 8 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async snapshotDailyAvailableFunds() {
     try {
       await this.captureAvailableFunds({ note: 'auto-daily' });
@@ -616,7 +645,12 @@ export class FinanceService {
       ...dto,
       availableBalance: dto.availableBalance ?? dto.principal ?? 0,
     });
-    return doc.save();
+    const saved = await doc.save();
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'funding_source.create',
+      entityId: String(saved._id),
+    });
+    return saved;
   }
 
   async listFundingSources(filter: { type?: string; status?: string }) {
@@ -631,59 +665,243 @@ export class FinanceService {
       .findByIdAndUpdate(id, dto, { new: true })
       .lean();
     if (!updated) throw new NotFoundException('Funding source not found');
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'funding_source.update',
+      entityId: id,
+    });
     return updated;
   }
 
   // Budget buckets
   async createBudgetBucket(dto: CreateBudgetBucketDto) {
-    const doc = new this.budgetBucketModel(dto);
-    return doc.save();
+    const payload = this.normalizeBudgetBucket(dto, true);
+    this.assertValidBudgetBucket(payload);
+    await this.assertBudgetBucketCategoriesExist(payload.productGroupIds);
+    const doc = new this.budgetBucketModel(payload);
+    const saved = await doc.save();
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'budget_bucket.create',
+      entityId: String(saved._id),
+    });
+    return saved;
   }
 
-  async listBudgetBuckets() {
-    return this.budgetBucketModel.find().sort({ createdAt: -1 }).lean();
+  async listBudgetBuckets(active?: boolean) {
+    const query = active === undefined ? {} : { active };
+    return this.budgetBucketModel.find(query).sort({ active: -1, createdAt: -1 }).lean();
   }
 
   async updateBudgetBucket(id: string, dto: UpdateBudgetBucketDto) {
+    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Budget bucket id is invalid');
+    const existing = await this.budgetBucketModel.findById(id).lean();
+    if (!existing) throw new NotFoundException('Budget bucket not found');
+
+    const payload = this.normalizeBudgetBucket(dto, false);
+    const merged = { ...existing, ...payload };
+    this.assertValidBudgetBucket(merged);
+    await this.assertBudgetBucketCategoriesExist(merged.productGroupIds);
     const updated = await this.budgetBucketModel
-      .findByIdAndUpdate(id, dto, { new: true })
+      .findByIdAndUpdate(id, payload, { new: true, runValidators: true })
       .lean();
     if (!updated) throw new NotFoundException('Budget bucket not found');
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'budget_bucket.update',
+      entityId: id,
+    });
     return updated;
   }
 
+  private normalizeBudgetBucket(
+    dto: CreateBudgetBucketDto | UpdateBudgetBucketDto,
+    applyDefaults: boolean,
+  ): Record<string, any> {
+    const normalized: Record<string, any> = { ...dto };
+    if (dto.name !== undefined) normalized.name = String(dto.name).trim();
+    if (dto.code !== undefined) {
+      normalized.code = String(dto.code).trim().toUpperCase() || undefined;
+    }
+    if (dto.productGroupIds !== undefined) {
+      normalized.productGroupIds = Array.from(new Set(
+        dto.productGroupIds.map((id) => String(id).trim()).filter(Boolean),
+      ));
+    } else if (applyDefaults) {
+      normalized.productGroupIds = [];
+    }
+    for (const field of ['dailyCap', 'weeklyCap', 'monthlyCap'] as const) {
+      if (dto[field] !== undefined) normalized[field] = Number(dto[field]);
+      else if (applyDefaults) normalized[field] = 0;
+    }
+    if (applyDefaults && dto.active === undefined) normalized.active = true;
+    if (dto.notes !== undefined) normalized.notes = String(dto.notes).trim();
+    return normalized;
+  }
+
+  private assertValidBudgetBucket(bucket: Record<string, any>): void {
+    const name = String(bucket.name || '').trim();
+    if (!name) throw new BadRequestException('Budget bucket name is required');
+
+    const categoryIds = Array.isArray(bucket.productGroupIds) ? bucket.productGroupIds : [];
+    if (categoryIds.some((id: unknown) => !Types.ObjectId.isValid(String(id)))) {
+      throw new BadRequestException('productGroupIds must contain Product.categoryId ObjectIds');
+    }
+
+    const caps = {
+      daily: Number(bucket.dailyCap || 0),
+      weekly: Number(bucket.weeklyCap || 0),
+      monthly: Number(bucket.monthlyCap || 0),
+    };
+    if (Object.values(caps).some((value) => !Number.isFinite(value) || value < 0)) {
+      throw new BadRequestException('Budget caps must be finite non-negative numbers');
+    }
+    if (caps.daily > 0 && caps.weekly > 0 && caps.weekly < caps.daily) {
+      throw new BadRequestException('weeklyCap must be zero or greater than or equal to dailyCap');
+    }
+    if (caps.weekly > 0 && caps.monthly > 0 && caps.monthly < caps.weekly) {
+      throw new BadRequestException('monthlyCap must be zero or greater than or equal to weeklyCap');
+    }
+    if (caps.daily > 0 && caps.monthly > 0 && caps.monthly < caps.daily) {
+      throw new BadRequestException('monthlyCap must be zero or greater than or equal to dailyCap');
+    }
+
+    for (const source of bucket.linkedSources || []) {
+      const allocated = Number(source?.allocated || 0);
+      if (!Number.isFinite(allocated) || allocated < 0) {
+        throw new BadRequestException('Linked source allocation must be non-negative');
+      }
+    }
+  }
+
+  private async assertBudgetBucketCategoriesExist(categoryIds: unknown): Promise<void> {
+    const ids = Array.isArray(categoryIds)
+      ? Array.from(new Set(categoryIds.map((id) => String(id).trim()).filter(Boolean)))
+      : [];
+    if (ids.length === 0) return;
+
+    const existingCount = await this.productCategoryModel.countDocuments({
+      _id: { $in: ids },
+    });
+    if (existingCount !== ids.length) {
+      throw new BadRequestException('One or more productGroupIds reference a ProductCategory that does not exist');
+    }
+  }
+
   // Cashflows
-  async createCashflow(dto: CreateCashflowEntryDto) {
+  async createCashflow(
+    dto: CreateCashflowEntryDto,
+    options: { session?: ClientSession; emitEvent?: boolean } = {},
+  ) {
+    const idempotencyKey = String(dto.idempotencyKey || '').trim();
+    if (dto.fundingSourceId && !options.session) {
+      if (!idempotencyKey) {
+        throw new BadRequestException('idempotencyKey is required for cashflow funding-source updates');
+      }
+      if (await this.cashflowModel.exists({ idempotencyKey })) {
+        throw new ConflictException('Cashflow with this idempotencyKey was already processed');
+      }
+
+      const session = await this.cashflowModel.db.startSession();
+      let saved: CashflowEntryDocument | undefined;
+      try {
+        await session.withTransaction(async () => {
+          await this.acquireCashflowSerializationLock(session);
+          saved = await this.createCashflow(dto, { session, emitEvent: false });
+        });
+      } catch (error) {
+        if ((error as any)?.code === 11000) {
+          throw new ConflictException('Cashflow with this idempotencyKey was already processed');
+        }
+        throw error;
+      } finally {
+        await session.endSession();
+      }
+      if (!saved) throw new BadRequestException('Cashflow transaction did not commit');
+      if (options.emitEvent !== false) {
+        this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+          source: 'cashflow.create',
+          entityId: String((saved as any)._id),
+        });
+      }
+      return saved;
+    }
+
+    if (idempotencyKey && !options.session && await this.cashflowModel.exists({ idempotencyKey })) {
+      throw new ConflictException('Cashflow with this idempotencyKey was already processed');
+    }
+
     const doc = new this.cashflowModel(dto);
-    const saved = await doc.save();
+    let saved: CashflowEntryDocument;
+    try {
+      saved = await doc.save(options.session ? { session: options.session } : undefined);
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        throw new ConflictException('Cashflow with this idempotencyKey was already processed');
+      }
+      throw error;
+    }
 
     // Nếu là tiền vào và có fundingSourceId → tăng availableBalance
     if (dto.direction === 'in' && dto.fundingSourceId) {
-      await this.fundingSourceModel.updateOne(
+      const result = await this.fundingSourceModel.updateOne(
         { _id: dto.fundingSourceId },
         { $inc: { availableBalance: dto.amount } },
+        options.session ? { session: options.session } : undefined,
       );
+      if (!result.matchedCount) throw new BadRequestException('Funding source not found');
     }
 
     // Nếu là tiền ra và có fundingSourceId → giảm availableBalance
     if (dto.direction === 'out' && dto.fundingSourceId) {
-      await this.fundingSourceModel.updateOne(
+      const result = await this.fundingSourceModel.updateOne(
         { _id: dto.fundingSourceId },
         { $inc: { availableBalance: -dto.amount } },
+        options.session ? { session: options.session } : undefined,
       );
+      if (!result.matchedCount) throw new BadRequestException('Funding source not found');
     }
 
+    if (options.emitEvent !== false) {
+      this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+        source: 'cashflow.create',
+        entityId: String(saved._id),
+      });
+    }
     return saved;
   }
 
   /**
    * Lấy bank account mặc định (đầu tiên) để thực hiện giao dịch
    */
-  async getDefaultBankAccount(): Promise<FundingSourceDocument | null> {
-    return this.fundingSourceModel.findOne({
-      type: 'bank_account',
-      isActive: true,
-    }).sort({ createdAt: 1 }).exec();
+  async getDefaultBankAccount(session?: ClientSession): Promise<FundingSourceDocument | null> {
+    const query = this.fundingSourceModel.findOne({
+      status: 'active',
+      restricted: { $ne: true },
+    }).sort({ type: 1, createdAt: 1 });
+    if (session) query.session(session);
+    return query.exec();
+  }
+
+  async acquireCashflowSerializationLock(session: ClientSession): Promise<void> {
+    const locked = await this.systemSettingsModel.findOneAndUpdate(
+      { key: 'financial_cashflow_serialization_lock' },
+      {
+        $inc: { 'value.version': 1 },
+        $set: { updatedBy: 'system:financial-transaction' },
+        $setOnInsert: {
+          description: 'Serialization mutex for bank-impacting financial transactions',
+          'value.kind': 'cashflow_serialization',
+        },
+      },
+      { upsert: true, new: true, session },
+    ).exec();
+    if (!locked) {
+      throw new BadRequestException(
+        'Financial transaction serialization lock is unavailable',
+      );
+    }
+  }
+
+  async hasCashflowIdempotencyKey(idempotencyKey: string): Promise<boolean> {
+    return Boolean(await this.cashflowModel.exists({ idempotencyKey }));
   }
 
   /**
@@ -691,13 +909,19 @@ export class FinanceService {
    * @param amount Số tiền thay đổi (dương = tăng, âm = giảm)
    * @param bankAccountId ID của bank account (nếu không có, dùng mặc định)
    */
-  async updateBankBalance(amount: number, bankAccountId?: string): Promise<boolean> {
+  async updateBankBalance(
+    amount: number,
+    bankAccountId?: string,
+    session?: ClientSession,
+  ): Promise<boolean> {
     let bankAccount: FundingSourceDocument | null;
     
     if (bankAccountId) {
-      bankAccount = await this.fundingSourceModel.findById(bankAccountId).exec();
+      const query = this.fundingSourceModel.findById(bankAccountId);
+      if (session) query.session(session);
+      bankAccount = await query.exec();
     } else {
-      bankAccount = await this.getDefaultBankAccount();
+      bankAccount = await this.getDefaultBankAccount(session);
     }
 
     if (!bankAccount) {
@@ -708,6 +932,7 @@ export class FinanceService {
     await this.fundingSourceModel.updateOne(
       { _id: bankAccount._id },
       { $inc: { availableBalance: amount } },
+      session ? { session } : undefined,
     );
 
     this.logger.log(`💰 Updated bank balance: ${amount > 0 ? '+' : ''}${amount.toLocaleString('vi-VN')}đ`);
@@ -717,24 +942,45 @@ export class FinanceService {
   /**
    * Tạo cashflow entry VÀ cập nhật bank balance tự động
    */
-  async createCashflowWithBankUpdate(dto: CreateCashflowEntryDto): Promise<CashflowEntry> {
+  async createCashflowWithBankUpdate(
+    dto: CreateCashflowEntryDto,
+    options: {
+      session?: ClientSession;
+      requireBankAccount?: boolean;
+      emitEvent?: boolean;
+    } = {},
+  ): Promise<CashflowEntry> {
     // Tạo cashflow entry
-    const entry = await this.createCashflow(dto);
+    const entry = await this.createCashflow(dto, {
+      session: options.session,
+      emitEvent: false,
+    });
 
     // Nếu không có fundingSourceId, tự động cập nhật bank account mặc định
     if (!dto.fundingSourceId) {
       const amount = dto.direction === 'in' ? dto.amount : -dto.amount;
-      await this.updateBankBalance(amount);
+      const updated = await this.updateBankBalance(amount, undefined, options.session);
+      if (!updated && options.requireBankAccount) {
+        throw new BadRequestException('No active bank account is available for this cashflow');
+      }
+    }
+
+    if (options.emitEvent !== false) {
+      this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+        source: 'cashflow.create',
+        entityId: String((entry as any)._id),
+      });
     }
 
     return entry;
   }
 
-  async listCashflows(filter: { direction?: string; sourceType?: string; bucketId?: string }) {
+  async listCashflows(filter: { direction?: string; sourceType?: string; bucketId?: string; category?: string }) {
     const q: any = {};
     if (filter.direction) q.direction = filter.direction;
     if (filter.sourceType) q.sourceType = filter.sourceType;
     if (filter.bucketId) q.bucketId = filter.bucketId;
+    if (filter.category) q.category = filter.category;
     return this.cashflowModel.find(q).sort({ date: -1 }).lean();
   }
 
@@ -762,6 +1008,182 @@ export class FinanceService {
       cashflowOut: outResult[0]?.total || 0,
       cashflowIn: inResult[0]?.total || 0,
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MASTER BANK BALANCE — Single Source of Truth
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * NGUỒN SỰ THẬT DUY NHẤT cho Số Dư Ngân Hàng.
+   * Được gọi bởi cả FinancialControlService và FundsService để đảm bảo
+   * mọi dashboard luôn hiển thị cùng một con số.
+   *
+   * Công thức:
+   *   BankBalance
+   *     = personalCapital + loanDisbursed − loanPaid   (vốn ròng)
+   *     + revenue          (supplierPaidAmount, supplierPaymentStatus='paid')
+   *     − agentPaid        (agentPaidAmount,   agentPaymentStatus='paid')
+   *     − adsCost          (spentAmount từ AdvertisingCost)
+   *     − laborCost        (statementPaymentTotal từ LaborStatement đã closed)
+   *     − otherCost        (amount từ OtherCost đã confirmed)
+   *     − cashflowOut      (owner_fund_transfer ra khỏi ngân hàng)
+   *     + cashflowIn       (owner_fund_return trả lại ngân hàng)
+   */
+  async calculateMasterBankBalance(): Promise<number> {
+    const cached = await this.cacheManager.get<number>(FinanceService.CACHE_KEY_MASTER_BANK_BALANCE);
+    if (cached !== undefined && cached !== null) {
+      return cached;
+    }
+
+    if (this.pendingMasterBankBalance) {
+      return this.pendingMasterBankBalance;
+    }
+
+    this.pendingMasterBankBalance = this.doCalculateMasterBankBalance();
+    try {
+      const balance = await this.pendingMasterBankBalance;
+      await this.cacheManager.set(
+        FinanceService.CACHE_KEY_MASTER_BANK_BALANCE,
+        balance,
+        FinanceService.CACHE_TTL_MASTER_BANK_BALANCE,
+      );
+      return balance;
+    } finally {
+      this.pendingMasterBankBalance = null;
+    }
+  }
+
+  async invalidateMasterBankBalanceCache(reason = 'unspecified'): Promise<void> {
+    await this.cacheManager.del(FinanceService.CACHE_KEY_MASTER_BANK_BALANCE).catch((err) => {
+      this.logger.warn(`[CACHE_INVALIDATED] master bank balance delete failed`, err);
+    });
+    this.logger.debug(`[CACHE_INVALIDATED] master bank balance ${reason}`);
+  }
+
+  private async doCalculateMasterBankBalance(): Promise<number> {
+    const [
+      personalCapitalResult,
+      loanResult,
+      repaymentPaidResult,
+      loanPaymentAuditResult,
+      revenueResult,
+      agentPaidResult,
+      adsResult,
+      laborResult,
+      otherResult,
+      cashflowTotals,
+    ] = await Promise.all([
+      // 1. Vốn cá nhân từ FundingSource
+      this.fundingSourceModel.aggregate([
+        { $match: { type: { $in: ['equity', 'internal'] }, status: 'active' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$principal', 0] } } } },
+      ]),
+      // 2. Khoản vay: đã giải ngân và đã trả (gốc + lãi)
+      this.loanModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            disbursed: { $sum: { $ifNull: ['$disbursedAmount', 0] } },
+          },
+        },
+      ]),
+      this.loanModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            principalPaid: { $sum: { $ifNull: ['$totalPrincipalPaid', 0] } },
+            interestPaid: { $sum: { $ifNull: ['$totalInterestPaid', 0] } },
+          },
+        },
+      ]),
+      // LoanContract totals include payments from every source. Reconcile the
+      // auditable bank-funded subset so Owner Fund payments do not reduce the
+      // company bank balance a second time. Historical unattributed amounts
+      // remain bank-funded conservatively.
+      this.loanPaymentModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRecorded: { $sum: { $ifNull: ['$amount', 0] } },
+            bankRecorded: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$source', PaymentSource.BANK_BALANCE] },
+                  { $ifNull: ['$amount', 0] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      // 3. Doanh thu đã thu (tiền NCC chuyển về)
+      this.orderModel.aggregate([
+        { $match: { supplierPaymentStatus: 'paid' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$supplierPaidAmount', 0] } } } },
+      ]),
+      // 4. Hoa hồng đại lý đã trả
+      this.orderModel.aggregate([
+        { $match: { agentPaymentStatus: 'paid' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$agentPaidAmount', 0] } } } },
+      ]),
+      // 5. Chi phí quảng cáo đã chi
+      this.adsCostModel.aggregate([
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$spentAmount', 0] } } } },
+      ]),
+      // 6. Lương đã trả (LaborStatement đã closed)
+      this.laborStatementModel.aggregate([
+        { $match: { status: 'closed' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$statementPaymentTotal', 0] } } } },
+      ]),
+      // 7. Chi phí khác đã xác nhận
+      this.otherCostModel.aggregate([
+        { $match: { isConfirmed: true } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      // 8. Cashflow nội bộ (chuyển quỹ owner)
+      this.getCashflowTotals(),
+    ]);
+
+    const personalCapital = personalCapitalResult[0]?.total || 0;
+    const loanDisbursed = loanResult[0]?.disbursed || 0;
+    const contractLoanPaid = (repaymentPaidResult[0]?.principalPaid || 0)
+      + (repaymentPaidResult[0]?.interestPaid || 0);
+    const loanPaid = this.reconcileBankFundedLoanPaid(
+      contractLoanPaid,
+      loanPaymentAuditResult[0]?.totalRecorded || 0,
+      loanPaymentAuditResult[0]?.bankRecorded || 0,
+    );
+    const revenue = revenueResult[0]?.total || 0;
+    const agentPaid = agentPaidResult[0]?.total || 0;
+    const adsCost = adsResult[0]?.total || 0;
+    const laborCost = laborResult[0]?.total || 0;
+    const otherCost = otherResult[0]?.total || 0;
+    const { cashflowOut, cashflowIn } = cashflowTotals;
+
+    const capital = personalCapital + loanDisbursed - loanPaid;
+    const balance = capital + revenue - agentPaid - adsCost - laborCost - otherCost - cashflowOut + cashflowIn;
+
+    this.logger.debug(
+      `[MASTER_BANK_BALANCE] capital=${capital} revenue=${revenue} agentPaid=${agentPaid}` +
+        ` adsCost=${adsCost} laborCost=${laborCost} otherCost=${otherCost}` +
+        ` cashflowOut=${cashflowOut} cashflowIn=${cashflowIn} → balance=${balance}`,
+    );
+
+    return balance;
+  }
+
+  private reconcileBankFundedLoanPaid(
+    contractTotalPaid: number,
+    totalRecordedPayments: number,
+    bankRecordedPayments: number,
+  ): number {
+    const contractTotal = Math.max(0, Number(contractTotalPaid) || 0);
+    const recordedTotal = Math.max(0, Number(totalRecordedPayments) || 0);
+    const recordedBank = Math.max(0, Number(bankRecordedPayments) || 0);
+    const historicalUnattributed = Math.max(0, contractTotal - recordedTotal);
+    return recordedBank + historicalUnattributed;
   }
 
   /**
@@ -838,20 +1260,25 @@ export class FinanceService {
   async updateLoanContract(id: string, dto: UpdateLoanContractDto) {
     const updated = await this.loanModel.findByIdAndUpdate(id, dto, { new: true }).lean();
     if (!updated) throw new NotFoundException('Loan contract not found');
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'loan_contract.update',
+      entityId: id,
+    });
     return updated;
   }
 
   // Loan repayments
   async createLoanRepayment(dto: CreateLoanRepaymentDto) {
+    if (dto.paid) {
+      throw new BadRequestException(
+        'Creating an already-paid repayment is disabled; create the schedule first and pay through loan-management',
+      );
+    }
     const loan = await this.loanModel.findById(dto.loanId);
     if (!loan) throw new NotFoundException('Loan contract not found');
 
     const doc = new this.repaymentModel(dto);
     const saved = await doc.save();
-
-    if (dto.paid) {
-      await this.applyRepaymentEffects(saved);
-    }
 
     return saved;
   }
@@ -872,26 +1299,24 @@ export class FinanceService {
       .lean();
   }
 
-  // Helper: áp dụng ảnh hưởng khi đã trả (giảm dư nợ, ghi cashflow)
+  // Helper: áp dụng ảnh hưởng khi đã trả (giảm dư nợ, ghi cashflow theo nguồn tiền)
   private async applyRepaymentEffects(rep: LoanRepaymentDocument) {
     const principalDelta = rep.amountPrincipal || 0;
     const interest = rep.amountInterest || 0;
+    const totalPaid = principalDelta + interest;
     const paidDate = rep.paidDate || new Date();
+    const fundingSource = rep.fundingSource || LoanRepaymentFundingSource.BANK;
 
     await this.loanModel.updateOne(
       { _id: rep.loanId },
       { $inc: { principalRemaining: -principalDelta }, $set: { updatedAt: new Date() } },
     );
 
-    await this.cashflowModel.create({
-      direction: 'out',
-      sourceType: 'loan',
-      amount: principalDelta + interest,
-      date: paidDate,
-      category: 'loan_repayment',
-      referenceId: String(rep._id),
-      description: 'Trả nợ vay (gốc+lãi)',
-    });
+    if (fundingSource === LoanRepaymentFundingSource.OWNER_FUND) {
+      await this.applyOwnerFundRepaymentEffects(rep, totalPaid, paidDate);
+    } else {
+      await this.applyBankRepaymentEffects(rep, totalPaid, paidDate);
+    }
 
     // Cập nhật tổng đã trả trên LoanContract
     await this.loanModel.updateOne(
@@ -905,6 +1330,80 @@ export class FinanceService {
     );
   }
 
+  private async applyBankRepaymentEffects(rep: LoanRepaymentDocument, amount: number, paidDate: Date) {
+    await this.createCashflowWithBankUpdate({
+      direction: 'out',
+      sourceType: 'loan',
+      amount,
+      date: paidDate.toISOString(),
+      category: 'loan_repayment',
+      referenceId: String(rep._id),
+      description: 'Trả nợ vay (gốc+lãi)',
+    });
+  }
+
+  private async applyOwnerFundRepaymentEffects(rep: LoanRepaymentDocument, amount: number, paidDate: Date) {
+    const ownerFundAccountCollection = this.fundingSourceModel.db.collection('owner_fund_accounts');
+    const fundTransactionCollection = this.fundingSourceModel.db.collection('fund_transactions');
+    const activeAccount = await ownerFundAccountCollection.findOne({ isActive: true });
+
+    if (!activeAccount) {
+      throw new BadRequestException('Active owner fund account not found');
+    }
+
+    if ((activeAccount.balance || 0) < amount) {
+      throw new BadRequestException('Insufficient owner fund balance for loan repayment');
+    }
+
+    const debitResult = await ownerFundAccountCollection.updateOne(
+      {
+        _id: activeAccount._id,
+        balance: { $gte: amount },
+      },
+      {
+        $inc: { balance: -amount },
+        $set: { updatedAt: new Date() },
+      },
+    );
+
+    if (!debitResult.modifiedCount) {
+      throw new BadRequestException('Failed to debit owner fund balance for loan repayment');
+    }
+
+    const refreshedAccount = await ownerFundAccountCollection.findOne({ _id: activeAccount._id });
+
+    await this.cashflowModel.create({
+      direction: 'out',
+      sourceType: 'owner_fund',
+      amount,
+      date: paidDate,
+      category: 'loan_repayment',
+      referenceId: String(rep._id),
+      description: 'Trả nợ vay bằng Quỹ Owner',
+    });
+
+    await fundTransactionCollection.insertOne({
+      type: 'out',
+      category: 'other_out',
+      amount,
+      date: paidDate,
+      description: 'Thanh toán khoản vay bằng Quỹ Owner',
+      notes: rep.notes || 'Owner fund loan repayment',
+      referenceId: String(rep._id),
+      reference: `LOAN_REPAYMENT_${String(rep._id)}`,
+      referenceType: 'loan_repayment',
+      balanceAfter: refreshedAccount?.balance || 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.eventEmitter.emit(FinanceEvents.OWNER_FUND_CHANGED, {
+      accountId: String(activeAccount._id),
+      type: 'withdrawal',
+      amount,
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════
   // GIẢI NGÂN (DISBURSEMENT) - Tiền VÀO Bank Balance
   // ═══════════════════════════════════════════════════════════
@@ -914,12 +1413,33 @@ export class FinanceService {
    * - Cập nhật disbursementStatus, disbursedAmount, disbursedDate
    * - Tạo cashflow entry (tiền VÀO)
    */
-  async recordDisbursement(loanId: string, dto: { amount: number; date?: string; notes?: string }) {
-    const loan = await this.loanModel.findById(loanId);
-    if (!loan) throw new NotFoundException('Loan contract not found');
+  async recordDisbursement(
+    loanId: string,
+    dto: { amount: number; date?: string; notes?: string; idempotencyKey?: string },
+  ) {
+    const rawKey = String(dto.idempotencyKey || '').trim();
+    if (!rawKey) throw new BadRequestException('idempotencyKey is required for loan disbursement');
+    const idempotencyKey = `loan-disbursement:${rawKey}`;
+    if (await this.cashflowModel.exists({ idempotencyKey })) {
+      throw new ConflictException('Loan disbursement with this idempotencyKey was already processed');
+    }
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+      throw new BadRequestException('Disbursement amount must be a positive finite number');
+    }
+
+    const session = await this.loanModel.db.startSession();
+    let updated: any;
+    try {
+      await session.withTransaction(async () => {
+        await this.acquireCashflowSerializationLock(session);
+        const loan = await this.loanModel.findById(loanId).session(session).exec();
+        if (!loan) throw new NotFoundException('Loan contract not found');
 
     const disbursedDate = dto.date ? new Date(dto.date) : new Date();
     const newDisbursedAmount = (loan.disbursedAmount || 0) + dto.amount;
+    if (newDisbursedAmount > Number(loan.principal || 0)) {
+      throw new BadRequestException('Disbursement would exceed the loan principal');
+    }
 
     // Xác định trạng thái giải ngân
     let disbursementStatus: 'pending' | 'partial' | 'fully' = 'partial';
@@ -930,7 +1450,7 @@ export class FinanceService {
     }
 
     // Cập nhật loan
-    const updated = await this.loanModel.findByIdAndUpdate(
+    updated = await this.loanModel.findByIdAndUpdate(
       loanId,
       {
         $set: {
@@ -938,21 +1458,37 @@ export class FinanceService {
           disbursedAmount: newDisbursedAmount,
           disbursedDate,
           // Khi giải ngân, principalRemaining = số tiền đã giải ngân (nợ phải trả)
-          principalRemaining: newDisbursedAmount,
+          principalRemaining: Number(loan.principalRemaining || 0) + dto.amount,
         },
       },
-      { new: true },
+      { new: true, session },
     ).lean();
 
-    // Tạo cashflow entry - Tiền VÀO
-    await this.cashflowModel.create({
+    await this.createCashflow({
+      idempotencyKey,
       direction: 'in',
       sourceType: 'loan',
       amount: dto.amount,
-      date: disbursedDate,
+      date: disbursedDate.toISOString(),
       category: 'loan_disbursement',
       referenceId: loanId,
       description: `Giải ngân khoản vay: ${loan.name} - ${dto.notes || ''}`,
+    }, { session, emitEvent: false });
+      });
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        throw new ConflictException('Loan disbursement with this idempotencyKey was already processed');
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    if (!updated) throw new BadRequestException('Loan disbursement did not commit');
+
+    this.eventEmitter.emit(FinanceEvents.LOAN_DISBURSED, {
+      loanId,
+      amount: dto.amount,
     });
 
     return updated;
@@ -1016,27 +1552,12 @@ export class FinanceService {
   /**
    * Đánh dấu một kỳ trả nợ đã trả
    */
-  async markRepaymentPaid(repaymentId: string, dto: { paidDate?: string; referenceId?: string; notes?: string }) {
-    const repayment = await this.repaymentModel.findById(repaymentId);
-    if (!repayment) throw new NotFoundException('Repayment not found');
-
-    if (repayment.paid) {
-      return repayment; // Đã trả rồi
-    }
-
-    const paidDate = dto.paidDate ? new Date(dto.paidDate) : new Date();
-
-    repayment.paid = true;
-    repayment.paidDate = paidDate;
-    if (dto.referenceId) repayment.referenceId = dto.referenceId;
-    if (dto.notes) repayment.notes = dto.notes;
-
-    await repayment.save();
-
-    // Áp dụng effects
-    await this.applyRepaymentEffects(repayment);
-
-    return repayment;
+  async markRepaymentPaid(repaymentId: string, dto: MarkRepaymentPaidDto) {
+    void repaymentId;
+    void dto;
+    throw new BadRequestException(
+      'Legacy repayment execution is disabled; use loan-management/loans/:id/pay',
+    );
   }
 
   // Cron: nhắc lịch trả nợ sắp đến hạn (T-3 ngày)
@@ -1234,9 +1755,9 @@ export class FinanceService {
     // 1. Get all active loans
     const activeLoans = await this.loanModel.find({ status: 'active' }).lean();
     
-    // 2. Get total disbursed (principal of all loans)
+    // 2. Get total disbursed (actual disbursedAmount, not contract principal)
     const allLoans = await this.loanModel.find().lean();
-    const totalLoanDisbursed = allLoans.reduce((sum, loan) => sum + (loan.principal || 0), 0);
+    const totalLoanDisbursed = allLoans.reduce((sum, loan) => sum + (loan.disbursedAmount || 0), 0);
 
     // 3. Get total outstanding
     const totalDebtOutstanding = activeLoans.reduce(

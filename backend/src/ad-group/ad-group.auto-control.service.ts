@@ -13,12 +13,18 @@ import { AdvertisingCostFacebookSyncService } from '../advertising-cost/advertis
 import { ApiTokenService } from '../api-token/api-token.service';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import axios from 'axios';
+import { getMetaGraphApiVersion } from '../common/ads-api-version';
 
-const FB_GRAPH_API_VERSION = process.env.FB_GRAPH_API_VERSION || 'v19.0';
+const FB_GRAPH_API_VERSION = getMetaGraphApiVersion();
 
 @Injectable()
 export class AdGroupAutoControlService {
   private readonly logger = new Logger(AdGroupAutoControlService.name);
+  private disabledWarningLogged = false;
+
+  private isApprovalPolicyIntegrated(): boolean {
+    return false;
+  }
 
   constructor(
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
@@ -41,10 +47,18 @@ export class AdGroupAutoControlService {
    */
   @Cron('*/10 * * * *')
   async cronEnforceThresholds(){
+    if (!this.isApprovalPolicyIntegrated()) {
+      if (!this.disabledWarningLogged) {
+        this.logger.warn('AdGroupAutoControlService is disabled until auto-control actions are routed through approval policy.');
+        this.disabledWarningLogged = true;
+      }
+      return;
+    }
+
     const start = Date.now();
-  const todayISO = new Date().toISOString().slice(0,10);
-  // Cập nhật nhanh chi phí hôm nay (partial) trước khi đánh giá
-  try { await this.facebookSync.syncForDate(todayISO, { trackFailure: false }); } catch(err){ this.logger.warn(`Quick sync today failed: ${(err as any)?.message}`); }
+    const todayISO = new Date().toISOString().slice(0,10);
+    // Cập nhật nhanh chi phí hôm nay (partial) trước khi đánh giá
+    try { await this.facebookSync.syncForDate(todayISO, { trackFailure: false }); } catch(err){ this.logger.warn(`Quick sync today failed: ${(err as any)?.message}`); }
     // Kiểm tra tất cả platform đang hoạt động (FB/Google/TikTok)
     const groups = await this.adGroupModel.find({ autoControlEnabled: true, isActive: true })
       .select('_id adGroupId name platform spendThresholdDaily cprThresholdDaily minConversations fanpageId adAccountId')
@@ -71,11 +85,19 @@ export class AdGroupAutoControlService {
           await this.adGroupModel.updateOne({ _id: (g as any)._id }, { 
             $set: { isActive: false, lastAutoControlAt: new Date(), autoPausedReason: reason }
           });
-          // Facebook: thử pause trực tiếp qua API, nền tảng khác: chỉ pause nội bộ trong hệ thống.
+          // Platform specific pause
           if ((g as any).platform === 'facebook') {
             try{
               await this.pauseFacebookAdsetByAdAccount(adGroupId, (g as any).adAccountId);
             } catch(err){ this.logger.warn(`Pause FB adset failed for ${adGroupId}: ${(err as any)?.message}`); }
+          } else if ((g as any).platform === 'google') {
+            try {
+              await this.pauseGoogleAdGroup(adGroupId, (g as any).adAccountId);
+            } catch(err) { this.logger.warn(`Pause Google adgroup failed for ${adGroupId}: ${(err as any)?.message}`); }
+          } else if ((g as any).platform === 'tiktok') {
+            try {
+              await this.pauseTikTokAdGroup(adGroupId, (g as any).adAccountId);
+            } catch(err) { this.logger.warn(`Pause TikTok adgroup failed for ${adGroupId}: ${(err as any)?.message}`); }
           } else {
             this.logger.warn(`Auto-control paused ${adGroupId} on ${(g as any).platform} locally (remote pause chưa hỗ trợ).`);
           }
@@ -114,6 +136,103 @@ export class AdGroupAutoControlService {
     }catch(err: any){
       const msg = err?.response?.data?.error?.message || err?.message;
       this.logger.warn(`Graph API pause failed for ${adsetId}: ${msg}`);
+    }
+  }
+
+  /** Tạm dừng adgroup trên Google Ads */
+  private async pauseGoogleAdGroup(adGroupId: string, adAccountRef?: any){
+    let customerId: string | undefined;
+    let loginCustomerId: string | undefined;
+    if (adAccountRef) {
+      try {
+        const acc = await this.adAccountModel.findById(adAccountRef).lean();
+        const rawId = (acc as any)?.accountId as string | undefined;
+        if (rawId) customerId = String(rawId).replace(/[^0-9]/g, '');
+        loginCustomerId = (acc as any)?.loginCustomerId || undefined;
+      } catch{}
+    }
+    if (!customerId) { this.logger.warn(`No customerId found for AdGroup ${adGroupId}`); return; }
+
+    const googleConfig = await this.apiTokenService.getGoogleAdsRuntimeConfig({
+      customerId,
+      loginCustomerId: loginCustomerId ? String(loginCustomerId) : '',
+    });
+
+    const accessToken = await this.apiTokenService.getGoogleAdsAccessToken(googleConfig);
+    if (!accessToken || !googleConfig.developerToken) {
+      this.logger.warn(`Missing Google Ads token for ${customerId}`);
+      return;
+    }
+
+    const url = `https://googleads.googleapis.com/${googleConfig.apiVersion}/customers/${customerId}/adGroups:mutate`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      'developer-token': googleConfig.developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (googleConfig.loginCustomerId) headers['login-customer-id'] = googleConfig.loginCustomerId;
+
+    const body = {
+      operations: [
+        {
+          updateMask: 'status',
+          update: {
+            resourceName: `customers/${customerId}/adGroups/${adGroupId}`,
+            status: 'PAUSED'
+          }
+        }
+      ]
+    };
+
+    try {
+      const res = await axios.post(url, body, { headers });
+      if(res.status >= 200 && res.status < 300) { this.logger.log(`Paused Google adgroup ${adGroupId} via API`); }
+    } catch(err: any) {
+      const msg = err?.response?.data?.error?.message || err?.message;
+      this.logger.warn(`Google Ads API pause failed for ${adGroupId}: ${msg}`);
+    }
+  }
+
+  /** Tạm dừng adgroup trên TikTok Ads */
+  private async pauseTikTokAdGroup(adGroupId: string, adAccountRef?: any){
+    let advertiserId: string | undefined;
+    if (adAccountRef) {
+      try {
+        const acc = await this.adAccountModel.findById(adAccountRef).lean();
+        const rawId = (acc as any)?.accountId as string | undefined;
+        if (rawId) advertiserId = String(rawId).replace(/[^0-9]/g, '');
+      } catch{}
+    }
+    if (!advertiserId) { this.logger.warn(`No advertiserId found for AdGroup ${adGroupId}`); return; }
+
+    const runtime = await this.apiTokenService.getTikTokRuntimeConfig();
+    if (!runtime.accessToken) {
+      this.logger.warn(`Missing TikTok Ads access token, cannot pause ${adGroupId}`);
+      return;
+    }
+
+    const url = 'https://business-api.tiktok.com/open_api/v1.3/adgroup/status/update/';
+    const headers = {
+      'Access-Token': runtime.accessToken,
+      'Content-Type': 'application/json',
+    };
+    const body = {
+      advertiser_id: advertiserId,
+      adgroup_ids: [adGroupId],
+      operation_status: 'DISABLE'
+    };
+
+    try {
+      const res = await axios.post(url, body, { headers });
+      const data = res.data;
+      if (res.status >= 200 && res.status < 300 && data.code === 0) {
+        this.logger.log(`Paused TikTok adgroup ${adGroupId} via API`);
+      } else {
+        throw new Error(data.message || 'Unknown TikTok API Error');
+      }
+    } catch(err: any) {
+      const msg = err?.response?.data?.message || err?.message;
+      this.logger.warn(`TikTok Ads API pause failed for ${adGroupId}: ${msg}`);
     }
   }
 }

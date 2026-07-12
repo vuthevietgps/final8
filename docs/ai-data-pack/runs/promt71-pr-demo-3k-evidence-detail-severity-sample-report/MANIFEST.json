@@ -1,0 +1,56 @@
+{
+  "phase": "PR-DEMO-3K",
+  "target": "evidence_detail_severity_sample_director_report_no_action",
+  "status": "sample_director_report_v2_packet",
+  "code_changed": false,
+  "production_db_used": false,
+  "source_basis": "prompt69_contract_template",
+  "report_mode": "contract_template_no_rendered_rows",
+  "canonical_finding_keys": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "director_path_referenced": "sections[\"16_operation_capacity\"].data.operation_capacity.operational_risk_findings",
+  "all_five_findings_covered": true,
+  "evidence_detail_shown": true,
+  "severity_scoring_shown": true,
+  "drilldown_refs_shown": true,
+  "no_data_fabrication": true,
+  "action_execution_opened": false,
+  "provider_execution_opened": false,
+  "business_mutation_opened": false,
+  "tests_run": [],
+  "safety": {
+    "no_code_change": true,
+    "no_test_change": true,
+    "no_config_change": true,
+    "no_db_access": true,
+    "no_mongodb_local_server_or_production": true,
+    "no_production_export": true,
+    "no_api_controller_or_export_endpoint": true,
+    "no_provider_call": true,
+    "no_google_ads_call": true,
+    "no_facebook_ads_call": true,
+    "no_openai_or_chatgpt_web_api_call": true,
+    "no_action_draft_schema": true,
+    "no_action_import": true,
+    "no_approval_workflow": true,
+    "no_dry_run_or_live_execution": true,
+    "no_frontend_change": true,
+    "no_business_mutation": true,
+    "no_phase_3": true
+  },
+  "source_packets": [
+    "docs/ai-data-pack/runs/promt70-pr-demo-3j-evidence-detail-severity-closeout",
+    "docs/ai-data-pack/runs/promt69-pr-demo-3i-evidence-detail-severity-mvp"
+  ],
+  "output_files": [
+    "MANIFEST.json",
+    "RESULT.md",
+    "FINAL_DIRECTOR_REPORT_V2.md",
+    "REVIEW_PACKET.md"
+  ]
+}

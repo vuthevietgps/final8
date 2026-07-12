@@ -1,0 +1,925 @@
+<div class="reviewer-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Ads Automation</p>
+      <h1>Trạng thái đồng bộ nguồn Ads</h1>
+    </div>
+
+    <form class="review-form" (ngSubmit)="load()">
+      <label>
+        Ngày báo cáo
+        <input name="reportDate" type="date" [(ngModel)]="reportDate" />
+      </label>
+
+      <label>
+        Now
+        <input name="now" [(ngModel)]="now" autocomplete="off" />
+      </label>
+
+      <fieldset class="source-picker">
+        <legend>Nguồn dữ liệu</legend>
+        <label *ngFor="let option of sourceOptions; trackBy: trackByLabel">
+          <input
+            type="checkbox"
+            [name]="'source-' + option.key"
+            [ngModel]="sourceSelected(option.key)"
+            (ngModelChange)="setSourceSelected(option.key, $event)"
+          />
+          <span>{{ option.label }}</span>
+        </label>
+      </fieldset>
+
+      <div class="button-row">
+        <button type="submit" class="primary" [disabled]="loading()">
+          {{ loading() ? 'Đang tải' : 'Tải' }}
+        </button>
+        <button type="button" (click)="loadDemoStatus()" [disabled]="loading()">Demo</button>
+        <button type="button" (click)="reset()" [disabled]="loading()">Đặt lại</button>
+      </div>
+    </form>
+  </header>
+
+  <div *ngIf="error()" class="error-banner">{{ error() }}</div>
+
+  <section *ngIf="!status() && !loading()" class="empty-panel">
+    <h2>Chưa tải trạng thái nguồn đồng bộ</h2>
+    <p>{{ reportDate }}</p>
+  </section>
+
+  @if (status(); as status) {
+    <section class="summary-grid">
+      <article
+        *ngFor="let card of summaryCards(); trackBy: trackByLabel"
+        [class.good]="card.tone === 'good'"
+        [class.warn]="card.tone === 'warn'"
+      >
+        <span>{{ card.label }}</span>
+        <strong>{{ card.value }}</strong>
+      </article>
+    </section>
+
+    <main class="review-layout">
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Trạng thái</p>
+            <h2>{{ status.reportDate }}</h2>
+          </div>
+          <span class="status-pill" [ngClass]="statusClass(status.summary.status)">
+            {{ statusText(status.summary.status) }}
+          </span>
+        </div>
+
+        <dl class="details-list">
+          <div>
+            <dt>Schema</dt>
+            <dd>{{ status.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Thời điểm tạo</dt>
+            <dd>{{ status.generatedAt }}</dd>
+          </div>
+          <div>
+            <dt>Nguồn bị chặn</dt>
+            <dd>{{ blockedSourceKeys().length ? blockedSourceKeys().join(', ') : 'không có' }}</dd>
+          </div>
+          <div>
+            <dt>Có thể dùng dữ liệu Google Ads</dt>
+            <dd>{{ booleanText(status.decisionGates.canUseGoogleAdsDataClaim) }}</dd>
+          </div>
+          <div>
+            <dt>Có thể tạo bản nháp</dt>
+            <dd>{{ booleanText(status.decisionGates.canGenerateActionDraft) }}</dd>
+          </div>
+          <div>
+            <dt>Có thể dry-run</dt>
+            <dd>{{ booleanText(status.decisionGates.canDryRun) }}</dd>
+          </div>
+          <div>
+            <dt>Có thể chạy live</dt>
+            <dd>{{ booleanText(status.decisionGates.canExecuteLive) }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">An toàn</p>
+            <h2>Cổng kiểm soát</h2>
+          </div>
+          <span class="status-pill passed">chỉ cục bộ</span>
+        </div>
+
+        <div class="gate-grid">
+          <div
+            *ngFor="let gate of safetyGates(); trackBy: trackByGate"
+            [class.pass]="gate.pass"
+            [class.fail]="!gate.pass"
+          >
+            <span>{{ gate.label }}</span>
+            <strong>{{ gate.value }}</strong>
+            <small>kỳ vọng {{ booleanText(gate.expected) }}</small>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    @if (localSnapshot(); as snapshot) {
+      <section class="panel snapshot-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Snapshot cục bộ</p>
+            <h2>JSON nguồn đồng bộ</h2>
+          </div>
+          <button type="button" class="primary" (click)="downloadLocalSnapshot()" [disabled]="loading()">
+            Xuất JSON
+          </button>
+        </div>
+
+        <dl class="details-list">
+          <div>
+            <dt>Schema snapshot</dt>
+            <dd>{{ snapshot.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Endpoint</dt>
+            <dd>{{ snapshot.createdFromEndpoint }}</dd>
+          </div>
+          <div>
+            <dt>Payload đã lược bỏ</dt>
+            <dd>{{ snapshot.omittedPayloads.join(', ') }}</dd>
+          </div>
+          <div>
+            <dt>Đã ẩn giá trị secret</dt>
+            <dd>{{ booleanText(snapshot.secret_values_omitted) }}</dd>
+          </div>
+          <div>
+            <dt>API nhà cung cấp</dt>
+            <dd>{{ booleanText(snapshot.provider_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Google Ads API</dt>
+            <dd>{{ booleanText(snapshot.google_ads_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Validate-only</dt>
+            <dd>{{ booleanText(snapshot.validateOnly_called) }}</dd>
+          </div>
+          <div>
+            <dt>Thực thi lúc này</dt>
+            <dd>{{ booleanText(snapshot.execution_allowed_now) }}</dd>
+          </div>
+        </dl>
+
+        <p *ngIf="lastExportName()" class="export-status">{{ lastExportName() }}</p>
+      </section>
+    }
+
+    <section
+      *ngFor="let source of sources(); trackBy: trackBySource"
+      class="panel source-panel"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">{{ sourceLabel(source.sourceKey) }}</p>
+          <h2>{{ source.provider }} / {{ source.platform }}</h2>
+        </div>
+        <span class="status-pill" [ngClass]="statusClass(source.status)">
+          {{ statusText(source.status) }}
+        </span>
+      </div>
+
+      <dl class="details-list source-details">
+        <div>
+          <dt>Khóa nguồn</dt>
+          <dd>{{ source.sourceKey }}</dd>
+        </div>
+        <div>
+          <dt>Miền dữ liệu</dt>
+          <dd>{{ source.domain }}</dd>
+        </div>
+        <div>
+          <dt>Mức quan trọng</dt>
+          <dd>{{ source.businessImportance }}</dd>
+        </div>
+        <div>
+          <dt>Độ phủ dữ liệu</dt>
+          <dd>{{ statusText(source.reportDateCoverage.coverageStatus) }}</dd>
+        </div>
+        <div>
+          <dt>Bản ghi đúng ngày báo cáo</dt>
+          <dd>{{ numberText(source.reportDateCoverage.reportDateRecordCount) }}</dd>
+        </div>
+        <div>
+          <dt>Bản ghi kỳ vọng</dt>
+          <dd>{{ numberText(source.reportDateCoverage.expectedRecordCount) }}</dd>
+        </div>
+        <div>
+          <dt>Độ mới dữ liệu</dt>
+          <dd>{{ statusText(source.freshness.freshnessStatus) }}</dd>
+        </div>
+        <div>
+          <dt>Số phút độ mới</dt>
+          <dd>{{ numberText(source.freshness.freshnessMinutes) }}</dd>
+        </div>
+        <div>
+          <dt>Số phút quá cũ</dt>
+          <dd>{{ numberText(source.freshness.staleByMinutes) }}</dd>
+        </div>
+        <div>
+          <dt>Lần đồng bộ thành công gần nhất</dt>
+          <dd>{{ timeText(source.freshness.lastSuccessfulSyncAt) }}</dd>
+        </div>
+        <div>
+          <dt>Cập nhật bản ghi mới nhất</dt>
+          <dd>{{ timeText(source.freshness.latestRecordUpdatedAt) }}</dd>
+        </div>
+        <div>
+          <dt>Ngày bản ghi mới nhất</dt>
+          <dd>{{ timeText(source.freshness.latestRecordDate) }}</dd>
+        </div>
+        <div>
+          <dt>Watermark</dt>
+          <dd>{{ timeText(source.freshness.latestSuccessfulSyncOrReadModelWatermark) }}</dd>
+        </div>
+        <div>
+          <dt>Dùng được cho quyết định ads</dt>
+          <dd>{{ booleanText(source.canUseForAdsAutomationDecision) }}</dd>
+        </div>
+      </dl>
+
+      <div class="source-grid">
+        <div>
+          <p class="eyebrow">Tình trạng cấu hình</p>
+          <div class="table-wrap" *ngIf="source.requiredConfigPresence.length; else noConfigRows">
+            <table>
+              <thead>
+                <tr>
+                  <th>Khóa</th>
+                  <th>Bắt buộc</th>
+                  <th>Đã có</th>
+                  <th>Chấp nhận</th>
+                  <th>Secret</th>
+                  <th>Lộ giá trị</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let config of source.requiredConfigPresence; trackBy: trackByConfig">
+                  <td><code>{{ config.key }}</code></td>
+                  <td>{{ booleanText(config.required) }}</td>
+                  <td>{{ booleanText(config.present) }}</td>
+                  <td>{{ booleanText(config.acceptable) }}</td>
+                  <td>{{ booleanText(config.secret) }}</td>
+                  <td>{{ booleanText(config.value_exposed) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ng-template #noConfigRows>
+            <p class="empty-text">không có</p>
+          </ng-template>
+        </div>
+
+        <div>
+          <p class="eyebrow">Blocker thông tin xác thực/cấu hình</p>
+          <ul *ngIf="source.missingCredentialOrConfigBlockers.length; else noConfigBlockers">
+            <li *ngFor="let blocker of source.missingCredentialOrConfigBlockers; trackBy: trackByValue">
+              {{ blocker }}
+            </li>
+          </ul>
+          <ng-template #noConfigBlockers>
+            <p class="empty-text">không có</p>
+          </ng-template>
+        </div>
+
+        <div>
+          <p class="eyebrow">Blocker nguồn</p>
+          <ul *ngIf="source.sourceSyncBlockers.length; else noSourceBlockers">
+            <li *ngFor="let blocker of source.sourceSyncBlockers; trackBy: trackByValue">
+              {{ blocker }}
+            </li>
+          </ul>
+          <ng-template #noSourceBlockers>
+            <p class="empty-text">không có</p>
+          </ng-template>
+        </div>
+
+        <div>
+          <p class="eyebrow">Cảnh báo</p>
+          <ul *ngIf="source.warnings.length; else noWarnings">
+            <li *ngFor="let warning of source.warnings; trackBy: trackByValue">
+              {{ warning }}
+            </li>
+          </ul>
+          <ng-template #noWarnings>
+            <p class="empty-text">không có</p>
+          </ng-template>
+        </div>
+      </div>
+    </section>
+  }
+
+  <section class="panel compare-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">So sánh trong trình duyệt</p>
+        <h2>Đọc lại snapshot A/B</h2>
+      </div>
+      <span class="status-pill passed">chỉ cục bộ</span>
+    </div>
+
+    <div class="compare-actions">
+      <label class="file-button">
+        Tải A
+        <input type="file" accept="application/json,.json" (change)="loadSnapshotFile($event, 'left')" />
+      </label>
+      <label class="file-button">
+        Tải B
+        <input type="file" accept="application/json,.json" (change)="loadSnapshotFile($event, 'right')" />
+      </label>
+      <button type="button" (click)="useCurrentSnapshot('left')" [disabled]="!localSnapshot()">Dùng snapshot hiện tại làm A</button>
+      <button type="button" (click)="useCurrentSnapshot('right')" [disabled]="!localSnapshot()">Dùng snapshot hiện tại làm B</button>
+      <button type="button" class="primary" (click)="compareSnapshots()">So sánh</button>
+      <button type="button" (click)="clearCompare()">Xóa</button>
+      <button type="button" (click)="downloadCompareAudit()" [disabled]="!compareResult()">
+        Xuất JSON so sánh
+      </button>
+    </div>
+
+    <div class="compare-grid">
+      <label>
+        JSON snapshot A
+        <textarea name="leftSnapshotText" [(ngModel)]="leftSnapshotText" spellcheck="false"></textarea>
+      </label>
+      <label>
+        JSON snapshot B
+        <textarea name="rightSnapshotText" [(ngModel)]="rightSnapshotText" spellcheck="false"></textarea>
+      </label>
+    </div>
+
+    <div *ngIf="compareError()" class="error-banner inline-error">{{ compareError() }}</div>
+
+    @if (compareResult(); as compare) {
+      <div class="compare-result">
+        <dl class="details-list">
+          <div>
+            <dt>Schema so sánh</dt>
+            <dd>{{ compare.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Ngày bên trái</dt>
+            <dd>{{ compare.leftReportDate }}</dd>
+          </div>
+          <div>
+            <dt>Ngày bên phải</dt>
+            <dd>{{ compare.rightReportDate }}</dd>
+          </div>
+          <div>
+            <dt>Cùng khóa</dt>
+            <dd>{{ booleanText(compare.sameComparisonKey) }}</dd>
+          </div>
+          <div>
+            <dt>Nguồn thay đổi</dt>
+            <dd>{{ compare.changedSourceCount }}</dd>
+          </div>
+          <div>
+            <dt>Cổng an toàn bên phải đã đóng</dt>
+            <dd>{{ booleanText(compare.safetyGatesClosedOnRight) }}</dd>
+          </div>
+        </dl>
+
+        <div class="delta-section">
+          <p class="eyebrow">Chênh lệch tổng quan</p>
+          <div *ngIf="changedMetricDeltas().length; else noMetricDelta" class="delta-list">
+            <div *ngFor="let delta of changedMetricDeltas(); trackBy: trackByLabel">
+              <strong>{{ delta.label }}</strong>
+              <span>{{ delta.leftValue }} -> {{ delta.rightValue }} ({{ delta.delta }})</span>
+            </div>
+          </div>
+          <ng-template #noMetricDelta>
+            <p class="empty-text">Không có chênh lệch tổng quan</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Khóa nguồn</p>
+          <div *ngIf="compare.sourceKeyDelta.changed; else noSourceKeyDelta" class="delta-card">
+            <p><strong>Thêm</strong> {{ deltaListText(compare.sourceKeyDelta.added) }}</p>
+            <p><strong>Gỡ</strong> {{ deltaListText(compare.sourceKeyDelta.removed) }}</p>
+          </div>
+          <ng-template #noSourceKeyDelta>
+            <p class="empty-text">Không có chênh lệch khóa nguồn</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Mức sẵn sàng nguồn thay đổi</p>
+          <div *ngIf="changedReadinessDeltas().length; else noReadinessDelta" class="source-delta-grid">
+            <article *ngFor="let delta of changedReadinessDeltas(); trackBy: trackByCompareSource">
+              <h3>{{ sourceLabel(delta.sourceKey) }}</h3>
+              <p>Trạng thái: {{ statusText(delta.leftStatus) }} -> {{ statusText(delta.rightStatus) }}</p>
+              <p>Dùng cho quyết định: {{ booleanText(delta.leftCanUseForAdsAutomationDecision) }} -> {{ booleanText(delta.rightCanUseForAdsAutomationDecision) }}</p>
+              <p>Độ phủ: {{ statusText(delta.leftCoverageStatus) }} -> {{ statusText(delta.rightCoverageStatus) }}</p>
+              <p>Độ mới: {{ statusText(delta.leftFreshnessStatus) }} -> {{ statusText(delta.rightFreshnessStatus) }}</p>
+            </article>
+          </div>
+          <ng-template #noReadinessDelta>
+            <p class="empty-text">Không có chênh lệch mức sẵn sàng nguồn</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Blocker và cảnh báo thay đổi</p>
+          <div *ngIf="changedBlockerDeltas().length; else noBlockerDelta" class="source-delta-grid">
+            <article *ngFor="let delta of changedBlockerDeltas(); trackBy: trackByCompareSource">
+              <h3>{{ sourceLabel(delta.sourceKey) }}</h3>
+              <p><strong>Blocker nguồn thêm</strong> {{ deltaListText(delta.sourceSyncBlockers.added) }}</p>
+              <p><strong>Blocker nguồn gỡ</strong> {{ deltaListText(delta.sourceSyncBlockers.removed) }}</p>
+              <p><strong>Blocker cấu hình thêm</strong> {{ deltaListText(delta.missingConfigBlockers.added) }}</p>
+              <p><strong>Blocker cấu hình gỡ</strong> {{ deltaListText(delta.missingConfigBlockers.removed) }}</p>
+              <p><strong>Cảnh báo thêm</strong> {{ deltaListText(delta.warnings.added) }}</p>
+              <p><strong>Cảnh báo gỡ</strong> {{ deltaListText(delta.warnings.removed) }}</p>
+            </article>
+          </div>
+          <ng-template #noBlockerDelta>
+            <p class="empty-text">Không có chênh lệch blocker</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Cổng quyết định thay đổi</p>
+          <div *ngIf="changedDecisionGateDeltas().length; else noDecisionGateDelta" class="delta-list">
+            <div *ngFor="let delta of changedDecisionGateDeltas(); trackBy: trackByLabel">
+              <strong>{{ delta.label }}</strong>
+              <span>{{ booleanText(delta.leftValue) }} -> {{ booleanText(delta.rightValue) }}</span>
+            </div>
+          </div>
+          <ng-template #noDecisionGateDelta>
+            <p class="empty-text">Không có chênh lệch cổng quyết định</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Cổng an toàn thay đổi</p>
+          <div *ngIf="changedSafetyDeltas().length; else noSafetyDelta" class="gate-grid">
+            <div
+              *ngFor="let delta of changedSafetyDeltas(); trackBy: trackByKey"
+              [ngClass]="safetyGateTone(delta.rightGateOpen)"
+            >
+              <span>{{ delta.key }}</span>
+              <strong>{{ booleanText(delta.leftValue) }} -> {{ booleanText(delta.rightValue) }}</strong>
+              <small>kỳ vọng {{ booleanText(delta.expected) }}</small>
+            </div>
+          </div>
+          <ng-template #noSafetyDelta>
+            <p class="empty-text">Không có chênh lệch an toàn</p>
+          </ng-template>
+        </div>
+
+        <p *ngIf="lastCompareExportName()" class="export-status">{{ lastCompareExportName() }}</p>
+      </div>
+    }
+  </section>
+
+  <section class="panel compare-audit-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Đọc lại audit so sánh</p>
+        <h2>Import JSON đã lưu</h2>
+      </div>
+      <label class="file-button">
+        Tải audit
+        <input type="file" accept="application/json,.json" (change)="loadCompareAuditFile($event)" />
+      </label>
+    </div>
+
+    <div class="compare-grid single">
+      <label>
+        JSON audit so sánh
+        <textarea name="compareAuditText" [(ngModel)]="compareAuditText" spellcheck="false"></textarea>
+      </label>
+    </div>
+
+    <div class="button-row">
+      <button type="button" (click)="parseCompareAudit()">Đọc audit</button>
+    </div>
+
+    <div *ngIf="compareAuditError()" class="error-banner inline-error">{{ compareAuditError() }}</div>
+
+    @if (compareAudit(); as audit) {
+      <div class="compare-result">
+        <dl class="details-list">
+          <div>
+            <dt>Schema audit</dt>
+            <dd>{{ audit.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Thời điểm tạo</dt>
+            <dd>{{ audit.generatedAt }}</dd>
+          </div>
+          <div>
+            <dt>Payload đã lược bỏ</dt>
+            <dd>{{ audit.omittedPayloads.join(', ') }}</dd>
+          </div>
+          <div>
+            <dt>API nhà cung cấp</dt>
+            <dd>{{ booleanText(audit.provider_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Google Ads API</dt>
+            <dd>{{ booleanText(audit.google_ads_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Validate-only</dt>
+            <dd>{{ booleanText(audit.validateOnly_called) }}</dd>
+          </div>
+          <div>
+            <dt>Chạy ads live</dt>
+            <dd>{{ booleanText(audit.live_ads_execution_used) }}</dd>
+          </div>
+          <div>
+            <dt>Thực thi lúc này</dt>
+            <dd>{{ booleanText(audit.execution_allowed_now) }}</dd>
+          </div>
+        </dl>
+
+        <div class="delta-section">
+          <p class="eyebrow">Chênh lệch tổng quan đọc lại</p>
+          <div *ngIf="auditChangedMetricDeltas().length; else noAuditMetricDelta" class="delta-list">
+            <div *ngFor="let delta of auditChangedMetricDeltas(); trackBy: trackByLabel">
+              <strong>{{ delta.label }}</strong>
+              <span>{{ delta.leftValue }} -> {{ delta.rightValue }} ({{ delta.delta }})</span>
+            </div>
+          </div>
+          <ng-template #noAuditMetricDelta>
+            <p class="empty-text">Không có chênh lệch tổng quan</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Nguồn đồng bộ đọc lại</p>
+          <div *ngIf="auditChangedReadinessDeltas().length; else noAuditReadinessDelta" class="source-delta-grid">
+            <article *ngFor="let delta of auditChangedReadinessDeltas(); trackBy: trackByCompareSource">
+              <h3>{{ sourceLabel(delta.sourceKey) }}</h3>
+              <p>Trạng thái: {{ statusText(delta.leftStatus) }} -> {{ statusText(delta.rightStatus) }}</p>
+              <p>Dùng cho quyết định: {{ booleanText(delta.leftCanUseForAdsAutomationDecision) }} -> {{ booleanText(delta.rightCanUseForAdsAutomationDecision) }}</p>
+              <p>Độ phủ: {{ statusText(delta.leftCoverageStatus) }} -> {{ statusText(delta.rightCoverageStatus) }}</p>
+              <p>Độ mới: {{ statusText(delta.leftFreshnessStatus) }} -> {{ statusText(delta.rightFreshnessStatus) }}</p>
+            </article>
+          </div>
+          <ng-template #noAuditReadinessDelta>
+            <p class="empty-text">Không có chênh lệch mức sẵn sàng nguồn</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Blocker đọc lại</p>
+          <div *ngIf="auditChangedBlockerDeltas().length; else noAuditBlockerDelta" class="source-delta-grid">
+            <article *ngFor="let delta of auditChangedBlockerDeltas(); trackBy: trackByCompareSource">
+              <h3>{{ sourceLabel(delta.sourceKey) }}</h3>
+              <p><strong>Blocker nguồn thêm</strong> {{ deltaListText(delta.sourceSyncBlockers.added) }}</p>
+              <p><strong>Blocker nguồn gỡ</strong> {{ deltaListText(delta.sourceSyncBlockers.removed) }}</p>
+              <p><strong>Blocker cấu hình thêm</strong> {{ deltaListText(delta.missingConfigBlockers.added) }}</p>
+              <p><strong>Blocker cấu hình gỡ</strong> {{ deltaListText(delta.missingConfigBlockers.removed) }}</p>
+            </article>
+          </div>
+          <ng-template #noAuditBlockerDelta>
+            <p class="empty-text">Không có chênh lệch blocker</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Cổng quyết định đọc lại</p>
+          <div *ngIf="auditChangedDecisionGateDeltas().length; else noAuditDecisionDelta" class="delta-list">
+            <div *ngFor="let delta of auditChangedDecisionGateDeltas(); trackBy: trackByLabel">
+              <strong>{{ delta.label }}</strong>
+              <span>{{ booleanText(delta.leftValue) }} -> {{ booleanText(delta.rightValue) }}</span>
+            </div>
+          </div>
+          <ng-template #noAuditDecisionDelta>
+            <p class="empty-text">Không có chênh lệch cổng quyết định</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section">
+          <p class="eyebrow">Chênh lệch an toàn đọc lại</p>
+          <div *ngIf="auditChangedSafetyDeltas().length; else noAuditSafetyDelta" class="gate-grid">
+            <div
+              *ngFor="let delta of auditChangedSafetyDeltas(); trackBy: trackByKey"
+              [ngClass]="safetyGateTone(delta.rightGateOpen)"
+            >
+              <span>{{ delta.key }}</span>
+              <strong>{{ booleanText(delta.leftValue) }} -> {{ booleanText(delta.rightValue) }}</strong>
+              <small>kỳ vọng {{ booleanText(delta.expected) }}</small>
+            </div>
+          </div>
+          <ng-template #noAuditSafetyDelta>
+            <p class="empty-text">Không có chênh lệch an toàn</p>
+          </ng-template>
+        </div>
+      </div>
+    }
+  </section>
+
+  <section class="panel approval-handoff-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Bàn giao bằng chứng phê duyệt</p>
+        <h2>Đối chiếu audit so sánh</h2>
+      </div>
+      <label class="file-button">
+        Tải audit phê duyệt
+        <input type="file" accept="application/json,.json" (change)="loadApprovalCompareAuditFile($event)" />
+      </label>
+    </div>
+
+    <div class="compare-grid single">
+      <label>
+        JSON audit so sánh phê duyệt
+        <textarea
+          name="approvalCompareAuditText"
+          [(ngModel)]="approvalCompareAuditText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+    </div>
+
+    <div class="button-row">
+      <button type="button" class="primary" (click)="correlateApprovalCompareAudit()">
+        Đối chiếu
+      </button>
+      <button type="button" (click)="importBrowserApprovalHandoff()">
+        Import bàn giao trình duyệt
+      </button>
+      <button
+        type="button"
+        (click)="downloadBrowserApprovalHandoffImportAudit()"
+        [disabled]="!browserApprovalHandoffImportAudit()"
+      >
+        Xuất audit import
+      </button>
+      <label class="file-button">
+        Tải audit import
+        <input
+          type="file"
+          accept="application/json,.json"
+          (change)="loadBrowserApprovalHandoffImportAuditFile($event)"
+        />
+      </label>
+      <button type="button" (click)="readBrowserApprovalHandoffImportAudit()">
+        Đọc audit import
+      </button>
+      <button type="button" (click)="clearBrowserApprovalHandoff()">
+        Xóa bàn giao trình duyệt
+      </button>
+      <button type="button" (click)="clearApprovalHandoff()">Xóa bàn giao</button>
+    </div>
+
+    <p *ngIf="browserApprovalHandoffStatus()" class="export-status">
+      {{ browserApprovalHandoffStatus() }}
+    </p>
+    @if (browserApprovalHandoffPrefillDetails(); as browserHandoff) {
+      <dl class="details-list browser-handoff-details" [class.stale]="browserHandoff.stale">
+        <div>
+          <dt>Bàn giao trình duyệt đã chuẩn bị</dt>
+          <dd>{{ browserHandoff.bundleGeneratedAt }}</dd>
+        </div>
+        <div>
+          <dt>Audit phê duyệt được tạo</dt>
+          <dd>{{ browserHandoff.approvalCompareAuditGeneratedAt }}</dd>
+        </div>
+        <div>
+          <dt>Tuổi bàn giao</dt>
+          <dd>{{ browserHandoff.ageLabel }}</dd>
+        </div>
+        <div>
+          <dt>Cũ sau số phút</dt>
+          <dd>{{ browserHandoff.staleAfterMinutes }}</dd>
+        </div>
+        <div>
+          <dt>Đã cũ</dt>
+          <dd>{{ booleanText(browserHandoff.stale) }}</dd>
+        </div>
+        <div>
+          <dt>Trạng thái import</dt>
+          <dd>
+            {{ browserApprovalHandoffManualImportRequired()
+              ? 'cần import thủ công'
+              : (browserApprovalHandoffImported() ? 'đã import' : 'đã chuẩn bị') }}
+          </dd>
+        </div>
+        <div>
+          <dt>Đối chiếu tự động</dt>
+          <dd>
+            {{ browserApprovalHandoffManualImportRequired() ? 'chặn đến khi import' : 'đủ điều kiện' }}
+          </dd>
+        </div>
+      </dl>
+    }
+    @if (browserApprovalHandoffImportAudit(); as importAudit) {
+      <dl class="details-list browser-handoff-audit-details">
+        <div>
+          <dt>Audit override</dt>
+          <dd>{{ importAudit.schemaVersion }}</dd>
+        </div>
+        <div>
+          <dt>Reviewer import</dt>
+          <dd>{{ importAudit.reviewerImportTimestamp }}</dd>
+        </div>
+        <div>
+          <dt>Thời điểm chuẩn bị</dt>
+          <dd>{{ importAudit.browserHandoffStagedAt }}</dd>
+        </div>
+        <div>
+          <dt>Audit phê duyệt được tạo</dt>
+          <dd>{{ importAudit.approvalCompareAuditGeneratedAt }}</dd>
+        </div>
+        <div>
+          <dt>Ngưỡng cũ</dt>
+          <dd>{{ importAudit.staleAfterMinutes }}</dd>
+        </div>
+        <div>
+          <dt>Cổng an toàn đã đóng</dt>
+          <dd>{{ booleanText(importAudit.safetyGatesClosed) }}</dd>
+        </div>
+        <div>
+          <dt>Payload đã lược bỏ</dt>
+          <dd>{{ importAudit.omittedPayloads.join(', ') }}</dd>
+        </div>
+      </dl>
+    }
+
+    <div class="compare-grid single import-audit-readback-grid">
+      <label>
+        JSON audit import
+        <textarea
+          name="browserApprovalHandoffImportAuditReadbackText"
+          [(ngModel)]="browserApprovalHandoffImportAuditReadbackText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+    </div>
+
+    <div
+      *ngIf="browserApprovalHandoffImportAuditReadbackError()"
+      class="error-banner inline-error"
+    >
+      {{ browserApprovalHandoffImportAuditReadbackError() }}
+    </div>
+
+    @if (browserApprovalHandoffImportAuditReadback(); as importAuditReadback) {
+      <dl class="details-list browser-handoff-readback-details">
+        <div>
+          <dt>Đọc lại audit import</dt>
+          <dd>{{ importAuditReadback.schemaVersion }}</dd>
+        </div>
+        <div>
+          <dt>Reviewer import</dt>
+          <dd>{{ importAuditReadback.reviewerImportTimestamp }}</dd>
+        </div>
+        <div>
+          <dt>Thời điểm chuẩn bị</dt>
+          <dd>{{ importAuditReadback.browserHandoffStagedAt }}</dd>
+        </div>
+        <div>
+          <dt>Audit phê duyệt được tạo</dt>
+          <dd>{{ importAuditReadback.approvalCompareAuditGeneratedAt }}</dd>
+        </div>
+        <div>
+          <dt>Ngưỡng cũ</dt>
+          <dd>{{ importAuditReadback.staleAfterMinutes }}</dd>
+        </div>
+        <div>
+          <dt>Tuổi bàn giao khi import</dt>
+          <dd>{{ importAuditReadback.handoffAgeLabelAtImport }}</dd>
+        </div>
+        <div>
+          <dt>Trạng thái import</dt>
+          <dd>{{ statusText(importAuditReadback.importState) }}</dd>
+        </div>
+        <div>
+          <dt>Cổng an toàn đọc lại đã đóng</dt>
+          <dd>{{ booleanText(importAuditReadback.safetyGatesClosed) }}</dd>
+        </div>
+        <div>
+          <dt>API nhà cung cấp</dt>
+          <dd>{{ importAuditReadback.provider_api_called }}</dd>
+        </div>
+        <div>
+          <dt>Google Ads API</dt>
+          <dd>{{ importAuditReadback.google_ads_api_called }}</dd>
+        </div>
+        <div>
+          <dt>Validate-only</dt>
+          <dd>{{ importAuditReadback.validateOnly_called }}</dd>
+        </div>
+        <div>
+          <dt>Chạy ads live</dt>
+          <dd>{{ importAuditReadback.live_ads_execution_used }}</dd>
+        </div>
+        <div>
+          <dt>Thực thi lúc này</dt>
+          <dd>{{ importAuditReadback.execution_allowed_now }}</dd>
+        </div>
+        <div>
+          <dt>Đã ẩn giá trị secret</dt>
+          <dd>{{ importAuditReadback.secret_values_omitted }}</dd>
+        </div>
+        <div>
+          <dt>Google Ads production</dt>
+          <dd>{{ importAuditReadback.google_ads_production_enabled }}</dd>
+        </div>
+        <div>
+          <dt>Payload đã lược bỏ</dt>
+          <dd>{{ importAuditReadback.omittedPayloads.join(', ') }}</dd>
+        </div>
+      </dl>
+    }
+    <p *ngIf="lastApprovalHandoffFileName()" class="export-status">
+      {{ lastApprovalHandoffFileName() }}
+    </p>
+    <p *ngIf="lastBrowserApprovalHandoffImportAuditFileName()" class="export-status">
+      {{ lastBrowserApprovalHandoffImportAuditFileName() }}
+    </p>
+    <div *ngIf="browserApprovalHandoffError()" class="error-banner inline-error">
+      {{ browserApprovalHandoffError() }}
+    </div>
+    <div *ngIf="approvalHandoffError()" class="error-banner inline-error">
+      {{ approvalHandoffError() }}
+    </div>
+
+    @if (approvalHandoff(); as handoff) {
+      <div class="compare-result">
+        <dl class="details-list">
+          <div>
+            <dt>Schema bàn giao</dt>
+            <dd>{{ handoff.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Audit phê duyệt được tạo</dt>
+            <dd>{{ handoff.approvalCompareAuditGeneratedAt }}</dd>
+          </div>
+          <div>
+            <dt>Cổng phê duyệt thay đổi</dt>
+            <dd>{{ booleanText(handoff.approvalSourceSyncGateChanged) }}</dd>
+          </div>
+          <div>
+            <dt>Cổng phê duyệt bên phải</dt>
+            <dd>{{ statusText(handoff.approvalSourceSyncRightGateStatus) }}</dd>
+          </div>
+          <div>
+            <dt>Chênh lệch nguồn bị chặn</dt>
+            <dd>{{ handoff.approvalBlockedSourcesDelta }}</dd>
+          </div>
+          <div>
+            <dt>Cổng an toàn đã đóng</dt>
+            <dd>{{ booleanText(handoff.safetyGatesClosed) }}</dd>
+          </div>
+          <div>
+            <dt>API nhà cung cấp</dt>
+            <dd>{{ handoff.provider_api_called }}</dd>
+          </div>
+          <div>
+            <dt>Thực thi lúc này</dt>
+            <dd>{{ handoff.execution_allowed_now }}</dd>
+          </div>
+        </dl>
+
+        <div class="delta-section">
+          <p class="eyebrow">Nguồn đã đối chiếu</p>
+          <div *ngIf="handoff.sourceCorrelations.length; else noApprovalCorrelation" class="source-delta-grid">
+            <article
+              *ngFor="let correlation of handoff.sourceCorrelations; trackBy: trackByApprovalCorrelation"
+              [ngClass]="correlationSummaryTone(correlation.correlationSummary)"
+            >
+              <h3>{{ sourceLabel(correlation.sourceKey) }}</h3>
+              <p><strong>Trạng thái</strong> {{ statusText(correlation.statusReadinessDelta?.leftStatus || 'missing') }} -> {{ statusText(correlation.statusReadinessDelta?.rightStatus || 'missing') }}</p>
+              <p><strong>Tóm tắt</strong> {{ statusText(correlation.correlationSummary) }}</p>
+              <p><strong>Khớp theo</strong> {{ deltaListText(correlation.matchedBy) }}</p>
+              <p><strong>Khóa nguồn phê duyệt thêm</strong> {{ deltaListText(correlation.approvalSourceKeys.added) }}</p>
+              <p><strong>Khóa nguồn phê duyệt gỡ</strong> {{ deltaListText(correlation.approvalSourceKeys.removed) }}</p>
+              <p><strong>Blocker phê duyệt thêm</strong> {{ deltaListText(correlation.approvalBlockingReasons.added) }}</p>
+              <p><strong>Blocker phê duyệt gỡ</strong> {{ deltaListText(correlation.approvalBlockingReasons.removed) }}</p>
+              <p><strong>Blocker trạng thái thêm</strong> {{ deltaListText(correlation.statusBlockerDelta?.sourceSyncBlockers?.added || []) }}</p>
+              <p><strong>Blocker trạng thái gỡ</strong> {{ deltaListText(correlation.statusBlockerDelta?.sourceSyncBlockers?.removed || []) }}</p>
+              <p><strong>Blocker cấu hình gỡ</strong> {{ deltaListText(correlation.statusBlockerDelta?.missingConfigBlockers?.removed || []) }}</p>
+              <p><strong>Blocker trùng đã gỡ</strong> {{ deltaListText(correlation.blockerOverlap.removed) }}</p>
+            </article>
+          </div>
+          <ng-template #noApprovalCorrelation>
+            <p class="empty-text">Không có đối chiếu nguồn</p>
+          </ng-template>
+        </div>
+
+        <div class="delta-section" *ngIf="handoff.unmatchedApprovalSourceKeys.length || handoff.unmatchedApprovalBlockingReasons.length">
+          <p class="eyebrow">Bằng chứng phê duyệt chưa khớp</p>
+          <div class="delta-card">
+            <p><strong>Khóa nguồn</strong> {{ deltaListText(handoff.unmatchedApprovalSourceKeys) }}</p>
+            <p><strong>Lý do bị chặn</strong> {{ deltaListText(handoff.unmatchedApprovalBlockingReasons) }}</p>
+          </div>
+        </div>
+      </div>
+    }
+  </section>
+</div>

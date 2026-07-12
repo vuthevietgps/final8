@@ -17,6 +17,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import * as fs from 'fs';
 import * as nodeCrypto from 'crypto';
+import { assertApiTokenSecretForProduction } from './common/ads-safety-config';
 
 // Ensure global crypto with randomUUID exists (Node 18 may not expose global crypto by default)
 // Some libs (e.g., @nestjs/schedule) call global `crypto.randomUUID()`. Provide a safe polyfill.
@@ -40,12 +41,20 @@ try {
 }
 
 async function bootstrap() {
+  assertApiTokenSecretForProduction();
+
   // Tạo NestJS application instance từ AppModule
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const apiPrefix = 'api';
   
   // Set global API prefix for all routes, but keep /health at root for container healthchecks
-  app.setGlobalPrefix('api', {
-    exclude: [{ path: 'health', method: RequestMethod.ALL }],
+  app.setGlobalPrefix(apiPrefix, {
+    exclude: [
+      { path: 'health', method: RequestMethod.ALL },
+      { path: 'health/live', method: RequestMethod.ALL },
+      { path: 'health/ready', method: RequestMethod.ALL },
+      { path: 'health/db', method: RequestMethod.ALL },
+    ],
   });
 
   // Cấu hình static files cho uploads
@@ -108,6 +117,24 @@ async function bootstrap() {
 
   // Khởi động server trên port cấu hình (PORT env) hoặc mặc định 3000
   const port = parseInt(process.env.PORT || '3000', 10);
+  const verifyToken =
+    process.env.MESSENGER_VERIFY_TOKEN?.trim() ||
+    process.env.FB_VERIFY_TOKEN?.trim();
+  const publicOrigin =
+    process.env.APP_PUBLIC_ORIGIN?.trim() ||
+    process.env.PUBLIC_ORIGIN?.trim();
+  const webhookBase = publicOrigin || `http://localhost:${port}`;
+  const webhookUrl = `${webhookBase.replace(/\/$/, '')}/${apiPrefix}/webhook/messenger`;
+
+  if (!verifyToken) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[webhook] Missing MESSENGER_VERIFY_TOKEN/FB_VERIFY_TOKEN in production. Verification will fail.');
+    } else {
+      console.warn('[webhook] Verify token env is not set. Using dev fallback token in non-production.');
+    }
+  }
+  console.log('[webhook] Messenger endpoint:', webhookUrl);
+
   await app.listen(port);
   console.log(`Backend server is running on http://localhost:${port}`);
 }

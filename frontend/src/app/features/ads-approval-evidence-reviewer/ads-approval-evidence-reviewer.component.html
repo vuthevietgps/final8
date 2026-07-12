@@ -1,0 +1,756 @@
+<div class="reviewer-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Ads Automation</p>
+      <h1>Rà soát bằng chứng phê duyệt Ads</h1>
+    </div>
+
+    <form class="review-form" (ngSubmit)="load()">
+      <label>
+        Approval ID
+        <input name="approvalId" [(ngModel)]="approvalId" autocomplete="off" />
+      </label>
+
+      <label>
+        Dữ liệu demo
+        <select name="fixture" [(ngModel)]="fixture">
+          <option *ngFor="let option of fixtureOptions; trackBy: trackByLabel" [ngValue]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <div class="button-row">
+        <button type="submit" class="primary" [disabled]="loading()">
+          {{ loading() ? 'Đang tải' : 'Tải' }}
+        </button>
+        <button type="button" (click)="loadLinkedFixture()" [disabled]="loading()">Demo có liên kết</button>
+        <button type="button" (click)="loadEmptyFixture()" [disabled]="loading()">Demo trống</button>
+        <button type="button" (click)="reset()" [disabled]="loading()">Đặt lại</button>
+      </div>
+    </form>
+  </header>
+
+  <div *ngIf="error()" class="error-banner">{{ error() }}</div>
+
+  <section *ngIf="!docs() && !loading()" class="empty-panel">
+    <h2>Chưa tải tài liệu rà soát</h2>
+    <p>{{ demoApprovalId }}</p>
+  </section>
+
+  <section class="panel compare-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">So sánh cục bộ</p>
+        <h2>Chênh lệch snapshot bằng chứng phê duyệt</h2>
+      </div>
+      <span class="status-pill passed">cục bộ trình duyệt</span>
+    </div>
+
+    <div class="compare-input-grid">
+      <label>
+        JSON snapshot A
+        <textarea
+          name="leftSnapshotText"
+          [(ngModel)]="leftSnapshotText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+
+      <label>
+        JSON snapshot B
+        <textarea
+          name="rightSnapshotText"
+          [(ngModel)]="rightSnapshotText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+    </div>
+
+    <div class="compare-actions">
+      <div class="button-row">
+        <button type="button" class="primary" (click)="compareSnapshots()">So sánh</button>
+        <button type="button" (click)="downloadCompareAuditJson()">Xuất JSON so sánh</button>
+        <button type="button" (click)="copyCompareAuditJson()">Sao chép JSON so sánh</button>
+        <button
+          type="button"
+          (click)="stageSourceSyncHandoffPrefill()"
+          [disabled]="!compareResult() && !compareAuditReadback()"
+        >
+          Chuẩn bị bàn giao nguồn đồng bộ
+        </button>
+        <button type="button" (click)="clearComparison()">Xóa</button>
+      </div>
+
+      <div class="button-row">
+        <button type="button" (click)="useCurrentSnapshot('left')" [disabled]="!localSnapshot()">
+          Đưa snapshot hiện tại vào A
+        </button>
+        <button type="button" (click)="useCurrentSnapshot('right')" [disabled]="!localSnapshot()">
+          Đưa snapshot hiện tại vào B
+        </button>
+        <label class="file-button">
+          Tải A
+          <input type="file" accept="application/json,.json" (change)="loadSnapshotFile($event, 'left')" />
+        </label>
+        <label class="file-button">
+          Tải B
+          <input type="file" accept="application/json,.json" (change)="loadSnapshotFile($event, 'right')" />
+        </label>
+      </div>
+    </div>
+
+    <div *ngIf="compareError()" class="error-banner compare-error">{{ compareError() }}</div>
+    <div *ngIf="sourceSyncHandoffError()" class="error-banner compare-error">
+      {{ sourceSyncHandoffError() }}
+    </div>
+    <p *ngIf="lastCompareExportName()" class="export-status">{{ lastCompareExportName() }}</p>
+    <p *ngIf="lastCompareCopyStatus()" class="export-status">{{ lastCompareCopyStatus() }}</p>
+    <p *ngIf="sourceSyncHandoffStatus()" class="export-status">{{ sourceSyncHandoffStatus() }}</p>
+
+    @if (compareResult(); as compare) {
+      <div class="compare-result">
+        <dl class="details-list">
+          <div>
+            <dt>Schema so sánh</dt>
+            <dd>{{ compare.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Cùng khóa</dt>
+            <dd>{{ booleanText(compare.sameComparisonKey) }}</dd>
+          </div>
+        </dl>
+
+        <div class="metric-grid">
+          <article *ngFor="let metric of compare.metricDeltas; trackBy: trackByMetricDelta" [class.changed]="metric.changed">
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.leftValue }} -> {{ metric.rightValue }}</strong>
+            <code>{{ deltaText(metric.delta) }}</code>
+          </article>
+        </div>
+
+        <div class="compare-columns">
+          <section>
+            <div class="mini-heading">
+              <p class="eyebrow">Chênh lệch an toàn</p>
+              <strong>{{ changedSafetyDeltas().length }}</strong>
+            </div>
+
+            <div class="delta-list">
+              <div *ngFor="let delta of changedSafetyDeltas(); trackBy: trackBySafetyDelta" [class.good]="delta.rightGateClosed" [class.warn]="delta.rightGateOpen">
+                <span>{{ safetyLabel(delta.key) }}</span>
+                <strong>{{ booleanDeltaText(delta.leftValue, delta.rightValue) }}</strong>
+                <em>{{ delta.rightGateClosed ? 'đóng' : 'mở' }}</em>
+              </div>
+              <p *ngIf="!changedSafetyDeltas().length" class="muted">Không có chênh lệch an toàn</p>
+            </div>
+          </section>
+
+          <section>
+            <div class="mini-heading">
+              <p class="eyebrow">Chênh lệch số lượng bằng chứng</p>
+              <strong>{{ changedMetricDeltas().length }}</strong>
+            </div>
+
+            <div class="delta-list">
+              <div *ngFor="let metric of changedMetricDeltas(); trackBy: trackByMetricDelta" [class.warn]="metric.changed">
+                <span>{{ metric.label }}</span>
+                <strong>{{ metric.leftValue }} -> {{ metric.rightValue }}</strong>
+                <em>{{ deltaText(metric.delta) }}</em>
+              </div>
+              <p *ngIf="!changedMetricDeltas().length" class="muted">Không có chênh lệch số lượng bằng chứng</p>
+            </div>
+          </section>
+
+          <section>
+            <div class="mini-heading">
+              <p class="eyebrow">Chênh lệch nguồn đồng bộ</p>
+              <strong>{{ sourceSyncChangedCount(compare.sourceSyncDelta) }}</strong>
+            </div>
+
+            <div class="delta-list source-sync-delta-list">
+              <ng-container *ngIf="compare.sourceSyncDelta.changed; else noSourceSyncDelta">
+                <div
+                  *ngIf="compare.sourceSyncDelta.gateStatus.changed"
+                  [class.good]="compare.sourceSyncDelta.gateStatus.rightValue === 'ready'"
+                  [class.warn]="compare.sourceSyncDelta.gateStatus.rightValue !== 'ready'"
+                >
+                  <span>Trạng thái cổng</span>
+                  <strong>
+                    {{ compare.sourceSyncDelta.gateStatus.leftValue }}
+                    ->
+                    {{ compare.sourceSyncDelta.gateStatus.rightValue }}
+                  </strong>
+                  <em>{{ compare.sourceSyncDelta.gateStatus.rightValue }}</em>
+                </div>
+
+                <div
+                  *ngIf="compare.sourceSyncDelta.blockedSources.changed"
+                  [class.good]="compare.sourceSyncDelta.blockedSources.rightValue <= compare.sourceSyncDelta.blockedSources.leftValue"
+                  [class.warn]="compare.sourceSyncDelta.blockedSources.rightValue > compare.sourceSyncDelta.blockedSources.leftValue"
+                >
+                  <span>Số nguồn bị chặn</span>
+                  <strong>
+                    {{ compare.sourceSyncDelta.blockedSources.leftValue }}
+                    ->
+                    {{ compare.sourceSyncDelta.blockedSources.rightValue }}
+                  </strong>
+                  <em>{{ deltaText(compare.sourceSyncDelta.blockedSources.delta) }}</em>
+                </div>
+
+                <div
+                  *ngIf="compare.sourceSyncDelta.blockingReasons.changed"
+                  [class.good]="!compare.sourceSyncDelta.blockingReasons.added.length"
+                  [class.warn]="compare.sourceSyncDelta.blockingReasons.added.length > 0"
+                >
+                  <span>Nội dung blocker</span>
+                  <strong>
+                    {{ compare.sourceSyncDelta.blockingReasons.leftValues.length }}
+                    ->
+                    {{ compare.sourceSyncDelta.blockingReasons.rightValues.length }}
+                  </strong>
+                  <em>{{ sourceSyncListDeltaText(compare.sourceSyncDelta.blockingReasons) }}</em>
+                  <div class="source-sync-list-delta">
+                    <p *ngFor="let value of compare.sourceSyncDelta.blockingReasons.added; trackBy: trackByValue">
+                      <span>Thêm</span>
+                      <code>{{ value }}</code>
+                    </p>
+                    <p *ngFor="let value of compare.sourceSyncDelta.blockingReasons.removed; trackBy: trackByValue">
+                      <span>Gỡ</span>
+                      <code>{{ value }}</code>
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  *ngIf="compare.sourceSyncDelta.sourceKeys.changed"
+                  class="warn"
+                >
+                  <span>Khóa nguồn</span>
+                  <strong>
+                    {{ compare.sourceSyncDelta.sourceKeys.leftValues.length }}
+                    ->
+                    {{ compare.sourceSyncDelta.sourceKeys.rightValues.length }}
+                  </strong>
+                  <em>{{ sourceSyncListDeltaText(compare.sourceSyncDelta.sourceKeys) }}</em>
+                  <div class="source-sync-list-delta">
+                    <p *ngFor="let value of compare.sourceSyncDelta.sourceKeys.added; trackBy: trackByValue">
+                      <span>Thêm</span>
+                      <code>{{ value }}</code>
+                    </p>
+                    <p *ngFor="let value of compare.sourceSyncDelta.sourceKeys.removed; trackBy: trackByValue">
+                      <span>Gỡ</span>
+                      <code>{{ value }}</code>
+                    </p>
+                  </div>
+                </div>
+              </ng-container>
+
+              <ng-template #noSourceSyncDelta>
+                <p class="muted">Không có chênh lệch nguồn đồng bộ</p>
+              </ng-template>
+            </div>
+          </section>
+        </div>
+      </div>
+    }
+
+    <div class="compare-readback">
+      <div class="mini-heading">
+        <div>
+          <p class="eyebrow">Đọc lại audit so sánh</p>
+          <strong>Import JSON đã lưu</strong>
+        </div>
+        <span class="status-pill passed">chỉ cục bộ</span>
+      </div>
+
+      <label>
+        JSON audit so sánh
+        <textarea
+          name="compareAuditText"
+          [(ngModel)]="compareAuditText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+
+      <div class="compare-actions">
+        <div class="button-row">
+          <button type="button" class="primary" (click)="readCompareAuditJson()">
+            Đọc audit so sánh
+          </button>
+          <button
+            type="button"
+            (click)="useCurrentCompareAuditForReadback()"
+            [disabled]="!compareResult()"
+          >
+            Đưa audit hiện tại vào vùng đọc lại
+          </button>
+          <label class="file-button">
+            Tải audit
+            <input type="file" accept="application/json,.json" (change)="loadCompareAuditFile($event)" />
+          </label>
+          <button type="button" (click)="clearCompareAuditReadback()">Xóa audit</button>
+        </div>
+      </div>
+
+      <div *ngIf="compareAuditReadbackError()" class="error-banner compare-error">
+        {{ compareAuditReadbackError() }}
+      </div>
+      <p *ngIf="lastCompareAuditReadbackFileName()" class="export-status">
+        {{ lastCompareAuditReadbackFileName() }}
+      </p>
+
+      @if (compareAuditReadback(); as audit) {
+        <div class="compare-result">
+          <dl class="details-list">
+            <div>
+              <dt>Schema audit</dt>
+              <dd>{{ audit.schemaVersion }}</dd>
+            </div>
+            <div>
+              <dt>Chế độ export</dt>
+              <dd>{{ statusText(audit.exportMode) }}</dd>
+            </div>
+            <div>
+              <dt>Schema so sánh</dt>
+              <dd>{{ audit.compareSchemaVersion }}</dd>
+            </div>
+            <div>
+              <dt>Thời điểm tạo</dt>
+              <dd>{{ audit.generatedAt }}</dd>
+            </div>
+            <div>
+              <dt>Cùng khóa</dt>
+              <dd>{{ booleanText(audit.sameComparisonKey) }}</dd>
+            </div>
+            <div>
+              <dt>Payload đã lược bỏ</dt>
+              <dd>{{ audit.omittedPayloads.join(', ') }}</dd>
+            </div>
+            <div>
+              <dt>API nhà cung cấp</dt>
+              <dd>{{ booleanText(audit.provider_api_called) }}</dd>
+            </div>
+            <div>
+              <dt>Google Ads API</dt>
+              <dd>{{ booleanText(audit.google_ads_api_called) }}</dd>
+            </div>
+            <div>
+              <dt>Chạy ads live</dt>
+              <dd>{{ booleanText(audit.live_ads_execution_used) }}</dd>
+            </div>
+            <div>
+              <dt>Thực thi lúc này</dt>
+              <dd>{{ booleanText(audit.execution_allowed_now) }}</dd>
+            </div>
+          </dl>
+
+          <div class="metric-grid">
+            <article *ngFor="let metric of audit.metricDeltas; trackBy: trackByMetricDelta" [class.changed]="metric.changed">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.leftValue }} -> {{ metric.rightValue }}</strong>
+              <code>{{ deltaText(metric.delta) }}</code>
+            </article>
+          </div>
+
+          <div class="compare-columns">
+            <section>
+              <div class="mini-heading">
+                <p class="eyebrow">Chênh lệch an toàn đọc lại</p>
+                <strong>{{ changedReadbackSafetyDeltas().length }}</strong>
+              </div>
+
+              <div class="delta-list">
+                <div *ngFor="let delta of changedReadbackSafetyDeltas(); trackBy: trackBySafetyDelta" [class.good]="delta.rightGateClosed" [class.warn]="delta.rightGateOpen">
+                  <span>{{ safetyLabel(delta.key) }}</span>
+                  <strong>{{ booleanDeltaText(delta.leftValue, delta.rightValue) }}</strong>
+                  <em>{{ delta.rightGateClosed ? 'đóng' : 'mở' }}</em>
+                </div>
+                <p *ngIf="!changedReadbackSafetyDeltas().length" class="muted">Không có chênh lệch an toàn</p>
+              </div>
+            </section>
+
+            <section>
+              <div class="mini-heading">
+                <p class="eyebrow">Chênh lệch bằng chứng đọc lại</p>
+                <strong>{{ changedReadbackMetricDeltas().length }}</strong>
+              </div>
+
+              <div class="delta-list">
+                <div *ngFor="let metric of changedReadbackMetricDeltas(); trackBy: trackByMetricDelta" [class.warn]="metric.changed">
+                  <span>{{ metric.label }}</span>
+                  <strong>{{ metric.leftValue }} -> {{ metric.rightValue }}</strong>
+                  <em>{{ deltaText(metric.delta) }}</em>
+                </div>
+                <p *ngIf="!changedReadbackMetricDeltas().length" class="muted">Không có chênh lệch số lượng bằng chứng</p>
+              </div>
+            </section>
+
+            <section>
+              <div class="mini-heading">
+                <p class="eyebrow">Nguồn đồng bộ đọc lại</p>
+                <strong>{{ sourceSyncChangedCount(audit.sourceSyncDelta) }}</strong>
+              </div>
+
+              <div class="delta-list source-sync-delta-list">
+                <ng-container *ngIf="audit.sourceSyncDelta.changed; else noReadbackSourceSyncDelta">
+                  <div
+                    *ngIf="audit.sourceSyncDelta.gateStatus.changed"
+                    [class.good]="audit.sourceSyncDelta.gateStatus.rightValue === 'ready'"
+                    [class.warn]="audit.sourceSyncDelta.gateStatus.rightValue !== 'ready'"
+                  >
+                    <span>Trạng thái cổng</span>
+                    <strong>
+                      {{ audit.sourceSyncDelta.gateStatus.leftValue }}
+                      ->
+                      {{ audit.sourceSyncDelta.gateStatus.rightValue }}
+                    </strong>
+                    <em>{{ audit.sourceSyncDelta.gateStatus.rightValue }}</em>
+                  </div>
+
+                  <div
+                    *ngIf="audit.sourceSyncDelta.blockedSources.changed"
+                    [class.good]="audit.sourceSyncDelta.blockedSources.rightValue <= audit.sourceSyncDelta.blockedSources.leftValue"
+                    [class.warn]="audit.sourceSyncDelta.blockedSources.rightValue > audit.sourceSyncDelta.blockedSources.leftValue"
+                  >
+                    <span>Số nguồn bị chặn</span>
+                    <strong>
+                      {{ audit.sourceSyncDelta.blockedSources.leftValue }}
+                      ->
+                      {{ audit.sourceSyncDelta.blockedSources.rightValue }}
+                    </strong>
+                    <em>{{ deltaText(audit.sourceSyncDelta.blockedSources.delta) }}</em>
+                  </div>
+
+                  <div
+                    *ngIf="audit.sourceSyncDelta.blockingReasons.changed"
+                    [class.good]="!audit.sourceSyncDelta.blockingReasons.added.length"
+                    [class.warn]="audit.sourceSyncDelta.blockingReasons.added.length > 0"
+                  >
+                    <span>Nội dung blocker</span>
+                    <strong>
+                      {{ audit.sourceSyncDelta.blockingReasons.leftValues.length }}
+                      ->
+                      {{ audit.sourceSyncDelta.blockingReasons.rightValues.length }}
+                    </strong>
+                    <em>{{ sourceSyncListDeltaText(audit.sourceSyncDelta.blockingReasons) }}</em>
+                    <div class="source-sync-list-delta">
+                      <p *ngFor="let value of audit.sourceSyncDelta.blockingReasons.added; trackBy: trackByValue">
+                        <span>Thêm</span>
+                        <code>{{ value }}</code>
+                      </p>
+                      <p *ngFor="let value of audit.sourceSyncDelta.blockingReasons.removed; trackBy: trackByValue">
+                        <span>Gỡ</span>
+                        <code>{{ value }}</code>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    *ngIf="audit.sourceSyncDelta.sourceKeys.changed"
+                    class="warn"
+                  >
+                    <span>Khóa nguồn</span>
+                    <strong>
+                      {{ audit.sourceSyncDelta.sourceKeys.leftValues.length }}
+                      ->
+                      {{ audit.sourceSyncDelta.sourceKeys.rightValues.length }}
+                    </strong>
+                    <em>{{ sourceSyncListDeltaText(audit.sourceSyncDelta.sourceKeys) }}</em>
+                    <div class="source-sync-list-delta">
+                      <p *ngFor="let value of audit.sourceSyncDelta.sourceKeys.added; trackBy: trackByValue">
+                        <span>Thêm</span>
+                        <code>{{ value }}</code>
+                      </p>
+                      <p *ngFor="let value of audit.sourceSyncDelta.sourceKeys.removed; trackBy: trackByValue">
+                        <span>Gỡ</span>
+                        <code>{{ value }}</code>
+                      </p>
+                    </div>
+                  </div>
+                </ng-container>
+
+                <ng-template #noReadbackSourceSyncDelta>
+                  <p class="muted">Không có chênh lệch nguồn đồng bộ</p>
+                </ng-template>
+              </div>
+            </section>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+  @if (docs(); as docs) {
+    <section class="summary-grid">
+      <article *ngFor="let card of summaryCards(); trackBy: trackByLabel" [class.good]="card.tone === 'good'" [class.warn]="card.tone === 'warn'">
+        <span>{{ card.label }}</span>
+        <strong>{{ card.value }}</strong>
+      </article>
+    </section>
+
+    <main class="review-layout">
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Phê duyệt</p>
+            <h2>{{ docs.query.approval_id }}</h2>
+          </div>
+          <span class="status-pill" [ngClass]="statusClass(docs.summary.docs_status)">
+            {{ statusText(docs.summary.docs_status) }}
+          </span>
+        </div>
+
+        <dl class="details-list">
+          <div>
+            <dt>Schema</dt>
+            <dd>{{ docs.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Thời điểm tạo</dt>
+            <dd>{{ docs.generatedAt }}</dd>
+          </div>
+          <div>
+            <dt>Chế độ tài liệu</dt>
+            <dd>{{ statusText(docs.docsMode) }}</dd>
+          </div>
+          <div>
+            <dt>Bản xuất nguồn</dt>
+            <dd>{{ statusText(docs.summary.source_export_mode) }}</dd>
+          </div>
+          <div>
+            <dt>Dữ liệu demo</dt>
+            <dd>{{ statusText(docs.query.fixture || 'none') }}</dd>
+          </div>
+        </dl>
+
+        <div *ngIf="docs.reviewerExport.fixture" class="fixture-box">
+          <strong>{{ docs.reviewerExport.fixture.scenario }}</strong>
+          <span>{{ docs.reviewerExport.fixture.source }}</span>
+          <p>{{ docs.reviewerExport.fixture.description }}</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">An toàn</p>
+            <h2>Cổng kiểm soát</h2>
+          </div>
+          <span class="status-pill passed">chỉ đọc</span>
+        </div>
+
+        <div class="gate-grid">
+          <div *ngFor="let gate of safetyGates(); trackBy: trackByGate" [class.pass]="gate.pass" [class.fail]="!gate.pass">
+            <span>{{ gate.label }}</span>
+            <strong>{{ gate.value }}</strong>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Nguồn đồng bộ</p>
+          <h2>Cổng phê duyệt</h2>
+        </div>
+        <div class="source-sync-heading-actions">
+          <span class="status-pill" [ngClass]="statusClass(docs.summary.source_sync_gate_status || 'not_available')">
+            {{ statusText(docs.summary.source_sync_gate_status || 'not_available') }}
+          </span>
+          <a
+            *ngIf="sourceSyncStatusQueryParams() as sourceSyncQueryParams"
+            class="source-sync-status-link"
+            [routerLink]="sourceSyncStatusReviewerRoute"
+            [queryParams]="sourceSyncQueryParams"
+          >
+            Rà trạng thái nguồn
+          </a>
+        </div>
+      </div>
+
+      <dl class="details-list">
+        <div>
+          <dt>Bản ghi phê duyệt chờ xử lý</dt>
+          <dd>{{ booleanText(docs.summary.pending_approval_record_rendered) }}</dd>
+        </div>
+        <div>
+          <dt>Bản ghi bằng chứng</dt>
+          <dd>{{ docs.summary.source_sync_decision_evidence_records_rendered || 0 }}</dd>
+        </div>
+        <div>
+          <dt>Nguồn bị chặn</dt>
+          <dd>{{ docs.summary.source_sync_decision_blocked_sources_rendered || 0 }}</dd>
+        </div>
+        <div>
+          <dt>Có thể tạo bản nháp hành động</dt>
+          <dd>{{ nullableBooleanText(docs.summary.source_sync_can_generate_action_draft) }}</dd>
+        </div>
+        <div>
+          <dt>Có thể dùng dữ liệu Google Ads</dt>
+          <dd>{{ nullableBooleanText(docs.summary.source_sync_can_use_google_ads_data_claim) }}</dd>
+        </div>
+      </dl>
+
+      <div class="source-sync-grid">
+        <div>
+          <p class="eyebrow">Lý do bị chặn</p>
+          <ul *ngIf="sourceSyncBlockingReasons().length; else noSourceSyncBlockers" class="source-sync-list">
+            <li *ngFor="let reason of sourceSyncBlockingReasons(); trackBy: trackByValue">{{ reason }}</li>
+          </ul>
+          <ng-template #noSourceSyncBlockers>
+            <p class="empty-text">Không có blocker nguồn đồng bộ</p>
+          </ng-template>
+        </div>
+
+        <div>
+          <p class="eyebrow">Khóa nguồn</p>
+          <div class="id-list" *ngIf="sourceSyncSourceKeys().length; else noSourceSyncKeys">
+            <code *ngFor="let key of sourceSyncSourceKeys(); trackBy: trackByValue">{{ key }}</code>
+          </div>
+          <ng-template #noSourceSyncKeys>
+            <p class="empty-text">Không có khóa nguồn đồng bộ</p>
+          </ng-template>
+        </div>
+      </div>
+
+      <div class="source-sync-section" *ngIf="sourceSyncSection() as section">
+        <p class="eyebrow">{{ section.title }}</p>
+        <div class="evidence-lines">
+          <p *ngFor="let line of section.lines; trackBy: trackByValue">{{ line }}</p>
+        </div>
+      </div>
+    </section>
+
+    @if (localSnapshot(); as snapshot) {
+      <section class="panel snapshot-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Snapshot cục bộ</p>
+            <h2>JSON bằng chứng phê duyệt</h2>
+          </div>
+          <button type="button" class="primary" (click)="downloadLocalSnapshot()" [disabled]="loading()">
+            Xuất JSON
+          </button>
+        </div>
+
+        <dl class="details-list">
+          <div>
+            <dt>Schema snapshot</dt>
+            <dd>{{ snapshot.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Endpoint nguồn</dt>
+            <dd>{{ snapshot.createdFromEndpoint }}</dd>
+          </div>
+          <div>
+            <dt>API nhà cung cấp</dt>
+            <dd>{{ booleanText(snapshot.provider_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Google Ads API</dt>
+            <dd>{{ booleanText(snapshot.google_ads_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Validate-only</dt>
+            <dd>{{ booleanText(snapshot.validateOnly_called) }}</dd>
+          </div>
+          <div>
+            <dt>Thực thi lúc này</dt>
+            <dd>{{ booleanText(snapshot.execution_allowed_now) }}</dd>
+          </div>
+          <div>
+            <dt>Cổng nguồn đồng bộ</dt>
+            <dd>{{ statusText(snapshot.source_sync.gate_status) }}</dd>
+          </div>
+          <div>
+            <dt>Blocker nguồn đồng bộ</dt>
+            <dd>{{ snapshot.source_sync.blocking_reasons.length }}</dd>
+          </div>
+        </dl>
+
+        <p *ngIf="lastExportName()" class="export-status">{{ lastExportName() }}</p>
+      </section>
+    }
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Bằng chứng</p>
+          <h2>ID đã liên kết</h2>
+        </div>
+        <span class="status-pill" [ngClass]="statusClass(linkedEvidenceSection()?.status || 'empty')">
+          {{ statusText(linkedEvidenceSection()?.status || 'empty') }}
+        </span>
+      </div>
+
+      <div class="evidence-layout">
+        <div class="evidence-lines">
+          <p *ngFor="let line of linkedEvidenceSection()?.lines || []; trackBy: trackByValue">{{ line }}</p>
+        </div>
+
+        <div class="id-list" *ngIf="linkedEvidenceIds().length; else noLinkedIds">
+          <code *ngFor="let id of linkedEvidenceIds(); trackBy: trackByValue">{{ id }}</code>
+        </div>
+        <ng-template #noLinkedIds>
+          <p class="empty-text">Không có ID bằng chứng đã liên kết</p>
+        </ng-template>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Checklist</p>
+          <h2>Các bước rà soát</h2>
+        </div>
+        <span class="status-pill" [ngClass]="statusClass(checklistSection()?.status || 'empty')">
+          {{ statusText(checklistSection()?.status || 'empty') }}
+        </span>
+      </div>
+
+      <ol class="checklist">
+        <li *ngFor="let line of checklistSection()?.lines || []; trackBy: trackByValue">{{ line }}</li>
+      </ol>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Xem trước</p>
+          <h2>Markdown</h2>
+        </div>
+      </div>
+      <pre>{{ docs.markdownPreview }}</pre>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Route</p>
+          <h2>Link đọc lại</h2>
+        </div>
+      </div>
+
+      <div class="route-list">
+        <div *ngFor="let example of docs.routeExamples; trackBy: trackByRoute">
+          <span>{{ example.method }}</span>
+          <code>{{ routePath(example) }}</code>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-grid" *ngIf="otherSections().length">
+      <article *ngFor="let section of otherSections(); trackBy: trackBySection">
+        <div>
+          <p class="eyebrow">{{ section.section_id }}</p>
+          <h2>{{ section.title }}</h2>
+        </div>
+        <ul>
+          <li *ngFor="let line of section.lines; trackBy: trackByValue">{{ line }}</li>
+        </ul>
+      </article>
+    </section>
+  }
+</div>

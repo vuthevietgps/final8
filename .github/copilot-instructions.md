@@ -237,23 +237,20 @@ cd frontend && npm start           # http://localhost:4200
 
 ## 5. TRẠNG THÁI TEST
 
-### ✅ Kết quả: 321 PASS / 0 FAIL (100%)
+### ✅ Kết quả: xem catalog QA hiện hành
 
-| Module | Script | Tests |
-|--------|--------|-------|
-| Auth & RBAC | `test-module-auth-rbac.ps1` | 18 |
-| Customer | `test-module-customer.ps1` | 8 |
-| Ad Account & Group | `test-module-ad-account-group.ps1` | 34 |
-| Labor & Other Cost | `test-module-labor-other-cost.ps1` | 32 |
-| Owner Fund & Loan | `test-module-owner-fund-loan.ps1` | 43 |
-| Ads Alerts & KPI | `test-module-ads-alerts-kpi.ps1` | 26 |
-| Reports, Products & Config | `test-module-reports-products-config.ps1` | 41 |
-| Supply Chain | `test-module-supply-chain.ps1` | 28 |
-| Quotes | `test-module-quotes.ps1` | 18 |
-| Media, Chat & Config | `test-module-media-chat-config.ps1` | 33 |
-| Financial Deep | `test-module-financial-deep.ps1` | 40 |
+| Nhóm | Vị trí chuẩn |
+|------|-------------|
+| Module core | `tests/backend/suites/modules/core/` |
+| Module extended | `tests/backend/suites/modules/extended/` |
+| E2E | `tests/backend/suites/e2e-flows/` |
+| Scenario | `tests/backend/suites/business-scenarios/` |
+| Legacy | `tests/backend/legacy/` |
 
-Chi tiết: xem `TEST-PLAN.md`
+Chi tiết:
+- Catalog hiện hành: `tests/backend/README.md`
+- Kế hoạch test hiện hành: `tests/backend/docs/backend-test-plan.md`
+- Baseline lịch sử: `tests/backend/legacy/docs/TEST-PLAN-20260223.md`
 
 ### Chạy test
 ```bash
@@ -266,7 +263,7 @@ powershell -ExecutionPolicy Bypass -File test-all-modules.ps1
 
 ### Backend (.env)
 ```
-MONGODB_URI=mongodb+srv://...
+MONGODB_URI=<MONGODB_URI_FROM_SECRET_MANAGER>
 JWT_SECRET=your-secret
 PORT=3000
 CORS_ORIGINS=http://localhost:4200,http://localhost:4201
@@ -328,4 +325,4 @@ GET    /health                   # Health check (no auth)
 | 02/02/2026 | Financial modules, labor statement, CFO spec v2 |
 | 03/02/2026 | Agent payment, ads alerts, advanced finance |
 | 14/02/2026 | Phase 1-5 test scripts, E2E business flow |
-| 16/02/2026 | 7 module test suites (202 PASS / 0 FAIL), cleanup |
+| 16/02/2026 | Consolidated backend regression suites and cleanup |

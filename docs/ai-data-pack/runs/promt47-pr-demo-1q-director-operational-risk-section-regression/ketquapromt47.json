@@ -1,0 +1,75 @@
+{
+  "phase": "PR-DEMO-1Q",
+  "status": "implemented_section_guard",
+  "output_root": "docs/ai-data-pack/runs/promt47-pr-demo-1q-director-operational-risk-section-regression",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target": "director_operational_risk_section_regression_guard",
+  "director_section_path_checked": true,
+  "director_section_path": "sections[\"16_operation_capacity\"].data.operation_capacity.operational_risk_findings",
+  "targeted_findings_checked": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "schema_guard_preserved": true,
+  "no_action_payload_guard_preserved": true,
+  "duplicate_path_stability_guard_added": true,
+  "code_changed": true,
+  "business_logic_changed": false,
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+      "working_directory": "backend",
+      "result": "passed",
+      "test_suites": "1 passed, 1 total",
+      "tests": "38 passed, 38 total"
+    },
+    {
+      "command": "npm run build",
+      "working_directory": "backend",
+      "result": "passed"
+    }
+  ],
+  "static_scans_classified": true,
+  "static_scans": [
+    {
+      "name": "provider_action_live_scan",
+      "result": "classified_existing_matches_no_prompt47_provider_or_execution_addition"
+    },
+    {
+      "name": "mutation_db_business_scan",
+      "result": "classified_existing_matches_and_prompt47_test_banned_key_text_only"
+    },
+    {
+      "name": "secret_token_scan",
+      "result": "classified_existing_token_redaction_matches_no_prompt47_secret"
+    }
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "chatgpt_web_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "server_mongodb_used": false,
+    "db_migration_added": false,
+    "business_mutation_added": false,
+    "new_export_download_endpoint_added": false
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": "",
+    "missing_files_or_contracts": []
+  },
+  "next_recommendation": "Accept Prompt47 and close the PR-DEMO-1 read-only evidence guard sequence with a no-code BA/QA handoff packet before any later phase."
+}

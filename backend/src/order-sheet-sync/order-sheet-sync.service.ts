@@ -1,7 +1,7 @@
 /**
  * Service: OrderSheetSyncService
  * Chức năng: Đồng bộ đơn hàng từ OrderTest2 lên Google Sheets của Đại lý và Nhà cung cấp
- * 
+ *
  * Features:
  * - Sync đơn hàng của Đại lý lên Google Sheet (tab "Đơn Hàng Đại Lý")
  * - Sync đơn hàng của Nhà cung cấp lên Google Sheet (tab "Đơn Hàng NCC")
@@ -179,8 +179,13 @@ export class OrderSheetSyncService {
 
     for (const agent of agents) {
       try {
-        await this.syncAgentOrders(agent._id.toString());
-        result.success++;
+        const syncResult = await this.syncAgentOrders(agent._id.toString());
+        if (syncResult.success) {
+          result.success++;
+        } else {
+          result.failed++;
+          result.errors.push(`Agent ${agent.fullName}: ${syncResult.message}`);
+        }
       } catch (error) {
         result.failed++;
         result.errors.push(`Agent ${agent.fullName}: ${error.message}`);
@@ -212,8 +217,13 @@ export class OrderSheetSyncService {
 
     for (const supplier of suppliers) {
       try {
-        await this.syncSupplierOrders(supplier._id.toString());
-        result.success++;
+        const syncResult = await this.syncSupplierOrders(supplier._id.toString());
+        if (syncResult.success) {
+          result.success++;
+        } else {
+          result.failed++;
+          result.errors.push(`Supplier ${supplier.fullName}: ${syncResult.message}`);
+        }
       } catch (error) {
         result.failed++;
         result.errors.push(`Supplier ${supplier.fullName}: ${error.message}`);
@@ -643,7 +653,7 @@ export class OrderSheetSyncService {
     try {
       const d = date instanceof Date ? date : (date ? new Date(date) : null);
       if (!d || isNaN(d.getTime())) return '';
-      
+
       const dd = String(d.getDate()).padStart(2, '0');
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const yyyy = d.getFullYear();
@@ -693,7 +703,7 @@ export class OrderSheetSyncService {
   }> {
     const hasEnvCredentials = !!process.env.GOOGLE_CREDENTIALS_JSON;
     const hasFileCredentials = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    
+
     let credentialsSource = 'none';
     let credentialsConfigured = false;
 
@@ -829,16 +839,24 @@ export class OrderSheetSyncService {
 
     // Đếm đơn hàng cho mỗi agent/supplier
     const agentOrderCounts = await this.orderModel.aggregate([
-      { $match: { agentId: { $exists: true }, isActive: { $ne: false } } },
+      { $match: { agentId: { $type: 'objectId' }, isActive: { $ne: false } } },
       { $group: { _id: '$agentId', count: { $sum: 1 } } },
     ]);
-    const agentCountMap = new Map(agentOrderCounts.map((a) => [a._id.toString(), a.count]));
+    const agentCountMap = new Map(
+      agentOrderCounts
+        .filter((a) => a?._id)
+        .map((a) => [a._id.toString(), a.count]),
+    );
 
     const supplierOrderCounts = await this.orderModel.aggregate([
-      { $match: { supplierId: { $exists: true }, isActive: { $ne: false } } },
+      { $match: { supplierId: { $type: 'objectId' }, isActive: { $ne: false } } },
       { $group: { _id: '$supplierId', count: { $sum: 1 } } },
     ]);
-    const supplierCountMap = new Map(supplierOrderCounts.map((s) => [s._id.toString(), s.count]));
+    const supplierCountMap = new Map(
+      supplierOrderCounts
+        .filter((s) => s?._id)
+        .map((s) => [s._id.toString(), s.count]),
+    );
 
     return {
       agents: agents.map((a) => ({

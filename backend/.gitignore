@@ -3,6 +3,13 @@
 .env.local
 .env.*
 
+# Cloud service-account credentials (never commit downloaded JSON keys)
+*service-account*.json
+*service_account*.json
+*firebase-adminsdk*.json
+google-credentials*.json
+dongbodulieuweb-*.json
+
 # Logs
 logs
 *.log

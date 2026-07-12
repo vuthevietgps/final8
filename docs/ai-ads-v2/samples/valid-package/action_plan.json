@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "2.0",
+  "planId": "PLAN-20260612-001",
+  "sourceExportId": "EXP-20260612-001",
+  "targetProvider": "google",
+  "currency": "VND",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "executionMode": "pending_approval",
+  "analysisSummary": {
+    "mainConclusion": "Create one paused Search campaign and monitor profitability before any resume action.",
+    "dataQuality": "good_with_warnings",
+    "warnings": [
+      "Keyword attribution coverage is partial."
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "ACT001",
+      "provider": "google",
+      "actionType": "create_search_campaign",
+      "customerId": "1234567890",
+      "loginCustomerId": "4345552613",
+      "resourceType": "campaign",
+      "operation": "create",
+      "typedPayload": {
+        "campaignName": "Search - Sample Product",
+        "budgetName": "Budget - Sample Product",
+        "dailyBudget": 500000,
+        "advertisingChannelType": "SEARCH",
+        "status": "PAUSED",
+        "biddingStrategyType": "MAXIMIZE_CONVERSIONS",
+        "startDate": "2026-06-13",
+        "finalUrl": "https://htxbachgia.shop/",
+        "adGroups": []
+      },
+      "reason": "Validated demand and positive product margin justify a controlled paused campaign draft.",
+      "evidence": {
+        "netProfitVnd": 2500000,
+        "confirmedOrders": 12
+      },
+      "confidence": 0.76,
+      "risk": "medium",
+      "dataQuality": "good_with_warnings",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-001:ACT001",
+      "rollbackIf": [
+        "Do not resume if inventory falls below minimum stock."
+      ]
+    },
+    {
+      "actionId": "ACT002",
+      "provider": "google",
+      "actionType": "create_keyword",
+      "customerId": "1234567890",
+      "loginCustomerId": "4345552613",
+      "resourceType": "keyword",
+      "operation": "create",
+      "typedPayload": {
+        "adGroupId": "9876543210",
+        "keywordText": "sample product",
+        "matchType": "PHRASE",
+        "negative": false
+      },
+      "reason": "The query demonstrates qualified commercial intent.",
+      "evidence": {
+        "conversions": 8,
+        "netProfitVnd": 1800000
+      },
+      "confidence": 0.81,
+      "risk": "low",
+      "dataQuality": "good",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-001:ACT002",
+      "rollbackIf": [
+        "Pause separately if spend reaches the policy threshold without conversions."
+      ]
+    },
+    {
+      "actionId": "ACT003",
+      "provider": "google",
+      "actionType": "create_responsive_search_ad",
+      "customerId": "1234567890",
+      "loginCustomerId": "4345552613",
+      "resourceType": "responsive_search_ad",
+      "operation": "create",
+      "typedPayload": {
+        "adGroupId": "9876543210",
+        "headlines": [
+          "Sample Product",
+          "Official Product Page",
+          "Request Advice Today"
+        ],
+        "descriptions": [
+          "Review product details and request advice from our team.",
+          "Visit the official page for current product information."
+        ],
+        "finalUrl": "https://htxbachgia.shop/",
+        "path1": "sample",
+        "path2": "advice"
+      },
+      "reason": "The current ad group needs an RSA with a clear consultation CTA.",
+      "evidence": {
+        "currentRsaCount": 0
+      },
+      "confidence": 0.72,
+      "risk": "medium",
+      "dataQuality": "partial",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-001:ACT003",
+      "rollbackIf": [
+        "Pause separately if policy review fails."
+      ]
+    },
+    {
+      "actionId": "ACT004",
+      "provider": "google",
+      "actionType": "update_campaign_budget",
+      "customerId": "1234567890",
+      "loginCustomerId": "4345552613",
+      "resourceType": "campaign_budget",
+      "operation": "update",
+      "typedPayload": {
+        "campaignBudgetId": "1122334455",
+        "dailyBudget": 600000,
+        "currentDailyBudget": 500000
+      },
+      "reason": "A 20 percent controlled increase remains within the configured policy.",
+      "evidence": {
+        "profitPerSpend": 1.4
+      },
+      "confidence": 0.7,
+      "risk": "medium",
+      "dataQuality": "good_with_warnings",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-001:ACT004",
+      "rollbackIf": [
+        "Recommend rollback if seven-day profit per spend drops below 1."
+      ]
+    },
+    {
+      "actionId": "ACT005",
+      "provider": "google",
+      "actionType": "monitor_only",
+      "customerId": "1234567890",
+      "loginCustomerId": "4345552613",
+      "resourceType": "monitor",
+      "operation": "monitor",
+      "typedPayload": {
+        "monitorUntil": "2026-06-20",
+        "metrics": [
+          "netProfit",
+          "conversions",
+          "costPerConversion"
+        ]
+      },
+      "reason": "Attribution is incomplete, so no stronger action is justified.",
+      "evidence": {
+        "keywordAttributionCoveragePercent": 38
+      },
+      "confidence": 0.55,
+      "risk": "low",
+      "dataQuality": "insufficient",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-001:ACT005",
+      "rollbackIf": []
+    }
+  ]
+}

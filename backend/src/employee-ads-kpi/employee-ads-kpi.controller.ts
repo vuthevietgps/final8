@@ -1,6 +1,6 @@
 /**
  * Employee Ads KPI Controller
- * 
+ *
  * Endpoints:
  * - GET /employee-ads-kpi - Lấy KPI tất cả nhân viên
  * - GET /employee-ads-kpi/:employeeId - Lấy KPI một nhân viên
@@ -9,7 +9,7 @@
  * - POST /employee-ads-kpi/bulk-assign - Gán nhân viên cho nhiều ad groups
  * - GET /employee-ads-kpi/employees - Lấy danh sách nhân viên có thể gán
  * - GET /employee-ads-kpi/alerts - Lấy tất cả alerts
- * 
+ *
  * Daily Budget Adjustment:
  * - GET /employee-ads-kpi/daily-suggestions - Lấy bảng gợi ý chi phí hôm nay
  * - POST /employee-ads-kpi/daily-suggestions/generate - Tạo suggestions thủ công
@@ -82,14 +82,16 @@ export class EmployeeAdsKpiController {
   @Get('profitable-stats/daily')
   async getProfitableStatsByDay(
     @Query('from') from?: string,
+    @Query('fromDate') fromDateAlias?: string,
     @Query('to') to?: string,
+    @Query('toDate') toDateAlias?: string,
     @Query('employeeId') employeeId?: string
   ) {
     // Default: last 30 days
-    const toDate = to || new Date().toISOString().split('T')[0];
+    const toDate = to || toDateAlias || new Date().toISOString().split('T')[0];
     const fromDateDefault = new Date();
     fromDateDefault.setDate(fromDateDefault.getDate() - 30);
-    const fromDate = from || fromDateDefault.toISOString().split('T')[0];
+    const fromDate = from || fromDateAlias || fromDateDefault.toISOString().split('T')[0];
 
     return this.kpiService.getProfitableStatsByDay(fromDate, toDate, employeeId);
   }
@@ -115,14 +117,16 @@ export class EmployeeAdsKpiController {
   @Get('profitable-stats/trend')
   async getProfitableRateTrend(
     @Query('from') from?: string,
+    @Query('fromDate') fromDateAlias?: string,
     @Query('to') to?: string,
+    @Query('toDate') toDateAlias?: string,
     @Query('employeeId') employeeId?: string
   ) {
     // Default: last 30 days
-    const toDate = to || new Date().toISOString().split('T')[0];
+    const toDate = to || toDateAlias || new Date().toISOString().split('T')[0];
     const fromDateDefault = new Date();
     fromDateDefault.setDate(fromDateDefault.getDate() - 30);
-    const fromDate = from || fromDateDefault.toISOString().split('T')[0];
+    const fromDate = from || fromDateAlias || fromDateDefault.toISOString().split('T')[0];
 
     return this.kpiService.getProfitableRateTrend(fromDate, toDate, employeeId);
   }
@@ -143,7 +147,9 @@ export class EmployeeAdsKpiController {
   @Get('meta/alerts')
   async getAllAlerts(
     @Query('from') from?: string,
+    @Query('fromDate') fromDateAlias?: string,
     @Query('to') to?: string,
+    @Query('toDate') toDateAlias?: string,
     @Query('type') type?: 'WARNING' | 'CRITICAL' | 'INFO'
   ): Promise<{
     alerts: Array<KpiAlert & { employeeId: string; employeeName: string }>;
@@ -153,13 +159,13 @@ export class EmployeeAdsKpiController {
       info: number;
     };
   }> {
-    const fromDate = from ? new Date(from) : undefined;
-    const toDate = to ? new Date(to) : undefined;
+    const fromDate = from || fromDateAlias ? new Date(from || fromDateAlias) : undefined;
+    const toDate = to || toDateAlias ? new Date(to || toDateAlias) : undefined;
 
     const employees = await this.kpiService.getAllEmployeesKpi(fromDate, toDate);
-    
+
     let allAlerts: Array<KpiAlert & { employeeId: string; employeeName: string }> = [];
-    
+
     for (const emp of employees) {
       for (const alert of emp.alerts) {
         if (!type || alert.type === type) {
@@ -272,14 +278,14 @@ export class EmployeeAdsKpiController {
       dto.notes,
       date
     );
-    
+
     if (!result) {
       return {
         success: false,
         message: `Không tìm thấy gợi ý cho nhóm ${adGroupId} ngày ${date || 'hôm nay'}`
       };
     }
-    
+
     return {
       success: true,
       message: `Đã xác nhận chỉnh budget cho ${result.adGroupName}: ${dto.confirmedBudget.toLocaleString()} VND`,

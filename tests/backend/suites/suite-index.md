@@ -1,0 +1,635 @@
+# Backend Suite Index
+
+Muc luc nay la danh sach active suite duy nhat de tra cuu nhanh.
+
+## Latest Execution Snapshot
+
+- Verified on `2026-04-25 11:56:15 +07`
+- Latest owner-fund orphan fixture cleanup closure:
+  - `module.owner-fund-orphan-fixture-cleanup.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `44 PASS / 0 FAIL`
+  - real QA DB orphan-owner cleanup:
+    - pre-audit: `FAILED_PRODUCT`, `15` orphan owner refs, `37` orphan withdrawals, `26` orphan fund transactions
+    - dry-run classification: `FAILED_PRODUCT`, `15` eligible exact fixture clusters, `0` blocked, `0` unknown, `63` candidate docs
+    - apply + serial verify + idempotent re-apply: `FAILED_PRODUCT -> FIXED_DATA -> PASSED`, `63` docs deleted, post-verify `0` orphan refs remain, re-apply deleted `0`
+  - latest canonical active full regression remains `2026-04-25 00:28:07 +07`: `1254 PASS / 0 FAIL / 0 BLOCKED`, `27/27` suites
+  - verified fixes:
+    - `backend/scripts/cleanup-owner-fund-orphan-fixtures.js`
+    - `tests/backend/suites/modules/extended/module.owner-fund-orphan-fixture-cleanup.ps1`
+  - same-round audit trail kept:
+    - [module.owner-fund-orphan-fixture-cleanup-rerun-20260425-115356.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-orphan-fixture-cleanup-rerun-20260425-115356.log): `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `44 PASS / 0 FAIL`
+    - [owner-fund-orphan-owner-audit-real-20260425-115356.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-owner-audit-real-20260425-115356.json): `FAILED_PRODUCT`
+    - [owner-fund-orphan-cleanup-dryrun-real-20260425-115356.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-cleanup-dryrun-real-20260425-115356.json): `FAILED_PRODUCT`
+    - [owner-fund-orphan-cleanup-apply-real-20260425-115356.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-cleanup-apply-real-20260425-115356.json): `FAILED_PRODUCT -> FIXED_DATA`
+    - [owner-fund-orphan-owner-audit-verify-real-20260425-115356.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-owner-audit-verify-real-20260425-115356.json): `DISCARDED` parallel race artifact
+    - [owner-fund-orphan-owner-audit-verify-real-20260425-120005.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-owner-audit-verify-real-20260425-120005.json): `PASSED`
+    - [owner-fund-orphan-cleanup-idempotent-real-20260425-120005.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-cleanup-idempotent-real-20260425-120005.json): `PASSED`
+    - [module-regression-20260425-002807.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260425-002807.json): `PASSED`, latest canonical active full gate
+  - traceable summaries:
+    - [qa-owner-fund-orphan-cleanup-summary-20260425-120005.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-orphan-cleanup-summary-20260425-120005.md)
+    - [qa-owner-fund-orphan-cleanup-summary-20260425-120005.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-orphan-cleanup-summary-20260425-120005.json)
+  - runner/catalog note:
+    - `module.owner-fund-orphan-fixture-cleanup.ps1` la validation/admin suite, khong nam trong active `27`-suite gate
+    - `synthetic.emergency-owner-fund` la label phan loai an toan cho `4` orphan clusters co marker E2E-style; label nay khong prove provenance toi bat ky active suite nao
+- Verified on `2026-04-25 11:16:11 +07`
+- Latest owner-fund ObjectId normalization and delete-guard closure:
+  - `module.owner-fund-objectid-normalize.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `43 PASS / 0 FAIL`
+  - real QA DB objectId normalization:
+    - dry-run: `FAILED_PRODUCT`, `98` convertible refs, `0` invalid strings, `0` unexpected BSON-type blockers
+    - apply + verify: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, `98` refs updated and `0` convertible refs remain
+  - delete-owner guard reproduce: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - related reruns:
+    - `module.owner-fund-loan.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+    - `e2e.concurrent-finance-ripple.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+  - canonical full regression `2026-04-25 00:28:07 +07`: `1254 PASS / 0 FAIL / 0 BLOCKED`, `27/27` suites
+  - residual real QA DB audit `2026-04-25 11:16:11 +07`: `FAILED_PRODUCT`, `15` orphan owner refs, `37` orphan withdrawals, `26` orphan fund transactions
+  - verified fixes:
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `backend/scripts/normalize-owner-fund-objectids.js`
+    - `backend/scripts/audit-owner-fund-orphan-owners.js`
+    - `tests/backend/suites/modules/extended/module.owner-fund-objectid-normalize.ps1`
+    - `tests/backend/suites/modules/core/module.owner-fund-loan.ps1`
+- Same-round audit trail kept:
+  - [module.owner-fund-objectid-normalize-direct-run-20260425-000805.err.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-objectid-normalize-direct-run-20260425-000805.err.log): `FAILED_HARNESS`
+  - [module.owner-fund-objectid-normalize-direct-run-20260425-000902.out.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-objectid-normalize-direct-run-20260425-000902.out.log): `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - [module.owner-fund-objectid-normalize-rerun-20260425-001052.out.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-objectid-normalize-rerun-20260425-001052.out.log): `PASSED`
+  - [module.owner-fund-objectid-normalize-deleteguard-rerun-20260425-001836.out.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-objectid-normalize-deleteguard-rerun-20260425-001836.out.log): `PASSED`, `43 PASS / 0 FAIL`
+  - [owner-fund-objectid-normalize-dryrun-real-20260425-001107.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-objectid-normalize-dryrun-real-20260425-001107.json): `FAILED_PRODUCT`
+  - [owner-fund-objectid-normalize-apply-real-20260425-001132.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-objectid-normalize-apply-real-20260425-001132.json): `FAILED_PRODUCT -> FIXED_PRODUCT`
+  - [owner-fund-objectid-normalize-verify-real-20260425-001143.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-objectid-normalize-verify-real-20260425-001143.json): `PASSED`
+  - [owner-fund-delete-guard-repro-pass-20260425-003420.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-delete-guard-repro-pass-20260425-003420.json): `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - [module.owner-fund-loan-cleanupfix-rerun-20260425-002706.out.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-loan-cleanupfix-rerun-20260425-002706.out.log): `PASSED`
+  - [module-regression-owner-objectid-final-20260425-002719.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-owner-objectid-final-20260425-002719.log): `PASSED`
+  - [module-regression-20260425-002807.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260425-002807.json): `PASSED`, `1254 PASS / 0 FAIL / 0 BLOCKED`
+  - [owner-fund-orphan-owner-audit-real-20260425-111459.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-orphan-owner-audit-real-20260425-111459.json): `FAILED_PRODUCT`
+- Traceable summaries:
+  - [qa-owner-fund-objectid-normalize-summary-20260425-111459.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-objectid-normalize-summary-20260425-111459.md)
+  - [qa-owner-fund-objectid-normalize-summary-20260425-111459.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-objectid-normalize-summary-20260425-111459.json)
+- Runner/catalog note:
+  - active module catalog hien tai la `27` suite (`14` core + `13` extended)
+  - `module.owner-fund-objectid-normalize.ps1` la suite active de bao phu mixed BSON normalization va owner delete guard voi financial history
+  - residual orphan-owner data tren real QA DB hien duoc theo doi bang audit read-only; khong co auto-repair active vi child documents thieu owner identity authoritative
+- Verified on `2026-04-24 23:43:45 +07`
+- Latest owner-fund historical ledger closure:
+  - `module.owner-fund-ledger-reconcile.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `26 PASS / 0 FAIL`
+  - related reruns:
+    - `module.owner-fund-loan.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+    - `e2e.concurrent-finance-ripple.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+  - canonical full regression `2026-04-24 23:37:05 +07`: `1212 PASS / 0 FAIL / 0 BLOCKED`, `26/26` suites
+  - real QA DB repair:
+    - dry-run reproduced `18` missing ledger rows / `55,840,000`
+    - apply inserted `18` ledger rows and verify dry-run closed to `0` anomalies
+  - verified fixes:
+    - `backend/src/owner-fund/schemas/fund-transaction.schema.ts`
+    - `backend/src/owner-fund/schemas/withdrawal.schema.ts`
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `backend/scripts/reconcile-owner-withdrawal-ledger.js`
+    - `tests/backend/suites/modules/extended/module.owner-fund-ledger-reconcile.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+- Same-round audit trail kept:
+  - [module.owner-fund-ledger-reconcile-rerun-20260424-231537.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-ledger-reconcile-rerun-20260424-231537.log): `FAILED_HARNESS`
+  - [module.owner-fund-ledger-reconcile-rerun-20260424-231811.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-ledger-reconcile-rerun-20260424-231811.log): `FAILED_HARNESS`
+  - [module.owner-fund-ledger-reconcile-rerun-20260424-233235.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-ledger-reconcile-rerun-20260424-233235.log): `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `26 PASS / 0 FAIL`
+  - [module.owner-fund-loan-rerun-20260424-233410.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-loan-rerun-20260424-233410.log): `PASSED`, `67 PASS / 0 FAIL`
+  - [module.finance-control-funds-rerun-20260424-233410.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.finance-control-funds-rerun-20260424-233410.log): `PASSED`, `40 PASS / 0 FAIL`
+  - [e2e.concurrent-finance-ripple-rerun-20260424-233410.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.concurrent-finance-ripple-rerun-20260424-233410.log): `PASSED`, `67 PASS / 0 FAIL`
+  - [module-regression-20260424-233705.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-233705.json): `PASSED`, `1212 PASS / 0 FAIL / 0 BLOCKED`
+  - [owner-fund-ledger-reconcile-dryrun-real-20260424-234202.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-ledger-reconcile-dryrun-real-20260424-234202.json): `FAILED_PRODUCT` reproduce on real QA DB
+  - [owner-fund-ledger-reconcile-apply-real-20260424-234211.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-ledger-reconcile-apply-real-20260424-234211.json): `FAILED_PRODUCT -> FIXED_PRODUCT`
+  - [owner-fund-ledger-reconcile-verify-real-20260424-234218.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-ledger-reconcile-verify-real-20260424-234218.json): `PASSED`
+  - [owner-fund-ledger-reconcile-api-probe-20260424-234228.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/owner-fund-ledger-reconcile-api-probe-20260424-234228.json): owner-history API visibility restored on real QA DB
+- Traceable summaries:
+  - [qa-owner-fund-historical-reconcile-summary-20260424-234345.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-historical-reconcile-summary-20260424-234345.md)
+  - [qa-owner-fund-historical-reconcile-summary-20260424-234345.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-historical-reconcile-summary-20260424-234345.json)
+- Runner/catalog note:
+  - active module catalog o thoi diem do la `26` suite (`14` core + `12` extended)
+  - `module.owner-fund-ledger-reconcile.ps1` la suite active de bao phu historical owner-withdrawal backfill + idempotence, khong chi fresh-path approve/complete
+- Verified on `2026-04-24 22:54:25 +07`
+- Latest owner-fund ledger closure:
+  - `module.owner-fund-loan.ps1`: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - baseline log closed at `45 PASS / 3 FAIL`
+  - final rerun closed at `67 PASS / 0 FAIL`
+  - `e2e.concurrent-finance-ripple.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `67 PASS / 0 FAIL`
+  - `module.finance-control-funds.ps1`: `FAILED_HARNESS_ENV -> FIXED_HARNESS_ENV -> PASSED`, final `40 PASS / 0 FAIL`
+  - canonical full regression `2026-04-24 22:47:36 +07`: `1186 PASS / 0 FAIL / 0 BLOCKED`, `25/25` suites
+  - verified fixes:
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `tests/backend/suites/modules/core/module.owner-fund-loan.ps1`
+    - `tests/backend/suites/e2e-flows/e2e.concurrent-finance-ripple.ps1`
+- Same-round audit trail kept:
+  - [module.owner-fund-loan-ledger-rerun-20260424-223653.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-loan-ledger-rerun-20260424-223653.log): `FAILED_PRODUCT`, `45 PASS / 3 FAIL`
+  - [module.owner-fund-loan-ledgerfix-rerun-20260424-224104.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-loan-ledgerfix-rerun-20260424-224104.log): `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, `67 PASS / 0 FAIL`
+  - [e2e.concurrent-finance-ripple-run-20260424-224135.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-224135.log): `FAILED_HARNESS`, `61 PASS / 3 FAIL`
+  - [e2e.concurrent-finance-ripple-run-20260424-224220.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-224220.log): `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `67 PASS / 0 FAIL`
+  - [module.finance-control-funds-ownerfund-rerun-20260424-224617.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.finance-control-funds-ownerfund-rerun-20260424-224617.log): `FAILED_HARNESS_ENV -> FIXED_HARNESS_ENV -> PASSED`, `40 PASS / 0 FAIL`
+  - [module-regression-20260424-224736.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-224736.json): `PASSED`, `1186 PASS / 0 FAIL / 0 BLOCKED`
+  - [module-regression-latest.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-latest.json): latest canonical post-fix pass
+- Traceable summaries:
+  - [qa-owner-fund-ledger-fix-summary-20260424-225425.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-ledger-fix-summary-20260424-225425.md)
+  - [qa-owner-fund-ledger-fix-summary-20260424-225425.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-ledger-fix-summary-20260424-225425.json)
+- Runner/catalog note:
+  - owner-withdrawal approve/complete now has exact-once ledger visibility on fresh paths, and mixed terminal races keep zero ledger rows for rejected/cancelled outcomes
+  - canonical `25`-suite backend regression stayed green after the fix, so this round closed a real product defect without relaxing owner-fund or finance assertions
+- Verified on `2026-04-24 22:13:08 +07`
+- Latest write-contention product closure:
+  - pre-fix valid-contract local control: `FAILED_PRODUCT`
+  - post-fix isolated rerun: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - canonical related gate `2026-04-24 22:07:47 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`, `25/25` suites
+  - verified fixes:
+    - `backend/src/test-order2/services/order-calculation.service.ts`
+    - `backend/src/finance/events/finance-event-listener.service.ts`
+- Same-round audit trail kept:
+  - [perf.write-contention-summary-20260424-215242.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.write-contention-summary-20260424-215242.json): `FAILED_PRODUCT`
+  - [run-backend-perf-write-contention-local-bootstrap-20260424-220531.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/run-backend-perf-write-contention-local-bootstrap-20260424-220531.log): `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - [load03-runtime-contract-check-20260424-220622.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/load03-runtime-contract-check-20260424-220622.json): `PASSED`
+  - [perf.write-contention-summary-20260424-220622.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.write-contention-summary-20260424-220622.json): `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - [module-regression-rerun-20260424-load03fix-20260424-220658.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-rerun-20260424-load03fix-20260424-220658.log): `PASSED`
+  - [module-regression-20260424-220747.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-220747.json): `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - [module-regression-latest.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-latest.json): latest canonical post-fix pass
+- Traceable summaries:
+  - [qa-load03-product-fix-summary-20260424-221308.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-load03-product-fix-summary-20260424-221308.md)
+  - [qa-load03-product-fix-summary-20260424-221308.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-load03-product-fix-summary-20260424-221308.json)
+- Runner/catalog note:
+  - `LOAD-03` is back to green on a valid-contract isolated backend after product changes, not by narrowing the fixture or threshold
+  - canonical `25`-suite backend regression stayed green after the fix, so this round closed a real perf defect without opening new module regressions
+- Verified on `2026-04-24 20:11:07 +07`
+- Latest external runtime manifest closure:
+  - direct suite pre-fix reproduce: `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`
+  - direct suite post-fix rerun: `BLOCKED -> FIXED_HARNESS -> PASSED`, `51 PASS / 0 FAIL`
+  - canonical green gate `2026-04-24 20:01:27 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - canonical blocked gate `2026-04-24 20:06:46 +07`: `1112 PASS / 0 FAIL / 1 BLOCKED`
+  - verified fixes:
+    - `tests/backend/setup/backend-runtime-manifest.ps1`
+    - `tests/backend/runners/write-backend-runtime-manifest.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+    - `tests/backend/suites/modules/extended/module.db-seed-cleanup.ps1`
+- Same-round audit trail kept:
+  - [module.db-seed-cleanup-runtime-manifest-prefix-20260424.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.db-seed-cleanup-runtime-manifest-prefix-20260424.log): `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`
+  - [module.db-seed-cleanup-runtime-manifest-rerun-20260424.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.db-seed-cleanup-runtime-manifest-rerun-20260424.log): `BLOCKED -> FIXED_HARNESS -> PASSED`, `51 PASS / 0 FAIL`
+  - [module-regression-runtime-manifest-rerun-20260424.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-runtime-manifest-rerun-20260424.log): `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - [module-regression-runtime-manifest-blocked-20260424.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-runtime-manifest-blocked-20260424.log): `BLOCKED`, `1112 PASS / 0 FAIL / 1 BLOCKED`
+  - [module-regression-20260424-200127.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-200127.json): canonical green gate with complete manifest
+  - [module-regression-20260424-200646.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-200646.json): canonical blocked gate with incomplete manifest
+  - [module-regression-latest.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-latest.json): latest now points to the blocked manifest verification
+- Traceable summaries:
+  - [qa-runtime-manifest-summary-20260424-201107.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-runtime-manifest-summary-20260424-201107.md)
+  - [qa-runtime-manifest-summary-20260424-201107.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-runtime-manifest-summary-20260424-201107.json)
+- Runner/catalog note:
+  - active module catalog o thoi diem do la `25` suite (`14` core + `11` extended)
+  - `BACKEND_RUNTIME_MANIFEST` dong vai tro contract an toan cho external backend khac shell/container
+  - canonical lane van giu `BLOCKED` neu manifest chua co `db06MediaDir`
+- Verified on `2026-04-24 19:44:06 +07`
+- Latest local QA bootstrap closure:
+  - bootstrap smoke audit: `FAILED_HARNESS -> FIXED_HARNESS`
+  - shared-DB local gate `2026-04-24 19:31:50 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - clean-shell local gate `2026-04-24 19:38:02 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - verified fixes:
+    - `tests/backend/runners/run-backend-module-regression-local.ps1`
+    - `test-all-modules.ps1`
+- Same-round audit trail kept:
+  - [test-all-modules-local-bootstrap-20260424.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/test-all-modules-local-bootstrap-20260424.log): `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - [test-all-modules-local-bootstrap-default-env-20260424.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/test-all-modules-local-bootstrap-default-env-20260424.log): `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - [module-regression-20260424-193239.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-193239.json): shared-DB local bootstrap pass
+  - [module-regression-20260424-193845.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-193845.json): clean-shell local bootstrap pass
+  - [module-regression-latest.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-latest.json): latest now points to the clean-shell local bootstrap pass
+- Traceable summaries:
+  - [qa-local-bootstrap-summary-20260424-194406.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-local-bootstrap-summary-20260424-194406.md)
+  - [qa-local-bootstrap-summary-20260424-194406.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-local-bootstrap-summary-20260424-194406.json)
+- Runner/catalog note:
+  - active module catalog o thoi diem do la `25` suite (`14` core + `11` extended)
+  - `test-all-modules.ps1` local default khong con phu thuoc vao mot service co san tren `localhost:3000`
+  - canonical external-backend `BLOCKED` semantics va direct DB-06 fail-fast coupling van duoc giu nguyen ben duoi wrapper
+- Verified on `2026-04-24 19:19:52 +07`
+- Latest canonical runner bootstrap/env closure:
+  - direct `module.db-seed-cleanup.ps1`: `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`
+  - canonical green gate `2026-04-24 19:09:19 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - canonical blocked gate `2026-04-24 19:15:47 +07`: `1112 PASS / 0 FAIL / 1 BLOCKED`
+  - verified fix:
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+- Same-round audit trail kept:
+  - [module.db-seed-cleanup-blocked-20260424-runner-bootstrap.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.db-seed-cleanup-blocked-20260424-runner-bootstrap.log): `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`
+  - [module-regression-rerun-20260424-runner-bootstrap.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-rerun-20260424-runner-bootstrap.log): `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - [module-regression-blocked-20260424-runner-bootstrap.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-blocked-20260424-runner-bootstrap.log): `BLOCKED`, `1112 PASS / 0 FAIL / 1 BLOCKED`
+  - [module-regression-20260424-190919.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-190919.json): canonical green gate with `Blocked=0`
+  - [module-regression-20260424-191547.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260424-191547.json): canonical blocked gate with `Blocked=1`
+- Traceable summaries:
+  - [qa-runner-bootstrap-summary-20260424-191952.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-runner-bootstrap-summary-20260424-191952.md)
+  - [qa-runner-bootstrap-summary-20260424-191952.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-runner-bootstrap-summary-20260424-191952.json)
+- Verified on `2026-04-24 21:26:01 +07`
+- Latest write-contention load closure:
+  - `perf.write-contention.k6.js`: `FAILED_HARNESS -> FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `120` iterations, `293` HTTP requests, global `p95=1391.47ms`
+  - no related product regression rerun was required; the clean isolated rerun reproduced no backend defect after the harness was fixed
+- Verified fixes:
+  - `tests/backend/runners/run-backend-perf-write-contention.ps1`
+- Same-round audit trail kept:
+  - [run-load03-write-contention-fix3-20260424-210944.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/run-load03-write-contention-fix3-20260424-210944.log): `FAILED_HARNESS`
+  - [perf.write-contention-summary-runtime-manifest-20260424-210953.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.write-contention-summary-runtime-manifest-20260424-210953.json): `FAILED_HARNESS`
+  - [runtime-contract-load03-local-20260424-212450.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/runtime-contract-load03-local-20260424-212450.json): dedicated local bootstrap contract
+  - first invocation of `tests/backend/runners/run-backend-perf-write-contention.ps1`: `FAILED_HARNESS` because null `FixturePath`/`SummaryPath` arg binding aborted the canonical runner before k6; the failure is recorded in the round summary below
+  - [perf.write-contention-summary-20260424-212539.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.write-contention-summary-20260424-212539.json): `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+- Traceable summaries:
+  - [qa-load03-local-bootstrap-summary-20260424-212601.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-load03-local-bootstrap-summary-20260424-212601.md)
+  - [qa-load03-local-bootstrap-summary-20260424-212601.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-load03-local-bootstrap-summary-20260424-212601.json)
+- Historical product-fix baseline kept:
+  - verified on `2026-04-19 14:35:20 +07`
+  - `perf.write-contention.k6.js`: `FAILED_PRODUCT -> FIXED_PRODUCT -> FIXED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - related regression:
+    - `e2e.concurrent-finance-ripple.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+    - `module.db-consistency.ps1`: `PASSED`, `68 PASS / 0 FAIL`
+    - `e2e.return-ripple.ps1`: `PASSED`, `64 PASS / 0 FAIL`
+  - verified fixes:
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `backend/src/return-request/return-request.service.ts`
+    - `tests/backend/perf/create-write-contention-fixture.js`
+    - `tests/backend/perf/perf.write-contention.k6.js`
+  - historical summaries:
+    - [qa-write-contention-summary-20260419-143957.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-write-contention-summary-20260419-143957.md)
+    - [qa-write-contention-summary-20260419-143957.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-write-contention-summary-20260419-143957.json)
+- Verified on `2026-04-24 22:29:33 +07`
+- Latest owner-fund concurrency re-verification:
+  - `e2e.concurrent-finance-ripple.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - final isolated-backend rerun: `61 PASS / 0 FAIL`
+  - no product bug reproduced for `approve vs reject` / `approve vs cancel`; all mixed terminal races closed with one winner and coherent balance + approval metadata
+  - companion regression: `module.owner-fund-loan.ps1`: `PASSED`, `44 PASS / 0 FAIL`
+- Same-round audit trail kept:
+  - [e2e.concurrent-finance-ripple-run-20260424-222614.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-222614.log): `FAILED_HARNESS`
+  - [e2e.concurrent-finance-ripple-run-20260424-222720.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-222720.log): `FIXED_HARNESS -> PASSED`
+  - [module.owner-fund-loan-rerun-20260424-222820.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.owner-fund-loan-rerun-20260424-222820.log): `PASSED`
+  - [qa-owner-fund-concurrency-reverify-summary-20260424-222933.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-concurrency-reverify-summary-20260424-222933.md)
+  - [qa-owner-fund-concurrency-reverify-summary-20260424-222933.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-owner-fund-concurrency-reverify-summary-20260424-222933.json)
+- Verified on `2026-04-19 13:48:20 +07`
+- Latest spike/public load closure:
+  - `perf.spike-public.k6.js`: `FAILED_HARNESS/BLOCKED_ENV -> FAILED_PRODUCT -> FAILED_HARNESS -> FIXED_PRODUCT -> PASSED`, final `0.00% http_req_failed`, global `p95=36.31ms`, `p99=83.37ms`
+  - related regression:
+    - `e2e.public-contracts-resilience.ps1`: `PASSED`, `61 PASS / 0 FAIL`
+    - `module.media-chat-config.ps1`: `PASSED`, `33 PASS / 0 FAIL`
+- Verified fixes:
+  - `backend/src/chat-message/chat-message.service.ts`
+  - `backend/src/chat-message/schemas/chat-message.schema.ts`
+  - `tests/backend/perf/perf.spike-public.k6.js`
+  - `tests/backend/perf/create-order-update-preview-fixture.js`
+- Same-round audit trail kept:
+  - [tmp-spike-public-backend-3696-20260419-133036.err.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/tmp-spike-public-backend-3696-20260419-133036.err.log): `FAILED_HARNESS/BLOCKED_ENV`
+  - [perf.spike-public-summary-20260419-133229.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.spike-public-summary-20260419-133229.json): `FAILED_PRODUCT`
+  - [perf.spike-public-summary-20260419-134125.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.spike-public-summary-20260419-134125.json): `FAILED_HARNESS`
+  - [perf.spike-public-summary-20260419-134309.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.spike-public-summary-20260419-134309.json): `FAILED_HARNESS/BLOCKED_ENV -> FAILED_PRODUCT -> FAILED_HARNESS -> FIXED_PRODUCT -> PASSED`
+  - [e2e.public-contracts-resilience-rerun-20260419-134548.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.public-contracts-resilience-rerun-20260419-134548.log): `PASSED`
+  - [module.media-chat-config-rerun-20260419-134657.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.media-chat-config-rerun-20260419-134657.log): `PASSED`
+- Traceable summaries:
+  - [qa-spike-public-summary-20260419-134820.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-spike-public-summary-20260419-134820.md)
+  - [qa-spike-public-summary-20260419-134820.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-spike-public-summary-20260419-134820.json)
+- Verified on `2026-04-19 13:07:26 +07`
+- Latest load smoke closure:
+  - `perf.load-smoke.k6.js`: `FAILED_HARNESS -> FAILED_PRODUCT -> FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, final `0.00% http_req_failed`, global `p95=427.28ms`, `p99=624.08ms`
+  - related regression:
+    - `module.auth-rbac.ps1`: `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `25 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+    - `e2e.order-finance-impact.ps1`: `PASSED`, `57 PASS / 0 FAIL`
+    - `e2e.ops-payroll.ps1`: `PASSED`, `24 PASS / 0 FAIL`
+- Verified fixes:
+  - `backend/src/auth/auth.service.ts`
+  - `backend/src/auth/strategies/jwt.strategy.ts`
+  - `backend/src/finance/funds.service.ts`
+  - `backend/src/finance/finance.service.ts`
+  - `backend/src/finance/events/finance-events.constants.ts`
+  - `backend/src/finance/events/finance-events.interfaces.ts`
+  - `backend/src/finance/events/finance-event-listener.service.ts`
+  - `backend/src/finance/funds.controller.ts`
+  - `backend/src/finance/financial-control.controller.ts`
+- Same-round audit trail kept:
+  - [tmp-load-smoke-backend-3687-20260419-123033.out.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/tmp-load-smoke-backend-3687-20260419-123033.out.log): `FAILED_HARNESS`
+  - [perf.load-smoke-summary-20260419-123253.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.load-smoke-summary-20260419-123253.json): `FAILED_PRODUCT`
+  - [perf.load-smoke-summary-20260419-124509.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.load-smoke-summary-20260419-124509.json): `FAILED_PRODUCT`
+  - [perf.load-smoke-summary-20260419-125702.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/perf.load-smoke-summary-20260419-125702.json): `FAILED_HARNESS -> FAILED_PRODUCT -> FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - [module.auth-rbac-rerun-20260419-125944.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.auth-rbac-rerun-20260419-125944.log): `BLOCKED_ENV`
+  - [module.auth-rbac-rerun-20260419-130726.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.auth-rbac-rerun-20260419-130726.log): `BLOCKED_ENV -> FIXED_ENV -> PASSED`
+  - [module.finance-control-funds-rerun-20260419-130726.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.finance-control-funds-rerun-20260419-130726.log): `PASSED`
+  - [e2e.order-finance-impact-rerun-20260419-130726.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-finance-impact-rerun-20260419-130726.log): `PASSED`
+  - [e2e.ops-payroll-rerun-20260419-125944.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.ops-payroll-rerun-20260419-125944.log): `PASSED`
+- Traceable summaries:
+  - [qa-load-smoke-summary-20260419-131147.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-load-smoke-summary-20260419-131147.md)
+  - [qa-load-smoke-summary-20260419-131147.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-load-smoke-summary-20260419-131147.json)
+- Verified on `2026-04-19 11:50:21 +07`
+- Latest DB consistency expansion closure:
+  - `module.db-consistency.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `68 PASS / 0 FAIL`
+  - added active coverage for `DB-05` on `GET /api/test-order2` pagination/filter/sort under in-filter non-sort mutation
+- Verified fixes:
+  - `tests/backend/suites/modules/extended/module.db-consistency.ps1`
+- Same-round audit trail kept:
+  - [module.db-consistency-rerun-20260419-114841.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.db-consistency-rerun-20260419-114841.log): `FAILED_HARNESS`
+  - [module.db-consistency-rerun-20260419-115021.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.db-consistency-rerun-20260419-115021.log): `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+- Traceable summaries:
+  - [qa-db-consistency-summary-20260419-115150.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-db-consistency-summary-20260419-115150.md)
+  - [qa-db-consistency-summary-20260419-115150.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-db-consistency-summary-20260419-115150.json)
+- Verified on `2026-04-19 11:35:53 +07`
+- Latest order-update ripple closure:
+  - `e2e.order-update-ripple.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> FAILED_PRODUCT -> FIXED_PRODUCT -> FIXED_EXPECTATION -> PASSED`, `72 PASS / 0 FAIL`
+  - `e2e.order-finance-impact.ps1`: `PASSED`, `57 PASS / 0 FAIL`
+  - `module.finance-control-funds.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+  - `module.reports-products-config.ps1`: `PASSED`, `41 PASS / 0 FAIL`
+- Verified fixes:
+  - `backend/src/order-update/order-update.service.ts`
+  - `backend/src/agent-receivable/agent-receivable.service.ts`
+  - `tests/backend/suites/e2e-flows/e2e.order-update-ripple.ps1`
+- Same-round audit trail kept:
+  - [e2e.order-update-ripple-rerun-20260419-110102.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-update-ripple-rerun-20260419-110102.log): `FAILED_PRODUCT`
+  - [e2e.order-update-ripple-rerun-20260419-110332.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-update-ripple-rerun-20260419-110332.log): `FAILED_PRODUCT -> FAILED_EXPECTATION`
+  - [e2e.order-update-ripple-rerun-20260419-113126.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-update-ripple-rerun-20260419-113126.log): `FAILED -> FIXED_PRODUCT -> FIXED_EXPECTATION -> PASSED`
+  - [e2e.order-finance-impact-rerun-20260419-113147.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-finance-impact-rerun-20260419-113147.log): `PASSED`
+  - [module.finance-control-funds-rerun-20260419-113545.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.finance-control-funds-rerun-20260419-113545.log): `PASSED`
+  - [module.reports-products-config-rerun-20260419-113552.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module.reports-products-config-rerun-20260419-113552.log): `PASSED`
+- Traceable summaries:
+  - [qa-order-update-ripple-summary-20260419-113629.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-order-update-ripple-summary-20260419-113629.md)
+  - [qa-order-update-ripple-summary-20260419-113629.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-order-update-ripple-summary-20260419-113629.json)
+- Verified on `2026-04-19 10:31:04 +07`
+- Latest targeted finance/return closure:
+  - `e2e.order-finance-impact.ps1`: `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `57 PASS / 0 FAIL`
+  - targeted `loan-management/pay` probe: `FAILED -> FIXED_PRODUCT -> PASSED`, `bankBalance 5000000 -> 4000000`, `debt 5000000 -> 4000000`
+  - `e2e.return-ripple.ps1`: `PASSED`, `64 PASS / 0 FAIL`
+- Verified fixes:
+  - `backend/src/finance/financial-control.service.ts`
+  - `backend/src/finance/finance.service.ts`
+- Same-round audit trail kept:
+  - [e2e.order-finance-impact-rerun-20260419-101125.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-finance-impact-rerun-20260419-101125.log): `BLOCKED_ENV`
+  - [finance.loan-repay-probe-20260419-102524.txt](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/finance.loan-repay-probe-20260419-102524.txt)
+  - [e2e.order-finance-impact-rerun-20260419-102708.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-finance-impact-rerun-20260419-102708.log)
+  - [e2e.return-ripple-rerun-20260419-103104.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.return-ripple-rerun-20260419-103104.log)
+- Traceable summaries:
+  - [qa-return-ripple-finance-summary-20260419-103327.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-return-ripple-finance-summary-20260419-103327.md)
+  - [qa-return-ripple-finance-summary-20260419-103327.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-return-ripple-finance-summary-20260419-103327.json)
+- Verified on `2026-04-19 09:13:56 +07`
+- Canonical full module regression: `991 assertions`, `23/23 modules`, `PASS / 0 FAIL`
+- Expanded active module suite:
+  - `module.db-consistency.ps1`
+  - Verified targeted expansion on `2026-04-19 08:11:05 +07`
+  - Result: `57 PASS / 0 FAIL`
+  - Covers `DB-01`, `DB-02`, `DB-03`, `DB-04`, `CON-08`, `CON-09`
+  - Verified fix:
+    - `backend/src/other-cost/other-cost.service.ts`
+- Same-round audit trail kept:
+  - `module.db-consistency-rerun-20260419-080903.log`: `FAILED`
+  - `module.db-consistency-rerun-20260419-081105.log`: `FAILED -> FIXED_PRODUCT -> PASSED`
+  - `full-module-regression-rerun-20260419-081155.log`: `BLOCKED_ENV`
+- Traceable summaries:
+  - [qa-db-consistency-summary-20260419-091826.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-db-consistency-summary-20260419-091826.md)
+  - [qa-module-regression-summary-20260419-091826.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-module-regression-summary-20260419-091826.md)
+- Verified on `2026-04-19 04:58:16 +07`
+- Canonical full module regression: `966 assertions`, `23/23 modules`, `PASS / 0 FAIL`
+- New active module suite:
+  - `module.db-consistency.ps1`
+  - Verified targeted activation on `2026-04-19 04:56:45 +07`
+  - Result: `32 PASS / 0 FAIL`
+  - Covers `DB-01`, `DB-02`, `DB-03`, `DB-04`, `CON-08`
+  - Verified fixes:
+    - `backend/src/return-request/return-request.schema.ts`
+    - `backend/src/return-request/return-request.service.ts`
+    - `backend/src/product-category/product-category.service.ts`
+- Same-round audit trail kept:
+  - `module.db-consistency-rerun-20260419-0453.log`: `FAILED_HARNESS -> FIXED_HARNESS -> FAILED -> FIXED_PRODUCT -> PASSED`
+  - `module.db-consistency-rerun-20260419-0456.log`: `32 PASS / 0 FAIL`
+- Traceable summaries:
+  - [qa-db-consistency-summary-20260419-045816.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-db-consistency-summary-20260419-045816.md)
+  - [qa-module-regression-summary-20260419-045816.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-module-regression-summary-20260419-045816.md)
+- Verified on `2026-04-19 04:18:12 +07`
+- Canonical full module regression: `934 assertions`, `22/22 modules`, `PASS / 0 FAIL`
+- Related active E2E / finance-ripple closure:
+  - `e2e.concurrent-finance-ripple.ps1`
+  - Verified product fix in `backend/src/test-order2/services/order-payment.service.ts`
+  - Latest rerun: `61 PASS / 0 FAIL` on `2026-04-24 22:27 +07`
+  - Covers `CON-05`, `CON-06`, `CON-07`, `CON-10`, `BE-SUP-05`
+  - Mixed owner-withdrawal terminal races now verify `approve`, `approve vs reject`, and `approve vs cancel`, including final-state balance and approval-metadata coherence
+- Related suite re-baseline:
+  - `e2e.agent-role-payment.ps1`: `FAILED -> FIXED_EXPECTATION -> PASSED`, `46 PASS / 0 FAIL`
+  - `e2e.order-finance-impact.ps1`: `FAILED -> FIXED_EXPECTATION -> PASSED`, `56 PASS / 0 FAIL`
+  - `module.ads-alerts-kpi.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `27 PASS / 0 FAIL`
+- Same-day failed audit snapshots kept:
+  - [module-regression-20260419-041141.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260419-041141.json)
+  - [e2e.agent-role-payment-rerun-20260419-0431.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.agent-role-payment-rerun-20260419-0431.log)
+  - [e2e.order-finance-impact-rerun-20260419-0420.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/e2e.order-finance-impact-rerun-20260419-0420.log)
+- Traceable summaries:
+  - [qa-concurrent-finance-ripple-summary-20260419-041812.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-concurrent-finance-ripple-summary-20260419-041812.md)
+  - [qa-module-regression-summary-20260419-041812.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-module-regression-summary-20260419-041812.md)
+- Verified on `2026-04-19 03:25:52 +07`
+- Canonical full module regression: `935 assertions`, `22/22 modules`, `PASS / 0 FAIL`
+- Related active E2E activation:
+  - `e2e.public-contracts-resilience.ps1`
+  - Verified on `2026-04-19 03:24:15 +07`
+  - Result: `61 PASS / 0 FAIL`
+  - Covers `BE-SMOKE-03`, `BE-MEDIA-03`, `BE-CHAT-03`, `BE-PUB-01..04`
+  - Verified fixes:
+    - `backend/src/chat-message/chat-message.controller.ts`: image-send routes no longer bypass the 24h gate
+    - `backend/src/media/media.controller.ts`: `/api/media/serve/:year/:month/:filename` alias now preserves serve/traversal/DB-fallback contract
+- Related module rerun:
+  - `module.media-chat-config.ps1`
+  - Result: `33 PASS / 0 FAIL`
+- Traceable summaries:
+  - [qa-public-contracts-resilience-summary-20260419-032552.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-public-contracts-resilience-summary-20260419-032552.md)
+  - [qa-module-regression-summary-20260419-032552.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-module-regression-summary-20260419-032552.md)
+- Verified on `2026-04-19 02:37:52 +07`
+- Full module regression: `934 assertions`, `22/22 modules`, `PASS / 0 FAIL`
+- Historical active catalog at that time was verified on `22/22` modules.
+- New active module suite:
+  - `module.order-sheet-sync-ops.ps1`
+  - Covers `BE-OPS-04`, `BE-OPS-05`, `BE-OPS-06`
+  - Verified product fix: `syncAllAgents()` / `syncAllSuppliers()` no longer count inner `success=false` results as successful syncs
+- Clean-DB harness closures verified in the same round:
+  - `module.owner-fund-loan.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - `module.ads-alerts-kpi.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+- Verified on `2026-04-19 01:59:22 +07`
+- Full module regression: `879 assertions`, `21/21 modules`, `PASS / 0 FAIL`
+- Historical active catalog at that time was verified on `21/21` modules.
+- New active module suites:
+  - `module.user-import-export.ps1`
+  - Covers `BE-MASTER-04`, `BE-MASTER-05`, `BE-MASTER-06`
+  - Security hardening verified: import/export now require auth + `users` permission; export CSV neutralizes formula payloads
+  - `module.api-token-timezone.ps1`
+  - Covers `BE-ADS-05`, `BE-ADS-06`
+  - Verified strict/non-strict timezone activation: PATCH bypass is closed in `backend/src/ad-account/ad-account.service.ts`
+- Verified on `2026-04-19 00:54:12 +07`
+- Full module regression: `825 PASS / 0 FAIL`
+- Historical active catalog at that time was verified on `19/19` modules.
+- Same-day failed baseline kept for audit:
+  - `2026-04-19 00:21:55 +07`
+  - `766 PASS / 17 FAIL`
+  - [module-regression-20260419-002155.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260419-002155.json)
+- Same-day targeted rerun after fixes on `2026-04-19 00:35:03 +07`:
+  - `TARGETED_RERUN_PASSED=5/5`
+  - `module.owner-fund-loan.ps1`: `FAILED -> FIXED -> PASSED`
+  - `module.reports-products-config.ps1`: `FAILED -> FIXED -> PASSED`
+  - `module.supply-chain.ps1`: `FAILED -> FIXED -> PASSED`
+  - `module.agent-supplier-quotes.ps1`: `FAILED -> FIXED -> PASSED`
+  - `module.finance-survival-alerts.ps1`: `FAILED -> FIXED -> PASSED`
+- Latest targeted auth verification round on `2026-04-19 00:09:19 +07`:
+  - `60 PASS / 0 FAIL`
+  - `module.auth-hardening.ps1`: `FAILED -> FIXED_HARNESS_ENV -> FIXED_CLEANUP -> PASSED`
+  - `module.auth-rbac.ps1`: `PASSED`
+  - Environment note:
+    - local QA Mongo service for this round ran on `127.0.0.1:27017` (`rs0`)
+    - run used `MONGODB_URI` override because `backend/.env` still points to `127.0.0.1:27019`
+  - Traceable result summary:
+    - [qa-auth-regression-summary-20260419-000919.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-auth-regression-summary-20260419-000919.md)
+- Traceable result summary:
+  - [qa-module-regression-summary-20260419-005412.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-module-regression-summary-20260419-005412.md)
+  - [full-module-regression-rerun-20260419-005330.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/full-module-regression-rerun-20260419-005330.log)
+  - [targeted-fail-suite-rerun-20260419-003503.log](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/targeted-fail-suite-rerun-20260419-003503.log)
+- Previous targeted auth activation round on `2026-04-15 07:42:39 +07`:
+  - `68 PASS / 0 FAIL`
+  - `module.auth-hardening.ps1`: `FAILED -> FIXED_HARNESS -> FIXED_ENV -> PASSED`
+  - `module.auth-rbac.ps1`: `PASSED`
+  - `module.customer.ps1`: `PASSED`
+  - Traceable result summary:
+    - [qa-auth-hardening-summary-20260415-074300.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-auth-hardening-summary-20260415-074300.md)
+- Traceable result summary:
+  - [qa-regression-summary-20260415-003457.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/qa-regression-summary-20260415-003457.md)
+- Previously blocked transactional item now closed:
+  - `module.reports-products-config.ps1`
+  - Case: `return-request resolve`
+  - Status: `FAILED -> BLOCKED_ENV -> FIXED_ENV -> PASSED`
+  - Environment note: current QA Mongo on `127.0.0.1:27019` is running as a single-node replica set
+- Fixed in the same round:
+  - `module.labor-other-cost.ps1`: green after unique statement-period fixture
+  - `module.agent-supplier-quotes.ps1`: green after deterministic setup and response-shape handling
+  - `module.reports-products-config.ps1` salary-config step: green after empty-array handling
+
+## Module Core
+
+- `module.auth-rbac.ps1`
+- `module.auth-hardening.ps1`
+- `module.customer.ps1`
+- `module.ad-account-ad-group.ps1`
+- `module.labor-other-cost.ps1`
+- `module.owner-fund-loan.ps1`
+- `module.ads-alerts-kpi.ps1`
+- `module.reports-products-config.ps1`
+- `module.supply-chain.ps1`
+- `module.agent-supplier-quotes.ps1`
+- `module.media-chat-config.ps1`
+- `module.user-import-export.ps1`
+- `module.api-token-timezone.ps1`
+- `module.finance-control-funds.ps1`
+
+Path:
+- `tests/backend/suites/modules/core/`
+
+## Module Extended
+
+- `module.net-profit-ad-group.ps1`
+- `module.finance-survival-alerts.ps1`
+- `module.return-report-product-rate.ps1`
+- `module.salary-labor-finance-link.ps1`
+- `module.ads-budget-product-x-vs-legacy.ps1`
+- `module.ads-budget-ripple-updates.ps1`
+- `module.ads-budget-x-emergency.ps1`
+- `module.order-sheet-sync-ops.ps1`
+- `module.db-consistency.ps1`
+- `module.purchase-inventory.ps1`
+- `module.db-seed-cleanup.ps1`
+- `module.owner-fund-ledger-reconcile.ps1`
+- `module.owner-fund-objectid-normalize.ps1`
+
+Path:
+- `tests/backend/suites/modules/extended/`
+
+## Manual Validation / Admin Recovery
+
+- `module.owner-fund-orphan-fixture-cleanup.ps1`
+
+Path:
+- `tests/backend/suites/modules/extended/`
+
+## E2E Flows
+
+- `e2e.public-contracts-resilience.ps1`
+- `e2e.concurrent-finance-ripple.ps1`
+- `e2e.order-to-cashflow.ps1`
+- `e2e.ads-auto-scale.ps1`
+- `e2e.ops-payroll.ps1`
+- `e2e.order-finance-impact.ps1`
+- `e2e.order-update-ripple.ps1`
+- `e2e.return-ripple.ps1`
+- `e2e.agent-role-payment.ps1`
+
+Path:
+- `tests/backend/suites/e2e-flows/`
+
+## Business Scenarios
+
+- `scenario.05-loan-owner-fund.ps1`
+
+Path:
+- `tests/backend/suites/business-scenarios/`
+
+## Perf
+
+- `perf.load-smoke.k6.js`
+- `perf.spike-public.k6.js`
+- `perf.write-contention.k6.js`
+- `perf.analytics-read.k6.js`
+
+Path:
+- `tests/backend/perf/`
+
+## Runners
+
+- Local bootstrap default:
+  - `tests/backend/runners/run-backend-module-regression-local.ps1`
+  - `tests/backend/runners/run-backend-perf-write-contention.ps1`
+- Canonical:
+  - `tests/backend/runners/run-backend-module-regression.ps1`
+  - `tests/backend/runners/run-load03-write-contention.ps1`
+- Runtime manifest writer:
+  - `tests/backend/runners/write-backend-runtime-manifest.ps1`
+- Compatibility:
+  - `tests/backend/runners/run-module-regression.ps1`
+
+## Shared Setup
+
+- `tests/backend/setup/ensure-regression-users.ps1`
+- `tests/backend/setup/ensure-regression-users.js`
+- `tests/backend/setup/backend-runtime-manifest.ps1`
+- Module regression runner goi shared setup nay truoc khi thuc thi cac suite.
+- `test-all-modules.ps1` va `tests/backend/runners/run-backend-module-regression-local.ps1` build backend, start mot backend local dedicated tren port free, va chi inject env runtime cho duration cua canonical full run.
+- Auth suites cho phep override base URL qua `AUTH_HARDENING_BASE_URL` va `AUTH_RBAC_BASE_URL` khi local `3000` dang duoc dung boi process khac.
+- Module regression runner cho phep override `BACKEND_BASE_URL` va `BACKEND_HEALTH_URL` khi canonical backend khong chay tren `3000`.
+- Khi canonical runner chay tren external backend cung shell va `DB06_MEDIA_DIR` chua duoc set, runner se alias `MEDIA_DIR -> DB06_MEDIA_DIR` cho `module.db-seed-cleanup.ps1`.
+- Khi backend nam o shell/container khac, `BACKEND_RUNTIME_MANIFEST` co the mang `backendBaseUrl`, `backendHealthUrl`, `auth*BaseUrl`, `mongodbUri`, va runner-visible `db06MediaDir`.
+- Direct `module.db-seed-cleanup.ps1` invocation van yeu cau explicit `DB06_MEDIA_DIR`; neu external backend khong couple media root thi suite se `BLOCKED`.
+- `module.owner-fund-orphan-fixture-cleanup.ps1` la validation/admin lane cho snapshot-scoped orphan-fixture cleanup helper; suite nay khong duoc goi boi canonical active module runner.
+
+## Coverage Gaps
+
+- Cac gap can bo sung tiep theo da duoc ghi trong [backend-test-plan.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/docs/backend-test-plan.md#16-coverage-gaps-to-add).
+- Section `16` hien tong hop backlog da duoc xac nhan qua multi-agent review.
+- Giu note transaction-support preflight trong backlog de local QA fail fast neu Mongo khong o replica-set mode.
+- Latest DB closure `2026-04-19 12:15:55 +07`:
+  - `module.db-seed-cleanup.ps1`: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, `50 PASS / 0 FAIL`
+  - related regression `module.media-chat-config.ps1`: `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `33 PASS / 0 FAIL`
+- Latest active perf closure `2026-04-24 21:26:01 +07`:
+  - `tests/backend/perf/perf.write-contention.k6.js`: `FAILED_HARNESS -> FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - final thresholds: `0.00% http_req_failed`, global `http_req_duration p95=1391.47ms`, `supplier_payment_batch p95=594.22ms`, `agent_payment_batch p95=688.23ms`, `owner_withdrawal_approve_commit_duration p95=1387.93ms`, `return_resolve_commit_duration p95=2209.59ms`, `other_cost_confirm p95=795.19ms`
+  - no product regression reruns were required; this round fixed stale-target/bootstrap harness issues only
+- Historical active perf closures:
+  - `tests/backend/perf/perf.analytics-read.k6.js`: `FAILED_HARNESS/BLOCKED_ENV -> FIXED_ENV -> FIXED_HARNESS -> FIXED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - `tests/backend/perf/perf.load-smoke.k6.js`: `FAILED_HARNESS -> FAILED_PRODUCT -> FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - `tests/backend/perf/perf.spike-public.k6.js`: `FAILED_HARNESS/BLOCKED_ENV -> FAILED_PRODUCT -> FAILED_HARNESS -> FIXED_PRODUCT -> PASSED`
+  - `tests/backend/perf/perf.write-contention.k6.js` product-fix baseline: `FAILED_PRODUCT -> FIXED_PRODUCT -> FIXED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+  - remaining perf backlog now starts at `LOAD-05`
+- Tam diem hien tai:
+  - `api-token` status-code semantics
+  - `ad-account` timezone/env matrix
+  - `LOAD-05+`
+
+## Planning Artifacts
+
+- Scenario matrix:
+  - [backend-test-scenario-matrix.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/docs/backend-test-scenario-matrix.md)
+- Suggested suite backlog:
+  - [backend-test-suite-backlog.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/docs/backend-test-suite-backlog.md)
+- Active perf harness:
+  - [perf.load-smoke.k6.js](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/perf/perf.load-smoke.k6.js)
+  - [perf.spike-public.k6.js](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/perf/perf.spike-public.k6.js)
+  - [perf.write-contention.k6.js](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/perf/perf.write-contention.k6.js)
+  - [perf.analytics-read.k6.js](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/perf/perf.analytics-read.k6.js)
+- DB-06 checklist companion:
+  - [db.seed-cleanup-checklist.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/suites/modules/extended/db.seed-cleanup-checklist.md)

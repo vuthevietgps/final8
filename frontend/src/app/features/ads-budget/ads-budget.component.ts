@@ -2,12 +2,13 @@ import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { ActivatedRoute } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 /**
  * 📊 Ads Budget Component - Bảng Gợi Ý Chi Phí Ads Hàng Ngày + KPI Nhóm Có Lãi
- * 
+ *
  * Tab 1: Gợi ý chi phí từ /api/ad-group-daily-report/optimal-spend
  * Tab 2: KPI nhóm có lãi từ /api/employee-ads-kpi/profitable-stats
  */
@@ -236,6 +237,7 @@ interface EmergencyModeFundingSnapshot {
 })
 export class AdsBudgetComponent implements OnInit {
   private http = inject(HttpClient);
+  private route = inject(ActivatedRoute);
   private apiUrl = `${environment.apiUrl}/ad-group-daily-report`;
   private kpiApiUrl = `${environment.apiUrl}/employee-ads-kpi`;
   private emergencyActionsApiUrl = `${environment.apiUrl}/emergency-actions`;
@@ -249,7 +251,7 @@ export class AdsBudgetComponent implements OnInit {
   // State
   isLoading = signal(false);
   error = signal<string | null>(null);
-  
+
   // Filter
   recommendationFilter = signal<string>('all');
   platformFilter = signal<string>('all');
@@ -290,7 +292,7 @@ export class AdsBudgetComponent implements OnInit {
   kpiMonthlyStats = signal<KpiMonthlyPlatformProduct[]>([]);
   kpiMonthlySummary = signal<KpiMonthlyResponse['overallSummary'] | null>(null);
   kpiTrend = signal<KpiTrendPoint[]>([]);
-  
+
   // KPI Filters
   kpiViewMode = signal<'daily' | 'monthly'>('daily');
   kpiPlatformFilter = signal<string>('all');
@@ -310,23 +312,23 @@ export class AdsBudgetComponent implements OnInit {
   // Filtered suggestions
   filteredSuggestions = computed(() => {
     let items = this.suggestions();
-    
+
     if (this.recommendationFilter() !== 'all') {
       items = items.filter(s => s.recommendation === this.recommendationFilter());
     }
-    
+
     if (this.platformFilter() !== 'all') {
       items = items.filter(s => s.platform === this.platformFilter());
     }
-    
+
     if (this.showAlertOnly()) {
       items = items.filter(s => s.hasAlert);
     }
-    
+
     if (this.showPendingOnly()) {
       items = items.filter(s => !s.actionDone);
     }
-    
+
     return items;
   });
 
@@ -447,6 +449,22 @@ export class AdsBudgetComponent implements OnInit {
     this.loadActionStatus();
     this.loadEmergencyActionStatus();
     this.loadEmergencyFundingConfig();
+
+    const requestedTab = this.route.snapshot.queryParamMap.get('tab');
+    if (requestedTab === 'suggestions' || requestedTab === 'kpi' || requestedTab === 'emergency') {
+      this.activeTab.set(requestedTab);
+    }
+
+    if (this.activeTab() === 'emergency') {
+      this.loadEmergencyActions();
+      return;
+    }
+
+    if (this.activeTab() === 'kpi') {
+      this.loadKpiData();
+      return;
+    }
+
     this.loadSuggestions();
   }
 
@@ -514,7 +532,7 @@ export class AdsBudgetComponent implements OnInit {
       .subscribe({
         next: (data) => {
           const actionMap = this.actionStatus();
-          
+
           // Map API response to display format
           const mapped: DailyBudgetSuggestion[] = (data.adGroupSuggestions || []).map(ag => ({
             adGroupId: ag.adGroupId,
@@ -545,7 +563,7 @@ export class AdsBudgetComponent implements OnInit {
           }));
 
           this.suggestions.set(mapped);
-          
+
           // Build summary
           const increaseCount = mapped.filter(m => m.recommendation === 'increase').length;
           const decreaseCount = mapped.filter(m => m.recommendation === 'decrease').length;
@@ -553,7 +571,7 @@ export class AdsBudgetComponent implements OnInit {
           const pauseCount = mapped.filter(m => m.recommendation === 'pause').length;
           const alertCount = mapped.filter(m => m.hasAlert).length;
           const actionDoneCount = mapped.filter(m => m.actionDone).length;
-          
+
           this.summary.set({
             total: mapped.length,
             totalCurrentSpend: data.totalCurrentSpend || 0,
@@ -566,7 +584,7 @@ export class AdsBudgetComponent implements OnInit {
             alertCount,
             actionDoneCount
           });
-          
+
           this.isLoading.set(false);
         },
         error: (err) => {
@@ -580,7 +598,7 @@ export class AdsBudgetComponent implements OnInit {
   // =============================================
   // ACTION STATUS (localStorage)
   // =============================================
-  
+
   loadActionStatus(): void {
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -600,19 +618,19 @@ export class AdsBudgetComponent implements OnInit {
       this.actionStatus.set(new Map());
     }
   }
-  
+
   toggleActionDone(adGroupId: string): void {
     const currentMap = new Map(this.actionStatus());
     const currentValue = currentMap.get(adGroupId) || false;
     currentMap.set(adGroupId, !currentValue);
     this.actionStatus.set(currentMap);
-    
+
     // Update suggestions
-    const updated = this.suggestions().map(s => 
+    const updated = this.suggestions().map(s =>
       s.adGroupId === adGroupId ? { ...s, actionDone: !currentValue } : s
     );
     this.suggestions.set(updated);
-    
+
     // Update summary
     const s = this.summary();
     if (s) {
@@ -621,11 +639,11 @@ export class AdsBudgetComponent implements OnInit {
         actionDoneCount: updated.filter(m => m.actionDone).length
       });
     }
-    
+
     // Save to localStorage
     this.saveActionStatus();
   }
-  
+
   saveActionStatus(): void {
     const today = new Date().toISOString().split('T')[0];
     const actions: Record<string, boolean> = {};
@@ -678,11 +696,15 @@ export class AdsBudgetComponent implements OnInit {
       targetSpend: t.targetSpend,
     }));
 
-    this.http.post(`${this.emergencyActionsApiUrl}/bulk-sync`, {
+    this.http.post<{ success: boolean }>(`${this.emergencyActionsApiUrl}/bulk-sync`, {
       date: today, tasks: payload
     }, { withCredentials: true }).pipe(
       catchError(() => of(null))
-    ).subscribe();
+    ).subscribe(res => {
+      if (res?.success) {
+        this.loadEmergencyActionStatus();
+      }
+    });
   }
 
   loadEmergencyFundingConfig(): void {
@@ -719,7 +741,24 @@ export class AdsBudgetComponent implements OnInit {
     this.saveEmergencyFundingConfig();
   }
 
+  private rollbackEmergencyTaskToggle(
+    taskId: string,
+    mode: EmergencyOptimizationMode,
+    done: boolean,
+  ): void {
+    const rollbackMap = new Map(this.emergencyTaskStatus());
+    rollbackMap.set(taskId, done);
+    this.emergencyTaskStatus.set(rollbackMap);
+    this.updateEmergencyTaskInMode(mode, taskId, (task) => ({ ...task, done }));
+  }
+
   toggleEmergencyTaskDone(taskId: string): void {
+    type EmergencyToggleResponse = {
+      success: boolean;
+      task?: any;
+      message?: string;
+    };
+
     const mode = this.getEmergencyModeFromTaskId(taskId);
     const map = new Map(this.emergencyTaskStatus());
     const current = map.get(taskId) || false;
@@ -733,47 +772,50 @@ export class AdsBudgetComponent implements OnInit {
     // Call backend API
     const today = new Date().toISOString().split('T')[0];
     const encodedTaskId = encodeURIComponent(taskId);
-    this.http.patch<{ success: boolean; task: any }>(
+    this.http.patch<EmergencyToggleResponse>(
       `${this.emergencyActionsApiUrl}/${encodedTaskId}/toggle`,
       {},
       { params: { date: today }, withCredentials: true }
     ).pipe(
-      catchError(() => {
-        // Rollback on failure
-        const rollbackMap = new Map(this.emergencyTaskStatus());
-        rollbackMap.set(taskId, current);
-        this.emergencyTaskStatus.set(rollbackMap);
-        this.updateEmergencyTaskInMode(mode, taskId, (task) => ({ ...task, done: current }));
-        return of(null);
+      catchError((err) => {
+        this.rollbackEmergencyTaskToggle(taskId, mode, current);
+        return of<EmergencyToggleResponse>({
+          success: false,
+          task: undefined,
+          message: err?.error?.message || 'Khong the cap nhat task khan cap',
+        });
       })
     ).subscribe(res => {
-      if (res?.task) {
-        // Update verification data from response
-        const vMap = new Map(this.emergencyVerificationData());
-        vMap.set(taskId, {
-          verificationStatus: res.task.verificationStatus,
-          verificationDetails: res.task.verificationDetails,
-          doneByName: res.task.doneByName,
-          doneAt: res.task.doneAt,
-        });
-        this.emergencyVerificationData.set(vMap);
-
-        // Update task with verification info
-        this.updateEmergencyTaskInMode(mode, taskId, (task) => ({
-          ...task,
-          verificationStatus: res.task.verificationStatus,
-          verificationDetails: res.task.verificationDetails,
-          doneByName: res.task.doneByName,
-          doneAt: res.task.doneAt,
-        }));
+      const updatedTask = res?.task;
+      if (!res?.success || !updatedTask) {
+        this.rollbackEmergencyTaskToggle(taskId, mode, current);
+        return;
       }
+
+      const vMap = new Map(this.emergencyVerificationData());
+      vMap.set(taskId, {
+        verificationStatus: updatedTask.verificationStatus,
+        verificationDetails: updatedTask.verificationDetails,
+        doneByName: updatedTask.doneByName,
+        doneAt: updatedTask.doneAt,
+      });
+      this.emergencyVerificationData.set(vMap);
+
+      this.updateEmergencyTaskInMode(mode, taskId, (currentTask) => ({
+        ...currentTask,
+        done: !!updatedTask.done,
+        verificationStatus: updatedTask.verificationStatus,
+        verificationDetails: updatedTask.verificationDetails,
+        doneByName: updatedTask.doneByName,
+        doneAt: updatedTask.doneAt,
+      }));
     });
   }
 
   getRecommendationFromReason(reason: string, currentSpend: number, suggestedSpend: number): 'increase' | 'maintain' | 'decrease' | 'pause' {
     const diff = suggestedSpend - currentSpend;
     const diffPercent = currentSpend > 0 ? (diff / currentSpend) * 100 : 0;
-    
+
     if (reason.toLowerCase().includes('tắt') || reason.toLowerCase().includes('pause')) {
       return 'pause';
     }
@@ -804,7 +846,7 @@ export class AdsBudgetComponent implements OnInit {
     if (value === undefined || value === null) return '0%';
     return value.toFixed(1) + '%';
   }
-  
+
   getPlatformIcon(platform: string): string {
     switch (platform?.toLowerCase()) {
       case 'facebook': return '📘';
@@ -1209,7 +1251,8 @@ export class AdsBudgetComponent implements OnInit {
 
     for (const item of productSummary) {
       const platform = (item.platform || '').toLowerCase();
-      const missingGroups = Math.max(0, this.minProfitableGroupsPerPlatformProduct - (item.totalGroups || 0));
+      const profitableGroups = Math.max(0, item.profitableGroups || 0);
+      const missingGroups = Math.max(0, this.minProfitableGroupsPerPlatformProduct - profitableGroups);
       if (missingGroups <= 0) continue;
 
       const needsAccountFirst = !accountsByPlatform.has(platform);
@@ -1322,9 +1365,9 @@ export class AdsBudgetComponent implements OnInit {
   loadKpiDaily(): void {
     this.kpiLoading.set(true);
     this.kpiError.set(null);
-    
+
     const { from, to } = this.kpiDateRange();
-    this.http.get<KpiDailyResponse>(`${this.kpiApiUrl}/profitable-stats/daily?fromDate=${from}&toDate=${to}`)
+    this.http.get<KpiDailyResponse>(`${this.kpiApiUrl}/profitable-stats/daily?from=${from}&to=${to}`)
       .subscribe({
         next: (data) => {
           this.kpiDailyStats.set(data.dailyStats || []);
@@ -1339,7 +1382,7 @@ export class AdsBudgetComponent implements OnInit {
       });
 
     // Load trend data
-    this.http.get<KpiTrendPoint[]>(`${this.kpiApiUrl}/profitable-stats/trend?fromDate=${from}&toDate=${to}`)
+    this.http.get<KpiTrendPoint[]>(`${this.kpiApiUrl}/profitable-stats/trend?from=${from}&to=${to}`)
       .subscribe({
         next: (data) => {
           this.kpiTrend.set(data || []);
@@ -1351,7 +1394,7 @@ export class AdsBudgetComponent implements OnInit {
   loadKpiMonthly(): void {
     this.kpiLoading.set(true);
     this.kpiError.set(null);
-    
+
     const yearMonth = this.kpiYearMonth();
     this.http.get<KpiMonthlyResponse>(`${this.kpiApiUrl}/profitable-stats/monthly?yearMonth=${yearMonth}`)
       .subscribe({

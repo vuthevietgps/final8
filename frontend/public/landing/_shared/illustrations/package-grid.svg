@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Package board</title>
+  <desc id="desc">Minh họa package board với lịch học, học phí, lớp và giáo viên dự kiến.</desc>
+  <rect width="1200" height="720" rx="32" fill="#173f3c"/>
+  <rect x="70" y="70" width="1060" height="580" rx="32" fill="#fffaf2"/>
+  <rect x="108" y="112" width="398" height="496" rx="28" fill="#f2e5d4"/>
+  <rect x="534" y="112" width="260" height="230" rx="28" fill="#ead5ab"/>
+  <rect x="818" y="112" width="274" height="230" rx="28" fill="#dce9e3"/>
+  <rect x="534" y="366" width="558" height="242" rx="28" fill="#f7efe2"/>
+  <text x="138" y="164" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">GOI HOC</text>
+  <text x="138" y="220" fill="#123b39" font-size="58" font-family="Georgia, serif" font-weight="700">Starter English 12</text>
+  <text x="138" y="266" fill="#546968" font-size="24" font-family="Trebuchet MS, sans-serif">12 buoi • 90 phut / buoi</text>
+  <text x="138" y="302" fill="#546968" font-size="24" font-family="Trebuchet MS, sans-serif">4.800.000 VND • toi da 12 hoc vien</text>
+  <text x="138" y="338" fill="#546968" font-size="24" font-family="Trebuchet MS, sans-serif">Offline tai co so pilot</text>
+  <text x="138" y="390" fill="#123b39" font-size="20" font-family="Trebuchet MS, sans-serif" font-weight="700">MA LOP</text>
+  <text x="138" y="428" fill="#b5522d" font-size="30" font-family="Trebuchet MS, sans-serif" font-weight="700">SE12-OFF-T3T5-1900-P01</text>
+  <text x="138" y="488" fill="#123b39" font-size="20" font-family="Trebuchet MS, sans-serif" font-weight="700">GIAO VIEN DU KIEN</text>
+  <text x="138" y="528" fill="#123b39" font-size="30" font-family="Georgia, serif" font-weight="700">Co Nguyen Thu Ha</text>
+  <text x="565" y="162" fill="#7d5312" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">LICH HOC</text>
+  <text x="565" y="218" fill="#7d5312" font-size="36" font-family="Georgia, serif" font-weight="700">Thu 3 va Thu 5</text>
+  <text x="565" y="260" fill="#7d5312" font-size="24" font-family="Trebuchet MS, sans-serif">19:00 - 20:30</text>
+  <text x="850" y="162" fill="#1f5852" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">CHINH SACH</text>
+  <text x="850" y="214" fill="#1f5852" font-size="24" font-family="Trebuchet MS, sans-serif">Doi lich toi da 1 buoi / chu ky</text>
+  <text x="850" y="252" fill="#1f5852" font-size="24" font-family="Trebuchet MS, sans-serif">Hoan phi chi sau gate finance</text>
+  <text x="565" y="414" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">4 DIEU KIEN DANG KY</text>
+  <circle cx="586" cy="458" r="11" fill="#2f7767"/>
+  <circle cx="586" cy="500" r="11" fill="#2f7767"/>
+  <circle cx="586" cy="542" r="11" fill="#2f7767"/>
+  <circle cx="586" cy="584" r="11" fill="#2f7767"/>
+  <text x="612" y="466" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Da tao parent va student profile</text>
+  <text x="612" y="508" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Invoice / order hop le</text>
+  <text x="612" y="550" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Finance duyet top-up hoac wallet du so du</text>
+  <text x="612" y="592" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">OPS moi duoc phep xep lop</text>
+</svg>

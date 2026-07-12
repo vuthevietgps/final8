@@ -1,0 +1,44 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="40" fill="#FFF7ED"/>
+  <rect x="40" y="40" width="1120" height="640" rx="32" fill="#FFFCF8" stroke="#E7D8C8" stroke-width="2"/>
+  <rect x="78" y="92" width="360" height="536" rx="28" fill="#FFFFFF" stroke="#DADFE8" stroke-width="2"/>
+  <text x="116" y="150" fill="#0B4F6C" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">Radar dau ca</text>
+  <text x="116" y="192" fill="#667085" font-family="Segoe UI, Arial, sans-serif" font-size="22">Thu tu manager nen di qua truoc 08:30</text>
+  <rect x="112" y="236" width="292" height="88" rx="24" fill="#EEF6FF"/>
+  <circle cx="154" cy="280" r="18" fill="#0B4F6C"/>
+  <text x="190" y="274" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Tien</text>
+  <text x="190" y="304" fill="#667085" font-family="Segoe UI, Arial, sans-serif" font-size="20">Kiem tra nhom ads dot tien va co hoi scale</text>
+  <rect x="112" y="348" width="292" height="88" rx="24" fill="#FFF3DB"/>
+  <circle cx="154" cy="392" r="18" fill="#D97706"/>
+  <text x="190" y="386" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Nguoi</text>
+  <text x="190" y="416" fill="#667085" font-family="Segoe UI, Arial, sans-serif" font-size="20">Doc KPI de thay ai dang vuot nhom, ai dang nghen</text>
+  <rect x="112" y="460" width="292" height="88" rx="24" fill="#ECFDF3"/>
+  <circle cx="154" cy="504" r="18" fill="#15803D"/>
+  <text x="190" y="498" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Asset + Khach</text>
+  <text x="190" y="528" fill="#667085" font-family="Segoe UI, Arial, sans-serif" font-size="20">Media san sang, fanpage va inbox khong vo chu ky</text>
+  <rect x="494" y="92" width="624" height="536" rx="32" fill="#14213D"/>
+  <text x="548" y="148" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="38" font-weight="700">Ban do uu tien trong ngay</text>
+  <text x="548" y="186" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="22">Nhanh - ro - co owner - co moc review lai</text>
+  <circle cx="810" cy="364" r="180" stroke="#34506E" stroke-width="2"/>
+  <circle cx="810" cy="364" r="130" stroke="#34506E" stroke-width="2"/>
+  <circle cx="810" cy="364" r="80" stroke="#34506E" stroke-width="2"/>
+  <line x1="810" y1="184" x2="810" y2="544" stroke="#34506E" stroke-width="2"/>
+  <line x1="630" y1="364" x2="990" y2="364" stroke="#34506E" stroke-width="2"/>
+  <line x1="686" y1="240" x2="934" y2="488" stroke="#34506E" stroke-width="2"/>
+  <line x1="934" y1="240" x2="686" y2="488" stroke="#34506E" stroke-width="2"/>
+  <polygon points="810,216 838,322 810,364 782,322" fill="#7DD3FC"/>
+  <polygon points="958,364 860,392 810,364 860,336" fill="#FBBF24"/>
+  <polygon points="810,512 782,406 810,364 838,406" fill="#4ADE80"/>
+  <polygon points="662,364 760,336 810,364 760,392" fill="#FB7185"/>
+  <circle cx="810" cy="364" r="36" fill="#FFFCF8" stroke="#DADFE8" stroke-width="4"/>
+  <text x="701" y="230" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="22">Ads budget</text>
+  <text x="935" y="352" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="22">KPI team</text>
+  <text x="704" y="542" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="22">Media / asset</text>
+  <text x="560" y="352" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="22">Fanpage / SLA</text>
+  <rect x="966" y="234" width="112" height="124" rx="24" fill="#1E2E47"/>
+  <text x="996" y="278" fill="#7DD3FC" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700">08:15</text>
+  <text x="994" y="318" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="20">hotspot</text>
+  <rect x="966" y="382" width="112" height="124" rx="24" fill="#1E2E47"/>
+  <text x="998" y="426" fill="#FBBF24" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700">15p</text>
+  <text x="984" y="466" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="20">chan doan</text>
+</svg>

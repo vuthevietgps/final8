@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SOP sale và kế toán | ERP Giáo dục Pilot</title>
+  <meta
+    name="description"
+    content="Trang SOP sale và kế toán: parent, student, invoice/order, finance gate, class, top-up, ledger, payroll preview và đối soát tài chính."
+  >
+  <link rel="stylesheet" href="../landing.css">
+</head>
+<body>
+  <div class="landing-shell">
+    <header class="topbar">
+      <a class="brand" href="../index.html">
+        <span class="brand-mark">ED</span>
+        <span class="brand-copy">
+          <span class="brand-title">ERP Giáo dục Pilot</span>
+          <span class="brand-subtitle">Trang 4 / SOP sale và kế toán</span>
+        </span>
+      </a>
+      <nav class="topbar-nav" aria-label="Điều hướng trang">
+        <a href="../index.html">Hub</a>
+        <a href="../nhan-su-va-quyen/index.html">Quyền</a>
+        <a aria-current="page" href="./index.html">Sale + kế toán</a>
+        <a href="../sop-van-hanh-va-giao-vien/index.html">OPS + giáo viên</a>
+      </nav>
+      <a class="topbar-cta" href="../sop-van-hanh-va-giao-vien/index.html">Duyệt quy trình bán hàng</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Trang 4</p>
+          <h1>Sale mở nhu cầu. Finance mở lớp.</h1>
+          <p class="lead">
+            SOP này phải được nói đúng, vì nếu landing page mô tả mơ hồ thì team rất dễ hiểu sai rằng sale có thể
+            “đẩy” học viên vào lớp trước khi ví phụ huynh đủ tiền hoặc hóa đơn chưa được duyệt.
+          </p>
+          <div class="chip-row">
+            <span class="chip">5 bước sale</span>
+            <span class="chip">Finance gate bắt buộc</span>
+            <span class="chip">Ledger phải về 0 sau đối soát</span>
+          </div>
+        </div>
+
+        <aside class="hero-visual">
+          <p class="eyebrow">Flow chuẩn</p>
+          <figure>
+            <img src="../_shared/illustrations/sale-finance-flow.svg" alt="Flow sale và finance từ parent đến class">
+          </figure>
+        </aside>
+      </section>
+
+      <section class="section">
+        <div class="two-column">
+          <article class="table-card">
+            <p class="eyebrow">SOP sale 5 bước</p>
+            <h3>Không nhảy cóc qua gate</h3>
+            <ol>
+              <li>Tạo parent profile và xác minh thông tin liên hệ.</li>
+              <li>Tạo student profile và gắn đúng parent.</li>
+              <li>Tạo invoice hoặc order theo đúng package Starter English 12.</li>
+              <li>Bàn giao cho Finance để duyệt top-up, hóa đơn hoặc xác nhận ví đủ số dư.</li>
+              <li>Chỉ sau khi finance gate đạt điều kiện, OPS mới được xếp lớp ở Classes.</li>
+            </ol>
+          </article>
+
+          <article class="callout">
+            <p class="eyebrow">Câu khóa cứng</p>
+            <h3>Chưa xếp lớp khi hóa đơn chưa duyệt hoặc ví phụ huynh chưa đủ.</h3>
+            <p>
+              Câu này phải xuất hiện nguyên văn ở training, handbook và landing page để tránh tạo kỳ vọng sai khi demo với đội sale.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="three-column">
+          <article class="flow-card">
+            <span class="kicker">Kế toán 1</span>
+            <h3>Duyệt top-up và hóa đơn</h3>
+            <p>Finance kiểm số tiền, trạng thái ví phụ huynh, chứng từ và trạng thái invoice/order trước khi mở gate cho OPS.</p>
+          </article>
+          <article class="flow-card">
+            <span class="kicker">Kế toán 2</span>
+            <h3>Kiểm tra ledger</h3>
+            <p>Ledger phải khớp với invoice, top-up và mọi điều chỉnh. Nếu còn lệch thì class chưa được xem là sạch về tài chính.</p>
+          </article>
+          <article class="flow-card">
+            <span class="kicker">Kế toán 3</span>
+            <h3>Chốt payroll preview và đối soát</h3>
+            <p>Payroll preview chỉ là preview khi attendance hoặc teaching report còn thiếu. Sau khi đủ hồ sơ, Finance mới đối soát và khóa kỳ.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-band">
+        <div>
+          <p class="eyebrow">Những câu không được nói sai</p>
+          <ul>
+            <li>Sale không có quyền xếp lớp.</li>
+            <li>Finance không phải hậu kiểm tùy chọn mà là cổng duyệt bắt buộc.</li>
+            <li>Parent wallet thiếu số dư thì class chưa được mở cho học viên đó.</li>
+            <li>Ledger mismatch là lý do dừng rollout, không phải ghi chú để xử lý sau.</li>
+          </ul>
+        </div>
+        <aside class="panel">
+          <p class="eyebrow">Bàn giao đúng</p>
+          <h3>Handoff sale → finance → ops phải có trạng thái rõ.</h3>
+          <p>
+            Trạng thái đề xuất cho pilot: <strong>draft</strong>, <strong>pending finance</strong>, <strong>finance approved</strong>, <strong>ready for class</strong>.
+          </p>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-grid">
+        <div>
+          <p class="eyebrow">Trang kế tiếp</p>
+          <p>Sau khi tiền đi đúng, team phải đảm bảo lớp chạy đúng ở Classes, Sessions, Attendance và Teaching Report.</p>
+        </div>
+        <div class="footer-links">
+          <a href="../sop-van-hanh-va-giao-vien/index.html">SOP vận hành + giáo viên</a>
+          <a href="../pilot-1-lop/index.html">Pilot plan</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

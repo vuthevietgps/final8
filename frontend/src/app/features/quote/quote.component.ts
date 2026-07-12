@@ -312,11 +312,23 @@ export class QuoteComponent implements OnInit {
     return statusOption ? statusOption.color : '#95a5a6';
   }
 
-  formatPrice(unitPrice: number): string {
+  formatPrice(unitPrice: number | string | null | undefined): string {
+    const numeric =
+      typeof unitPrice === 'number'
+        ? unitPrice
+        : Number(String(unitPrice ?? '').replace(/[^0-9.-]/g, ''));
+
+    if (!Number.isFinite(numeric)) {
+      return new Intl.NumberFormat('vi-VN', {
+        style: 'currency',
+        currency: 'VND'
+      }).format(0);
+    }
+
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND'
-    }).format(unitPrice);
+    }).format(numeric);
   }
 
   formatDate(date: string | undefined | null): string {

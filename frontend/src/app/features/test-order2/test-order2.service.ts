@@ -97,6 +97,9 @@ export class TestOrder2Service {
 
   create(data: CreateTestOrder2): Observable<TestOrder2> { return this.http.post<TestOrder2>(this.baseUrl, data); }
   update(id: string, data: UpdateTestOrder2): Observable<TestOrder2> { return this.http.patch<TestOrder2>(`${this.baseUrl}/${id}`, data); }
+  confirmBusiness(id: string): Observable<TestOrder2> {
+    return this.http.post<TestOrder2>(`${this.baseUrl}/${id}/business-confirmation`, {});
+  }
   delete(id: string): Observable<{ message: string }> { return this.http.delete<{ message: string }>(`${this.baseUrl}/${id}`); }
 
   // Đã loại bỏ các API import/export và cập nhật trạng thái giao hàng

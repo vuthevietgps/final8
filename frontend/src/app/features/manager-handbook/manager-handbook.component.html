@@ -1,0 +1,169 @@
+<div class="manager-guide">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Manager Quick Guide</p>
+      <h1>Sổ tay manager gọn để mở ca, xử lý việc nóng và bàn giao cuối ngày</h1>
+      <p class="hero-lead">
+        Trang này giờ chỉ giữ vai trò định hướng nhanh. Phần checklist xử lý Ads khẩn cấp đã chuyển về
+        tab <strong>Hành động khẩn cấp</strong> trong <strong>Ads Budget</strong> để manager thao tác tập trung ở một nơi.
+      </p>
+
+      <div class="welcome-banner">
+        <strong>{{ welcomeName() }}</strong>
+        <span>Nếu hôm nay chỉ có 10-15 phút, hãy mở Ads Budget, KPI team và chốt owner cho các việc nóng trước.</span>
+      </div>
+
+      <div class="hero-actions">
+        <a class="btn btn-primary" routerLink="/ads-budget" [queryParams]="{ tab: 'emergency' }">Mở tab khẩn cấp</a>
+        <a class="btn btn-secondary" routerLink="/ads-budget">Mở Ads Budget</a>
+        <a class="btn btn-ghost" routerLink="/employee-ads-kpi">Mở KPI team</a>
+      </div>
+    </div>
+
+    <div class="hero-panel">
+      <div class="hero-note">
+        <span class="hero-note-label">Cập nhật mới</span>
+        <p>Manager handbook không còn chứa SOP chi tiết cho incident Ads. Handbook chỉ còn phần điều hướng và nguyên tắc vận hành.</p>
+      </div>
+
+      <div class="metric-grid">
+        @for (metric of heroMetrics; track metric.label) {
+          <article class="metric-card">
+            <span class="metric-value">{{ metric.value }}</span>
+            <h2>{{ metric.label }}</h2>
+            <p>{{ metric.note }}</p>
+          </article>
+        }
+      </div>
+    </div>
+  </section>
+
+  <nav class="jump-nav">
+    @for (link of jumpLinks; track link.id) {
+      <a [href]="'#' + link.id">{{ link.label }}</a>
+    }
+  </nav>
+
+  <section class="section" id="quick-start">
+    <div class="section-heading">
+      <p class="section-kicker">Vào việc nhanh</p>
+      <h2>3 đường đi ngắn nhất cho manager</h2>
+      <p>
+        Khi handbook đã gọn lại, phần quan trọng nhất là biết mở đúng màn hình đúng lúc. Dưới đây là ba luồng
+        nên dùng thường xuyên nhất.
+      </p>
+    </div>
+
+    <div class="quick-grid">
+      @for (action of quickActions; track action.title) {
+        <article class="quick-card">
+          <h3>{{ action.title }}</h3>
+          <p>{{ action.summary }}</p>
+          <div class="quick-footer">
+            <span>{{ action.note }}</span>
+            <a [routerLink]="action.route" [queryParams]="action.queryParams">{{ action.cta }}</a>
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="section section-alt" id="workspaces">
+    <div class="section-heading">
+      <p class="section-kicker">Màn hình chính</p>
+      <h2>Những nơi manager nên quay lại mỗi ngày</h2>
+      <p>
+        Mỗi màn hình bên dưới đều phải dẫn tới một checkpoint rõ ràng. Nếu mở ra mà chưa biết cần chốt điều gì,
+        hãy quay về ưu tiên đầu ca.
+      </p>
+    </div>
+
+    <div class="workspace-grid">
+      @for (workspace of workspaceCards; track workspace.title) {
+        <article class="workspace-card">
+          <h3>{{ workspace.title }}</h3>
+          <p>{{ workspace.summary }}</p>
+          <div class="workspace-footer">
+            <span>{{ workspace.checkpoint }}</span>
+            <a [routerLink]="workspace.route">{{ workspace.cta }}</a>
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="section" id="cadence">
+    <div class="section-heading">
+      <p class="section-kicker">Nhịp trong ngày</p>
+      <h2>Giữ manager chạy theo nhịp thay vì chữa cháy rời rạc</h2>
+      <p>
+        Chỉ cần giữ đúng ba nhịp này là manager đã có khung vận hành đủ chắc. Mọi case nóng về Ads nên được kéo về
+        một nơi duy nhất là tab Hành động khẩn cấp.
+      </p>
+    </div>
+
+    <div class="cadence-grid">
+      @for (block of cadenceBlocks; track block.label) {
+        <article class="cadence-card">
+          <div class="cadence-meta">
+            <span>{{ block.label }}</span>
+            <strong>{{ block.time }}</strong>
+          </div>
+          <h3>{{ block.goal }}</h3>
+          <ul>
+            @for (item of block.checklist; track item) {
+              <li>{{ item }}</li>
+            }
+          </ul>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="section section-alt" id="principles">
+    <div class="section-heading">
+      <p class="section-kicker">Nguyên tắc điều hành</p>
+      <h2>4 nguyên tắc đủ dùng để manager không bị loãng việc</h2>
+      <p>
+        Đây là phần còn lại của handbook sau khi bỏ bớt SOP dài. Mục tiêu là giúp manager giữ sự rõ ràng khi phải
+        chuyển giữa ngân sách, đội ngũ và vận hành khách hàng.
+      </p>
+    </div>
+
+    <div class="principle-grid">
+      @for (principle of principles; track principle.title) {
+        <article class="principle-card">
+          <h3>{{ principle.title }}</h3>
+          <p>{{ principle.body }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="section" id="handoff">
+    <div class="section-heading">
+      <p class="section-kicker">Bàn giao cuối ngày</p>
+      <h2>Mẫu ngắn để giám đốc hoặc ca sau quyết được ngay</h2>
+      <p>
+        Một bản handoff tốt không cần dài. Chỉ cần đủ dữ kiện để người nhận biết ngay chuyện gì đã xong, chuyện gì
+        còn mở và ai đang theo tiếp.
+      </p>
+    </div>
+
+    <div class="handoff-layout">
+      <article class="handoff-card">
+        <h3>Checklist handoff</h3>
+        <ol>
+          @for (note of handoffChecklist; track note) {
+            <li>{{ note }}</li>
+          }
+        </ol>
+      </article>
+
+      <article class="handoff-card handoff-template">
+        <h3>Mẫu báo cáo ngắn</h3>
+        <pre>{{ handoffTemplate }}</pre>
+      </article>
+    </div>
+  </section>
+</div>

@@ -1,4 +1,5 @@
 ﻿/**
+﻿/**
  * FUNDS SERVICE - Quản lý 4 Quỹ theo Spec Chuẩn
  * ==================================================
  * 
@@ -16,12 +17,15 @@
  * - Permission (Quyền): Ai được dùng, điều kiện nào
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { FundingSource, FundingSourceDocument } from './schemas/funding-source.schema';
 import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
+import { FinanceService } from './finance.service';
 
 // ===== INTERFACES =====
 
@@ -217,6 +221,9 @@ export interface FundsOverview {
 @Injectable()
 export class FundsService {
   private readonly logger = new Logger(FundsService.name);
+  private static readonly CACHE_KEY_OVERVIEW = 'finance:funds_overview';
+  private static readonly CACHE_TTL_OVERVIEW = 15_000;
+  private pendingOverview: Promise<FundsOverview> | null = null;
 
   constructor(
     @InjectModel(TestOrder2.name)
@@ -225,6 +232,9 @@ export class FundsService {
     private readonly fundingSourceModel: Model<FundingSourceDocument>,
     @InjectModel(LoanContract.name)
     private readonly loanModel: Model<LoanContractDocument>,
+    private readonly financeService: FinanceService,
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
   ) {}
 
   /**
@@ -232,167 +242,120 @@ export class FundsService {
    */
   async computeFundsOverview(): Promise<FundsOverview> {
     try {
-      // 1. Tính Doanh Thu (Net Revenue)
-      const revenue = await this.computeRevenue();
-      
-      // 2. Lấy Vốn ban đầu (Seed Capital)
-      const seedCapital = await this.getSeedCapital();
-      
-      // 3. Tính Lợi nhuận thuần
-      const netProfit = await this.computeNetProfit();
-      
-      // 4. Tính Quỹ Đặt Chỗ (Committed Cash)
-      const committedCash = await this.computeCommittedCashFund();
-      
-      // 5. Tính Quỹ Ads (Growth Capital)
-      const adsFund = await this.computeAdsFund(seedCapital.total, netProfit.realized);
-      
-      // 6. Tính Quỹ Dự Phòng (Survival Buffer)
-      const survivalBuffer = await this.computeSurvivalBufferFund(netProfit.realized);
-      
-      // 7. Tính Quỹ Owner (Thu nhập)
-      const ownerFund = await this.computeOwnerFund(netProfit.realized);
-      
-      // 8. Tính Số dư ngân hàng thực tế (Bank Balance)
-      const bankBalance = await this.computeBankBalance(seedCapital.total);
-      
-      // 9. Công thức kiểm tra
-      const totalFunds = committedCash.stock.current + adsFund.stock.current + 
-                        survivalBuffer.stock.current + ownerFund.stock.current;
-      
-      // ===== 10. PHÂN TÁCH: DÒNG TIỀN vs HIỆU QUẢ KINH DOANH =====
-      
-      /**
-       * ════════════════════════════════════════════════════════════════════════
-       * PHẦN 1: DÒNG TIỀN (CASH FLOW TRACKING)
-       * ════════════════════════════════════════════════════════════════════════
-       * Mục đích: Theo dõi tiền MẶT THỰC TẾ
-       * Câu hỏi: "Có bao nhiêu tiền CÓ THỂ chi ngay bây giờ?"
-       */
-      
-      /**
-       * TIỀN KHẢ DỤNG (Free Cash Flow)
-       * ===============================
-       * CÔNG THỨC: Bank Balance - Committed Cash
-       * 
-       * Ý nghĩa:
-       * - Tiền MẶT có thể chi tiêu ngay lập tức
-       * - CHỈ trừ nợ phải trả (Committed Cash)
-       * - KHÔNG trừ các quỹ "đã phân bổ" vì tiền vẫn còn trong TK
-       * 
-       * Ví dụ:
-       * - Bank Balance: 151M
-       * - Committed Cash: 0M
-       * → Free Cash Flow = 151M ✅ (toàn bộ tiền đều khả dụng)
-       */
-      const freeCashFlow = bankBalance - committedCash.stock.current;
+      const cached = await this.cacheManager.get<FundsOverview>(FundsService.CACHE_KEY_OVERVIEW);
+      if (cached) {
+        return cached;
+      }
 
-      /**
-       * ════════════════════════════════════════════════════════════════════════
-       * PHẦN 2: HIỆU QUẢ KINH DOANH (BUSINESS PERFORMANCE)
-       * ════════════════════════════════════════════════════════════════════════
-       * Mục đích: Theo dõi PHÂN BỔ và SỬ DỤNG tiền
-       * Câu hỏi: "Tiền được dùng vào đâu? Còn bao nhiêu chưa phân bổ?"
-       */
-      
-      /**
-       * TIỀN ĐÃ PHÂN BỔ (Allocated Cash)
-       * ==================================
-       * Tổng tiền đã được "gắn nhãn" cho các mục đích:
-       * - Ads Fund: Dành cho quảng cáo
-       * - Reserve Fund: Dự phòng khẩn cấp
-       * - Owner Fund: Thuộc về owner (chưa rút)
-       */
-      const allocatedCash = adsFund.stock.current + survivalBuffer.stock.current + ownerFund.stock.current;
-      
-      /**
-       * TIỀN CHƯA PHÂN BỔ (Unallocated Cash)
-       * =====================================
-       * CÔNG THỨC: Free Cash Flow - Allocated Cash
-       * 
-       * Ý nghĩa:
-       * - Tiền CHƯA quyết định mục đích sử dụng
-       * - Hoàn toàn TỰ DO để phân bổ cho mục đích mới
-       * 
-       * Ví dụ:
-       * - Free Cash Flow: 151M
-       * - Allocated: 69M (Ads 68M + Reserve 0.5M + Owner 0.5M)
-       * → Unallocated = 82M ✅ (chưa quyết định làm gì)
-       */
-      const unallocatedCash = freeCashFlow - allocatedCash;
-      
-      // Legacy variable (compatibility)
-      const tienTuDo = freeCashFlow;
-      
-      /**
-       * NGÂN SÁCH ADS (Ads Budget)
-       * ===========================
-       * Số tiền đã phân bổ cho quảng cáo (GÓC ĐỘ KẾ TOÁN)
-       */
-      const adsBudgetAllowed = adsFund.stock.current;
+      if (this.pendingOverview) {
+        return this.pendingOverview;
+      }
 
-      // ===== T�NH BANK BALANCE YESTERDAY & DELTA =====
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(23, 59, 59, 999); // End of yesterday
-      
-      const bankBalanceYesterday = await this.computeBankBalanceAsOf(yesterday, seedCapital.total);
-      const bankBalanceDelta = bankBalance - bankBalanceYesterday;
-
-      return {
-        // ===== DOANH THU & VỐN =====
-        revenue,
-        seedCapital,
-        
-        // ===== 4 QUỸ CỐT LÕI =====
-        committedCash,
-        adsFund,
-        survivalBuffer,
-        ownerFund,
-        netProfit,
-        
-        // ===== DÒNG TIỀN (Cash Flow Tracking) =====
-        cashFlow: {
-          bankBalance,                    // Tiền trong TK
-          bankBalanceYesterday,
-          bankBalanceDelta,
-          committedCash: committedCash.stock.current,  // Nợ phải trả
-          freeCash: freeCashFlow,        // = Bank - Committed (tiền CÓ THỂ dùng)
-        },
-        
-        // ===== HIỆU QUẢ KINH DOANH (Business Performance) =====
-        businessPerformance: {
-          allocatedCash,                 // Tiền đã phân bổ mục đích
-          unallocatedCash,               // Tiền chưa phân bổ (hoàn toàn tự do)
-          breakdown: {
-            adsFund: adsFund.stock.current,
-            reserveFund: survivalBuffer.stock.current,
-            ownerFund: ownerFund.stock.current,
-          }
-        },
-        
-        // ===== VALIDATION =====
-        validation: {
-          bankBalance,
-          bankBalanceYesterday,
-          bankBalanceDelta,
-          totalFunds,
-          difference: Math.abs(bankBalance - totalFunds),
-          isValid: Math.abs(bankBalance - totalFunds) < 1000
-        },
-        
-        // ===== LEGACY (Compatibility) =====
-        formulas: {
-          tienTuDo,
-          adsBudgetAllowed
-        },
-        
-        calculatedAt: new Date()
-      };
+      this.pendingOverview = this.doComputeFundsOverview();
+      const overview = await this.pendingOverview;
+      await this.cacheManager.set(FundsService.CACHE_KEY_OVERVIEW, overview, FundsService.CACHE_TTL_OVERVIEW);
+      return overview;
     } catch (err) {
       this.logger.error('computeFundsOverview failed', err);
       throw err;
+    } finally {
+      this.pendingOverview = null;
     }
+  }
+
+  invalidateCache(reason = 'unspecified'): void {
+    void this.cacheManager.del(FundsService.CACHE_KEY_OVERVIEW).catch((err) => {
+      this.logger.warn(`[CACHE_INVALIDATED] funds overview delete failed`, err);
+    });
+    this.logger.debug(`[CACHE_INVALIDATED] ${reason}`);
+  }
+
+  private async doComputeFundsOverview(): Promise<FundsOverview> {
+    // 1. Lấy Vốn ban đầu (Seed Capital) trước vì vài nhánh phụ thuộc seed
+    const seedCapital = await this.getSeedCapital();
+
+    // 2. Những phép tính không phụ thuộc nhau chạy song song
+    const [revenue, netProfit, committedCash, bankBalance] = await Promise.all([
+      this.computeRevenue(),
+      this.computeNetProfit(),
+      this.computeCommittedCashFund(),
+      this.computeBankBalance(seedCapital.total),
+    ]);
+
+    // 3. Các quỹ phụ thuộc vào netProfit/seedCapital
+    const [adsFund, survivalBuffer, ownerFund, bankBalanceYesterday] = await Promise.all([
+      this.computeAdsFund(seedCapital.total, netProfit.realized),
+      this.computeSurvivalBufferFund(netProfit.realized),
+      this.computeOwnerFund(netProfit.realized),
+      this.computeBankBalanceAsOf(this.getYesterdayEnd(), seedCapital.total),
+    ]);
+
+    // 4. Công thức kiểm tra
+    const totalFunds = committedCash.stock.current + adsFund.stock.current +
+                      survivalBuffer.stock.current + ownerFund.stock.current;
+
+    // ===== 10. PHÂN TÁCH: DÒNG TIỀN vs HIỆU QUẢ KINH DOANH =====
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════
+     * PHẦN 1: DÒNG TIỀN (CASH FLOW TRACKING)
+     * ════════════════════════════════════════════════════════════════════════
+     * Mục đích: Theo dõi tiền MẶT THỰC TẾ
+     * Câu hỏi: "Có bao nhiêu tiền CÓ THỂ chi ngay bây giờ?"
+     */
+
+    const freeCashFlow = bankBalance - committedCash.stock.current;
+    const allocatedCash = adsFund.stock.current + survivalBuffer.stock.current + ownerFund.stock.current;
+    const unallocatedCash = freeCashFlow - allocatedCash;
+    const tienTuDo = freeCashFlow;
+    const adsBudgetAllowed = adsFund.stock.current;
+    const bankBalanceDelta = bankBalance - bankBalanceYesterday;
+
+    return {
+      revenue,
+      seedCapital,
+      committedCash,
+      adsFund,
+      survivalBuffer,
+      ownerFund,
+      netProfit,
+      cashFlow: {
+        bankBalance,
+        bankBalanceYesterday,
+        bankBalanceDelta,
+        committedCash: committedCash.stock.current,
+        freeCash: freeCashFlow,
+      },
+      businessPerformance: {
+        allocatedCash,
+        unallocatedCash,
+        breakdown: {
+          adsFund: adsFund.stock.current,
+          reserveFund: survivalBuffer.stock.current,
+          ownerFund: ownerFund.stock.current,
+        }
+      },
+      validation: {
+        bankBalance,
+        bankBalanceYesterday,
+        bankBalanceDelta,
+        totalFunds,
+        difference: Math.abs(bankBalance - totalFunds),
+        isValid: Math.abs(bankBalance - totalFunds) < 1000
+      },
+      formulas: {
+        tienTuDo,
+        adsBudgetAllowed
+      },
+      calculatedAt: new Date()
+    };
+  }
+
+  private getYesterdayEnd(): Date {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(23, 59, 59, 999);
+    return yesterday;
   }
 
   /**
@@ -476,20 +439,18 @@ export class FundsService {
    * = Vốn vay + Vốn cá nhân bỏ vào
    */
   private async getSeedCapital() {
-    // 1. L?y v?n t? LoanContract (kho?n vay)
+    // 1. Lấy vốn từ LoanContract (khoản vay) - CHỈ tính phần đã giải ngân
     const loanResult = await this.loanModel.aggregate([
-      { $match: { status: { $in: ['active', 'draft'] } } },
-      { $group: { _id: null, total: { $sum: '$principal' } } }
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$disbursedAmount', 0] } } } }
     ]);
     const loanTotal = loanResult?.[0]?.total || 0;
     
-    // 2. L?y v?n t? FundingSource
+    // 2. Lấy vốn từ FundingSource
     const fundingSources = await this.fundingSourceModel.aggregate([
-      { $match: { status: 'active' } },
       {
         $group: {
           _id: null,
-          total: { $sum: '$principal' },
+          total: { $sum: { $ifNull: ['$principal', { $ifNull: ['$initialAmount', 0] }] } },
           allocated: { $sum: { $ifNull: ['$allocatedAmount', 0] } }
         }
       }
@@ -673,188 +634,15 @@ export class FundsService {
    * ═══════════════════════════════════════════════════════════════════════════
    * ---------------------------------------------------------------------------
    */
-  private async computeBankBalance(seedCapital: number): Promise<number> {
-    // ---------------------------------------------------------------------------
-    // ?? �?NH NGHIA CHU?N: TI?N TRONG NG�N H�NG = TI?N V�O - TI?N RA
-    // ---------------------------------------------------------------------------
-    //
-    // ? TI?N �� V�O (Cash In) - B?T K? kho?n ti?n n�o �� TH?C S? v�o t�i kho?n:
-    // --------------------------------------------------------------------------
-    // 1?? V?N BAN �?U / TI?N VAY (seedCapital)
-    //    - Ti?n c� nh�n n?p v�o
-    //    - Ti?n vay ng�n h�ng / d?i t�c
-    //    ? L�m tang bankBalance
-    //    ? KH�NG ph?i doanh thu, KH�NG ph?i l?i nhu?n
-    //
-    // 2?? DOANH THU �� TH?C HI?N (supplierPaidAmount)
-    //    - Ti?n NCC chuy?n cho c�ng ty
-    //    - �� TR? ti?n nh?p h�ng (NCC gi? l?i ph?n c?a h?)
-    //    ? L�m tang bankBalance
-    //    ? L� doanh thu (net revenue)
-    //    ? KH�NG ph?i COD (COD l� ti?n kh�ch tr? NCC, kh�ng ph?i ti?n v�o c�ng ty)
-    //
-    // ? KH�NG �U?C T�NH L� "TI?N �� V�O":
-    //    - COD kh�ch tr? NCC
-    //    - Doanh thu k? to�n chua thu ti?n
-    //    - Doanh thu d? ki?n
-    //    - �on chua ch?t
-    //    - C�ng n? ph?i thu
-    //
-    // ? TI?N �� RA (Cash Out) - B?T K? kho?n ti?n n�o �� TH?C S? ra kh?i t�i kho?n:
-    // --------------------------------------------------------------------------
-    // 1. Chi ph� Ads d� chi
-    // 2. Tr? luong
-    // 3. Tr? chi ph� kh�c (di?n, nu?c, van ph�ng...)
-    // 4. Thanh to�n cho d?i l� (hoa h?ng agent)
-    // 5. Owner Fund d� r�t (ti?n ch? r�t ra)
-    //
-    // ---------------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------------
-    // ?? TI?N V�O #2: DOANH THU = supplierPaidAmount (Ti?n NCC g?i v?)
-    // ---------------------------------------------------------------------------
-    const revenueResult = await this.orderModel.aggregate([
-      {
-        $match: {
-          supplierPaymentStatus: 'paid',
-          supplierPaidAmount: { $exists: true }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: '$supplierPaidAmount' }
-        }
-      }
-    ]);
-    const totalRevenue = revenueResult?.[0]?.totalRevenue || 0;
-
-    // ---------------------------------------------------------------------------
-    // ?? TI?N RA #4: HOA H?NG �?I L� �� TR?
-    // ---------------------------------------------------------------------------
-    const agentCommissionResult = await this.orderModel.aggregate([
-      {
-        $match: {
-          agentPaymentStatus: 'paid',
-          agentPaidAmount: { $exists: true, $gt: 0 }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: '$agentPaidAmount' }
-        }
-      }
-    ]);
-    const agentCommissionPaid = agentCommissionResult?.[0]?.total || 0;
-
-    // ---------------------------------------------------------------------------
-    // ?? TI?N RA #2: LUONG �� TR? (t? laborstatements v?i status='closed')
-    // ---------------------------------------------------------------------------
-    const laborResult = await this.orderModel.db.collection('laborstatements').aggregate([
-      { $match: { status: 'closed' } },
-      {
-        $group: {
-          _id: null,
-          total: {
-            $sum: {
-              $add: [
-                { $ifNull: ['$openingBalance', 0] },
-                { $ifNull: ['$periodCost', 0] },
-                { $ifNull: ['$bonus', 0] },
-                { $multiply: [{ $ifNull: ['$deduction', 0] }, -1] }
-              ]
-            }
-          }
-        }
-      }
-    ]).toArray();
-    const laborCostPaid = laborResult?.[0]?.total || 0;
-
-    // ---------------------------------------------------------------------------
-    // ?? TI?N RA #3: CHI PH� KH�C �� X�C NH?N (isConfirmed = true)
-    // ---------------------------------------------------------------------------
-    const otherCostResult = await this.orderModel.db.collection('othercosts').aggregate([
-      { $match: { isConfirmed: true } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]).toArray();
-    const otherCostConfirmed = otherCostResult?.[0]?.total || 0;
-
-    // ---------------------------------------------------------------------------
-    // ?? TI?N RA #1: CHI PH� QU?NG C�O (t? advertisingcosts collection)
-    // ---------------------------------------------------------------------------
-    const adsSpentResult = await this.orderModel.db.collection('advertisingcosts').aggregate([
-      { $group: { _id: null, total: { $sum: '$spend' } } }
-    ]).toArray();
-    const adsSpent = adsSpentResult?.[0]?.total || 0;
-
-    // ---------------------------------------------------------------------------
-    // ?? TI?N RA #5: OWNER FUND �� R�T (t? capital_allocation_snapshots)
-    // ---------------------------------------------------------------------------
-    const ownerWithdrawnResult = await this.orderModel.db.collection('capital_allocation_snapshots').aggregate([
-      { $group: { _id: null, total: { $sum: { $ifNull: ['$personalIncomeWithdrawn', 0] } } } }
-    ]).toArray();
-    const ownerWithdrawn = ownerWithdrawnResult?.[0]?.total || 0;
-
-    // ---------------------------------------------------------------------------
-    // ---------------------------------------------------------------------------
-    // 💵 TÍNH TỔNG TIỀN TRONG TÀI KHOẢN (BANK BALANCE)
-    // ---------------------------------------------------------------------------
-    // 📐 CÔNG THỨC MỚI:
-    // Bank Balance = Số dư cũ 
-    //              + Vốn vay đã giải ngân
-    //              + Doanh thu đã thu (tiền NCC chuyển về)
-    //              - Chi phí đã chi (nhân công + vận hành + ads + khác)
-    //              - Đại lý đã trả
-    //              - Owner đã rút
-    //              - Thuế đã đóng
-    //              (- Trả nợ đã trả, nếu có)
-    //
-    // 📥 TIỀN VÀO:
-    // - Vốn ban đầu / Tiền vay (seedCapital)
-    // - Doanh thu đã thực hiện (supplierPaidAmount - tiền NCC gửi về)
-    //
-    // 📤 TIỀN RA:
-    // - Chi phí Ads đã chi (adsSpent)
-    // - Trả lương (laborCostPaid)
-    // - Trả chi phí vận hành khác (otherCostConfirmed)
-    // - Thanh toán cho đại lý - hoa hồng agent (agentCommissionPaid)
-    // - Quỹ Owner Fund đã rút (ownerWithdrawn)
-    // - Thuế đã đóng (taxPaid) - TODO: Implement khi có collection thuế
-    // - Trả nợ (loanRepayment) - TODO: Implement khi cần
-    // ---------------------------------------------------------------------------
-    
-    // TODO: Thêm query thuế đã đóng khi có collection
-    const taxPaid = 0; // Placeholder - sẽ query từ tax_payments collection
-    const loanRepayment = 0; // Placeholder - sẽ query từ loan_repayments collection
-    
-    const totalCashIn = seedCapital + totalRevenue;
-    const totalCashOut = adsSpent + laborCostPaid + otherCostConfirmed + agentCommissionPaid + ownerWithdrawn + taxPaid + loanRepayment;
-    const bankBalance = totalCashIn - totalCashOut;
-
-    this.logger.log(`💰 Bank Balance Calculation (Số Dư Ngân Hàng):`);
-    this.logger.log(`  ========== TIỀN VÀO ==========`);
-    this.logger.log(`  Vốn ban đầu (Loan + Funding): ${seedCapital.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Doanh thu (NCC gửi về): ${totalRevenue.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  ✅ Tổng tiền vào: ${totalCashIn.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  ========== TIỀN RA ==========`);
-    this.logger.log(`  Chi phí Ads: -${adsSpent.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Trả lương: -${laborCostPaid.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Chi phí khác: -${otherCostConfirmed.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Hoa hồng đại lý: -${agentCommissionPaid.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Owner rút: -${ownerWithdrawn.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Thuế đã đóng: -${taxPaid.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  Trả nợ: -${loanRepayment.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  ❌ Tổng tiền ra: -${totalCashOut.toLocaleString('vi-VN')}đ`);
-    this.logger.log(`  ==============================`);
-    this.logger.log(`  🏦 SỐ DƯ NGÂN HÀNG: ${bankBalance.toLocaleString('vi-VN')}đ`);
-
-    return Math.max(0, bankBalance);
+  private async computeBankBalance(_seedCapital: number): Promise<number> {
+    // Delegate to the single authoritative implementation in FinanceService.
+    // This ensures the Funds Dashboard always matches the CFO Dashboard.
+    return this.financeService.calculateMasterBankBalance();
   }
 
   /**
-   * T�NH S? DU NG�N H�NG T?I TH?I �I?M C? TH?
-   * D�ng d? t�nh Bank Balance h�m qua, ho?c b?t k? ng�y n�o trong qu� kh?
+   * TÍNH SỐ DƯ NGÂN HÀNG TẠI THỜI ĐIỂM CỤ THỂ
+   * Dùng để tính Bank Balance hôm qua, hoặc bất kỳ ngày nào trong quá khứ
    */
   private async computeBankBalanceAsOf(endDate: Date, seedCapital: number): Promise<number> {
     // ---------------------------------------------------------------------------
@@ -966,10 +754,28 @@ export class FundsService {
     const ownerWithdrawn = ownerWithdrawnResult?.[0]?.total || 0;
 
     // ---------------------------------------------------------------------------
+    // TRẢ NỢ VAY (trước endDate)
+    // ---------------------------------------------------------------------------
+    const loanRepaymentResult = await this.orderModel.db.collection('loanrepayments').aggregate([
+      {
+        $match: {
+          paid: true,
+          paidDate: { $lte: endDate },
+          fundingSource: { $ne: 'owner_fund' }
+        }
+      },
+      { $group: {
+        _id: null,
+        total: { $sum: { $add: [{ $ifNull: ['$amountPrincipal', 0] }, { $ifNull: ['$amountInterest', 0] }] } }
+      } }
+    ]).toArray();
+    const loanRepayment = loanRepaymentResult?.[0]?.total || 0;
+
+    // ---------------------------------------------------------------------------
     // T�NH S? DU NG�N H�NG T?I endDate
     // ---------------------------------------------------------------------------
     const totalCashIn = seedCapital + totalRevenue;
-    const totalCashOut = adsSpent + laborCostPaid + otherCostConfirmed + agentCommissionPaid + ownerWithdrawn;
+    const totalCashOut = adsSpent + laborCostPaid + otherCostConfirmed + agentCommissionPaid + ownerWithdrawn + loanRepayment;
     const bankBalance = totalCashIn - totalCashOut;
 
     return Math.max(0, bankBalance);
@@ -1390,4 +1196,3 @@ export class FundsService {
     return 0;
   }
 }
-

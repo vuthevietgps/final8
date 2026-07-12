@@ -16,6 +16,10 @@ export class FanpageController {
   @RequirePermissions('fanpages')
   create(@Body() dto: CreateFanpageDto) { return this.service.create(dto); }
 
+  @Post('sync')
+  @RequirePermissions('fanpages')
+  syncFanpages() { return this.service.syncFanpagesFromSystemUser(); }
+
   @Get()
   @RequirePermissions('fanpages')
   findAll() { return this.service.findAll(); }
@@ -37,20 +41,23 @@ export class FanpageController {
   createAIConfig(@Param('id') id: string) { return this.service.createAIConfigForExisting(id); }
 
   @Post(':id/validate-token')
+  @RequirePermissions('fanpages')
   validateToken(@Param('id') id: string) { return this.service.validateAccessToken(id); }
 
   @Post(':id/refresh-token')
+  @RequirePermissions('fanpages')
   refreshToken(@Param('id') id: string, @Body() dto: { accessToken: string }) { 
     return this.service.refreshAccessToken(id, dto.accessToken); 
   }
 
-  // Debug endpoints without auth
   @Post('debug/:id/validate-token')
+  @RequirePermissions('fanpages')
   debugValidateToken(@Param('id') id: string) { 
     return this.service.validateAccessToken(id); 
   }
 
   @Post('debug/:id/refresh-token')
+  @RequirePermissions('fanpages')
   debugRefreshToken(@Param('id') id: string, @Body() dto: { accessToken: string }) { 
     return this.service.refreshAccessToken(id, dto.accessToken); 
   }

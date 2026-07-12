@@ -1,0 +1,22 @@
+# Treat CR as part of the line ending in this existing Windows worktree while
+# still detecting real spaces/tabs at EOL and extra blank lines at EOF.
+* whitespace=trailing-space,space-before-tab,cr-at-eol
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Markdown may intentionally use trailing spaces for hard line breaks.
+*.md whitespace=-trailing-space,space-before-tab,cr-at-eol
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.zip binary
+*.xlsx binary
+*.pdf binary

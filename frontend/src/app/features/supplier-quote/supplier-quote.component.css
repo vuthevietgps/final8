@@ -14,3 +14,16 @@ th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; }
 .muted { color: #6b7280; }
 .center { text-align: center; }
 .filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.status-badge { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.status-badge.pending { color: #92400e; background: #fef3c7; }
+.status-badge.approved { color: #166534; background: #dcfce7; }
+.status-badge.rejected { color: #991b1b; background: #fee2e2; }
+.decision-cell { min-width: 170px; }
+.decision-cell span, .decision-cell small { display: block; }
+.decision-cell small { margin-top: 3px; color: #64748b; }
+.decision-cell .rejection-reason { color: #991b1b; max-width: 240px; white-space: normal; }
+.decision-cell .sod-warning { color: #92400e; max-width: 280px; white-space: normal; }
+.decision-actions { display: flex; gap: 6px; }
+.btn.approve { color: #166534; border-color: #86efac; background: #f0fdf4; }
+.btn.reject { color: #991b1b; border-color: #fca5a5; background: #fef2f2; }
+.btn.claim { color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; }

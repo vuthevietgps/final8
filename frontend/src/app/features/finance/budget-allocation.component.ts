@@ -327,10 +327,13 @@ interface CapitalFlow {
           <button class="btn-preview" (click)="preview()" [disabled]="loading()">
             👁️ Xem trước
           </button>
-          <button class="btn-apply" (click)="apply()" [disabled]="loading() || !result()">
-            🚀 Áp dụng ngay
+          <button class="btn-apply" (click)="goToExecutionPlanV2()" [disabled]="loading()">
+            🔒 Mở trung tâm Ads V2
           </button>
         </div>
+        <p class="execution-guard-note">
+          Màn hình này chỉ lập đề xuất. Thay đổi live phải qua validateOnly, duyệt từng action và execution log tại Ads V2.
+        </p>
       </div>
 
       <!-- Loading -->
@@ -671,6 +674,7 @@ interface CapitalFlow {
     .btn-apply { background: #10b981; color: white; }
     .btn-apply:hover { background: #059669; }
     .btn-apply:disabled { opacity: 0.5; cursor: not-allowed; }
+    .execution-guard-note { margin: 0.75rem 0 0; text-align: right; font-size: 0.8rem; color: #6b7280; }
     
     .loading { text-align: center; padding: 2rem; color: #6b7280; }
     
@@ -838,33 +842,8 @@ export class BudgetAllocationComponent implements OnInit {
     });
   }
 
-  apply() {
-    if (!confirm('Bạn có chắc muốn áp dụng phân bổ ngân sách này?')) return;
-
-    this.loading.set(true);
-    this.http.post<AllocationResult>(`${this.apiUrl}/auto`, {
-      dryRun: false,
-      minBudget: this.minBudget,
-      maxBudget: this.maxBudget,
-      priorityMode: this.priorityMode
-    }).subscribe({
-      next: (data) => {
-        this.result.set(data);
-        this.loading.set(false);
-        this.loadAll(); // Reload all data
-        
-        const msg = `✅ Hoàn thành!\n` +
-          `- Thành công: ${data.summary.successCount}\n` +
-          `- Thất bại: ${data.summary.failedCount}\n` +
-          `- Bỏ qua: ${data.summary.skippedCount}`;
-        alert(msg);
-      },
-      error: (err) => {
-        console.error('Apply error:', err);
-        this.loading.set(false);
-        alert('Lỗi áp dụng: ' + (err?.error?.message || err.message));
-      }
-    });
+  goToExecutionPlanV2() {
+    window.location.assign('/ads-settings');
   }
 
   format(amount: number): string {

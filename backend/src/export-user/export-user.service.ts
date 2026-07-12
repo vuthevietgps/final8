@@ -121,13 +121,29 @@ export class ExportUserService {
    */
   private escapeCsvValue(value: string): string {
     if (!value) return '';
-    
-    // Nếu có dấu phẩy, dấu ngoặc kép, hoặc xuống dòng thì wrap bằng dấu ngoặc kép
-    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-      // Escape dấu ngoặc kép bằng cách double nó
-      return '"' + value.replace(/"/g, '""') + '"';
+
+    const sanitizedValue = this.escapeSpreadsheetFormula(value);
+
+    // N?u c� d?u ph?y, d?u ngo?c k�p, ho?c xu?ng d�ng th� wrap b?ng d?u ngo?c k�p
+    if (sanitizedValue.includes(',') || sanitizedValue.includes('"') || sanitizedValue.includes('\n')) {
+      // Escape d?u ngo?c k�p b?ng c�ch double n�
+      return '"' + sanitizedValue.replace(/"/g, '""') + '"';
     }
-    
+
+    return sanitizedValue;
+  }
+
+  /**
+   * Neutralize spreadsheet formula injection while preserving CSV escaping.
+   */
+  private escapeSpreadsheetFormula(value: string): string {
+    if (!value) return '';
+
+    const trimmedStart = value.replace(/^\s+/, '');
+    if (/^[=+\-@]/.test(trimmedStart) || /^[\t\r]/.test(value)) {
+      return `'${value}`;
+    }
+
     return value;
   }
 

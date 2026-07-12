@@ -15,7 +15,7 @@ import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-
 
 try { require('dotenv').config(); } catch {}
 
-const DEFAULT_CONN = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev';
+const DEFAULT_CONN = process.env.MONGODB_URI;
 
 async function main(){
   const argv = process.argv.slice(2);
@@ -40,7 +40,8 @@ async function main(){
     adGroupModel as any, 
     adAccountModel as any, 
     tokenModel as any,
-    null as any // TestOrder2Service not available in standalone script
+    null as any, // Recalculation queue not available in standalone script
+    null as any, // ApiTokenService not available in standalone script
   );
   const res = await svc.syncRange({ date, days });
   console.log('Sync results:', res);

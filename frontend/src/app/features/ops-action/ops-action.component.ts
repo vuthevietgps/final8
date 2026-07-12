@@ -28,7 +28,45 @@ interface OpsActionsResponse {
   mediumCount: number;
   bySeverity: { critical: number; high: number; medium: number; low: number };
   asOf: string;
-  dataSources: { supplierPayable: boolean; agentReceivable: boolean };
+  dataSources?: { supplierPayable?: boolean; agentReceivable?: boolean };
+}
+
+type OpsTaskStatus = 'pending' | 'approved' | 'rejected';
+type OpsPlanStatus = 'draft' | 'pending_approval' | 'partially_approved' | 'approved' | 'rejected';
+
+interface OpsTask extends OpsActionItem {
+  _id: string;
+  status: OpsTaskStatus;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  requiresApproval?: boolean;
+}
+
+interface OpsActionPlan {
+  _id: string;
+  title: string;
+  status: OpsPlanStatus;
+  mode?: string;
+  summary?: {
+    selectedSuggestions?: number;
+    bySeverity?: { critical?: number; high?: number; medium?: number; low?: number };
+    executionMode?: string;
+    liveApplyEnabled?: boolean;
+  };
+  tasks?: OpsTask[];
+  createdBy?: string;
+  createdAt?: string;
+}
+
+interface OpsTaskRow {
+  planId: string;
+  planTitle: string;
+  planStatus: OpsPlanStatus;
+  createdAt?: string;
+  task: OpsTask;
 }
 
 @Component({
@@ -40,7 +78,7 @@ interface OpsActionsResponse {
       <header class="dash-header">
         <div class="header-left">
           <h1>Việc Cần Làm - Vận Hành</h1>
-          <span class="subtitle">Hành động khẩn cấp • NCC, Đại lý, Đơn hàng</span>
+          <span class="subtitle">Hành động khẩn cấp • NCC, Đại lý, Đơn hàng • xử lý thủ công có kiểm soát</span>
         </div>
         <div class="header-right">
           <span class="update-time" *ngIf="response()">
@@ -52,11 +90,70 @@ interface OpsActionsResponse {
         </div>
       </header>
 
+      <div class="ops-mode-note">
+        <div>
+          <span class="mode-chip read">AI chỉ gợi ý</span>
+          <span class="mode-chip approve">Người phụ trách duyệt</span>
+          <span class="mode-chip manual">Không tự động ghi ERP</span>
+        </div>
+        <div class="mode-links">
+          <button class="quick-btn" (click)="navigateTo('/ai-assistant')">AI Assistant</button>
+          <button class="quick-btn" (click)="navigateTo('/ai-marketing')">AI Marketing</button>
+          <a class="quick-btn docs-link" href="/docs/AI-OPS-SUBAGENT-ROADMAP.md" target="_blank" rel="noopener">Tai lieu AI Ops</a>
+        </div>
+      </div>
+
       <!-- Data Source Status -->
       <div class="data-sources" *ngIf="response()">
-        <span class="ds-item" [class.ok]="response()!.dataSources.supplierPayable" [class.fail]="!response()!.dataSources.supplierPayable">NCC</span>
-        <span class="ds-item" [class.ok]="response()!.dataSources.agentReceivable" [class.fail]="!response()!.dataSources.agentReceivable">Đại lý</span>
+        <span class="ds-item" [class.ok]="dataSourceReady('supplierPayable')" [class.fail]="!dataSourceReady('supplierPayable')">NCC</span>
+        <span class="ds-item" [class.ok]="dataSourceReady('agentReceivable')" [class.fail]="!dataSourceReady('agentReceivable')">Đại lý</span>
       </div>
+
+      <section class="approval-workbench">
+        <div class="workbench-header">
+          <div>
+            <h2>Hàng đợi duyệt vận hành</h2>
+            <p>Chuyển gợi ý hiện tại thành plan/task để ghi nhận người duyệt. Không có thao tác live nào được thực thi.</p>
+          </div>
+          <div class="workbench-actions">
+            <button class="quick-btn primary" (click)="createPlanFromSuggestions()" [disabled]="queueLoading() || !response()?.totalCount">
+              Tạo plan từ gợi ý
+            </button>
+            <button class="quick-btn" (click)="loadApprovalQueue()" [disabled]="queueLoading()">Tải lại plan</button>
+          </div>
+        </div>
+
+        <div class="queue-message" *ngIf="queueMessage()">{{ queueMessage() }}</div>
+
+        <div class="plan-strip" *ngIf="plans().length">
+          <article *ngFor="let plan of plans()" class="plan-chip" [class.approved]="plan.status === 'approved'" [class.rejected]="plan.status === 'rejected'">
+            <strong>{{ plan.title }}</strong>
+            <span>{{ planStatusLabel(plan.status) }} · {{ plan.summary?.selectedSuggestions || plan.tasks?.length || 0 }} task</span>
+            <small>{{ plan.createdAt | date:'HH:mm dd/MM' }}</small>
+          </article>
+        </div>
+
+        <div class="pending-task-list" *ngIf="pendingTasks().length; else emptyPendingTasks">
+          <article *ngFor="let row of pendingTasks()" class="pending-task" [class]="row.task.priority">
+            <div>
+              <span class="task-plan">{{ row.planTitle }}</span>
+              <strong>{{ row.task.title }}</strong>
+              <p>{{ row.task.description }}</p>
+              <small>
+                {{ getPriorityLabel(row.task.priority) }} · {{ row.task.amount ? formatCurrency(row.task.amount) : 'Không có số tiền' }}
+              </small>
+            </div>
+            <div class="task-actions">
+              <button class="approve-btn" (click)="approveTask(row)" [disabled]="actionInFlight() === taskKey(row)">Duyệt</button>
+              <button class="reject-btn" (click)="rejectTask(row)" [disabled]="actionInFlight() === taskKey(row)">Từ chối</button>
+            </div>
+          </article>
+        </div>
+
+        <ng-template #emptyPendingTasks>
+          <div class="empty-queue" *ngIf="!queueLoading()">Chưa có task pending trong các plan gần đây.</div>
+        </ng-template>
+      </section>
 
       <!-- Critical Alert Banner -->
       <div class="critical-alert-banner" *ngIf="hasCritical()">
@@ -106,9 +203,12 @@ interface OpsActionsResponse {
                 </span>
               </div>
             </div>
-            <button class="action-btn" *ngIf="action.linkTo" (click)="navigateTo(action.linkTo!)">
-              Xử lý →
-            </button>
+            <div class="action-controls">
+              <span class="approval-note">Cần xác nhận</span>
+              <button class="action-btn" *ngIf="action.linkTo" (click)="navigateTo(action.linkTo!)">
+                Xử lý →
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -157,10 +257,66 @@ interface OpsActionsResponse {
     .spin { display: inline-block; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .ops-mode-note {
+      display: flex; justify-content: space-between; gap: 12px; align-items: center;
+      padding: 12px; border: 1px solid #dde5df; border-radius: 10px; background: #fff;
+      margin-bottom: 14px;
+    }
+    .ops-mode-note > div { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .mode-chip, .approval-note {
+      display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px;
+      border-radius: 999px; font-size: 11px; font-weight: 800;
+    }
+    .mode-chip.read { color: #2e7d32; background: #e8f5e9; }
+    .mode-chip.approve, .approval-note { color: #c62828; background: #ffebee; }
+    .mode-chip.manual { color: #7a4b12; background: #fff3e0; }
+    .mode-links { justify-content: flex-end; }
+    .docs-link { color: #155a9c; border-color: #b7cce2; text-decoration: none; }
+
     .data-sources { display: flex; gap: 8px; margin-bottom: 16px; }
     .ds-item { font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 600; }
     .ds-item.ok { background: #e8f5e9; color: #2e7d32; }
     .ds-item.fail { background: #ffebee; color: #c62828; }
+
+    .approval-workbench {
+      margin-bottom: 20px; padding: 16px; border: 1px solid #dde5df;
+      border-radius: 12px; background: #fff;
+    }
+    .workbench-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+    .workbench-header h2 { margin: 0 0 4px; font-size: 16px; }
+    .workbench-header p { margin: 0; color: #666; font-size: 13px; line-height: 1.5; }
+    .workbench-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .quick-btn.primary { color: white; background: #1976d2; border-color: #1976d2; }
+    .queue-message { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #eef7ff; color: #155a9c; font-size: 13px; }
+    .plan-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 14px; }
+    .plan-chip {
+      display: grid; gap: 4px; padding: 10px; border-radius: 8px;
+      background: #f8faf8; border: 1px solid #dfe6e2; font-size: 12px;
+    }
+    .plan-chip strong { font-size: 13px; }
+    .plan-chip.approved { border-color: #81c784; background: #f1fbf2; }
+    .plan-chip.rejected { border-color: #ef9a9a; background: #fff5f5; }
+    .pending-task-list { display: grid; gap: 10px; margin-top: 14px; }
+    .pending-task {
+      display: flex; justify-content: space-between; gap: 12px; padding: 12px;
+      border-radius: 10px; border-left: 4px solid #ccc; background: #fbfcfb;
+    }
+    .pending-task.critical { border-left-color: #d32f2f; }
+    .pending-task.high { border-left-color: #e65100; }
+    .pending-task.medium { border-left-color: #f57f17; }
+    .pending-task.low { border-left-color: #2e7d32; }
+    .pending-task strong, .pending-task small, .pending-task span { display: block; }
+    .pending-task p { margin: 4px 0 6px; color: #555; font-size: 13px; }
+    .task-plan { margin-bottom: 4px; color: #777; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .task-actions { display: flex; gap: 8px; align-items: center; }
+    .approve-btn, .reject-btn {
+      border: 0; border-radius: 6px; padding: 8px 12px; color: white;
+      cursor: pointer; font-weight: 700; white-space: nowrap;
+    }
+    .approve-btn { background: #2e7d32; }
+    .reject-btn { background: #c62828; }
+    .approve-btn:disabled, .reject-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .empty-queue { margin-top: 12px; color: #777; font-size: 13px; }
 
     .critical-alert-banner {
       display: flex; align-items: center; gap: 16px;
@@ -212,6 +368,8 @@ interface OpsActionsResponse {
     .action-details { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #777; }
     .action-reason { flex: 1; min-width: 200px; }
 
+    .action-controls { display: grid; gap: 8px; justify-items: end; align-self: center; }
+
     .action-btn {
       background: #1976d2; color: white; border: none; padding: 8px 16px;
       border-radius: 6px; cursor: pointer; font-size: 13px; white-space: nowrap; font-weight: 600;
@@ -238,6 +396,12 @@ interface OpsActionsResponse {
     .spinner { width: 36px; height: 36px; border: 3px solid #eee; border-top-color: #1976d2; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 
     .error-state { text-align: center; padding: 40px; color: #c62828; }
+
+    @media (max-width: 720px) {
+      .dash-header, .ops-mode-note, .workbench-header, .pending-task, .action-item { display: grid; }
+      .header-right, .mode-links, .action-controls { justify-content: start; justify-items: start; }
+      .workbench-actions, .task-actions { justify-content: start; }
+    }
   `],
 })
 export class OpsActionComponent implements OnInit {
@@ -246,13 +410,20 @@ export class OpsActionComponent implements OnInit {
   private apiUrl = `${environment.apiUrl}/ops-actions`;
 
   loading = signal(false);
+  queueLoading = signal(false);
   error = signal<string | null>(null);
+  queueMessage = signal<string | null>(null);
+  actionInFlight = signal<string | null>(null);
   response = signal<OpsActionsResponse | null>(null);
+  plans = signal<OpsActionPlan[]>([]);
+  tasks = signal<OpsTaskRow[]>([]);
 
   hasCritical = computed(() => (this.response()?.criticalCount ?? 0) > 0);
+  pendingTasks = computed(() => this.tasks().filter((row) => row.task.status === 'pending'));
 
   ngOnInit(): void {
     this.load();
+    this.loadApprovalQueue();
   }
 
   load(): void {
@@ -268,6 +439,91 @@ export class OpsActionComponent implements OnInit {
         console.error('Failed to load ops actions:', err);
         this.error.set('Không thể tải dữ liệu. Vui lòng thử lại.');
         this.loading.set(false);
+      },
+    });
+  }
+
+  loadApprovalQueue(clearMessage = true): void {
+    this.queueLoading.set(true);
+    if (clearMessage) this.queueMessage.set(null);
+
+    this.http.get<{ success: boolean; plans: OpsActionPlan[] }>(`${this.apiUrl}/plans?limit=5`).subscribe({
+      next: (plansResponse) => {
+        this.plans.set(plansResponse.plans || []);
+        this.loadPendingTasks();
+      },
+      error: (err) => {
+        console.error('Failed to load ops action plans:', err);
+        this.queueMessage.set('Không tải được hàng đợi duyệt vận hành.');
+        this.queueLoading.set(false);
+      },
+    });
+  }
+
+  loadPendingTasks(): void {
+    this.http.get<{ success: boolean; tasks: OpsTaskRow[] }>(`${this.apiUrl}/tasks?status=pending&limit=20`).subscribe({
+      next: (tasksResponse) => {
+        this.tasks.set(tasksResponse.tasks || []);
+        this.queueLoading.set(false);
+      },
+      error: (err) => {
+        console.error('Failed to load ops tasks:', err);
+        this.queueMessage.set('Không tải được task đang chờ duyệt.');
+        this.queueLoading.set(false);
+      },
+    });
+  }
+
+  createPlanFromSuggestions(): void {
+    if (!this.response()?.totalCount || this.queueLoading()) return;
+
+    this.queueLoading.set(true);
+    this.queueMessage.set(null);
+    this.http.post<{ success: boolean; plan: OpsActionPlan }>(`${this.apiUrl}/plans/from-suggestions`, {
+      limit: 100,
+      notes: 'Created from current ops suggestions in the AI operations queue.',
+    }).subscribe({
+      next: (result) => {
+        const taskCount = result.plan?.tasks?.length || result.plan?.summary?.selectedSuggestions || 0;
+        this.queueMessage.set(`Đã tạo plan "${result.plan.title}" với ${taskCount} task chờ duyệt.`);
+        this.loadApprovalQueue(false);
+      },
+      error: (err) => {
+        console.error('Failed to create ops action plan:', err);
+        this.queueMessage.set(err?.error?.message || 'Không tạo được plan từ gợi ý hiện tại.');
+        this.queueLoading.set(false);
+      },
+    });
+  }
+
+  approveTask(row: OpsTaskRow): void {
+    this.setTaskApproval(row, true);
+  }
+
+  rejectTask(row: OpsTaskRow): void {
+    this.setTaskApproval(row, false);
+  }
+
+  setTaskApproval(row: OpsTaskRow, approved: boolean): void {
+    const key = this.taskKey(row);
+    if (this.actionInFlight()) return;
+
+    this.actionInFlight.set(key);
+    const endpoint = approved ? 'approve' : 'reject';
+    const body = approved
+      ? { note: 'Approved from Ops Actions UI. No live action executed.' }
+      : { reason: 'Rejected from Ops Actions UI. No live action executed.' };
+
+    this.http.patch(`${this.apiUrl}/plans/${row.planId}/tasks/${row.task._id}/${endpoint}`, body).subscribe({
+      next: () => {
+        this.queueMessage.set(approved ? 'Đã ghi nhận duyệt task. Chưa thực thi live.' : 'Đã ghi nhận từ chối task.');
+        this.actionInFlight.set(null);
+        this.loadApprovalQueue(false);
+      },
+      error: (err) => {
+        console.error('Failed to update ops task approval:', err);
+        this.queueMessage.set(err?.error?.message || 'Không cập nhật được trạng thái task.');
+        this.actionInFlight.set(null);
       },
     });
   }
@@ -288,6 +544,25 @@ export class OpsActionComponent implements OnInit {
       currency: 'VND',
       maximumFractionDigits: 0,
     }).format(value);
+  }
+
+  dataSourceReady(source: 'supplierPayable' | 'agentReceivable'): boolean {
+    return Boolean(this.response()?.dataSources?.[source]);
+  }
+
+  planStatusLabel(status: OpsPlanStatus): string {
+    const labels: Record<OpsPlanStatus, string> = {
+      draft: 'Nháp',
+      pending_approval: 'Chờ duyệt',
+      partially_approved: 'Duyệt một phần',
+      approved: 'Đã duyệt',
+      rejected: 'Từ chối',
+    };
+    return labels[status] || status;
+  }
+
+  taskKey(row: OpsTaskRow): string {
+    return `${row.planId}:${row.task._id}`;
   }
 
   navigateTo(route: string): void {

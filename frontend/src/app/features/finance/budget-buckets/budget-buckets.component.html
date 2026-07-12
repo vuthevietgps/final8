@@ -1,0 +1,128 @@
+<main class="page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Finance policy owner surface</p>
+      <h1>Budget buckets</h1>
+      <p>Quản lý giới hạn ngân sách Ads theo nhóm sản phẩm.</p>
+    </div>
+    <button class="btn" type="button" (click)="load()" [disabled]="loading() || saving()">Tải lại</button>
+  </header>
+
+  <section class="policy-note">
+    <strong>Quy tắc áp dụng:</strong>
+    bucket không chọn nhóm sản phẩm là <strong>global</strong>. Khi một hành động khớp nhiều bucket
+    global/category, hệ thống dùng <strong>cap dương nhỏ nhất — strictest cap</strong> cho từng kỳ.
+    Giá trị <strong>0</strong> nghĩa là không đặt giới hạn cho kỳ đó.
+  </section>
+
+  <p class="error" *ngIf="error()">{{ error() }}</p>
+
+  <section class="card form-card">
+    <div class="section-heading">
+      <h2>{{ editingId() ? 'Cập nhật bucket' : 'Tạo bucket' }}</h2>
+      <span class="scope-preview" [class.global]="!form.productGroupIds.length">
+        {{ form.productGroupIds.length ? form.productGroupIds.length + ' category scope' : 'GLOBAL' }}
+      </span>
+    </div>
+
+    <div class="form-grid">
+      <label>
+        Tên bucket
+        <input [(ngModel)]="form.name" maxlength="120" placeholder="Ví dụ: Gia dụng an toàn" />
+      </label>
+      <label>
+        Mã
+        <input [(ngModel)]="form.code" maxlength="40" placeholder="HOME_SAFE" />
+      </label>
+      <label class="categories-field">
+        Nhóm sản phẩm — Product.categoryId
+        <select multiple [(ngModel)]="form.productGroupIds" size="5">
+          <option *ngFor="let category of categories()" [value]="category._id">
+            {{ category.name }}{{ category.isActive === false ? ' (ngừng)' : '' }}
+          </option>
+        </select>
+        <small>Không chọn mục nào để tạo bucket global.</small>
+      </label>
+      <label>
+        Daily cap (VND)
+        <input type="number" min="0" step="1000" [(ngModel)]="form.dailyCap" />
+      </label>
+      <label>
+        Weekly cap (VND)
+        <input type="number" min="0" step="1000" [(ngModel)]="form.weeklyCap" />
+      </label>
+      <label>
+        Monthly cap (VND)
+        <input type="number" min="0" step="1000" [(ngModel)]="form.monthlyCap" />
+      </label>
+      <label class="notes-field">
+        Ghi chú
+        <textarea [(ngModel)]="form.notes" maxlength="300" rows="3"></textarea>
+      </label>
+      <label class="active-field">
+        <input type="checkbox" [(ngModel)]="form.active" />
+        Đang hoạt động
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn primary" type="button" (click)="save()" [disabled]="saving()">
+        {{ saving() ? 'Đang lưu…' : editingId() ? 'Lưu thay đổi' : 'Tạo bucket' }}
+      </button>
+      <button class="btn" *ngIf="editingId()" type="button" (click)="cancelEdit()" [disabled]="saving()">Hủy sửa</button>
+    </div>
+  </section>
+
+  <section class="card table-card">
+    <div class="section-heading">
+      <h2>Danh sách buckets</h2>
+      <span>{{ buckets().length }} bucket</span>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Bucket</th>
+            <th>Scope</th>
+            <th>Daily</th>
+            <th>Weekly</th>
+            <th>Monthly</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let bucket of buckets(); trackBy: trackById" [class.inactive]="!bucket.active">
+            <td>
+              <strong>{{ bucket.name }}</strong>
+              <small>{{ bucket.code || 'Không mã' }}</small>
+              <small *ngIf="bucket.notes">{{ bucket.notes }}</small>
+            </td>
+            <td>
+              <span class="scope-badge" [class.global]="!bucket.productGroupIds.length">
+                {{ bucket.productGroupIds.length ? 'CATEGORY' : 'GLOBAL' }}
+              </span>
+              <small class="scope-text">{{ scopeLabel(bucket) }}</small>
+            </td>
+            <td>{{ formatVnd(bucket.dailyCap) }}</td>
+            <td>{{ formatVnd(bucket.weeklyCap) }}</td>
+            <td>{{ formatVnd(bucket.monthlyCap) }}</td>
+            <td><span class="status" [class.active]="bucket.active">{{ bucket.active ? 'Active' : 'Inactive' }}</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="btn small" type="button" (click)="edit(bucket)">Sửa</button>
+                <button class="btn small" type="button" (click)="toggleActive(bucket)" [disabled]="saving()">
+                  {{ bucket.active ? 'Tắt' : 'Bật' }}
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="!buckets().length && !loading()">
+            <td colspan="7" class="empty">Chưa có budget bucket.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>

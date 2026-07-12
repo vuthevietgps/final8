@@ -7,13 +7,16 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AdAccountService } from './ad-account.service';
 import { AdAccountController } from './ad-account.controller';
 import { AdAccount, AdAccountSchema } from './schemas/ad-account.schema';
+import { AdAccountTimezoneCheckService } from './ad-account.timezone-check.service';
+import { ApiTokenModule } from '../api-token/api-token.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: AdAccount.name, schema: AdAccountSchema }]),
+    ApiTokenModule,
   ],
   controllers: [AdAccountController],
-  providers: [AdAccountService],
+  providers: [AdAccountService, AdAccountTimezoneCheckService],
   exports: [AdAccountService],
 })
 export class AdAccountModule {}

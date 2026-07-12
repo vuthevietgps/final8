@@ -9,7 +9,7 @@ export interface TestOrder2 {
   customerName: string;
   quantity: number;
   agentId: { _id: string; name?: string; fullName?: string } | string;
-  adGroupId: string; // may be '0'
+  adGroupId: string; // empty means unattributed; provider IDs must never use a sentinel
   isActive: boolean;
   serviceDetails?: string;
   productionStatus: string;
@@ -36,9 +36,20 @@ export interface TestOrder2 {
   receiverAddress?: string;
   createdAt?: string;
   updatedAt?: string;
+  readonly businessConfirmedAt?: string | null;
+  readonly businessConfirmedBy?: string;
+  readonly businessConfirmationSource?: 'erp_manual_confirmation' | 'pending_order_approval';
 }
 
-export type CreateTestOrder2 = Omit<TestOrder2, '_id' | 'createdAt' | 'updatedAt'>;
+export type CreateTestOrder2 = Omit<
+  TestOrder2,
+  | '_id'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'businessConfirmedAt'
+  | 'businessConfirmedBy'
+  | 'businessConfirmationSource'
+>;
 export type UpdateTestOrder2 = Partial<CreateTestOrder2>;
 
 export interface NamedItem { _id: string; name: string; color?: string; }

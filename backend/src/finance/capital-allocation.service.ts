@@ -24,9 +24,9 @@ export class CapitalAllocationService {
    */
   async createPolicy(dto: CreateCapitalAllocationPolicyDto) {
     // Validate tổng tỷ lệ = 100%
-    const total = dto.reinvestmentRatio + dto.safetyReserveRatio + 
+    const total = dto.reinvestmentRatio + dto.safetyReserveRatio +
                   dto.personalIncomeRatio + dto.longTermAssetRatio;
-    
+
     if (Math.abs(total - 100) > 0.01) {
       throw new BadRequestException(`Tổng tỷ lệ phải = 100%. Hiện tại: ${total}%`);
     }
@@ -120,26 +120,26 @@ export class CapitalAllocationService {
 
   /**
    * Tính toán phân bổ vốn từ lợi nhuận thuần
-   * 
+   *
    * CRITICAL FIX: Dùng safeAvailableFunds (cash-based), KHÔNG dùng totalNetProfit (accrual-based)
-   * 
+   *
    * WHY:
    * ----
    * - totalNetProfit = Accrual accounting (tất cả orders, kể cả chưa nhận tiền)
    * - safeAvailableFunds = Cash accounting (dynamic weights + initial capital)
-   * 
+   *
    * EXAMPLE:
    * --------
    * totalNetProfit = 100M (tất cả orders)
    * safeAvailableFunds = 84.5M (discounted + initial capital)
-   * 
+   *
    * Nếu dùng totalNetProfit → Phân bổ 45M reinvestment
    * → Nhưng chỉ có 84.5M cash thực tế
    * → OVERSPENDING 15.5M!
-   * 
+   *
    * Đúng: Dùng safeAvailableFunds → Phân bổ 38M reinvestment
    * → An toàn, không chi tiền chưa có
-   * 
+   *
    * LOGIC MỚI (2024):
    * ==================
    * - conservative: Chỉ tính đơn đã thanh toán CẢ NCC VÀ Đại lý (realizedNetProfit)
@@ -148,7 +148,7 @@ export class CapitalAllocationService {
    */
   async computeAllocation(policyId?: string, mode: 'conservative' | 'moderate' | 'aggressive' = 'conservative') {
     // 1. Lấy policy (dùng active nếu không chỉ định)
-    const policy = policyId 
+    const policy = policyId
       ? await this.policyModel.findById(policyId)
       : await this.getActivePolicy();
 
@@ -159,7 +159,7 @@ export class CapitalAllocationService {
     // 2. Lấy lợi nhuận thuần thực tế (CASH-BASED - realizedNetProfit)
     // ✅ Mặc định dùng conservative = chỉ tính đơn đã thanh toán cả 2 bên
     const fundsData = await this.financeService.computeRealAvailableFunds(mode);
-    
+
     // ✅ FIX: Dùng safeAvailableFunds (= realizedNetProfit + initialCapital)
     const cashAvailable = fundsData.safeAvailableFunds;
     const totalNetProfit = fundsData.totalNetProfit;  // Giữ để reference
@@ -171,12 +171,12 @@ export class CapitalAllocationService {
     // Thu nhập = 20% lợi nhuận thuần
     // Tài sản dài hạn = 10% lợi nhuận thuần
     // 55% vốn ban đầu còn lại dành cho vận hành/phí đệm
-    
+
     // Normalize cashFlow để tránh lỗi TypeScript với union types
     const cashFlow = (fundsData.cashFlow || {}) as any;
     const initialCapital = cashFlow.initialCapital ?? 0;
     const realizedProfit = cashFlow.realizedNetProfit ?? cashFlow.realizedProfit ?? totalNetProfit ?? 0;
-    
+
     // Chi phí ads đã chi (lấy từ tổng chi ads trong đơn hàng realized)
     const totalAdsCost = cashFlow.totalAdsCost ?? 0;
 
@@ -198,13 +198,13 @@ export class CapitalAllocationService {
       date: new Date(),
       policyName: policy.name,
       mode: fundsData.mode,
-      
+
       // Cash available (actual money can allocate - based on realized profit)
       cashAvailable,
-      
+
       // Total profit (for reference - includes pending)
       totalNetProfit,
-      
+
       // Phân bổ (số tiền) - DỰA TRÊN CASH AVAILABLE (realized only)
       reinvestmentAmount,
       safetyReserveAmount,
@@ -230,7 +230,7 @@ export class CapitalAllocationService {
       date: new Date(),
       policyName: allocation.policyName,
       totalNetProfit: allocation.totalNetProfit,
-      
+
       reinvestmentAmount: allocation.reinvestmentAmount,
       safetyReserveAmount: allocation.safetyReserveAmount,
       personalIncomeAmount: allocation.personalIncomeAmount,
@@ -249,9 +249,10 @@ export class CapitalAllocationService {
   }
 
   /**
-   * Cron job: Tự động chụp snapshot mỗi ngày 2:00 AM
+   * Cron job: Tự động chụp snapshot mỗi ngày 08:00 AM (Asia/Ho_Chi_Minh)
+   * Cần chạy sau khi AdGroupDailyReport đã chốt (07:15) để snapshot phản ánh đúng lợi nhuận thực.
    */
-  @Cron('0 2 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  @Cron('0 8 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async autoCaptureSnapshot() {
     try {
       // Kiểm tra xem hôm nay đã có snapshot chưa
@@ -331,11 +332,11 @@ export class CapitalAllocationService {
 
   /**
    * Lấy vốn tái đầu tư khả dụng cho ads
-   * 
+   *
    * CÔNG THỨC MỚI:
    * ==============
    * Vốn tái đầu tư khả dụng = Vốn tái đầu tư ban đầu + Vốn tái đầu tư được phân bổ - Chi phí ads
-   * 
+   *
    * Trong đó:
   * - Vốn tái đầu tư ban đầu: Từ funding sources đang active
    * - Vốn tái đầu tư được phân bổ: Tổng reinvestmentAmount từ các snapshots

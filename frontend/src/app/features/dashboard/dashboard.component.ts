@@ -134,10 +134,11 @@ export class DashboardComponent {
       'export': 'Xuất dữ liệu',
       'import': 'Nhập dữ liệu',
       'fanpages': 'Fanpage',
-      'openai-configs': 'Cấu hình OpenAI',
-      'api-tokens': 'API Tokens',
+      'openai-configs': 'AI API Key & Prompt',
+      'api-tokens': 'Ads API Tokens',
       'ads-budget': 'Ngân sách Ads',
       'employee-ads-kpi': 'KPI nhân viên Ads',
+      'manager-handbook': 'Sổ tay Manager',
       'finance': 'Tài chính',
       'owner-fund': 'Quỹ Owner'
     };
@@ -145,34 +146,6 @@ export class DashboardComponent {
   }
 
   getAvailablePermissions(): string[] {
-    const user = this.authService.user();
-    if (!user) return [];
-
-    const rolePermissions: Record<UserRole, string[]> = {
-      [UserRole.DIRECTOR]: [
-        'users', 'orders', 'orders-test2', 'products', 'product-categories', 'media',
-        'delivery-status', 'production-status', 'order-status',
-        'ad-accounts', 'ad-groups', 'advertising-costs',
-        'labor-costs', 'other-costs', 'salary-config',
-        'customers', 'purchase-costs', 'fanpages', 'openai-configs', 'api-tokens', 'chat-messages', 'pending-orders',
-        'quotes', 'reports', 'export', 'import', 'settings',
-        'ads-budget', 'employee-ads-kpi', 'finance', 'owner-fund',
-        'order-update'
-      ],
-      [UserRole.MANAGER]: [
-        'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
-        'fanpages', 'openai-configs', 'api-tokens', 'chat-messages',
-        'ads-budget', 'employee-ads-kpi'
-      ],
-      [UserRole.EMPLOYEE]: [
-        'orders-test2', 'order-update', 'chat-messages'
-      ],
-      [UserRole.INTERNAL_AGENT]: ['orders-test2'],
-      [UserRole.EXTERNAL_AGENT]: ['orders-test2'],
-      [UserRole.INTERNAL_SUPPLIER]: ['orders-test2'],
-      [UserRole.EXTERNAL_SUPPLIER]: ['orders-test2']
-    };
-
-    return rolePermissions[user.role] || [];
+    return this.authService.getCurrentPermissions();
   }
 }

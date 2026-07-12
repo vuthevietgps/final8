@@ -7,7 +7,7 @@ require('dotenv').config();
 const { MongoClient } = require('mongodb');
 const mongoose = require('mongoose');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 // Mock Summary5 service logic
 async function syncSummary5() {

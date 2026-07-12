@@ -1,14 +1,22 @@
 ﻿<div class="api-token-container">
   <div class="header-row">
-    <h2>API & Tokens</h2>
+    <h2>Ads API Tokens</h2>
     <div class="actions" *ngIf="activeTab() === 'list'">
-      <button class="btn" (click)="openCreate()">Thêm Token</button>
+      <button class="btn" (click)="openCreate()">Thêm Ads Token</button>
       <button class="btn secondary" (click)="load()" [disabled]="loading()">Tải lại</button>
+      <button
+        class="btn secondary"
+        (click)="syncSystemUser()"
+        [disabled]="syncSystemLoading()"
+        title="Đồng bộ fanpage/page access token tự động từ 1 system user token"
+      >
+        Sync page token từ System User
+      </button>
       <button
         class="btn secondary"
         (click)="sync()"
         [disabled]="syncLoading()"
-        title="Nhập token trực tiếp; nút này chỉ dùng khi muốn nhập từ Tài khoản quảng cáo"
+        title="Nhập Ads provider token trực tiếp; nút này chỉ dùng khi muốn nhập từ Tài khoản quảng cáo"
       >
         Đồng bộ từ Tài khoản quảng cáo
       </button>
@@ -22,7 +30,7 @@
       (click)="activeTab.set('list')"
       type="button"
     >
-      Danh sách token
+      Danh sách Ads token
     </button>
     <button
       class="tab-btn"
@@ -30,7 +38,7 @@
       (click)="activeTab.set('guide')"
       type="button"
     >
-      Hướng dẫn API Ads
+      Hướng dẫn Ads API
     </button>
   </div>
 
@@ -55,7 +63,7 @@
         <tr *ngFor="let t of tokens()">
           <td>
             <strong>{{ t.adAccountName || adAccountNames[t._id] || '—' }}</strong>
-            <div class="sub">Token: {{ t.name }}</div>
+            <div class="sub">Tên token: {{ t.name }}</div>
             <div class="sub" *ngIf="t.notes">{{ t.notes }}</div>
           </td>
           <td>{{ t.adAccountId || adAccountIds[t._id] || testAdAccountId[t._id] || '—' }}</td>
@@ -92,13 +100,13 @@
       </tbody>
     </table>
 
-    <div *ngIf="!loading() && !tokens().length" class="empty">Chưa có token nào.</div>
+    <div *ngIf="!loading() && !tokens().length" class="empty">Chưa có Ads API token nào.</div>
 
     <div class="modal-backdrop" *ngIf="showModal()" (click)="showModal.set(false)">
       <div class="modal" (click)="$event.stopPropagation()">
-        <h3>Thêm Token</h3>
+        <h3>Thêm Ads API Token</h3>
         <label>Tên<input [ngModel]="form().name" (ngModelChange)="updateForm('name', $event)" /></label>
-        <label>Token<input [ngModel]="form().token" (ngModelChange)="updateForm('token', $event)" /></label>
+        <label>Access/Refresh Token<input [ngModel]="form().token" (ngModelChange)="updateForm('token', $event)" /></label>
         <label>
           Nền tảng
           <select [ngModel]="form().provider" (ngModelChange)="updateForm('provider', $event)">
@@ -134,9 +142,9 @@
 
     <div class="modal-backdrop" *ngIf="rotating()" (click)="cancelRotate()">
       <div class="modal" (click)="$event.stopPropagation()">
-        <h3>Rotate Token: {{ rotating()?.name }}</h3>
-        <p class="help">Token cũ sẽ được đánh dấu đã rotate và liên kết token mới.</p>
-        <label>Token mới<input [ngModel]="rotateForm().newToken" (ngModelChange)="updateRotateForm('newToken', $event)" /></label>
+        <h3>Rotate Ads Token: {{ rotating()?.name }}</h3>
+        <p class="help">Ads token cũ sẽ được đánh dấu đã rotate và liên kết token mới.</p>
+        <label>Ads token mới<input [ngModel]="rotateForm().newToken" (ngModelChange)="updateRotateForm('newToken', $event)" /></label>
         <label>
           Ghi chú
           <textarea rows="2" [ngModel]="rotateForm().notes" (ngModelChange)="updateRotateForm('notes', $event)"></textarea>
@@ -154,7 +162,8 @@
       <h3>Mục tiêu</h3>
       <p>
         Tab này hướng dẫn cấu hình API theo từng nền tảng để hệ thống lấy được chi phí quảng cáo về UI,
-        phục vụ theo dõi lợi nhuận và cảnh báo hành động khẩn cấp.
+        phục vụ theo dõi lợi nhuận và cảnh báo hành động khẩn cấp. Đây là nơi nhập token quảng cáo
+        Meta/Google/TikTok/Zalo, không dùng để nhập OpenAI API Key cho chatbot.
       </p>
     </div>
 
@@ -163,7 +172,7 @@
       <ul>
         <li>Mỗi nhóm quảng cáo gắn đúng 1 sản phẩm (đã khóa cứng theo nghiệp vụ hiện tại).</li>
         <li>Mỗi bản ghi nhóm quảng cáo cần có mã định danh duy nhất từ nền tảng (Meta adset_id, Google ad_group_id, TikTok adgroup_id).</li>
-        <li>Token phải gắn đúng tài khoản quảng cáo để đối soát chi phí theo ngày.</li>
+        <li>Ads provider token phải gắn đúng tài khoản quảng cáo để đối soát chi phí theo ngày.</li>
         <li>Múi giờ báo cáo cần thống nhất với hệ thống (khuyến nghị Asia/Ho_Chi_Minh).</li>
       </ul>
     </div>
@@ -174,7 +183,7 @@
         <li>Tạo App tại Meta for Developers và bật quyền Marketing API.</li>
         <li>Xin quyền tối thiểu: <code>ads_management</code>, <code>ads_read</code>, <code>business_management</code>.</li>
         <li>Lấy Access Token dài hạn cho user hệ thống hoặc system user của Business.</li>
-        <li>Trong tab Danh sách token, bấm Thêm Token và nhập đúng <code>act_XXXXXXXX</code>.</li>
+        <li>Trong tab Danh sách Ads token, bấm Thêm Ads Token và nhập đúng <code>act_XXXXXXXX</code>.</li>
         <li>Dùng nút Test kết nối để xác thực tài khoản quảng cáo trước khi chạy đồng bộ tự động.</li>
       </ol>
       <p class="guide-note">
@@ -187,7 +196,7 @@
       <ol>
         <li>Tạo OAuth Client trên Google Cloud, bật Google Ads API.</li>
         <li>Tạo Developer Token trong Google Ads Manager.</li>
-        <li>Lấy <code>refresh_token</code> và lưu theo cơ chế token của hệ thống.</li>
+        <li>Lấy <code>refresh_token</code> và lưu trong Ads API Tokens hoặc Ads API Connections của hệ thống.</li>
         <li>Liên kết đúng <code>customer_id</code> của tài khoản chạy quảng cáo.</li>
         <li>Đồng bộ dữ liệu qua báo cáo ad group để lấy cost theo ngày.</li>
       </ol>
@@ -212,7 +221,7 @@
     <div class="guide-card">
       <h3>5) Quy trình đưa dữ liệu về UI</h3>
       <ol>
-        <li>Thêm token và kiểm tra trạng thái hợp lệ trong tab Danh sách token.</li>
+        <li>Thêm Ads token và kiểm tra trạng thái hợp lệ trong tab Danh sách Ads token.</li>
         <li>Map ad group nền tảng với nhóm quảng cáo nội bộ (1 nhóm quảng cáo = 1 sản phẩm).</li>
         <li>Chạy tác vụ đồng bộ định kỳ theo ngày để ghi chi phí vào MongoDB.</li>
         <li>UI ngân sách/quản trị sẽ đọc dữ liệu đã chuẩn hóa từ backend để hiển thị thực tế và dự kiến theo X hoàn.</li>
@@ -222,7 +231,7 @@
     <div class="guide-card">
       <h3>6) Kiểm tra nhanh khi lỗi dữ liệu</h3>
       <ul>
-        <li>Token hết hạn hoặc thiếu scope: chi phí trả về rỗng/403.</li>
+        <li>Ads token hết hạn hoặc thiếu scope: chi phí trả về rỗng/403.</li>
         <li>Sai ad account id: test token báo không truy cập được tài khoản.</li>
         <li>Lệch múi giờ: dữ liệu ngày hiện tại thiếu hoặc lệch 1 ngày.</li>
         <li>Chưa map ad group: có chi phí API nhưng không ghép được vào nhóm quảng cáo nội bộ.</li>
@@ -232,8 +241,8 @@
     <div class="guide-card">
       <h3>7) Bảo mật và vận hành an toàn</h3>
       <ul>
-        <li>Không lưu token trong mã nguồn; chỉ lưu trong cơ sở dữ liệu và biến môi trường an toàn.</li>
-        <li>Bật cơ chế xoay token định kỳ, ghi chú ngày đổi để dễ truy vết.</li>
+        <li>Không lưu Ads token trong mã nguồn; chỉ lưu trong cơ sở dữ liệu và biến môi trường an toàn.</li>
+        <li>Bật cơ chế xoay Ads token định kỳ, ghi chú ngày đổi để dễ truy vết.</li>
         <li>Giới hạn quyền tài khoản chỉ đủ đọc chi phí quảng cáo.</li>
         <li>Luôn có backup MongoDB trước khi chỉnh mapping hoặc chạy job đồng bộ lớn.</li>
       </ul>

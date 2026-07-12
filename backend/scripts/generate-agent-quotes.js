@@ -3,7 +3,7 @@
 
 const { MongoClient, ObjectId } = require('mongodb');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const MONGODB_URI = process.env.MONGODB_URI;
 const AGENT_ROLES = ['internal_agent', 'external_agent', 'internal_supplier', 'external_supplier'];
 const APPROVED_STATUS = 'Đã duyệt';
 

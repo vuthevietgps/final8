@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 async function analyzeSummary4Logic() {
   try {
-    const MONGO_URI = 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+    const MONGO_URI = process.env.MONGODB_URI;
     await mongoose.connect(MONGO_URI);
     console.log('✅ Connected to MongoDB Atlas');
     

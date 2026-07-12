@@ -1,0 +1,30 @@
+{
+  "data-quality-report-20260612.json": {
+    "sha256": "ed897618afd57b623bb3d5bf890132400a202d37a4c76e78bfddd6da2e0e51fc",
+    "bytes": 5830
+  },
+  "decision-history-20260612.json": {
+    "sha256": "da917a57dcf18a43dc9e94021e05555c4d5e48ca5075ab82c93a5e2b9fbdce64",
+    "bytes": 1235
+  },
+  "director-data-pack-20260612.json": {
+    "sha256": "4ab7e0644148f5d2b6309d5f2b5e4064245c8b6f32034e5bdd4093ea7a146aab",
+    "bytes": 78686
+  },
+  "director-data-pack-20260612.xlsx": {
+    "sha256": "ee81bce500ea0df6070cc1e865c44f2faa6eb6b17962152ae13d5a96483a8835",
+    "bytes": 53026
+  },
+  "mapping-report-20260612.json": {
+    "sha256": "ec7843d5893d342998adde7acd11bfd26c9063f55f144802057e0c129b270abf",
+    "bytes": 11124
+  },
+  "marketer-data-pack-20260612.json": {
+    "sha256": "115f694b1bc160aea00ccfe7760c59cd73ceef08dba74fc066a54da361c357ce",
+    "bytes": 39095
+  },
+  "marketer-data-pack-20260612.xlsx": {
+    "sha256": "2c8cbeffe5193a13b39358022c2a021bb28c1e39afbb3ca9e4747d53728b2a1a",
+    "bytes": 29699
+  }
+}

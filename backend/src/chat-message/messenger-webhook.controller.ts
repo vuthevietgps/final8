@@ -1,7 +1,6 @@
-import { Body, Controller, Get, Post, Query, Req, Res, Logger } from '@nestjs/common';
-import { Response, Request } from 'express';
+import { Body, Controller, Get, Post, Query, Res, Logger } from '@nestjs/common';
+import { Response } from 'express';
 import { MessengerWebhookService } from './messenger-webhook.service';
-import { FeatureModule } from '../plan/feature-module.decorator';
 
 // Heavy logic moved into MessengerWebhookService for maintainability
 
@@ -17,7 +16,6 @@ import { FeatureModule } from '../plan/feature-module.decorator';
  * - Message persistence to database
  * - Conversation state management
  */
-@FeatureModule('chat-message')
 @Controller('webhook/messenger')
 export class MessengerWebhookController {
   private readonly logger = new Logger(MessengerWebhookController.name);
@@ -26,6 +24,28 @@ export class MessengerWebhookController {
   constructor(
     private readonly webhookService: MessengerWebhookService,
   ) {}
+
+  private resolveExpectedVerifyToken(): string | null {
+    const envToken =
+      process.env.MESSENGER_VERIFY_TOKEN?.trim() ||
+      process.env.FB_VERIFY_TOKEN?.trim();
+
+    if (envToken) {
+      return envToken;
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      this.logger.error(
+        '[WebhookVerify] Missing MESSENGER_VERIFY_TOKEN/FB_VERIFY_TOKEN in production.',
+      );
+      return null;
+    }
+
+    this.logger.warn(
+      '[WebhookVerify] Using fallback verify token in non-production environment.',
+    );
+    return 'dev-verify-token';
+  }
 
   /**
    * Webhook verification endpoint for Facebook
@@ -37,16 +57,19 @@ export class MessengerWebhookController {
     @Query('hub.challenge') challenge: string,
     @Res() res: Response,
   ) {
-    const expectedToken = process.env.MESSENGER_VERIFY_TOKEN || 
-                         process.env.FB_VERIFY_TOKEN || 
-                         'dev-verify-token';
-    
+    const expectedToken = this.resolveExpectedVerifyToken();
+    if (!expectedToken) {
+      return res.status(500).send('Webhook verify token is not configured');
+    }
+
     if (mode === 'subscribe' && token === expectedToken) {
       this.logger.log('Webhook verification successful');
       return res.status(200).send(challenge);
     }
-    
-    this.logger.warn('Webhook verification failed', { mode, token });
+
+    this.logger.warn(
+      `[WebhookVerify] Verification failed. mode=${mode || '<empty>'} tokenProvided=${token ? 'yes' : 'no'}`,
+    );
     return res.status(403).send('Verification failed');
   }
 
@@ -55,9 +78,8 @@ export class MessengerWebhookController {
    */
   @Post()
   async receive(
-    @Body() body: any, 
-    @Res() res: Response, 
-    @Req() req: Request
+    @Body() body: any,
+    @Res() res: Response,
   ) {
     try {
       // Runtime diagnostic: quickly identify which instance receives webhook
@@ -66,16 +88,22 @@ export class MessengerWebhookController {
       const firstMsg = Array.isArray(firstEntry?.messaging) ? firstEntry.messaging[0] : undefined;
       if (this.isDebugMode || process.env.NODE_ENV !== 'production') {
         this.logger.log(
-          `[WebhookRecv] pid=${process.pid} pageId=${firstEntry?.id || 'n/a'} sender=${firstMsg?.sender?.id || 'n/a'} entries=${Array.isArray(body?.entry) ? body.entry.length : 0} AI_FB_SENDING_ENABLED=${process.env.AI_FB_SENDING_ENABLED ?? '<unset>'} FB_SENDING_ENABLED=${process.env.FB_SENDING_ENABLED ?? '<unset>'}`
+          `[WebhookRecv] pid=${process.pid} pageId=${firstEntry?.id || 'n/a'} sender=${firstMsg?.sender?.id || 'n/a'} entries=${Array.isArray(body?.entry) ? body.entry.length : 0} AI_FB_SENDING_ENABLED=${process.env.AI_FB_SENDING_ENABLED ?? '<unset>'} FB_SENDING_ENABLED=${process.env.FB_SENDING_ENABLED ?? '<unset>'}`,
         );
       }
-      await this.webhookService.handle(body);
-      return res.status(200).json({ status: 'ok' });
+
+      // Acknowledge Meta immediately to reduce webhook retries, then process in background.
+      const payload = body ? JSON.parse(JSON.stringify(body)) : body;
+      res.status(200).json({ status: 'accepted' });
+      void this.webhookService.handle(payload).catch((error) => {
+        this.logger.error('Webhook processing failed after ACK', error?.stack || error?.message || String(error));
+      });
+      return;
     } catch (error) {
       this.logger.error('Webhook processing failed', error.stack);
-      return res.status(500).json({ 
-        message: 'Webhook processing error', 
-        error: error.message 
+      return res.status(500).json({
+        message: 'Webhook processing error',
+        error: error.message,
       });
     }
   }

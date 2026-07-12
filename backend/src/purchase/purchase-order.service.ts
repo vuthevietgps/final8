@@ -27,6 +27,13 @@ export class PurchaseOrderService {
     return { itemsTotal, tax, shippingFee, discount, grandTotal };
   }
 
+  private asObjectId(value: string, fieldName: string): Types.ObjectId {
+    if (!value || !Types.ObjectId.isValid(value)) {
+      throw new BadRequestException(`${fieldName} must be a valid ObjectId`);
+    }
+    return new Types.ObjectId(value);
+  }
+
   /** Lịch sử giá nhập cho 1 sản phẩm, tùy chọn lọc theo NCC, khoảng ngày; trả về bản ghi mới nhất trước */
   async priceHistory(params: PurchasePriceHistoryDto) {
     const q: any = { 'items.productId': new Types.ObjectId(params.productId), 'items.quantityReceived': { $gt: 0 } };
@@ -102,7 +109,7 @@ export class PurchaseOrderService {
     const page = Math.max(1, Number(filter.page || 1));
     const limit = Math.max(1, Math.min(100, Number(filter.limit || 20)));
     const q: any = {};
-    if (filter.supplierId) q.supplierId = new Types.ObjectId(filter.supplierId);
+    if (filter.supplierId) q.supplierId = this.asObjectId(filter.supplierId, 'supplierId');
     if (filter.status) q.status = filter.status;
     const [data, total] = await Promise.all([
       this.poModel.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
@@ -112,7 +119,7 @@ export class PurchaseOrderService {
   }
 
   async findOne(id: string) {
-    const doc = await this.poModel.findById(id).lean();
+    const doc = await this.poModel.findById(this.asObjectId(id, 'id')).lean();
     if (!doc) throw new NotFoundException('Không tìm thấy PO');
     return doc;
   }
@@ -124,7 +131,7 @@ export class PurchaseOrderService {
     const match: any = { qtyReceived: { $gt: 0 } };
 
     if (params.supplierId) {
-      match.supplierId = new Types.ObjectId(params.supplierId);
+      match.supplierId = this.asObjectId(params.supplierId, 'supplierId');
     }
 
     const fromDate = params.from ? new Date(params.from) : undefined;
@@ -194,7 +201,7 @@ export class PurchaseOrderService {
   }
 
   async update(id: string, dto: UpdatePurchaseOrderDto) {
-    const po = await this.poModel.findById(id);
+    const po = await this.poModel.findById(this.asObjectId(id, 'id'));
     if (!po) throw new NotFoundException('Không tìm thấy PO');
     if (dto.items && dto.items.length === 0) throw new BadRequestException('Cần ít nhất 1 dòng hàng');
 
@@ -243,16 +250,17 @@ export class PurchaseOrderService {
   }
 
   async remove(id: string) {
-    const res = await this.poModel.findByIdAndDelete(id).lean();
+    const res = await this.poModel.findByIdAndDelete(this.asObjectId(id, 'id')).lean();
     if (!res) throw new NotFoundException('Không tìm thấy PO');
     return res;
   }
 
   async receive(id: string, dto: ReceivePurchaseDto) {
+    const purchaseOrderId = this.asObjectId(id, 'id');
     const session = await this.poModel.db.startSession();
     let result: any;
     await session.withTransaction(async () => {
-      const po = await this.poModel.findById(id).session(session);
+      const po = await this.poModel.findById(purchaseOrderId).session(session);
       if (!po) throw new NotFoundException('Không tìm thấy PO');
       if (po.status === PurchaseStatus.CANCELLED) throw new BadRequestException('PO đã hủy, không thể nhập kho');
       if (po.status === PurchaseStatus.RECEIVED) throw new BadRequestException('PO đã nhập đủ');

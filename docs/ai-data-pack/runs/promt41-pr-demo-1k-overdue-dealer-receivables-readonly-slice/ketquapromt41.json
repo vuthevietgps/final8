@@ -1,0 +1,75 @@
+{
+  "phase": "PR-DEMO-1K",
+  "status": "implemented_read_only_slice",
+  "output_root": "docs/ai-data-pack/runs/promt41-pr-demo-1k-overdue-dealer-receivables-readonly-slice",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target_finding": "overdue_dealer_receivables",
+  "implementation": {
+    "code_changed": true,
+    "docs_changed": true,
+    "director_json_evidence_surface_changed": true,
+    "evidence_row_present": true,
+    "data_quality_gate_present": true,
+    "director_json_section": "16_operation_capacity",
+    "read_only_sources": [
+      "ordertest2",
+      "agentstatements",
+      "users"
+    ],
+    "tests_run": [
+      {
+        "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+        "working_directory": "backend",
+        "result": "passed",
+        "test_suites": "1 passed, 1 total",
+        "tests": "29 passed, 29 total"
+      },
+      {
+        "command": "npm run build",
+        "working_directory": "backend",
+        "result": "passed"
+      },
+      {
+        "command": "rg static safety scans on changed files",
+        "working_directory": ".",
+        "result": "passed",
+        "notes": "No callable OpenAI/action/provider/live/destructive DB/secret path added. Matches were existing test assertions or not_allowed_actions safety text."
+      }
+    ]
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": "",
+    "missing_fields_or_models": []
+  },
+  "non_blocking_weak_fields": [
+    "agent_receivable_module_semantics_are_payable_or_settlement_oriented",
+    "collection_owner_not_canonical",
+    "last_payment_is_statement_level_not_order_allocated",
+    "separate_invoice_model_not_found"
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "db_migration_added": false,
+    "collection_action_added": false,
+    "agent_blocking_action_added": false,
+    "payment_mutation_added": false,
+    "cashflow_mutation_added": false,
+    "customer_mutation_added": false,
+    "invoice_order_mutation_added": false,
+    "purchase_replenishment_action_added": false
+  },
+  "next_recommendation": "Review and approve Prompt41 as a partial read-only overdue_dealer_receivables evidence slice; keep Action Draft Schema, provider execution, OpenAI upload, collection/payment/cashflow, and all mutation branches parked."
+}
+

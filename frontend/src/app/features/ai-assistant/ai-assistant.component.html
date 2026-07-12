@@ -1,0 +1,398 @@
+<div class="ai-assistant-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">AI Operator</p>
+      <h1>Trợ lý quản trị ERP</h1>
+      <p class="lead">
+        Tổng hợp dữ liệu ERP, giải thích API, liệt kê tình huống vận hành và hỗ trợ kiểm soát AI API Key.
+      </p>
+    </div>
+    <div class="header-actions">
+      <a routerLink="/ops-actions" class="link-button">Ops Actions</a>
+      <a routerLink="/ai-marketing" class="link-button secondary">AI Marketing</a>
+      <a routerLink="/openai-configs" class="link-button">AI API Key</a>
+      <a routerLink="/api-tokens" class="link-button secondary">Ads API Tokens</a>
+      <a href="/docs/AI-OPS-SUBAGENT-ROADMAP.md" target="_blank" rel="noopener" class="link-button docs">Tai lieu AI Ops</a>
+    </div>
+  </header>
+
+  <section class="control-strip">
+    <label>
+      Vai trò
+      <select [(ngModel)]="selectedRole" (change)="onRoleChange()">
+        <option *ngFor="let role of roleOptions" [value]="role.value">{{ role.label }}</option>
+      </select>
+    </label>
+    <label>
+      Khung dữ liệu
+      <input type="number" min="1" max="90" [(ngModel)]="windowDays" />
+    </label>
+    <button type="button" (click)="loadContext()" [disabled]="contextLoading()">
+      {{ contextLoading() ? 'Đang tải' : 'Tải lại ngữ cảnh' }}
+    </button>
+  </section>
+
+  <div *ngIf="error()" class="error-banner">
+    {{ error() }}
+  </div>
+
+  <section class="status-board">
+    <div class="status-copy">
+      <p class="eyebrow">Trạng thái vận hành</p>
+      <h2>AI đang hỗ trợ quyết định, chưa tự ghi dữ liệu ERP</h2>
+      <p>
+        Câu trả lời ưu tiên đọc dữ liệu, nêu thiếu sót và chuyển việc sang màn hình thao tác khi cần duyệt hoặc xử lý thủ công.
+      </p>
+    </div>
+    <div class="mode-list">
+      <article
+        *ngFor="let mode of operationModes(); trackBy: trackByLabel"
+        class="mode-card"
+        [ngClass]="mode.key"
+      >
+        <span>{{ mode.label }}</span>
+        <strong>{{ mode.count }}</strong>
+        <small>{{ mode.description }}</small>
+      </article>
+    </div>
+  </section>
+
+  <main class="assistant-layout">
+    <section class="chat-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Chat</p>
+          <h2>Hỏi AI theo dữ liệu ERP</h2>
+        </div>
+        <span class="mode-pill">Read-only</span>
+      </div>
+
+      <div class="route-summary" *ngIf="routeInfo() as route">
+        <div>
+          <strong>{{ route.scenarioId || 'Không khóa scenario' }}</strong>
+          <span>{{ route.scenarioTitle || route.reason || 'Route theo nội dung câu hỏi gần nhất' }}</span>
+        </div>
+        <div class="route-chips">
+          <span [class]="'execution-chip ' + executionClass(route.executionMode)">{{ executionLabel(route.executionMode) }}</span>
+          <span [class]="'sufficiency ' + (route.apiSufficiency || 'partial')">{{ sufficiencyLabel(route.apiSufficiency) }}</span>
+          <span *ngIf="route.approvalRequired" class="approval-chip">Cần duyệt</span>
+        </div>
+      </div>
+
+      <div class="quick-prompts">
+        <button type="button" *ngFor="let prompt of quickPrompts()" (click)="sendPrompt(prompt)" [disabled]="loading()">
+          {{ prompt.text }}
+        </button>
+      </div>
+
+      <div class="message-list" *ngIf="messages().length; else emptyChat">
+        <article *ngFor="let message of messages()" class="message" [class.assistant]="message.sender === 'assistant'">
+          <div class="message-meta">
+            <strong>{{ message.sender === 'assistant' ? 'AI Operator' : 'Bạn' }}</strong>
+            <span>{{ message.createdAt | date: 'short' }}</span>
+            <span *ngIf="message.modelUsed">Model: {{ message.modelUsed }}</span>
+          </div>
+          <p>{{ message.content }}</p>
+          <div class="message-feedback" *ngIf="message.sender === 'assistant' && message._id">
+            <button
+              type="button"
+              [class.active]="message.feedbackRating === 'up'"
+              [disabled]="message.feedbackSubmitting"
+              (click)="submitFeedback(message, 'up')"
+            >
+              Đúng
+            </button>
+            <button
+              type="button"
+              [class.active]="message.feedbackRating === 'down'"
+              [disabled]="message.feedbackSubmitting"
+              (click)="submitFeedback(message, 'down')"
+            >
+              Sai
+            </button>
+            <span *ngIf="message.feedbackRating">Đã ghi nhận</span>
+          </div>
+        </article>
+      </div>
+
+      <ng-template #emptyChat>
+        <div class="empty-chat">
+          <strong>Chưa có hội thoại</strong>
+          <span>Chọn một câu hỏi nhanh hoặc nhập yêu cầu vận hành ERP.</span>
+        </div>
+      </ng-template>
+
+      <form class="composer" (submit)="$event.preventDefault(); sendPrompt()">
+        <textarea
+          [(ngModel)]="draftMessage"
+          name="draftMessage"
+          rows="4"
+          placeholder="Ví dụ: Giám đốc hôm nay cần xem API và tình huống nào trước?"
+        ></textarea>
+        <button type="submit" [disabled]="loading() || !draftMessage.trim()">
+          {{ loading() ? 'Đang hỏi' : 'Gửi' }}
+        </button>
+      </form>
+    </section>
+
+    <aside class="side-panel">
+      <section class="summary-card">
+        <div class="card-heading">
+          <h2>Phiên hội thoại</h2>
+          <button type="button" class="text-button" (click)="newSession()">Phiên mới</button>
+        </div>
+        <div class="session-list" *ngIf="sessions().length; else emptySessions">
+          <article
+            *ngFor="let session of sessions(); trackBy: trackById"
+            class="session-item"
+            [class.active]="selectedSessionId() === session._id"
+            (click)="selectSession(session)"
+          >
+            <div>
+              <span>{{ session.title }}</span>
+              <small>
+                {{ session.lastIntent || 'overview' }}
+                <ng-container *ngIf="session.lastScenarioId"> · {{ session.lastScenarioId }}</ng-container>
+                · {{ session.messageCount }} tin
+              </small>
+            </div>
+            <button type="button" class="archive-button" (click)="archiveSession(session, $event)">Ẩn</button>
+          </article>
+        </div>
+        <ng-template #emptySessions>
+          <p class="muted">Chưa có phiên AI Operator nào.</p>
+        </ng-template>
+      </section>
+
+      <section class="summary-card">
+        <div class="card-heading">
+          <h2>Nguồn dữ liệu</h2>
+          <span [class]="'summary-status ' + readinessSummary().status">{{ readinessSummary().label }}</span>
+        </div>
+        <div class="readiness-list">
+          <article
+            *ngFor="let item of dataReadiness(); trackBy: trackByLabel"
+            class="readiness-item"
+            [ngClass]="item.status"
+          >
+            <div>
+              <strong>{{ item.label }}</strong>
+              <small>{{ item.detail }}</small>
+            </div>
+            <span>{{ item.value }}</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="summary-card">
+        <div class="card-heading">
+          <h2>Lối đi tiếp</h2>
+          <span class="summary-status warn">Handoff</span>
+        </div>
+        <div class="handoff-list">
+          <a *ngFor="let link of handoffLinks; trackBy: trackByRoute" [routerLink]="link.route">
+            <strong>{{ link.label }}</strong>
+            <small>{{ link.description }}</small>
+          </a>
+        </div>
+      </section>
+
+      <section class="summary-card" *ngIf="assistantQuality() as quality">
+        <div class="card-heading">
+          <h2>Assistant quality</h2>
+          <span>{{ quality.target || '9+' }}</span>
+        </div>
+        <div class="token-metrics">
+          <div>
+            <strong>{{ quality.score ?? 0 }}/100</strong>
+            <span>Score</span>
+          </div>
+          <div>
+            <strong>{{ quality.confidence || 'n/a' }}</strong>
+            <span>Confidence</span>
+          </div>
+        </div>
+        <p class="muted" *ngIf="quality.mustStateMissingData">
+          Missing/limited data was detected. The answer must state the data gaps.
+        </p>
+      </section>
+
+      <section class="summary-card" *ngIf="workflowQuality() as wf">
+        <div class="card-heading">
+          <h2>Workflow audit</h2>
+          <span>{{ wf.summary?.byStatus?.good || 0 }}/{{ wf.summary?.totalWorkflows || 0 }}</span>
+        </div>
+        <div class="token-metrics">
+          <div>
+            <strong>{{ wf.summary?.missingApiCount || 0 }}</strong>
+            <span>Missing API</span>
+          </div>
+          <div>
+            <strong>{{ wf.summary?.notLoadedReadApiCount || 0 }}</strong>
+            <span>Not loaded</span>
+          </div>
+        </div>
+        <div class="agent-trace-list" *ngIf="wf.criticalFindings?.length">
+          <article *ngFor="let finding of wf.criticalFindings.slice(0, 5); trackBy: trackById" class="agent-trace-step warn">
+            <div>
+              <strong>{{ finding.scenarioId }} · {{ finding.score }}/100</strong>
+              <small>{{ finding.title }}</small>
+            </div>
+            <span>{{ finding.qualityStatus }}</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="summary-card" *ngIf="agentTrace() as trace">
+        <div class="card-heading">
+          <h2>Agent trace</h2>
+          <span>{{ trace.mode }}</span>
+        </div>
+        <div class="agent-trace-list">
+          <article *ngFor="let step of trace.steps; trackBy: trackByAgent" class="agent-trace-step" [ngClass]="step.status">
+            <div>
+              <strong>{{ step.agent }}</strong>
+              <small>{{ step.summary }}</small>
+            </div>
+            <span>{{ step.status }}</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="summary-card">
+        <div class="card-heading">
+          <h2>AI API Key</h2>
+          <a routerLink="/openai-configs">Quản lý</a>
+        </div>
+        <div class="token-metrics" *ngIf="tokenStatus() as token">
+          <div>
+            <strong>{{ token.status.byPurpose?.adminAssistant?.active || 0 }}</strong>
+            <span>Trợ lý quản trị</span>
+          </div>
+          <div>
+            <strong>{{ token.status.byPurpose?.customerChatbot?.active || 0 }}</strong>
+            <span>Chatbot khách hàng</span>
+          </div>
+          <div>
+            <strong>{{ token.status.byPurpose?.general?.active || 0 }}</strong>
+            <span>Khác</span>
+          </div>
+        </div>
+        <ul *ngIf="tokenStatus()?.status?.configs?.length">
+          <li *ngFor="let config of tokenStatus()!.status.configs; trackBy: trackById">
+            <span>{{ config.name }}</span>
+            <small>{{ purposeLabel(config.purpose) }} · {{ config.model }} · {{ config.apiKey || 'masked' }}</small>
+          </li>
+        </ul>
+        <p *ngIf="!tokenStatus()?.status?.configs?.length" class="muted">
+          Chưa có OpenAI config active/default cho AI Operator.
+        </p>
+      </section>
+
+      <section class="summary-card" *ngIf="selectedPlaybook() as playbook">
+        <h2>{{ playbook.title }}</h2>
+        <p>{{ playbook.summary }}</p>
+        <h3>Câu hỏi mỗi ngày</h3>
+        <ul>
+          <li *ngFor="let item of firstStrings(playbook.dailyQuestions, 6)">{{ item }}</li>
+        </ul>
+        <h3>Tình huống thường gặp</h3>
+        <ul>
+          <li *ngFor="let item of firstStrings(playbook.frequentScenarios, 6)">{{ item }}</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <section class="recommendations" *ngIf="recommendations().length">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Khuyến nghị</p>
+        <h2>Việc AI thấy cần xem</h2>
+      </div>
+    </div>
+    <div class="recommendation-grid">
+      <article *ngFor="let item of recommendations(); trackBy: trackById" class="recommendation-card" [class.high]="item.priority === 'high' || item.priority === 'critical'">
+        <div class="recommendation-topline">
+          <span class="priority-chip">{{ priorityLabel(item.priority) }}</span>
+          <span [class]="'risk-chip ' + riskClass(item.riskLevel)">Rủi ro: {{ riskLabel(item.riskLevel) }}</span>
+          <span class="approval-chip">{{ recommendationModeLabel(item) }}</span>
+        </div>
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.reason }}</p>
+        <strong *ngIf="item.proposedAction">{{ item.proposedAction }}</strong>
+        <small>Nguồn: {{ sourceLabel(item) }}</small>
+        <a class="handoff-link" [routerLink]="recommendationLink(item)">
+          {{ recommendationLinkLabel(item) }}
+        </a>
+      </article>
+    </div>
+  </section>
+
+  <section class="knowledge-section" *ngIf="selectedScenarioWorkflows().length">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Scenario workflows</p>
+        <h2>Tình huống vận hành và ERP API tương ứng</h2>
+      </div>
+    </div>
+    <div class="scenario-grid">
+      <article *ngFor="let scenario of selectedScenarioWorkflows(); trackBy: trackById" class="scenario-card" [class.missing]="scenario.apiSufficiency === 'missing'">
+        <div class="scenario-card-header">
+          <span>{{ scenario.scenarioId }}</span>
+          <span [class]="'sufficiency ' + (scenario.apiSufficiency || 'partial')">{{ sufficiencyLabel(scenario.apiSufficiency) }}</span>
+        </div>
+        <h3>{{ scenario.title }}</h3>
+        <p>{{ scenario.goal }}</p>
+        <small>{{ scenario.trigger }}</small>
+
+        <div class="endpoint-block">
+          <strong>API đọc</strong>
+          <code *ngFor="let endpoint of firstStrings(scenario.readApis, 5)">{{ endpoint }}</code>
+          <span *ngIf="!firstStrings(scenario.readApis, 5).length" class="muted">Chưa có API đọc</span>
+        </div>
+        <div class="endpoint-block">
+          <strong>API ghi sau duyệt</strong>
+          <code *ngFor="let endpoint of firstStrings(scenario.writeApis, 5)">{{ endpoint }}</code>
+          <span *ngIf="!firstStrings(scenario.writeApis, 5).length" class="muted">Không ghi dữ liệu</span>
+        </div>
+
+        <div class="scenario-footer">
+          <span [class]="'execution-chip ' + executionClass(scenario.executionMode)">{{ executionLabel(scenario.executionMode) }}</span>
+          <span *ngIf="scenario.approvalRequired" class="approval-chip">Cần duyệt</span>
+        </div>
+        <ul *ngIf="firstStrings(scenario.missingDataOrApi, 2).length">
+          <li *ngFor="let gap of firstStrings(scenario.missingDataOrApi, 2)">{{ gap }}</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="knowledge-section" *ngIf="knowledge() as kb">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">ERP API catalog</p>
+        <h2>Ý nghĩa API để AI điều khiển ERP có kiểm soát</h2>
+      </div>
+    </div>
+    <div class="api-grid">
+      <article *ngFor="let api of kb.apiCatalog; trackBy: trackByDomain" class="api-card">
+        <h3>{{ api.domain }}</h3>
+        <p>{{ api.purpose }}</p>
+        <div class="endpoint-block">
+          <strong>Đọc dữ liệu</strong>
+          <code *ngFor="let endpoint of firstStrings(api.readEndpoints, 4)">{{ endpoint }}</code>
+          <span *ngIf="!firstStrings(api.readEndpoints, 4).length" class="muted">Chưa khai báo endpoint đọc</span>
+        </div>
+        <div class="endpoint-block">
+          <strong>Ghi/điều khiển</strong>
+          <code *ngFor="let endpoint of firstStrings(api.writeEndpoints, 4)">{{ endpoint }}</code>
+          <span *ngIf="!firstStrings(api.writeEndpoints, 4).length" class="muted">Không có endpoint ghi</span>
+        </div>
+        <ul>
+          <li *ngFor="let guardrail of firstStrings(api.guardrails, 2)">{{ guardrail }}</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+</div>

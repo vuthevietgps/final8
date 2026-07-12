@@ -7,6 +7,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as XLSX from 'xlsx';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
+import { TestOrder2Service } from '../test-order2/test-order2.service';
 import { 
   ExcelRowData, 
   ProcessResult, 
@@ -17,7 +18,8 @@ import {
 export class OrderUpdateService {
   constructor(
     @InjectModel(TestOrder2.name) 
-    private testOrder2Model: Model<TestOrder2Document>
+    private testOrder2Model: Model<TestOrder2Document>,
+    private readonly testOrder2Service: TestOrder2Service,
   ) {}
 
   // Excel column indices (0-based)
@@ -295,11 +297,9 @@ export class OrderUpdateService {
           });
         } else {
           try {
-            const updateFilter = findFilter;
-            const updateResult = await this.testOrder2Model.updateMany(
-              updateFilter,
-              { $set: updateSet }
-            );
+            for (const order of orders) {
+              await this.testOrder2Service.update(String(order._id), updateSet as any);
+            }
 
             result.successItems.push({
               trackingNumber,

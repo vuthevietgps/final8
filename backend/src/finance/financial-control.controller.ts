@@ -4,7 +4,7 @@
  * REST API for Financial Control Dashboard
  */
 
-import { Controller, Get, Patch, Body, Logger, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Patch, Body, Logger, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { FinancialControlService } from './financial-control.service';
@@ -16,6 +16,9 @@ import {
   FinancialControlConfig,
 } from './interfaces/financial-control.interface';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { UpdateFinancialControlConfigDto } from './dto/update-financial-control-config.dto';
+import { UpsertTaxObligationSnapshotDto } from './dto/upsert-tax-obligation-snapshot.dto';
 
 @FeatureModule('finance')
 @Controller('financial-control')
@@ -29,11 +32,14 @@ export class FinancialControlController {
   /**
    * GET /api/financial-control/dashboard
    * Dashboard 8 số chính cho CEO/CFO
+   * @param forceRefresh Khi true, bỏ qua cache và tính toán lại ngay lập tức (Issue 1 — Eventual Consistency)
    */
   @Get('dashboard')
-  async getDashboard(): Promise<FinancialControlDashboard> {
-    this.logger.log('GET /api/financial-control/dashboard');
-    return this.service.getDashboard();
+  async getDashboard(
+    @Query('forceRefresh') forceRefresh?: string,
+  ): Promise<FinancialControlDashboard> {
+    this.logger.debug(`GET /api/financial-control/dashboard forceRefresh=${forceRefresh}`);
+    return this.service.getDashboard(forceRefresh === 'true');
   }
 
   /**
@@ -42,7 +48,7 @@ export class FinancialControlController {
    */
   @Get('full')
   async getFullMetrics(): Promise<FinancialControlFull> {
-    this.logger.log('GET /api/financial-control/full');
+    this.logger.debug('GET /api/financial-control/full');
     return this.service.getFullMetrics();
   }
 
@@ -52,8 +58,8 @@ export class FinancialControlController {
    */
   @Get('forecast')
   async getForecast(): Promise<Forecast7DResult> {
-    this.logger.log('GET /api/financial-control/forecast');
-    return this.service.getForecast7D();
+    this.logger.debug('GET /api/financial-control/forecast');
+    return this.service.getForecastForDashboard();
   }
 
   /**
@@ -62,7 +68,7 @@ export class FinancialControlController {
    */
   @Get('optimal-ads')
   async getOptimalAds(): Promise<OptimalAdsSuggestionResult> {
-    this.logger.log('GET /api/financial-control/optimal-ads');
+    this.logger.debug('GET /api/financial-control/optimal-ads');
     return this.service.getOptimalAdsSuggestion();
   }
 
@@ -71,30 +77,38 @@ export class FinancialControlController {
    * Get current config
    */
   @Get('config')
-  getConfig(): FinancialControlConfig {
-    this.logger.log('GET /api/financial-control/config');
-    return this.service.getConfig();
+  async getConfig(): Promise<FinancialControlConfig> {
+    this.logger.debug('GET /api/financial-control/config');
+    return await this.service.getConfig();
   }
 
   /**
    * PATCH /api/financial-control/config
-   * Update config
+   * Update config — persisted to MongoDB (survives restart / multi-pod)
    */
   @Patch('config')
-  updateConfig(@Body() config: Partial<FinancialControlConfig>): FinancialControlConfig {
-    this.logger.log('PATCH /api/financial-control/config');
-    this.service.updateConfig(config);
-    return this.service.getConfig();
+  @RequirePermissions('finance', 'finance.policy.manage')
+  async updateConfig(
+    @CurrentUser() currentUser: any,
+    @Body() config: UpdateFinancialControlConfigDto,
+  ): Promise<FinancialControlConfig> {
+    this.logger.debug('PATCH /api/financial-control/config');
+    return this.service.updateConfig(config, currentUser);
   }
 
-  /**
-   * GET /api/financial-control/debug/deprecation-stats
-   * CFO Checklist #5: Monitor deprecated fallback usage
-   */
-  @Get('debug/deprecation-stats')
-  getDeprecationStats() {
-    this.logger.log('GET /api/financial-control/debug/deprecation-stats');
-    return this.service.getDeprecationStats();
+  @Get('tax-obligation')
+  @RequirePermissions('finance', 'finance.policy.manage')
+  async getTaxObligation() {
+    return this.service.getTaxObligationSnapshot();
+  }
+
+  @Put('tax-obligation')
+  @RequirePermissions('finance', 'finance.policy.manage')
+  async upsertTaxObligation(
+    @CurrentUser() currentUser: any,
+    @Body() snapshot: UpsertTaxObligationSnapshotDto,
+  ) {
+    return this.service.upsertTaxObligationSnapshot(snapshot, currentUser);
   }
 
   /**
@@ -103,7 +117,7 @@ export class FinancialControlController {
    */
   @Get('module-health')
   async getModuleHealth() {
-    this.logger.log('GET /api/financial-control/module-health');
+    this.logger.debug('GET /api/financial-control/module-health');
     return this.service.getModuleHealth();
   }
 
@@ -113,7 +127,7 @@ export class FinancialControlController {
    */
   @Get('actions')
   async getActionSuggestions() {
-    this.logger.log('GET /api/financial-control/actions');
+    this.logger.debug('GET /api/financial-control/actions');
     return this.service.getActionSuggestions();
   }
 }

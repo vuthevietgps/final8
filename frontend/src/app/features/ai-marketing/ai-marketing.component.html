@@ -1,0 +1,348 @@
+<div class="ai-marketing-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">AI Marketing</p>
+      <h1>Bảng điều phối marketing tự động</h1>
+      <p class="lead">Theo dõi chi phí ads, đơn hàng thật, lợi nhuận, phễu lead, kế hoạch chờ duyệt, dry-run và kết quả sau thay đổi.</p>
+    </div>
+    <div class="header-actions">
+      <label>
+        Khoảng ngày
+        <input type="number" min="1" max="90" [(ngModel)]="lookbackDays" />
+      </label>
+      <button type="button" (click)="loadAll()" [disabled]="loading()">Tải lại</button>
+      <button type="button" (click)="syncLeads()" [disabled]="!!actionLoading()">
+        {{ actionLoading() === 'sync-leads' ? 'Đang đồng bộ' : 'Đồng bộ lead' }}
+      </button>
+      <button type="button" class="primary" (click)="generatePlan()" [disabled]="!!actionLoading()">
+        {{ actionLoading() === 'generate' ? 'Đang tạo' : 'Tạo kế hoạch' }}
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="error()" class="error-banner">{{ error() }}</div>
+
+  @if (overview(); as o) {
+    <section class="summary-grid">
+      <article>
+        <span>Lead</span>
+        <strong>{{ o.summary.leads }}</strong>
+      </article>
+      <article>
+        <span>Đơn hàng</span>
+        <strong>{{ o.summary.orders }}</strong>
+      </article>
+      <article>
+        <span>Chi phí ads</span>
+        <strong>{{ formatCurrency(o.summary.adsSpent) }}</strong>
+      </article>
+      <article [class.negative]="o.summary.netProfit < 0">
+        <span>Lợi nhuận ròng</span>
+        <strong>{{ formatCurrency(o.summary.netProfit) }}</strong>
+      </article>
+      <article>
+        <span>ROI</span>
+        <strong>{{ formatPercent(o.summary.roi) }}</strong>
+      </article>
+      <article [class.warning]="o.summary.saleIssueAdGroups > 0">
+        <span>Vấn đề sale</span>
+        <strong>{{ o.summary.saleIssueAdGroups }}</strong>
+      </article>
+      <article>
+        <span>Mẫu quảng cáo</span>
+        <strong>{{ o.creativeSummary?.totalCreatives || 0 }}</strong>
+      </article>
+      <article>
+        <span>Lợi nhuận mẫu ads</span>
+        <strong>{{ formatCurrency(o.creativeSummary?.totalNetProfit || 0) }}</strong>
+      </article>
+      <article [class.warning]="(o.readiness.dataQuality?.lowQualityRows || 0) > 0">
+        <span>Chất lượng dữ liệu</span>
+        <strong>{{ o.readiness.dataQuality?.avgScore || 0 }}/100</strong>
+      </article>
+      <article [class.warning]="o.readiness.status !== 'production_ready_after_live_provider_validation'">
+        <span>Mức sẵn sàng</span>
+        <strong>{{ statusText(o.readiness.status) }}</strong>
+      </article>
+      <article [class.warning]="!o.readiness.providerExecutionEnabled">
+        <span>Thực thi</span>
+        <strong>{{ statusText(o.readiness.executionMode || 'manual_or_dry_run_only') }}</strong>
+      </article>
+      <article [class.warning]="(o.assistantQuality?.score || 0) < 80">
+        <span>Chất lượng trợ lý</span>
+        <strong>{{ o.assistantQuality?.score || 0 }}/100</strong>
+      </article>
+    </section>
+
+    <section class="panel quality-panel" *ngIf="o.readiness.missing?.length || o.assistantQuality?.blockers?.length">
+      <div>
+        <p class="eyebrow">Hàng rào an toàn</p>
+        <h2>Blocker mức sẵn sàng</h2>
+      </div>
+      <ul>
+        <li *ngFor="let item of o.assistantQuality?.blockers || []">{{ item }}</li>
+        <li *ngFor="let item of o.readiness.missing || []">{{ item }}</li>
+      </ul>
+    </section>
+  }
+
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Lead funnel</p>
+          <h2>Nhóm quảng cáo theo kết quả kinh doanh thật</h2>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nhóm quảng cáo</th>
+              <th>Nền tảng</th>
+              <th class="number">Leads</th>
+              <th class="number">Đơn</th>
+              <th class="number">Chốt</th>
+              <th class="number">Chi phí</th>
+              <th class="number">Lợi nhuận</th>
+              <th class="number">ROI</th>
+              <th>Tín hiệu</th>
+              <th>Điều khiển</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of funnel()?.rows || []; trackBy: trackById" [class.issue]="row.saleIssue">
+              <td>
+                <strong>{{ row.adGroupName || row.adGroupId }}</strong>
+                <small>{{ row.adGroupId }}</small>
+              </td>
+              <td>{{ row.platform || '-' }}</td>
+              <td class="number">{{ row.totalLeads }}</td>
+              <td class="number">{{ row.totalOrders }}</td>
+              <td class="number">{{ closeRate(row) }}</td>
+              <td class="number">{{ formatCurrency(row.adsSpent) }}</td>
+              <td class="number" [class.negative-text]="row.netProfit < 0">{{ formatCurrency(row.netProfit) }}</td>
+              <td class="number">{{ formatPercent(row.roi) }}</td>
+              <td>
+                <span class="pill" [class.danger]="row.saleIssue">{{ row.saleIssue ? 'Cần kiểm tra sale' : statusText(row.dataQuality) }}</span>
+                <span class="pill" [class.danger]="row.dataQualityGrade === 'low'">{{ row.dataQualityScore }}/100 {{ statusText(row.dataQualityGrade) }}</span>
+                <small *ngIf="row.saleIssueReason">{{ row.saleIssueReason }}</small>
+                <small *ngIf="row.dataQualityReasons?.length">{{ row.dataQualityReasons.join(' ') }}</small>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <button type="button" (click)="runProviderAction(row, 'pause', true)" [disabled]="!!actionLoading()">Chạy thử tạm dừng</button>
+                  <button type="button" (click)="runProviderAction(row, 'resume', true)" [disabled]="!!actionLoading()">Chạy thử chạy lại</button>
+                  <small *ngIf="!overview()?.readiness?.providerExecutionEnabled">Live chỉ được thực thi qua execution plan Google Ads V2</small>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="panel side-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Kế hoạch</p>
+          <h2>Hàng chờ phê duyệt</h2>
+        </div>
+      </div>
+
+      <div class="plan-list">
+        <button
+          type="button"
+          *ngFor="let plan of plans(); trackBy: trackById"
+          [class.active]="selectedPlanId() === plan._id"
+          (click)="selectPlan(plan)"
+        >
+          <span>{{ plan.title }}</span>
+          <small>{{ statusText(plan.status) }} - {{ plan.items.length }} mục</small>
+        </button>
+      </div>
+
+      <div class="durable-queue">
+        <div class="queue-heading">
+          <p class="eyebrow">Hàng chờ bền vững</p>
+          <strong>{{ durableApprovalQueue()?.summary?.pending_approvals_listed || 0 }} chờ duyệt</strong>
+        </div>
+
+        <div class="queue-list" *ngIf="durableApprovals().length; else emptyDurableQueue">
+          <div class="queue-row" *ngFor="let approval of durableApprovals(); trackBy: trackById">
+            <div>
+              <strong>{{ durableApprovalTitle(approval) }}</strong>
+              <small>{{ approval.approval_id }}</small>
+              <small>{{ statusText(approval.action_type) }} - {{ statusText(approval.status) }} - {{ statusText(approval.storage) }}</small>
+            </div>
+            <a
+              class="evidence-link"
+              [routerLink]="evidenceReviewerRoute"
+              [queryParams]="durableApprovalEvidenceQueryParams(approval)"
+            >
+              Rà bằng chứng
+            </a>
+            <a
+              *ngIf="durableApprovalSourceSyncStatusQueryParams(approval) as sourceSyncQueryParams"
+              class="evidence-link source-sync-link"
+              [routerLink]="sourceSyncStatusReviewerRoute"
+              [queryParams]="sourceSyncQueryParams"
+            >
+              Rà nguồn đồng bộ
+            </a>
+          </div>
+        </div>
+
+        <ng-template #emptyDurableQueue>
+          <p class="queue-empty">Không có bản ghi phê duyệt bền vững đang chờ.</p>
+        </ng-template>
+      </div>
+    </aside>
+  </main>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Thư viện mẫu quảng cáo</p>
+        <h2>Hiệu quả mẫu quảng cáo theo lead và lợi nhuận thật</h2>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mẫu quảng cáo</th>
+            <th>Nền tảng</th>
+            <th class="number">Leads</th>
+            <th class="number">Chốt</th>
+            <th class="number">Tỷ lệ chốt</th>
+            <th class="number">Chi phí ước tính</th>
+            <th class="number">Lợi nhuận</th>
+            <th class="number">ROI</th>
+            <th>Quy gán</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of creativePerformance()?.rows || []; trackBy: trackById">
+            <td>
+              <strong>{{ row.name || row.creativeId }}</strong>
+              <small>{{ row.creativeId }}</small>
+            </td>
+            <td>{{ row.platform }}</td>
+            <td class="number">{{ row.totalLeads }}</td>
+            <td class="number">{{ row.wonLeads }}</td>
+            <td class="number">{{ formatPercent(row.closeRate * 100) }}</td>
+            <td class="number">{{ formatCurrency(row.estimatedSpend) }}</td>
+            <td class="number" [class.negative-text]="row.netProfit < 0">{{ formatCurrency(row.netProfit) }}</td>
+            <td class="number">{{ formatPercent(row.roi) }}</td>
+            <td>
+              <span class="pill">{{ statusText(row.status) }}</span>
+              <small>{{ statusText(row.attributionMode) }}</small>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note" *ngIf="creativePerformance()?.notes?.length">
+      {{ creativePerformance()?.notes?.join(' ') }}
+    </p>
+  </section>
+
+  @if (selectedPlan(); as plan) {
+    <section class="panel plan-detail">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Kế hoạch đã chọn</p>
+          <h2>{{ plan.title }}</h2>
+        </div>
+        <div class="header-actions">
+          <button type="button" (click)="apply(plan, true)" [disabled]="!approvedItems().length || !!actionLoading()">Chạy thử</button>
+          <button
+            *ngIf="overview()?.readiness?.providerExecutionEnabled"
+            type="button"
+            class="primary"
+            (click)="apply(plan, false)"
+            [disabled]="!approvedItems().length || !!actionLoading()"
+          >
+            Áp dụng mục đã duyệt
+          </button>
+          <button *ngIf="!overview()?.readiness?.providerExecutionEnabled" type="button" disabled>
+            Live chỉ qua Ads V2
+          </button>
+        </div>
+      </div>
+
+      <div class="item-grid">
+        <article *ngFor="let item of plan.items; trackBy: trackById" [class.approved]="item.status === 'approved'" [class.rejected]="item.status === 'rejected'">
+          <div class="item-top">
+            <span class="pill">{{ statusText(item.actionType) }}</span>
+            <span class="status">{{ statusText(item.status) }}</span>
+          </div>
+          <h3>{{ item.adGroupName || item.adGroupId || 'Tác vụ nội bộ' }}</h3>
+          <p>{{ item.reason }}</p>
+          <div class="metrics">
+            <span>Hiện tại {{ item.currentValue !== undefined ? formatCurrency(item.currentValue) : '-' }}</span>
+            <span>Mục tiêu {{ item.targetValue !== undefined ? formatCurrency(item.targetValue) : '-' }}</span>
+            <span>Độ tin cậy {{ item.confidence || 0 }}%</span>
+            <span *ngIf="item.expectedRoi !== undefined">ROI kỳ vọng {{ formatPercent(item.expectedRoi) }}</span>
+            <span *ngIf="item.riskLevel">Rủi ro {{ statusText(item.riskLevel) }}</span>
+            <span *ngIf="item.metadata?.eligibility">Điều kiện {{ statusText(item.metadata?.eligibility) }}</span>
+          </div>
+          <small *ngIf="item.metadata?.dataQualityScore !== undefined">
+            Chất lượng dữ liệu {{ item.metadata?.dataQualityScore }}/100 {{ statusText(item.metadata?.dataQualityGrade || '') }}
+          </small>
+          <small *ngIf="item.metadata?.blockers?.length">{{ item.metadata?.blockers?.join(' ') }}</small>
+          <small *ngIf="item.metadata?.dataQualityReasons?.length">{{ item.metadata?.dataQualityReasons?.join(' ') }}</small>
+          <small *ngIf="item.approvedBy">Đã duyệt bởi {{ item.approvedBy }} {{ item.approvedAt || '' }}</small>
+          <small *ngIf="item.rejectionReason">Bị từ chối: {{ item.rejectionReason }}</small>
+          <div class="evidence-actions">
+            <a
+              *ngIf="approvalEvidenceQueryParams(item) as evidenceQueryParams"
+              class="evidence-link"
+              [routerLink]="evidenceReviewerRoute"
+              [queryParams]="evidenceQueryParams"
+            >
+              Rà bằng chứng
+            </a>
+            <a
+              *ngIf="planSourceSyncStatusQueryParams(plan, item) as sourceSyncQueryParams"
+              class="evidence-link source-sync-link"
+              [routerLink]="sourceSyncStatusReviewerRoute"
+              [queryParams]="sourceSyncQueryParams"
+            >
+              Rà nguồn đồng bộ
+            </a>
+          </div>
+          <div class="item-actions" *ngIf="item.status === 'pending'">
+            <button type="button" (click)="approve(plan, item, false)" [disabled]="!!actionLoading()">Từ chối</button>
+            <button type="button" class="primary" (click)="approve(plan, item, true)" [disabled]="!!actionLoading()">Duyệt</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  }
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Theo dõi sau thay đổi</p>
+        <h2>Đánh giá</h2>
+      </div>
+      <button type="button" (click)="loadAll(true)" [disabled]="loading()">Làm mới mục đến hạn</button>
+    </div>
+
+    <div class="evaluation-list">
+      <article *ngFor="let evaluation of evaluations(); trackBy: trackById">
+        <div>
+          <strong>{{ evaluation.adGroupId || 'Nhóm quảng cáo chưa rõ' }}</strong>
+          <span class="pill">{{ statusText(evaluation.status) }}</span>
+          <span class="pill" *ngIf="evaluation.verdict">{{ statusText(evaluation.verdict) }}</span>
+        </div>
+        <p>{{ evaluation.insight || 'Đang chờ đủ dữ liệu sau thay đổi.' }}</p>
+      </article>
+    </div>
+  </section>
+</div>

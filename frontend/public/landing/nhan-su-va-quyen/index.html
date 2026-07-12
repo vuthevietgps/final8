@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nhân sự và quyền | ERP Giáo dục Pilot</title>
+  <meta
+    name="description"
+    content="Trang chốt sơ đồ nhân sự và quyền cho ERP giáo dục: ai làm sale, ai làm ops, ai duyệt tài chính, ai dạy và ai được thao tác module nào."
+  >
+  <link rel="stylesheet" href="../landing.css">
+</head>
+<body>
+  <div class="landing-shell">
+    <header class="topbar">
+      <a class="brand" href="../index.html">
+        <span class="brand-mark">ED</span>
+        <span class="brand-copy">
+          <span class="brand-title">ERP Giáo dục Pilot</span>
+          <span class="brand-subtitle">Trang 3 / Nhân sự và quyền</span>
+        </span>
+      </a>
+      <nav class="topbar-nav" aria-label="Điều hướng trang">
+        <a href="../index.html">Hub</a>
+        <a href="../goi-hoc-chuan/index.html">Gói học</a>
+        <a aria-current="page" href="./index.html">Quyền</a>
+        <a href="../sop-sale-va-ke-toan/index.html">SOP</a>
+      </nav>
+      <a class="topbar-cta" href="../sop-sale-va-ke-toan/index.html">Xác nhận quyền</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Trang 3</p>
+          <h1>Role cứng theo người để ERP không bị “đẩy việc” chéo module.</h1>
+          <p class="lead">
+            Pilot chỉ dùng bốn owner chính. Mỗi owner có ranh giới rất rõ: sale mở nhu cầu, ops vận hành lớp,
+            finance duyệt tiền và ledger, teacher chịu trách nhiệm attendance link và teaching report.
+          </p>
+          <div class="chip-row">
+            <span class="chip">Sale: Trần Anh</span>
+            <span class="chip">OPS: Hải Yến</span>
+            <span class="chip">Finance: Minh Phúc</span>
+            <span class="chip">Teacher: Nguyễn Thu Hà</span>
+          </div>
+        </div>
+
+        <aside class="hero-visual">
+          <p class="eyebrow">Role map</p>
+          <figure>
+            <img src="../_shared/illustrations/role-map.svg" alt="Role map giữa sale, ops, finance và teacher trong ERP giáo dục">
+          </figure>
+        </aside>
+      </section>
+
+      <section class="section">
+        <div class="table-card">
+          <p class="eyebrow">Ma trận quyền</p>
+          <h3>Ai được làm gì trong pilot</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Module / tác vụ</th>
+                <th>Sale</th>
+                <th>OPS</th>
+                <th>Finance</th>
+                <th>Teacher</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Parent / student profile</td>
+                <td>Tạo mới và cập nhật dữ liệu bán hàng</td>
+                <td>Chỉ xem để kiểm roster</td>
+                <td>Chỉ xem để so khớp chứng từ</td>
+                <td>Không thao tác</td>
+              </tr>
+              <tr>
+                <td>Invoice / order</td>
+                <td>Tạo và gửi đúng package</td>
+                <td>Không chỉnh sửa</td>
+                <td>Duyệt hoặc trả lại</td>
+                <td>Không thao tác</td>
+              </tr>
+              <tr>
+                <td>Wallet / top-up / ledger</td>
+                <td>Không duyệt</td>
+                <td>Không duyệt</td>
+                <td>Toàn quyền duyệt và đối soát</td>
+                <td>Không thao tác</td>
+              </tr>
+              <tr>
+                <td>Classes / roster</td>
+                <td>Không xếp lớp</td>
+                <td>Sửa roster sau finance gate</td>
+                <td>Chỉ xem</td>
+                <td>Chỉ xem danh sách đã chốt</td>
+              </tr>
+              <tr>
+                <td>Sessions / lịch học</td>
+                <td>Không tạo session</td>
+                <td>Tạo và chỉnh lịch</td>
+                <td>Chỉ xem</td>
+                <td>Xem lịch để dạy</td>
+              </tr>
+              <tr>
+                <td>Attendance / teaching report</td>
+                <td>Không thao tác</td>
+                <td>Kiểm trạng thái đủ thiếu</td>
+                <td>Xem payroll preview</td>
+                <td>Tạo link, điểm danh, nộp report</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="three-column">
+          <article class="card">
+            <span class="kicker">Sale owner</span>
+            <h3>Trần Anh</h3>
+            <p>Chịu trách nhiệm parent, student, invoice/order và bàn giao đúng package cho OPS. Không được tự hứa xếp lớp trước gate.</p>
+          </article>
+          <article class="card">
+            <span class="kicker">OPS owner</span>
+            <h3>Hải Yến</h3>
+            <p>Quản lý Classes, Sessions và session close. Chỉ vận hành khi Finance đã duyệt, không nhận lệnh miệng từ sale.</p>
+          </article>
+          <article class="card">
+            <span class="kicker">Finance approver</span>
+            <h3>Minh Phúc</h3>
+            <p>Duyệt top-up, invoice, ledger, payroll preview và giữ quyền cho hoặc không cho lớp đi tiếp về mặt tài chính.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-grid">
+        <div>
+          <p class="eyebrow">Trang kế tiếp</p>
+          <p>Khi role matrix đã khóa, toàn bộ SOP phải viết bám đúng quyền này để tránh mô tả sai luồng hệ thống.</p>
+        </div>
+        <div class="footer-links">
+          <a href="../sop-sale-va-ke-toan/index.html">SOP sale + kế toán</a>
+          <a href="../sop-van-hanh-va-giao-vien/index.html">SOP vận hành + giáo viên</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

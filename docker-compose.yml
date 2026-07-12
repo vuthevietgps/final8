@@ -1,71 +1,91 @@
 services:
+  mongo:
+    image: mongo:8.2
+    container_name: htxbachgia-mongo
+    restart: unless-stopped
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '${MONGO_PORT:-27019}:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping").ok']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  mongo-init-replica:
+    image: mongo:8.2
+    restart: 'no'
+    depends_on:
+      mongo:
+        condition: service_healthy
+    entrypoint: ['mongosh', '--quiet', '--host', 'mongo:27017', '--eval']
+    command:
+      - >-
+        try { rs.status().ok }
+        catch (error) {
+          rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok
+        }
+
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: final8-backend
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: htxbachgia-backend
+    restart: unless-stopped
+    ports:
+      - '${BACKEND_PORT:-3001}:3000'
     environment:
-      NODE_ENV: production
-      PORT: "3000"
-      JWT_SECRET: ${JWT_SECRET:-smarterp_dev_secret_key_change_in_prod}
-      # MongoDB connection string; uses Atlas by default, can override with MONGODB_URI env var
-      MONGODB_URI: ${MONGODB_URI:-mongodb+srv://dinhvigps07:NFHQx8go5hl9U45L@smarterp-dev.khsfdta.mongodb.net/management-system?appName=smarterp-dev}
-      # If using Google credentials, prefer GOOGLE_CREDENTIALS_JSON env; file mounting removed during cleanup
-      # GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON:-}
-      # Optional hint for our path resolver
-      BACKEND_ROOT: /app
+      PORT: '3000'
+      JWT_SECRET: '${JWT_SECRET:-smarterp_dev_secret_key_change_me}'
+      API_TOKEN_SECRET: '${API_TOKEN_SECRET:-}'
+      AI_MARKETING_REQUIRE_APPROVAL: '${AI_MARKETING_REQUIRE_APPROVAL:-true}'
+      AI_MARKETING_DRY_RUN: '${AI_MARKETING_DRY_RUN:-true}'
+      AI_MARKETING_PROVIDER_EXECUTION_ENABLED: '${AI_MARKETING_PROVIDER_EXECUTION_ENABLED:-false}'
+      GOOGLE_ADS_PRODUCTION_ENABLED: '${GOOGLE_ADS_PRODUCTION_ENABLED:-false}'
+      MONGODB_URI: 'mongodb://mongo:27017/htxbachgia?replicaSet=rs0'
       MEDIA_DIR: /app/uploads/media
       MEDIA_PUBLIC_BASE: /media
-      # Optional: enable FB sending + absolute media origin for image attachments
-      FB_SENDING_ENABLED: "${FB_SENDING_ENABLED:-1}"
-      AI_FB_SENDING_ENABLED: "${AI_FB_SENDING_ENABLED:-1}"
-      AI_FB_DELIVERY_RECOVERY_ENABLED: "${AI_FB_DELIVERY_RECOVERY_ENABLED:-1}"
-      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:8080}"
-      MEDIA_ABSOLUTE_BASE: "${MEDIA_ABSOLUTE_BASE:-http://localhost:8080}"
+      PUBLIC_ORIGIN: '${PUBLIC_ORIGIN:-http://localhost:8080}'
+      FB_SENDING_ENABLED: '${FB_SENDING_ENABLED:-0}'
+      AI_FB_SENDING_ENABLED: '${AI_FB_SENDING_ENABLED:-0}'
+      AI_FB_DELIVERY_RECOVERY_ENABLED: '${AI_FB_DELIVERY_RECOVERY_ENABLED:-0}'
+      MESSENGER_VERIFY_TOKEN: '${MESSENGER_VERIFY_TOKEN:-dev-verify-token}'
+      FB_VERIFY_TOKEN: '${FB_VERIFY_TOKEN:-dev-verify-token}'
     volumes:
-      # Persist uploads across rebuilds
-      - ./backend/uploads:/app/uploads
-      # Media shared storage
+      - ./uploads:/app/uploads
       - ./media:/app/uploads/media
-    ports:
-      - "3001:3000"
+    depends_on:
+      mongo-init-replica:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
-      interval: 30s
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 15s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      retries: 10
+      start_period: 40s
 
   frontend:
     build:
-      context: ./frontend
+      context: .
       dockerfile: Dockerfile
-    container_name: final8-frontend
-    depends_on:
-      - backend
+    container_name: htxbachgia-frontend
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      - '${FRONTEND_PORT:-8080}:80'
     volumes:
       - ./media:/var/www/media:ro
+    depends_on:
+      backend:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1/']
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-networks:
-  default:
-    name: final8-net
-    driver: bridge
-
+volumes:
+  mongo-data:

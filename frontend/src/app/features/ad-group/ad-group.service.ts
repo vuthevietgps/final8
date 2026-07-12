@@ -16,11 +16,12 @@ export class AdGroupService {
 
   constructor(private http: HttpClient) {}
 
-  getAll(filter?: { platform?: string; productId?: string; agentId?: string; adAccountId?: string; isActive?: boolean }): Observable<AdGroup[]> {
+  getAll(filter?: { platform?: string; productId?: string; agentId?: string; assignedEmployeeId?: string; adAccountId?: string; isActive?: boolean }): Observable<AdGroup[]> {
     let params = new HttpParams();
     if (filter?.platform) params = params.set('platform', filter.platform);
     if (filter?.productId) params = params.set('productId', filter.productId);
     if (filter?.agentId) params = params.set('agentId', filter.agentId);
+    if (filter?.assignedEmployeeId) params = params.set('assignedEmployeeId', filter.assignedEmployeeId);
     if (filter?.adAccountId) params = params.set('adAccountId', filter.adAccountId);
     if (filter?.isActive !== undefined) params = params.set('isActive', String(filter.isActive));
     return this.http.get<AdGroup[]>(this.apiUrl, { params, withCredentials: true });
@@ -46,12 +47,13 @@ export class AdGroupService {
     return this.http.post<{ applied: any[]; failed: any[] }>(`${this.apiUrl}/recommendations/apply`, { ids }, { withCredentials: true });
   }
 
-  search(filter: { q?: string; platform?: string; productId?: string; agentId?: string; adAccountId?: string; status?: 'all'|'active'|'inactive' }): Observable<AdGroup[]> {
+  search(filter: { q?: string; platform?: string; productId?: string; agentId?: string; assignedEmployeeId?: string; adAccountId?: string; status?: 'all'|'active'|'inactive' }): Observable<AdGroup[]> {
     let params = new HttpParams();
     if (filter.q) params = params.set('q', filter.q);
     if (filter.platform) params = params.set('platform', filter.platform);
     if (filter.productId) params = params.set('productId', filter.productId);
     if (filter.agentId) params = params.set('agentId', filter.agentId);
+    if (filter.assignedEmployeeId) params = params.set('assignedEmployeeId', filter.assignedEmployeeId);
     if (filter.adAccountId) params = params.set('adAccountId', filter.adAccountId);
     if (filter.status) params = params.set('status', filter.status);
     return this.http.get<AdGroup[]>(`${this.apiUrl}/search`, { params, withCredentials: true });
@@ -67,6 +69,16 @@ export class AdGroupService {
   getProductsByCategory(categoryId: string): Observable<Product[]> {
     return this.http
       .get<{ success: boolean; data: Product[] }>(`${this.apiUrl}/products-by-category/${categoryId}`, { withCredentials: true })
+      .pipe(map(res => res?.data || []));
+  }
+
+  getProducts(status?: string): Observable<Product[]> {
+    let params = new HttpParams();
+    if (status) {
+      params = params.set('status', status);
+    }
+    return this.http
+      .get<{ success: boolean; data: Product[] }>(`${this.apiUrl}/products`, { params, withCredentials: true })
       .pipe(map(res => res?.data || []));
   }
 
@@ -118,7 +130,7 @@ export class AdGroupService {
     adAccountId: string;
     adGroupIds: string[];
     fanpageId: string;
-    productCategoryId: string;
+    productCategoryId?: string;
     selectedProductId?: string;
     agentId: string;
   }): Observable<{ success: boolean; imported: number; skipped: number; errors: string[] }> {

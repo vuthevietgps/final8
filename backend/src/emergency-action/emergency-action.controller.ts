@@ -1,10 +1,5 @@
 /**
- * File: emergency-action/emergency-action.controller.ts
- * Mục đích: API endpoints cho Emergency Action Logs
- * - GET    /emergency-actions?date=...        Lấy tasks theo ngày
- * - POST   /emergency-actions/bulk-sync       Upsert tasks từ frontend
- * - PATCH  /emergency-actions/:taskId/toggle  Toggle done/undone + verification
- * - GET    /emergency-actions/overdue?date=... Lấy tasks quá hạn
+ * API endpoints for Emergency Action Logs.
  */
 import {
   Controller,
@@ -14,6 +9,7 @@ import {
   Body,
   Param,
   Query,
+  NotFoundException,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -28,10 +24,6 @@ import { FeatureModule } from '../plan/feature-module.decorator';
 export class EmergencyActionController {
   constructor(private readonly service: EmergencyActionService) {}
 
-  /**
-   * GET /emergency-actions?date=2026-02-26
-   * Lấy tất cả task logs của 1 ngày
-   */
   @Get()
   @RequirePermissions('ad-groups')
   async getByDate(@Query('date') date?: string) {
@@ -40,10 +32,6 @@ export class EmergencyActionController {
     return { success: true, date: targetDate, tasks, total: tasks.length };
   }
 
-  /**
-   * POST /emergency-actions/bulk-sync
-   * Frontend gửi toàn bộ tasks sau khi buildEmergencyTasks()
-   */
   @Post('bulk-sync')
   @RequirePermissions('ad-groups')
   async bulkSync(@Body() body: { date: string; tasks: BulkSyncTaskDto[] }) {
@@ -51,15 +39,13 @@ export class EmergencyActionController {
     const result = await this.service.bulkSync(date, body.tasks || []);
     return {
       success: true,
-      message: `Synced ${result.upserted} mới, ${result.existing} đã tồn tại`,
+      message:
+        `Synced ${result.upserted} moi, ${result.existing} giu nguyen, ` +
+        `${result.updated} cap nhat, ${result.removed} xoa pending cu, ${result.reset} reset trang thai`,
       ...result,
     };
   }
 
-  /**
-   * PATCH /emergency-actions/:taskId/toggle?date=2026-02-26
-   * Toggle done/undone + trigger verification
-   */
   @Patch(':taskId/toggle')
   @RequirePermissions('ad-groups')
   async toggleDone(
@@ -79,16 +65,12 @@ export class EmergencyActionController {
     );
 
     if (!task) {
-      return { success: false, message: 'Task không tồn tại' };
+      throw new NotFoundException('Task khong ton tai');
     }
 
     return { success: true, task };
   }
 
-  /**
-   * GET /emergency-actions/overdue?date=2026-02-26
-   * Lấy tasks quá hạn chưa xử lý
-   */
   @Get('overdue')
   @RequirePermissions('ad-groups')
   async getOverdue(@Query('date') date?: string) {

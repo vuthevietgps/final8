@@ -7,11 +7,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios from 'axios';
-import { google } from 'googleapis';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { ApiToken, ApiTokenDocument } from '../api-token/schemas/api-token.schema';
 import { ApiTokenService } from '../api-token/api-token.service';
+import { getMetaGraphApiVersion } from '../common/ads-api-version';
 
 export interface VerificationResult {
   status: 'verified' | 'failed' | 'skipped';
@@ -94,7 +94,7 @@ export class EmergencyActionVerificationService {
     }
 
     if (taskType === 'pause-ad-group') {
-      const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adGroupId)}`;
+      const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(adGroupId)}`;
       const res = await axios.get(url, {
         params: { access_token: token, fields: 'status,effective_status' },
       });
@@ -112,7 +112,7 @@ export class EmergencyActionVerificationService {
     }
 
     if (taskType === 'change-budget') {
-      const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adGroupId)}`;
+      const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(adGroupId)}`;
       const res = await axios.get(url, {
         params: { access_token: token, fields: 'daily_budget,lifetime_budget' },
       });
@@ -156,25 +156,31 @@ export class EmergencyActionVerificationService {
       return { status: 'skipped', details: 'Ad account không tồn tại' };
     }
 
-    const refreshToken = await this.getGoogleRefreshToken(account as any);
-    if (!refreshToken) {
+    const customerId = this.sanitizeId(String((account as any).accountId));
+    if (!customerId) {
+      return { status: 'skipped', details: 'customerId Google Ads không hợp lệ' };
+    }
+
+    const googleConfig = await this.apiTokenService.getGoogleAdsRuntimeConfig({
+      customerId,
+      loginCustomerId: String((account as any).loginCustomerId || ''),
+    });
+
+    if (!googleConfig.refreshToken) {
       return { status: 'skipped', details: 'Không có Google refresh token để xác minh' };
     }
 
-    const accessToken = await this.getGoogleAccessToken(refreshToken);
+    const accessToken = await this.apiTokenService.getGoogleAdsAccessToken(googleConfig);
     if (!accessToken) {
       return { status: 'skipped', details: 'Không lấy được Google access token' };
     }
 
-    const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+    const developerToken = googleConfig.developerToken;
     if (!developerToken) {
       return { status: 'skipped', details: 'Thiếu GOOGLE_ADS_DEVELOPER_TOKEN' };
     }
 
-    const customerId = this.sanitizeId(String((account as any).accountId));
-    const loginCid = this.sanitizeId(
-      String((account as any).loginCustomerId || process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || ''),
-    );
+    const loginCid = this.sanitizeId(String(googleConfig.loginCustomerId || ''));
 
     if (taskType === 'pause-ad-group') {
       const gaql = `SELECT ad_group.status FROM ad_group WHERE ad_group.id = '${this.sanitizeId(adGroupId)}'`;
@@ -219,44 +225,6 @@ export class EmergencyActionVerificationService {
     return { status: 'skipped', details: `Task type "${taskType}" chưa hỗ trợ verify trên Google` };
   }
 
-  private async getGoogleRefreshToken(account: any): Promise<string | undefined> {
-    if (process.env.GOOGLE_ADS_REFRESH_TOKEN) return process.env.GOOGLE_ADS_REFRESH_TOKEN.trim();
-
-    const variants = new Set<string>();
-    if (account?.accountId) {
-      const clean = this.sanitizeId(String(account.accountId));
-      if (clean) {
-        variants.add(clean);
-        variants.add(account.accountId);
-      }
-    }
-
-    const tokenDoc = await this.tokenModel
-      .findOne({ provider: 'google', status: 'active', adAccountId: { $in: Array.from(variants) } })
-      .sort({ isPrimary: -1, updatedAt: -1 })
-      .lean();
-    if (!tokenDoc) return undefined;
-
-    try {
-      const { decryptToken } = await import('../api-token/crypto.util');
-      if ((tokenDoc as any).tokenEnc) {
-        const raw = decryptToken((tokenDoc as any).tokenEnc);
-        if (raw) return raw;
-      }
-    } catch {}
-    return (tokenDoc as any).token;
-  }
-
-  private async getGoogleAccessToken(refreshToken: string): Promise<string | undefined> {
-    const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return undefined;
-    const oauth2Client = new google.auth.OAuth2({ clientId, clientSecret });
-    oauth2Client.setCredentials({ refresh_token: refreshToken });
-    const token = await oauth2Client.getAccessToken();
-    return token?.token || undefined;
-  }
-
   private async queryGoogleAds(
     customerId: string,
     gaql: string,
@@ -264,7 +232,8 @@ export class EmergencyActionVerificationService {
     developerToken: string,
     loginCid?: string,
   ): Promise<any[]> {
-    const url = `https://googleads.googleapis.com/v15/customers/${customerId}/googleAds:searchStream`;
+    const googleConfig = await this.apiTokenService.getGoogleAdsRuntimeConfig({ customerId, loginCustomerId: loginCid });
+    const url = `https://googleads.googleapis.com/${googleConfig.apiVersion}/customers/${customerId}/googleAds:searchStream`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
       'developer-token': developerToken,

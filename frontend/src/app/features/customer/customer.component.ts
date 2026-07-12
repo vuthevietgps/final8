@@ -302,6 +302,7 @@ export class CustomerComponent implements OnInit {
     // Debounce search
     setTimeout(() => {
       if (this.searchTerm() === target.value) {
+        this.currentPage.set(1);
         this.loadCustomers();
       }
     }, 500);
@@ -313,6 +314,7 @@ export class CustomerComponent implements OnInit {
   onFilterChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     this.selectedFilter.set(target.value);
+    this.currentPage.set(1);
     this.loadCustomers();
   }
 

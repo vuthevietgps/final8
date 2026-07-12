@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "2.0",
+  "planId": "PLAN-20260612-INVALID08",
+  "sourceExportId": "EXP-20260612-001",
+  "targetProvider": "google",
+  "currency": "VND",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "executionMode": "pending_approval",
+  "analysisSummary": {
+    "mainConclusion": "Invalid duplicate idempotency keys.",
+    "dataQuality": "good"
+  },
+  "actions": [
+    {
+      "actionId": "ACT108A",
+      "provider": "google",
+      "actionType": "monitor_only",
+      "customerId": "1234567890",
+      "resourceType": "monitor",
+      "operation": "monitor",
+      "typedPayload": { "monitorUntil": "2026-06-20", "metrics": ["netProfit"] },
+      "reason": "First duplicate fixture.",
+      "evidence": {},
+      "confidence": 0.5,
+      "risk": "low",
+      "dataQuality": "good",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-INVALID08:DUPLICATE",
+      "rollbackIf": []
+    },
+    {
+      "actionId": "ACT108B",
+      "provider": "google",
+      "actionType": "monitor_only",
+      "customerId": "1234567890",
+      "resourceType": "monitor",
+      "operation": "monitor",
+      "typedPayload": { "monitorUntil": "2026-06-21", "metrics": ["conversions"] },
+      "reason": "Second duplicate fixture.",
+      "evidence": {},
+      "confidence": 0.5,
+      "risk": "low",
+      "dataQuality": "good",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-INVALID08:DUPLICATE",
+      "rollbackIf": []
+    }
+  ]
+}

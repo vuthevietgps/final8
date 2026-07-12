@@ -1,0 +1,827 @@
+# Backend QA Test Catalog
+
+Thu muc chuan cho toan bo backend test assets nam o `tests/backend/`.
+
+## Structure
+
+- `runners/`
+  - `run-backend-module-regression-local.ps1`: local QA bootstrap runner; build backend, start dedicated local backend, then delegate to canonical runner.
+  - `run-backend-module-regression.ps1`: runner chuan hien hanh cho module regression.
+  - `write-backend-runtime-manifest.ps1`: tao runtime manifest cho external backend khi runner shell/container khong the chia se env/media-root truc tiep.
+  - `run-module-regression.ps1`: wrapper tuong thich cu, chuyen tiep sang runner chuan.
+- `setup/`
+  - `ensure-regression-users.ps1`: wrapper PowerShell de upsert bo user nen cho regression.
+  - `ensure-regression-users.js`: script Node/Mongo thuc hien upsert deterministic.
+  - `backend-runtime-manifest.ps1`: helper doc/runtime contract cho runner va DB-06 suite.
+- `suites/suite-index.md`
+  - Muc luc active suite, gom theo lop test va thu tu tra cuu.
+- `suites/modules/core/`
+  - Module regression nen, chay thuong xuyen.
+- `suites/modules/extended/`
+  - Module regression mo rong va cross-module.
+  - Active includes `module.owner-fund-ledger-reconcile.ps1` for historical owner-withdrawal ledger/backfill parity and idempotence coverage.
+  - Active includes `module.owner-fund-objectid-normalize.ps1` for mixed BSON owner-fund reference normalization and owner delete-guard coverage.
+  - Manual/admin validation includes `module.owner-fund-orphan-fixture-cleanup.ps1` for snapshot-scoped orphan-fixture cleanup helper verification; suite nay co y khong duoc tinh vao active `27`-suite regression gate.
+- `suites/e2e-flows/`
+  - E2E flow lan toa nhieu module.
+  - Active includes `e2e.public-contracts-resilience.ps1` for public/bootstrap/media/chat contract coverage.
+  - Active includes `e2e.concurrent-finance-ripple.ps1` for supplier/agent payment retry, owner-withdrawal mixed terminal races (`approve`, `reject`, `cancel`), and post-payment ripple coverage.
+  - Active includes `e2e.order-update-ripple.ps1` for Excel preview/check/apply -> payable/receivable/report/dashboard ripple coverage.
+  - Active includes `e2e.return-ripple.ps1` for return resolve -> order/report rollback coverage.
+- `suites/business-scenarios/`
+  - Scenario nghiep vu sau, phuc vu deep-dive.
+- `perf/`
+  - k6 harness cho load/resilience.
+  - Active includes `perf.load-smoke.k6.js` for `LOAD-01`.
+  - Active includes `perf.spike-public.k6.js` for `LOAD-02`.
+  - Active includes `perf.write-contention.k6.js` and `create-write-contention-fixture.js` for `LOAD-03`.
+  - Active includes `perf.analytics-read.k6.js` and `create-analytics-read-fixture.js` for `LOAD-04`.
+- `docs/`
+  - Tai lieu ke hoach test hien hanh.
+- `legacy/`
+  - Archive, superseded suites, ad-hoc scripts, baseline cu.
+- `artifacts/results/`
+  - Noi luu ket qua regression moi.
+
+## Run
+
+- Local QA mac dinh:
+  - `powershell -ExecutionPolicy Bypass -File .\test-all-modules.ps1`
+- Bootstrap runner local:
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\run-backend-module-regression-local.ps1`
+- Runner chuan:
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\run-backend-module-regression.ps1`
+- Runner wrapper cu:
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\run-module-regression.ps1`
+- Shared setup cho standalone suite:
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\setup\ensure-regression-users.ps1`
+- Chay owner-fund orphan audit read-only:
+  - `$env:MONGODB_URI='mongodb://127.0.0.1:27017/htxbachgia'`
+  - `node .\backend\scripts\audit-owner-fund-orphan-owners.js --out .\tests\backend\artifacts\results\owner-fund-orphan-owner-audit-real-<timestamp>.json`
+- Chay owner-fund orphan-fixture cleanup dry-run (snapshot-scoped, chi dung voi audit JSON vua chup):
+  - `$env:MONGODB_URI='mongodb://127.0.0.1:27017/htxbachgia'`
+  - `node .\backend\scripts\cleanup-owner-fund-orphan-fixtures.js --audit-file .\tests\backend\artifacts\results\owner-fund-orphan-owner-audit-real-<timestamp>.json --out .\tests\backend\artifacts\results\owner-fund-orphan-cleanup-dryrun-real-<timestamp>.json`
+- Chay owner-fund orphan-fixture cleanup apply (chi khi dry-run tra `0` blocked cluster va `0` unknown cluster):
+  - `$env:MONGODB_URI='mongodb://127.0.0.1:27017/htxbachgia'`
+  - `node .\backend\scripts\cleanup-owner-fund-orphan-fixtures.js --apply --audit-file .\tests\backend\artifacts\results\owner-fund-orphan-owner-audit-real-<timestamp>.json --out .\tests\backend\artifacts\results\owner-fund-orphan-cleanup-apply-real-<timestamp>.json`
+- Chay owner-fund orphan-fixture cleanup validation suite (manual/admin, non-active):
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\suites\modules\extended\module.owner-fund-orphan-fixture-cleanup.ps1`
+- Preflight duoc verify cho workspace hien tai `2026-04-24`:
+  - `$env:MONGODB_URI='mongodb://127.0.0.1:27017/htxbachgia'`
+  - `$env:BACKEND_BASE_URL='http://localhost:3000/api'`
+  - `$env:BACKEND_HEALTH_URL='http://localhost:3000/health'`
+  - `$env:AUTH_RBAC_BASE_URL='http://localhost:3000/api'`
+  - `$env:AUTH_HARDENING_BASE_URL='http://localhost:3000/api'`
+  - `backend/.env` van tro `127.0.0.1:27019`, nen neu khong override thi baseline-user setup se `BLOCKED_ENV`
+- Chay tung suite:
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\setup\ensure-regression-users.ps1`
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\suites\modules\core\module.auth-rbac.ps1`
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\suites\modules\core\module.auth-hardening.ps1`
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\suites\e2e-flows\e2e.order-to-cashflow.ps1`
+- Chay load smoke harness:
+  - `k6 run .\tests\backend\perf\perf.load-smoke.k6.js -e BACKEND_BASE_URL=http://localhost:3690/api -e BACKEND_EMAIL=director@test.com -e BACKEND_PASSWORD=123456`
+- Chay load spike/public harness:
+  - `node .\tests\backend\perf\create-order-update-preview-fixture.js .\tests\backend\artifacts\results\tmp-spike-preview.xlsx 24`
+  - `k6 run .\tests\backend\perf\perf.spike-public.k6.js -e BACKEND_BASE_URL=http://localhost:3810 -e BACKEND_HEALTH_URL=http://localhost:3810/health -e BACKEND_EMAIL=director@test.com -e BACKEND_PASSWORD=123456 -e ORDER_UPDATE_PREVIEW_FILE=.\tests\backend\artifacts\results\tmp-spike-preview.xlsx -e ORDER_UPDATE_PREVIEW_EXPECTED_ROWS=24 -e WEBHOOK_VERIFY_TOKEN=load02-spike-token -e WEBHOOK_PAGE_ID=<seeded-page-id>`
+- Chay load write-contention harness:
+  - Local bootstrap mac dinh:
+    - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\run-backend-perf-write-contention.ps1`
+    - runner nay build backend, start mot backend local dedicated tren port free, tao Mongo/media root co lap, ghi `runtime-contract-load03-local-*.json`, roi delegate vao canonical `run-load03-write-contention.ps1`
+  - External backend / explicit runtime contract:
+    - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\run-load03-write-contention.ps1 -ManifestPath .\tests\backend\artifacts\results\external-runtime.json`
+    - chi dung path nay khi target backend da duoc chot co y va contract runtime machine-readable la hop le
+  - Docker `grafana/k6` van la execution path da duoc verify trong local bootstrap runner; muc tieu la khong reuse mot localhost backend cu dang treo port va lam sai artifact `LOAD-03`
+- Chay load analytics-read harness:
+  - `node .\tests\backend\perf\create-analytics-read-fixture.js .\tests\backend\artifacts\results\perf.analytics-read-fixture-local.json`
+  - `docker run --rm -i -v ${PWD}:/workspace -w /workspace -e BACKEND_BASE_URL=http://host.docker.internal:50108 -e BACKEND_HEALTH_URL=http://host.docker.internal:50108/health -e BACKEND_EMAIL=director@test.com -e BACKEND_PASSWORD=123456 -e ANALYTICS_READ_FIXTURE=/workspace/tests/backend/artifacts/results/perf.analytics-read-fixture-local.json -e ANALYTICS_READ_SUMMARY_PATH=/workspace/tests/backend/artifacts/results/perf.analytics-read-summary-local.json grafana/k6 run tests/backend/perf/perf.analytics-read.k6.js`
+  - Neu native `k6` khong co tren `PATH`, Docker `grafana/k6` la cach chay hop le da duoc verify trong round `LOAD-03` va `LOAD-04`.
+- Auth suite port override khi local `3000` dang bi process khac su dung:
+  - `$env:AUTH_HARDENING_BASE_URL='http://localhost:3200/api'`
+  - `$env:AUTH_RBAC_BASE_URL='http://localhost:3200/api'`
+- Module regression override khi backend regression khong chay tren `3000`:
+  - `$env:BACKEND_BASE_URL='http://localhost:3676/api'`
+  - `$env:BACKEND_HEALTH_URL='http://localhost:3676/health'`
+  - `$env:MEDIA_DIR='C:\path\to\shared-media-root'`
+  - canonical runner tu dong alias `MEDIA_DIR -> DB06_MEDIA_DIR` cho `module.db-seed-cleanup.ps1` khi `BACKEND_BASE_URL` la external backend va `DB06_MEDIA_DIR` chua duoc set
+  - direct `module.db-seed-cleanup.ps1` van yeu cau explicit `DB06_MEDIA_DIR`; neu `BACKEND_BASE_URL` la external va ca `MEDIA_DIR`/`DB06_MEDIA_DIR` deu khong co trong shell chay runner thi canonical lane se ket thuc `BLOCKED`, khong bi ep thanh `FAIL`
+- External backend runtime manifest:
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\write-backend-runtime-manifest.ps1 -Path .\tests\backend\artifacts\results\external-runtime.json -BackendBaseUrl http://localhost:3884/api -BackendHealthUrl http://localhost:3884/health -MongoUri mongodb://127.0.0.1:27017/htxbachgia_external -Db06MediaDir C:\runner-visible\media-root`
+  - `$env:BACKEND_RUNTIME_MANIFEST=(Resolve-Path '.\tests\backend\artifacts\results\external-runtime.json').Path`
+  - `powershell -ExecutionPolicy Bypass -File .\tests\backend\runners\run-backend-module-regression.ps1`
+  - manifest path nay la contract uu tien cho external backend khac shell/container; `db06MediaDir` phai la media root ma runner nhin thay duoc
+- Local QA bootstrap mac dinh:
+  - `test-all-modules.ps1` nay build backend, start mot backend local dedicated tren port free, va inject `BACKEND_BASE_URL`, `BACKEND_HEALTH_URL`, `AUTH_RBAC_BASE_URL`, `AUTH_HARDENING_BASE_URL`, `MEDIA_DIR`
+  - neu shell khong co `MONGODB_URI`, bootstrap runner se tu tao timestamped DB name tren local Mongo `127.0.0.1:27017`
+  - neu shell da co `MONGODB_URI`, bootstrap runner se dung dung override do; round `2026-04-24 19:31:50 +07` da verify path nay voi shared QA DB
+
+## Naming Standard
+
+- Runner:
+  - `run-backend-<scope>.ps1`
+- Module suite:
+  - `module.<domain-scope>.ps1`
+- E2E flow:
+  - `e2e.<business-flow>.ps1`
+- Business scenario:
+  - `scenario.<id>-<business-flow>.ps1`
+
+Quy uoc nay uu tien:
+
+- Ten file mo ta ro domain/flow, khong dung ten mo ho nhu `deep`.
+- Folder active va legacy tach rieng, khong de trung baseline.
+- Chuan active khong giu 2 ten song song cho cung 1 suite.
+
+## Active Catalog
+
+- Muc luc suite active:
+  - [suite-index.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/suites/suite-index.md)
+- Ke hoach test backend hien hanh:
+  - [backend-test-plan.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/docs/backend-test-plan.md)
+- Ma tran scenario:
+  - [backend-test-scenario-matrix.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/docs/backend-test-scenario-matrix.md)
+- Backlog suite de xuat:
+  - [backend-test-suite-backlog.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/docs/backend-test-suite-backlog.md)
+- Baseline lich su:
+  - [TEST-PLAN-20260223.md](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/legacy/docs/TEST-PLAN-20260223.md)
+
+## Coverage Status
+
+- Latest targeted QA round:
+  - `2026-04-25 11:56:15 +07`
+  - Scope:
+    - `tests/backend/suites/modules/extended/module.owner-fund-orphan-fixture-cleanup.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `44 PASS / 0 FAIL / 0 BLOCKED`
+    - real QA DB orphan-owner pre-audit: `FAILED_PRODUCT`, `ownersTotal=5`, `15` orphan owner refs, `37` orphan withdrawal docs, `26` orphan fund-transaction docs
+    - real QA DB orphan-fixture cleanup dry-run: `FAILED_PRODUCT`, `15` eligible clusters (`11` `module.owner-fund-loan`, `4` `synthetic.emergency-owner-fund`), `0` blocked, `0` unknown, `63` candidate docs
+    - real QA DB orphan-fixture cleanup apply: `FAILED_PRODUCT -> FIXED_DATA`, deleted `37` orphan withdrawals + `26` orphan fund transactions = `63` docs
+    - real QA DB orphan-owner serial verify: `PASSED`, `0` orphan owner refs, `0` orphan withdrawals, `0` orphan fund transactions
+    - real QA DB orphan-fixture cleanup idempotent re-apply: `PASSED`, deleted `0` docs
+    - canonical active full regression was not rerun in this round because no runtime product path changed; latest green gate remains `tests/backend/artifacts/results/module-regression-20260425-002807.json` = `1254 PASS / 0 FAIL / 0 BLOCKED`, `27/27` suites
+  - Product / harness fixes verified in this round:
+    - `backend/scripts/cleanup-owner-fund-orphan-fixtures.js`
+    - `tests/backend/suites/modules/extended/module.owner-fund-orphan-fixture-cleanup.ps1`
+  - Root-cause note:
+    - real QA DB orphan-owner set no longer represented an unsolved identity-restore problem for the current snapshot; the `15` orphan clusters matched two exact historical fixture families already encoded in the cleanup helper
+    - `11` clusters matched the exact `module.owner-fund-loan` fixture family, while `4` clusters matched the exact `synthetic.emergency-owner-fund` signature with explicit E2E-style marker strings
+    - helper nay van phai giu o che do manual snapshot cleanup: neu audit snapshot co `blocked` hoac `unknown` cluster thi `--apply` phai dung lai, khong duoc promote thanh generic orphan deleter hay generic owner-restore path
+    - `4` synthetic clusters co marker E2E-style, nhung round nay khong claim provenance toi bat ky active suite hien hanh nao
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-owner-fund-orphan-cleanup-summary-20260425-120005.md`
+    - `tests/backend/artifacts/results/qa-owner-fund-orphan-cleanup-summary-20260425-120005.json`
+  - Traceable rerun / repair artifacts:
+    - `tests/backend/artifacts/results/module.owner-fund-orphan-fixture-cleanup-rerun-20260425-115356.log`
+    - `tests/backend/artifacts/results/owner-fund-orphan-owner-audit-real-20260425-115356.json`
+    - `tests/backend/artifacts/results/owner-fund-orphan-cleanup-dryrun-real-20260425-115356.json`
+    - `tests/backend/artifacts/results/owner-fund-orphan-cleanup-apply-real-20260425-115356.json`
+    - `tests/backend/artifacts/results/owner-fund-orphan-owner-audit-verify-real-20260425-120005.json`
+    - `tests/backend/artifacts/results/owner-fund-orphan-cleanup-idempotent-real-20260425-120005.json`
+  - Non-authoritative artifact retained for traceability:
+    - `tests/backend/artifacts/results/owner-fund-orphan-owner-audit-verify-real-20260425-115356.json`: invalid parallel race artifact, khong duoc dung lam post-apply verify
+  - Open risk:
+    - cleanup helper chi an toan cho snapshot/family exact-match; neu tuong lai audit lo ra orphan shape khac thi lane nay phai ve `BLOCKED`/manual review, khong duoc tu dong xoa
+- Latest targeted QA round:
+  - `2026-04-25 11:16:11 +07`
+  - Scope:
+    - `module.owner-fund-objectid-normalize.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `43 PASS / 0 FAIL / 0 BLOCKED`
+    - real QA DB objectId normalization:
+      - dry-run: `FAILED_PRODUCT`, `98` convertible refs, `0` invalid strings, `0` unexpected BSON-type blockers
+      - apply + verify: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, `98` refs updated, post-verify `0` convertible refs remain
+    - owner delete guard reproduce: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+    - related reruns:
+      - `module.owner-fund-loan.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+      - `module.finance-control-funds.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+      - `e2e.concurrent-finance-ripple.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+    - `test-all-modules.ps1`: `PASSED`, `1254 PASS / 0 FAIL / 0 BLOCKED`, `27/27` suites
+    - real QA DB orphan-owner audit: `FAILED_PRODUCT`, `ownersTotal=5`, `15` orphan owner refs, `37` orphan withdrawal docs, `26` orphan fund-transaction docs
+  - Product / harness fixes verified in this round:
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `backend/scripts/normalize-owner-fund-objectids.js`
+    - `backend/scripts/audit-owner-fund-orphan-owners.js`
+    - `tests/backend/suites/modules/extended/module.owner-fund-objectid-normalize.ps1`
+    - `tests/backend/suites/modules/core/module.owner-fund-loan.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+  - Root-cause note:
+    - owner-fund mixed string/ObjectId refs were normalized without blockers, and `deleteOwner()` no longer allows removing an owner that still has withdrawals or fund transactions
+    - the remaining real-QA orphan-owner issue is historical identity loss, not remaining BSON-type drift: money rows still exist, but the backing `owners` row is gone
+    - child rows do not contain authoritative owner identity fields, so a generic auto-repair would invent owners or rebind history unsafely; the current safe path is audit-only
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-owner-fund-objectid-normalize-summary-20260425-111459.md`
+    - `tests/backend/artifacts/results/qa-owner-fund-objectid-normalize-summary-20260425-111459.json`
+  - Traceable rerun / repair artifacts:
+    - `tests/backend/artifacts/results/module.owner-fund-objectid-normalize-direct-run-20260425-000805.err.log`
+    - `tests/backend/artifacts/results/module.owner-fund-objectid-normalize-direct-run-20260425-000902.out.log`
+    - `tests/backend/artifacts/results/module.owner-fund-objectid-normalize-rerun-20260425-001052.out.log`
+    - `tests/backend/artifacts/results/module.owner-fund-objectid-normalize-deleteguard-rerun-20260425-001836.out.log`
+    - `tests/backend/artifacts/results/owner-fund-objectid-normalize-dryrun-real-20260425-001107.json`
+    - `tests/backend/artifacts/results/owner-fund-objectid-normalize-apply-real-20260425-001132.json`
+    - `tests/backend/artifacts/results/owner-fund-objectid-normalize-verify-real-20260425-001143.json`
+    - `tests/backend/artifacts/results/owner-fund-delete-guard-repro-pass-20260425-003420.json`
+    - `tests/backend/artifacts/results/module.owner-fund-loan-cleanupfix-rerun-20260425-002706.out.log`
+    - `tests/backend/artifacts/results/module-regression-20260425-002807.json`
+    - `tests/backend/artifacts/results/owner-fund-orphan-owner-audit-real-20260425-111459.json`
+  - Open risk:
+    - real QA DB still contains `15` orphan owner refs across owner-fund history; no safe automated repair is active because the deleted `owners` identity rows are no longer authoritative or recoverable from the child documents alone
+- Latest targeted QA round:
+  - `2026-04-24 23:43:45 +07`
+  - Scope:
+    - `module.owner-fund-ledger-reconcile.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `26 PASS / 0 FAIL / 0 BLOCKED`
+    - `module.owner-fund-loan.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `PASSED`, `40 PASS / 0 FAIL`
+    - `e2e.concurrent-finance-ripple.ps1`: `PASSED`, `67 PASS / 0 FAIL`
+    - `test-all-modules.ps1`: `PASSED`, `1212 PASS / 0 FAIL / 0 BLOCKED`, `26/26` suites
+    - real QA DB reconcile dry-run: `FAILED_PRODUCT` reproduced with `18` anomalies / `55,840,000` missing amount
+    - real QA DB reconcile apply + verify: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, `18` inserted, post-verify `0` anomalies
+  - Product / harness fixes verified in this round:
+    - `backend/src/owner-fund/schemas/fund-transaction.schema.ts`
+    - `backend/src/owner-fund/schemas/withdrawal.schema.ts`
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `backend/scripts/reconcile-owner-withdrawal-ledger.js`
+    - `tests/backend/suites/modules/extended/module.owner-fund-ledger-reconcile.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+  - Root-cause note:
+    - owner-fund `ObjectId` decorator metadata compiled as Mongoose `Mixed`, so live API writes persisted `ownerId` as string while reconciliation/backfill wrote `ownerId` as `ObjectId`
+    - owner-scoped read paths were querying raw string equality, so historical backfilled rows were invisible in `GET /owner-fund/owners/:id/transactions` and `GET /owner-fund/transactions?ownerId=...` even when `fund-summary` already reflected the money-out rows
+    - owner-fund read paths now match by stringified `ownerId`, and the reconcile script reconstructs balance history with the same mixed-type tolerance
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-owner-fund-historical-reconcile-summary-20260424-234345.md`
+    - `tests/backend/artifacts/results/qa-owner-fund-historical-reconcile-summary-20260424-234345.json`
+  - Traceable rerun / repair artifacts:
+    - `tests/backend/artifacts/results/module.owner-fund-ledger-reconcile-rerun-20260424-231537.log`
+    - `tests/backend/artifacts/results/module.owner-fund-ledger-reconcile-rerun-20260424-231811.log`
+    - `tests/backend/artifacts/results/module.owner-fund-ledger-reconcile-rerun-20260424-233235.log`
+    - `tests/backend/artifacts/results/module.owner-fund-loan-rerun-20260424-233410.log`
+    - `tests/backend/artifacts/results/module.finance-control-funds-rerun-20260424-233410.log`
+    - `tests/backend/artifacts/results/e2e.concurrent-finance-ripple-rerun-20260424-233410.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-233705.json`
+    - `tests/backend/artifacts/results/owner-fund-ledger-reconcile-dryrun-real-20260424-234202.json`
+    - `tests/backend/artifacts/results/owner-fund-ledger-reconcile-apply-real-20260424-234211.json`
+    - `tests/backend/artifacts/results/owner-fund-ledger-reconcile-verify-real-20260424-234218.json`
+    - `tests/backend/artifacts/results/owner-fund-ledger-reconcile-api-probe-20260424-234228.json`
+  - Open risk:
+    - owner-fund APIs and reconciliation now tolerate both legacy string and normalized `ObjectId` storage, but ad hoc raw-Mongo queries outside this module must not assume a single historical `ownerId` storage type until a separate normalization migration is planned
+- Latest targeted QA round:
+  - `2026-04-24 22:54:25 +07`
+  - Scope:
+    - `module.owner-fund-loan.ps1`: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, baseline `45 PASS / 3 FAIL`, final `67 PASS / 0 FAIL`
+    - `e2e.concurrent-finance-ripple.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, baseline `61 PASS / 3 FAIL`, final `67 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `FAILED_HARNESS_ENV -> FIXED_HARNESS_ENV -> PASSED`, final `40 PASS / 0 FAIL`
+    - `test-all-modules.ps1`: `PASSED`, `1186 PASS / 0 FAIL / 0 BLOCKED`, `25/25` suites
+  - Product / harness fixes verified in this round:
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `tests/backend/suites/modules/core/module.owner-fund-loan.ps1`
+    - `tests/backend/suites/e2e-flows/e2e.concurrent-finance-ripple.ps1`
+  - Root-cause note:
+    - approved/completed owner withdrawals were mutating `availableBalance` and `totalWithdrawn`, but fresh ledger/history APIs still saw no linked `fund_transactions` row
+    - `approveWithdrawal()` now writes exactly one linked `FundTransaction` in the same Mongo transaction, `completeWithdrawal()` only updates linked reference metadata, and approval emits `OWNER_FUND_CHANGED` after commit for finance/funds refresh
+  - Environment note:
+    - the only same-round non-product red after the service fix was a PowerShell singleton-array helper bug in `e2e.concurrent-finance-ripple.ps1`; it was fixed before the final pass and is kept as `FAILED_HARNESS`
+    - the first ad hoc `module.finance-control-funds.ps1` rerun never reached the suite because `dist/main.js` was missing in that shell flow; it is tracked as `FAILED_HARNESS_ENV`, not product fail
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-owner-fund-ledger-fix-summary-20260424-225425.md`
+    - `tests/backend/artifacts/results/qa-owner-fund-ledger-fix-summary-20260424-225425.json`
+  - Traceable rerun logs:
+    - `tests/backend/artifacts/results/module.owner-fund-loan-ledger-rerun-20260424-223653.log`
+    - `tests/backend/artifacts/results/module.owner-fund-loan-ledgerfix-rerun-20260424-224104.log`
+    - `tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-224135.log`
+    - `tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-224220.log`
+    - `tests/backend/artifacts/results/module.finance-control-funds-ownerfund-rerun-20260424-224617.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-224736.json`
+  - Open risk:
+    - pre-fix `approved/completed` withdrawals may still need a separate backfill/migration if historical ledger/history parity is required
+- Latest targeted QA round:
+  - `2026-04-24 22:29:33 +07`
+  - Scope:
+    - `e2e.concurrent-finance-ripple.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, same-round metadata hardening initially failed `64 PASS / 3 FAIL` because a duplicate helper override in the suite shadowed the intended assertion helper; final isolated-backend rerun closed `61 PASS / 0 FAIL`
+    - `module.owner-fund-loan.ps1`: `PASSED`, `44 PASS / 0 FAIL`, rerun on a dedicated isolated backend after the `CON-07` coverage expansion
+  - Product / harness fixes verified in this round:
+    - `tests/backend/suites/e2e-flows/e2e.concurrent-finance-ripple.ps1`
+  - Environment note:
+    - no product bug was reproduced for `approve vs reject` / `approve vs cancel` on isolated owner-withdrawal races; final-state balance, `totalWithdrawn`, `approvedBy`, `approvedDate`, and `transactionReference` stayed coherent on the winning terminal action
+    - the only same-round red signal was a suite-local helper collision introduced while tightening assertions; it was fixed before the final pass and is kept in the audit trail as `FAILED_HARNESS`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-owner-fund-concurrency-reverify-summary-20260424-222933.md`
+    - `tests/backend/artifacts/results/qa-owner-fund-concurrency-reverify-summary-20260424-222933.json`
+  - Traceable rerun logs:
+    - `tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-222614.log`
+    - `tests/backend/artifacts/results/e2e.concurrent-finance-ripple-run-20260424-222720.log`
+    - `tests/backend/artifacts/results/module.owner-fund-loan-rerun-20260424-222820.log`
+- Latest targeted QA round:
+  - `2026-04-24 22:13:08 +07`
+  - Scope:
+    - valid-contract local-bootstrap control baseline: `FAILED_PRODUCT`, recorded at `tests/backend/artifacts/results/perf.write-contention-summary-20260424-215242.json`
+    - `run-backend-perf-write-contention.ps1`: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, dedicated local bootstrap rerun on `http://localhost:50512/api`
+    - `test-all-modules.ps1`: `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`, canonical `25/25` suite ripple regression after the fix
+  - Product / harness fixes verified in this round:
+    - `backend/src/test-order2/services/order-calculation.service.ts`
+    - `backend/src/finance/events/finance-event-listener.service.ts`
+  - Environment note:
+    - pre-fix valid-contract `LOAD-03` was still red on the same host/repo state, so this round treated the perf failure as a real product signal rather than a harness artifact
+    - same-day order recalculation is now drained through a per-day single-flight loop instead of overlapping duplicate runs
+    - `ops`, `agent`, and `supplier` finance snapshot refreshes are now coalesced per domain instead of faning out overlapping refresh storms under contention
+    - canonical post-fix module regression stayed green on isolated backend `http://localhost:50896/api`
+    - `module-regression-latest.json` now points to the canonical post-fix pass at `2026-04-24 22:07:47 +07`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-load03-product-fix-summary-20260424-221308.md`
+    - `tests/backend/artifacts/results/qa-load03-product-fix-summary-20260424-221308.json`
+  - Traceable rerun logs:
+    - `tests/backend/artifacts/results/run-backend-perf-write-contention-local-bootstrap-20260424-220531.log`
+    - `tests/backend/artifacts/results/perf.write-contention-summary-20260424-220622.json`
+    - `tests/backend/artifacts/results/load03-runtime-contract-check-20260424-220622.json`
+    - `tests/backend/artifacts/results/module-regression-rerun-20260424-load03fix-20260424-220658.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-220747.json`
+- Latest targeted QA round:
+  - `2026-04-24 20:11:07 +07`
+  - Scope:
+    - `module.db-seed-cleanup.ps1`: `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`, pre-fix external runtime manifest reproduction where manifest existed but harness did not consume it
+    - `module.db-seed-cleanup.ps1`: `BLOCKED -> FIXED_HARNESS -> PASSED`, `51 PASS / 0 FAIL / 0 BLOCKED`, direct suite rerun with `BACKEND_RUNTIME_MANIFEST` only
+    - `run-backend-module-regression.ps1`: `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`, canonical full runner with complete runtime manifest
+    - `run-backend-module-regression.ps1`: `BLOCKED`, `1112 PASS / 0 FAIL / 1 BLOCKED`, strictness verification with incomplete runtime manifest
+  - Product / harness fixes verified in this round:
+    - `tests/backend/setup/backend-runtime-manifest.ps1`
+    - `tests/backend/runners/write-backend-runtime-manifest.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+    - `tests/backend/suites/modules/extended/module.db-seed-cleanup.ps1`
+  - Environment note:
+    - external backend for this round ran on `http://localhost:61121/api`
+    - runtime manifest now carries base URLs, Mongo target, and runner-visible DB-06 media coupling without relying on shared shell env
+    - same-shell `MEDIA_DIR -> DB06_MEDIA_DIR` alias behavior remains intact for the legacy external-backend path
+    - `module-regression-latest.json` now points to the intentional blocked verification at `2026-04-24 20:06:46 +07`; the green canonical pass is preserved at `module-regression-20260424-200127.json`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-runtime-manifest-summary-20260424-201107.md`
+    - `tests/backend/artifacts/results/qa-runtime-manifest-summary-20260424-201107.json`
+  - Traceable rerun logs:
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-runtime-manifest-prefix-20260424.log`
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-runtime-manifest-rerun-20260424.log`
+    - `tests/backend/artifacts/results/module-regression-runtime-manifest-rerun-20260424.log`
+    - `tests/backend/artifacts/results/module-regression-runtime-manifest-blocked-20260424.log`
+    - `tests/backend/artifacts/results/runtime-contract-pass-20260424.json`
+    - `tests/backend/artifacts/results/runtime-contract-blocked-20260424.json`
+- Latest targeted QA round:
+  - `2026-04-24 19:44:06 +07`
+  - Scope:
+    - `test-all-modules.ps1`: `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`, local bootstrap runner with shared override `MONGODB_URI=mongodb://127.0.0.1:27017/htxbachgia`
+    - `test-all-modules.ps1`: `PASSED`, `1163 PASS / 0 FAIL / 0 BLOCKED`, local bootstrap runner with clean shell env and auto-generated dedicated DB `mongodb://127.0.0.1:27017/htxbachgia_module_regression_local_20260424193802`
+  - Product / harness fixes verified in this round:
+    - `tests/backend/runners/run-backend-module-regression-local.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+    - `test-all-modules.ps1`
+  - Environment note:
+    - shared-DB local bootstrap verification ran on `http://localhost:60384/api` with media root `tests/backend/artifacts/results/tmp-local-module-regression-media-20260424193150`
+    - clean-shell local bootstrap verification ran on `http://localhost:60707/api` with media root `tests/backend/artifacts/results/tmp-local-module-regression-media-20260424193802`
+    - bootstrap wrapper now defaults local QA away from `backend/.env` drift and no longer depends on any pre-existing service on `http://localhost:3000`
+    - canonical external-backend semantics from round `2026-04-24 19:19:52 +07` remain unchanged underneath this wrapper
+    - `backend/.env` still points to `127.0.0.1:27019`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-local-bootstrap-summary-20260424-194406.md`
+    - `tests/backend/artifacts/results/qa-local-bootstrap-summary-20260424-194406.json`
+  - Traceable rerun logs:
+    - `tests/backend/artifacts/results/test-all-modules-local-bootstrap-20260424.log`
+    - `tests/backend/artifacts/results/test-all-modules-local-bootstrap-default-env-20260424.log`
+- Latest verified backend QA round:
+  - `2026-04-24 21:26:01 +07`
+  - Active perf closure in the same round:
+    - `perf.write-contention.k6.js`: `FAILED_HARNESS (stale backend collision) -> FAILED_HARNESS (local wrapper arg binding) -> FIXED_HARNESS -> PASSED`
+    - final thresholds: `0.00% http_req_failed`, global `http_req_duration p95=1391.47ms`, `supplier_payment_batch p95=594.22ms`, `agent_payment_batch p95=688.23ms`, `owner_withdrawal_approve_commit_duration p95=1387.93ms`, `return_resolve_commit_duration p95=2209.59ms`, `other_cost_confirm p95=795.19ms`
+  - Related regression verified in this round:
+    - none; clean isolated rerun reproduced no backend product defect, so no product ripple rerun was required
+  - Product fixes verified in this round:
+    - none; no product bug was reproduced after the dedicated local bootstrap isolated backend, Mongo, and media state
+  - Harness/files verified in this round:
+    - `tests/backend/runners/run-backend-perf-write-contention.ps1`
+    - `tests/backend/runners/run-load03-write-contention.ps1`
+    - `tests/backend/perf/create-write-contention-fixture.js`
+    - `tests/backend/perf/perf.write-contention.k6.js`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-load03-local-bootstrap-summary-20260424-212601.md`
+    - `tests/backend/artifacts/results/qa-load03-local-bootstrap-summary-20260424-212601.json`
+- Latest verified backend QA round:
+  - `2026-04-19 17:13:18 +07`
+  - Active perf closure in the same round:
+    - `perf.analytics-read.k6.js`: `FAILED_HARNESS/BLOCKED_ENV -> FIXED_ENV -> FIXED_HARNESS -> FIXED_HARNESS -> FIXED_HARNESS -> PASSED`
+    - final thresholds: `0.00% http_req_failed`, global `http_req_duration p95=61.49ms`, `financial_control_dashboard p95=22.82ms`, `financial_control_dashboard_refresh p95=71.13ms`, `cashflow_dashboard_summary p95=13.04ms`, `ad_group_profit_report_performance p95=73.14ms`, `return_report_product p95=41.05ms`, `return_report_ad_group p95=41.28ms`
+  - Related regression verified in this round:
+    - none; no backend product code changed in this round
+  - Product fixes verified in this round:
+    - none; no product bug was reproduced
+  - Harness/files verified in this round:
+    - `tests/backend/perf/create-analytics-read-fixture.js`
+    - `tests/backend/perf/perf.analytics-read.k6.js`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-analytics-read-summary-20260419-171318.md`
+    - `tests/backend/artifacts/results/qa-analytics-read-summary-20260419-171318.json`
+- Latest verified backend QA round:
+  - `2026-04-19 14:35:20 +07`
+  - Active perf closure in the same round:
+    - `perf.write-contention.k6.js`: `FAILED_PRODUCT -> FIXED_PRODUCT -> FIXED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+    - final thresholds: `0.00% http_req_failed`, global `http_req_duration p95=1480.01ms`, `supplier_payment_batch p95=646.00ms`, `agent_payment_batch p95=669.44ms`, `owner_withdrawal_approve_commit_duration p95=1434.40ms`, `return_resolve_commit_duration p95=2009.75ms`, `other_cost_confirm p95=804.82ms`
+  - Related regression verified in this round:
+    - `e2e.concurrent-finance-ripple.ps1`: `40 PASS / 0 FAIL`
+    - `module.db-consistency.ps1`: `68 PASS / 0 FAIL`
+    - `e2e.return-ripple.ps1`: `64 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/owner-fund/owner-fund.service.ts`
+    - `backend/src/return-request/return-request.service.ts`
+  - Harness/files verified in this round:
+    - `tests/backend/perf/perf.write-contention.k6.js`
+    - `tests/backend/perf/create-write-contention-fixture.js`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-write-contention-summary-20260419-143957.md`
+    - `tests/backend/artifacts/results/qa-write-contention-summary-20260419-143957.json`
+- Latest verified backend QA round:
+  - `2026-04-19 13:48:20 +07`
+  - Active perf closure in the same round:
+    - `perf.spike-public.k6.js`: `FAILED_HARNESS/BLOCKED_ENV -> FAILED_PRODUCT -> FAILED_HARNESS -> FIXED_PRODUCT -> PASSED`
+    - final thresholds: `0.00% http_req_failed`, global `http_req_duration p95=36.31ms`, `p99=83.37ms`
+  - Related regression verified in this round:
+    - `e2e.public-contracts-resilience.ps1`: `61 PASS / 0 FAIL`
+    - `module.media-chat-config.ps1`: `33 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/chat-message/chat-message.service.ts`
+    - `backend/src/chat-message/schemas/chat-message.schema.ts`
+  - Harness/files verified in this round:
+    - `tests/backend/perf/perf.spike-public.k6.js`
+    - `tests/backend/perf/create-order-update-preview-fixture.js`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-spike-public-summary-20260419-134820.md`
+    - `tests/backend/artifacts/results/qa-spike-public-summary-20260419-134820.json`
+- Latest verified backend QA round:
+  - `2026-04-19 13:07:26 +07`
+  - Active perf closure in the same round:
+    - `perf.load-smoke.k6.js`: `FAILED_HARNESS -> FAILED_PRODUCT -> FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+    - final thresholds: `0.00% http_req_failed`, global `http_req_duration p95=427.28ms`, `p99=624.08ms`
+  - Related regression verified in this round:
+    - `module.auth-rbac.ps1`: `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `25 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `40 PASS / 0 FAIL`
+    - `e2e.order-finance-impact.ps1`: `57 PASS / 0 FAIL`
+    - `e2e.ops-payroll.ps1`: `24 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/auth/auth.service.ts`
+    - `backend/src/auth/strategies/jwt.strategy.ts`
+    - `backend/src/finance/funds.service.ts`
+    - `backend/src/finance/finance.service.ts`
+    - `backend/src/finance/events/finance-events.constants.ts`
+    - `backend/src/finance/events/finance-events.interfaces.ts`
+    - `backend/src/finance/events/finance-event-listener.service.ts`
+    - `backend/src/finance/funds.controller.ts`
+    - `backend/src/finance/financial-control.controller.ts`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-load-smoke-summary-20260419-131147.md`
+    - `tests/backend/artifacts/results/qa-load-smoke-summary-20260419-131147.json`
+- Latest verified backend QA round:
+  - `2026-04-19 11:50:21 +07`
+  - Expanded active suite in the same round:
+    - `module.db-consistency.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `68 PASS / 0 FAIL`
+    - added active coverage for `DB-05` pagination/filter/sort stability under mutation on `GET /api/test-order2`
+  - Harness fix verified in this round:
+    - `tests/backend/suites/modules/extended/module.db-consistency.ps1`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-db-consistency-summary-20260419-115150.md`
+    - `tests/backend/artifacts/results/qa-db-consistency-summary-20260419-115150.json`
+- Latest verified backend QA round:
+  - `2026-04-19 11:35:53 +07`
+  - Active suite closure in the same round:
+    - `e2e.order-update-ripple.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> FAILED_PRODUCT -> FIXED_PRODUCT -> FIXED_EXPECTATION -> PASSED`, final `72 PASS / 0 FAIL`
+  - Related regression verified in this round:
+    - `e2e.order-finance-impact.ps1`: `57 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `40 PASS / 0 FAIL`
+    - `module.reports-products-config.ps1`: `41 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/order-update/order-update.service.ts`
+    - `backend/src/agent-receivable/agent-receivable.service.ts`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-order-update-ripple-summary-20260419-113629.md`
+    - `tests/backend/artifacts/results/qa-order-update-ripple-summary-20260419-113629.json`
+- Latest verified backend QA round:
+  - `2026-04-19 09:18:26 +07`
+  - Canonical full module regression: `991 assertions`, `23/23 modules`, `PASS / 0 FAIL`
+  - Expanded active suite in the same round:
+    - `module.db-consistency.ps1`: `FAILED -> FIXED_PRODUCT -> PASSED`, final `57 PASS / 0 FAIL`
+    - added active coverage for `CON-09` other-cost Bangkok timezone boundary ripple
+  - Product fix verified in this round:
+    - `backend/src/other-cost/other-cost.service.ts`
+  - Related regression verified in this round:
+    - `module.labor-other-cost.ps1`: `32 PASS / 0 FAIL`
+    - `module.finance-control-funds.ps1`: `40 PASS / 0 FAIL`
+  - Same-day blocked audit kept:
+    - `tests/backend/artifacts/results/full-module-regression-rerun-20260419-081155.log`
+    - status: `BLOCKED_ENV` because default runner hit a non-QA service on `http://localhost:3000`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-db-consistency-summary-20260419-091826.md`
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-091826.md`
+- Latest verified backend QA round:
+  - `2026-04-19 04:58:16 +07`
+  - Canonical full module regression: `966 assertions`, `23/23 modules`, `PASS / 0 FAIL`
+  - New active suite in the same round:
+    - `module.db-consistency.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> FAILED -> FIXED_PRODUCT -> PASSED`, final `32 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/return-request/return-request.schema.ts`
+    - `backend/src/return-request/return-request.service.ts`
+    - `backend/src/product-category/product-category.service.ts`
+  - Related suite hardening verified in this round:
+    - `tests/backend/suites/modules/extended/module.db-consistency.ps1`
+    - `tests/backend/suites/modules/core/module.reports-products-config.ps1`
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-db-consistency-summary-20260419-045816.md`
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-045816.md`
+- Latest verified backend QA round:
+  - `2026-04-19 10:31:04 +07`
+  - Targeted finance/return follow-up on isolated backends:
+    - `e2e.order-finance-impact.ps1`: `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `57 PASS / 0 FAIL`
+    - targeted `loan-management/pay` probe: `FAILED -> FIXED_PRODUCT -> PASSED`, `bankBalance 5000000 -> 4000000`, `debt 5000000 -> 4000000`
+    - `e2e.return-ripple.ps1`: `PASSED`, `64 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/finance/financial-control.service.ts`: FC bank balance now reads the master ledger path instead of stale bank-account snapshots
+    - `backend/src/finance/finance.service.ts`: loan repayment from `loan-management/pay` now reduces master bank balance via loan contract paid totals
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-return-ripple-finance-summary-20260419-103327.md`
+    - `tests/backend/artifacts/results/qa-return-ripple-finance-summary-20260419-103327.json`
+- Latest verified backend QA round:
+  - `2026-04-19 04:18:12 +07`
+  - Canonical full module regression: `934 assertions`, `22/22 modules`, `PASS / 0 FAIL`
+  - Active concurrency/ripple suites verified in the same round:
+    - `e2e.concurrent-finance-ripple.ps1`: `40 PASS / 0 FAIL`
+    - `e2e.agent-role-payment.ps1`: `46 PASS / 0 FAIL`
+    - `e2e.order-finance-impact.ps1`: `56 PASS / 0 FAIL`
+    - `module.ads-alerts-kpi.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `27 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/test-order2/services/order-payment.service.ts`: duplicate supplier/agent payment retries no longer overwrite paid batch metadata or re-pay the same order
+  - Harness/test-drift closures verified in this round:
+- `tests/backend/suites/e2e-flows/e2e.agent-role-payment.ps1`
+- `tests/backend/suites/e2e-flows/e2e.order-finance-impact.ps1`
+- `tests/backend/suites/e2e-flows/e2e.return-ripple.ps1`
+    - `tests/backend/suites/modules/core/module.ads-alerts-kpi.ps1`
+  - Same-day failed audit snapshots kept:
+    - `tests/backend/artifacts/results/module-regression-20260419-041141.json`
+    - `tests/backend/artifacts/results/e2e.agent-role-payment-rerun-20260419-0431.log`
+    - `tests/backend/artifacts/results/e2e.order-finance-impact-rerun-20260419-0420.log`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-concurrent-finance-ripple-summary-20260419-041812.md`
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-041812.md`
+- Latest verified backend QA round:
+  - `2026-04-19 03:25:52 +07`
+  - Canonical full module regression: `935 assertions`, `22/22 modules`, `PASS / 0 FAIL`
+  - Related active E2E suite:
+    - `e2e.public-contracts-resilience.ps1`
+    - verified `2026-04-19 03:24:15 +07`
+    - result: `61 PASS / 0 FAIL`
+  - Related module rerun:
+    - `module.media-chat-config.ps1`: `33 PASS / 0 FAIL`
+  - Product fixes verified in this round:
+    - `backend/src/chat-message/chat-message.controller.ts`: image send paths no longer bypass the 24h Messenger gate
+    - `backend/src/media/media.controller.ts`: `/api/media/serve/:year/:month/:filename` alias contract now matches public runtime behavior
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-public-contracts-resilience-summary-20260419-032552.md`
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-032552.md`
+- Historical verified regression:
+  - `2026-04-24 20:11:07 +07`
+  - External backend runtime manifest closure:
+    - direct suite pre-fix reproduce: `module.db-seed-cleanup.ps1` -> `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`
+    - direct suite post-fix rerun: `module.db-seed-cleanup.ps1` -> `BLOCKED -> FIXED_HARNESS -> PASSED`, `51 PASS / 0 FAIL`
+    - canonical green gate `2026-04-24 20:01:27 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`
+    - canonical blocked gate `2026-04-24 20:06:46 +07`: `1112 PASS / 0 FAIL / 1 BLOCKED`
+  - Harness fixes verified in this round:
+    - `tests/backend/setup/backend-runtime-manifest.ps1`
+      - imports `BACKEND_RUNTIME_MANIFEST` and applies manifest values only when explicit shell env is absent
+      - resolves runner-visible `db06MediaDir` for DB-06 coupling
+    - `tests/backend/runners/write-backend-runtime-manifest.ps1`
+      - emits the machine-readable external-backend contract consumed in this round
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+      - consumes the runtime manifest before backend/auth/DB06 resolution
+      - reports manifest path and applied fields in the canonical banner
+    - `tests/backend/suites/modules/extended/module.db-seed-cleanup.ps1`
+      - consumes the runtime manifest before external-backend coupling preflight
+      - stays `BLOCKED` if the manifest still omits DB-06 media coupling
+  - Audit trail kept:
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-runtime-manifest-prefix-20260424.log`
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-runtime-manifest-rerun-20260424.log`
+    - `tests/backend/artifacts/results/module-regression-runtime-manifest-rerun-20260424.log`
+    - `tests/backend/artifacts/results/module-regression-runtime-manifest-blocked-20260424.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-200127.json`
+    - `tests/backend/artifacts/results/module-regression-20260424-200646.json`
+    - `tests/backend/artifacts/results/module-regression-latest.json`
+      - note: `latest` hien tro toi blocked verification `2026-04-24 20:06:46 +07`; green gate cung round duoc giu o file timestamped `module-regression-20260424-200127.json`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-runtime-manifest-summary-20260424-201107.md`
+    - `tests/backend/artifacts/results/qa-runtime-manifest-summary-20260424-201107.json`
+- Historical verified regression:
+  - `2026-04-24 19:44:06 +07`
+  - Default local bootstrap regression:
+    - entrypoint: `test-all-modules.ps1`
+    - bootstrap runner: `tests/backend/runners/run-backend-module-regression-local.ps1`
+    - canonical runner: `tests/backend/runners/run-backend-module-regression.ps1`
+  - Same-round local bootstrap verifications:
+    - `2026-04-24 19:31:50 +07`: shared QA DB override -> `1163 PASS / 0 FAIL / 0 BLOCKED`
+    - `2026-04-24 19:38:02 +07`: clean shell + auto timestamped DB -> `1163 PASS / 0 FAIL / 0 BLOCKED`
+  - Harness fixes verified in this round:
+    - `tests/backend/runners/run-backend-module-regression-local.ps1`
+      - builds backend with `npm.cmd run build`
+      - starts a dedicated local backend on a free port
+      - injects shared `BACKEND_BASE_URL`, `BACKEND_HEALTH_URL`, auth base URLs, and `MEDIA_DIR` only for the duration of the canonical run
+      - restores previous shell env after completion
+    - `test-all-modules.ps1`
+      - now delegates to the local bootstrap runner instead of calling the canonical runner directly
+  - Audit trail kept:
+    - `tests/backend/artifacts/results/test-all-modules-local-bootstrap-20260424.log`
+    - `tests/backend/artifacts/results/test-all-modules-local-bootstrap-default-env-20260424.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-193239.json`
+    - `tests/backend/artifacts/results/module-regression-20260424-193845.json`
+    - `tests/backend/artifacts/results/module-regression-latest.json`
+      - latest now points to the clean-shell local bootstrap pass at `2026-04-24 19:38:45 +07`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-local-bootstrap-summary-20260424-194406.md`
+    - `tests/backend/artifacts/results/qa-local-bootstrap-summary-20260424-194406.json`
+- Historical verified regression:
+  - `2026-04-24 19:19:52 +07`
+  - Canonical runner bootstrap/env closure on `25/25` active modules:
+    - direct `module.db-seed-cleanup.ps1`: `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED`
+    - canonical green gate `2026-04-24 19:09:19 +07`: `1163 PASS / 0 FAIL / 0 BLOCKED`
+    - canonical blocked gate `2026-04-24 19:15:47 +07`: `1112 PASS / 0 FAIL / 1 BLOCKED`
+  - Harness fix verified in this round:
+    - `tests/backend/runners/run-backend-module-regression.ps1`
+      - parses structured `BLOCKED` counts with lower priority than `FAIL`
+      - writes per-module and total `Blocked` counts into canonical JSON output
+      - aliases `MEDIA_DIR -> DB06_MEDIA_DIR` for the local same-shell external-backend flow only
+  - Audit trail kept:
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-blocked-20260424-runner-bootstrap.log`
+    - `tests/backend/artifacts/results/module-regression-rerun-20260424-runner-bootstrap.log`
+    - `tests/backend/artifacts/results/module-regression-blocked-20260424-runner-bootstrap.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-190919.json`
+    - `tests/backend/artifacts/results/module-regression-20260424-191547.json`
+    - `tests/backend/artifacts/results/module-regression-latest.json`
+      - note: `latest` hien tro toi canonical blocked verification `2026-04-24 19:15:47 +07`; green gate cung round duoc giu o file timestamped `module-regression-20260424-190919.json`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-runner-bootstrap-summary-20260424-191952.md`
+    - `tests/backend/artifacts/results/qa-runner-bootstrap-summary-20260424-191952.json`
+- Latest verified regression:
+  - `2026-04-24 18:48:04 +07`
+  - Full module regression: `1163 PASS / 0 FAIL`
+  - Historical active catalog at that time was verified on `25/25` modules.
+  - Same-round purchase contract hardening:
+    - `backend/src/purchase/purchase-order.service.ts`
+      - raw `purchase-orders/:id` and `supplierId` filters now validate `ObjectId` explicitly
+      - malformed id/filter now returns `400`; valid but missing single-resource id remains `404`
+    - `tests/backend/suites/modules/extended/module.purchase-inventory.ps1`
+      - contract coverage now includes malformed/missing purchase-order ids and malformed/missing supplier filters
+    - targeted reruns:
+      - `module.purchase-inventory.ps1`: `101 PASS / 0 FAIL`
+      - `module.supply-chain.ps1`: `28 PASS / 0 FAIL`
+  - Same-round canonical gate audit trail kept:
+    - `2026-04-24 18:39:56 +07`
+    - `1160 PASS / 2 FAIL`
+    - blocker: `module.db-seed-cleanup.ps1`
+    - failure mode: `FAILED_ENV`
+    - root cause:
+      - external backend was started with a different media root than the suite helper's temporary `DB06_MEDIA_DIR`, so `cleanup-orphaned` looked at the wrong filesystem namespace
+    - harness/env closure:
+      - `tests/backend/suites/modules/extended/module.db-seed-cleanup.ps1`
+        - external-backend mode now requires explicit `DB06_MEDIA_DIR`; missing coupling is classified as `BLOCKED` instead of leaking as a false product failure
+      - blocked preflight probe:
+        - `module.db-seed-cleanup.ps1`: `BLOCKED`, `0 PASS / 0 FAIL / 1 BLOCKED` when `BACKEND_BASE_URL` is provided without `DB06_MEDIA_DIR`
+      - targeted rerun:
+        - `module.db-seed-cleanup.ps1`: `FAILED_ENV -> FIXED_HARNESS -> FIXED_ENV -> PASSED`, `51 PASS / 0 FAIL`
+      - canonical rerun:
+        - `tests/backend/runners/run-backend-module-regression.ps1`: `FAILED_ENV -> FIXED_HARNESS -> FIXED_ENV -> PASSED`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-purchase-contract-hardening-summary-20260424-184804.md`
+    - `tests/backend/artifacts/results/qa-purchase-contract-hardening-summary-20260424-184804.json`
+  - Traceable rerun logs:
+    - `tests/backend/artifacts/results/module.purchase-inventory-rerun-20260424-qa-objectid.log`
+    - `tests/backend/artifacts/results/module.supply-chain-rerun-20260424-objectid-20260424-1839.log`
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-rerun-20260424-objectid-20260424-1845.log`
+    - `tests/backend/artifacts/results/module.db-seed-cleanup-blocked-20260424-1853.log`
+    - `tests/backend/artifacts/results/module-regression-rerun-20260424-objectid-20260424-1840.log`
+    - `tests/backend/artifacts/results/module-regression-rerun-20260424-mediafix-20260424-1848.log`
+    - `tests/backend/artifacts/results/module-regression-20260424-184804.json`
+  - `2026-04-24 17:22:35 +07`
+  - Full module regression: `1145 PASS / 0 FAIL`
+  - Historical active catalog at that time was verified on `25/25` modules.
+  - Audit trail kept for the same-day failed baseline:
+    - `2026-04-24 17:00:22 +07`
+    - `1141 PASS / 3 FAIL`
+    - `module.finance-survival-alerts.ps1`: `FAILED_HARNESS`
+    - artifacts:
+      - `tests/backend/artifacts/results/module-regression-rerun-20260424-170012.log`
+      - `tests/backend/artifacts/results/module-regression-20260424-170022.json`
+  - Same-round closure:
+    - `backend/scripts/test-scenario-4-finance-health.js`
+      - `setupScenario1` now seeds the missing `agentPaidAmount` that `cashflow-health` currently uses for `dso`
+    - targeted rerun:
+      - `module.finance-survival-alerts.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, `18 PASS / 0 FAIL`
+    - canonical rerun:
+      - `tests/backend/runners/run-backend-module-regression.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - Traceable summary:
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260424-172235.md`
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260424-172235.json`
+- Historical verified regression:
+  - `2026-04-19 02:37:52 +07`
+  - Full module regression: `934 assertions`, `22/22 modules`, `PASS / 0 FAIL`
+  - Historical active catalog at that time was verified on `22/22` modules.
+  - New active suite:
+    - `module.order-sheet-sync-ops.ps1`
+  - Same-round clean-DB harness closures:
+    - `module.owner-fund-loan.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+    - `module.ads-alerts-kpi.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`
+  - Traceable summaries:
+    - `tests/backend/artifacts/results/qa-order-sheet-sync-ops-summary-20260419-023752.md`
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-023752.md`
+- Historical verified regression:
+  - `2026-04-19 01:59:22 +07`
+  - Full module regression: `879 assertions`, `21/21 modules`, `PASS / 0 FAIL`
+  - Historical active catalog at that time was verified on `21/21` modules.
+  - New active suites:
+    - `module.user-import-export.ps1`
+    - `module.api-token-timezone.ps1`
+  - Security fixes verified in these rounds:
+    - `import-users` / `export-users` now require auth + `users` permission
+    - export CSV neutralizes spreadsheet formula payloads
+    - strict timezone enforcement no longer bypasses PATCH updates in `backend/src/ad-account/ad-account.service.ts`
+  - Traceable summary:
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-015922.md`
+- Historical verified regression:
+  - `2026-04-19 00:54:12 +07`
+  - Full module regression: `825 PASS / 0 FAIL`
+  - Historical active catalog at that time was verified on `19/19` modules.
+  - Same-day failed baseline kept for audit:
+    - `2026-04-19 00:21:55 +07`
+    - `766 PASS / 17 FAIL`
+    - artifact: `tests/backend/artifacts/results/module-regression-20260419-002155.json`
+  - Same-day targeted rerun after fixes:
+    - `2026-04-19 00:35:03 +07`
+    - `TARGETED_RERUN_PASSED=5/5`
+    - `module.owner-fund-loan.ps1`: `FAILED -> FIXED -> PASSED`
+    - `module.reports-products-config.ps1`: `FAILED -> FIXED -> PASSED`
+    - `module.supply-chain.ps1`: `FAILED -> FIXED -> PASSED`
+    - `module.agent-supplier-quotes.ps1`: `FAILED -> FIXED -> PASSED`
+    - `module.finance-survival-alerts.ps1`: `FAILED -> FIXED -> PASSED`
+  - Latest targeted auth verification:
+    - `2026-04-19 00:09:19 +07`
+    - `60 PASS / 0 FAIL`
+    - suites: `module.auth-hardening.ps1`, `module.auth-rbac.ps1`
+    - `module.auth-hardening.ps1`: `FAILED -> FIXED_HARNESS_ENV -> FIXED_CLEANUP -> PASSED`
+    - `module.auth-rbac.ps1`: `PASSED`
+    - environment note:
+      - local QA Mongo service for this round ran on `127.0.0.1:27017` (`rs0`)
+      - run used `MONGODB_URI` override because `backend/.env` still points to `127.0.0.1:27019`
+    - traceable summary:
+      - `tests/backend/artifacts/results/qa-auth-regression-summary-20260419-000919.md`
+  - This closing round summary:
+    - `tests/backend/artifacts/results/qa-module-regression-summary-20260419-005412.md`
+    - `tests/backend/artifacts/results/full-module-regression-rerun-20260419-005330.log`
+    - `tests/backend/artifacts/results/targeted-fail-suite-rerun-20260419-003503.log`
+  - Previous targeted auth activation:
+    - `2026-04-15 07:42:39 +07`
+    - `68 PASS / 0 FAIL`
+    - suites: `module.auth-hardening.ps1`, `module.auth-rbac.ps1`, `module.customer.ps1`
+    - `module.auth-hardening.ps1`: `FAILED -> FIXED_HARNESS -> FIXED_ENV -> PASSED`
+    - traceable summary:
+      - `tests/backend/artifacts/results/qa-auth-hardening-summary-20260415-074300.md`
+  - Historical blocker closed:
+    - `module.reports-products-config.ps1` -> `return-request resolve`
+    - `FAILED -> BLOCKED_ENV -> FIXED_ENV -> PASSED`
+    - current QA Mongo on `127.0.0.1:27019` is running as a single-node replica set, so transaction flows now pass
+  - This round fixed:
+    - `module.labor-other-cost.ps1`: `FAILED -> FIXED -> PASSED`
+    - `module.reports-products-config.ps1` salary-config step: `FAILED -> FIXED -> PASSED`
+    - `module.agent-supplier-quotes.ps1`: `FAILED -> FIXED -> PASSED`
+  - Traceable summary:
+    - `tests/backend/artifacts/results/qa-regression-summary-20260415-003457.md`
+  - Historical summary kept for audit:
+    - `tests/backend/artifacts/results/qa-regression-summary-20260415-002059.md`
+- `suite-index.md` chi liet ke active suite dang co file regression.
+- Runner module regression se goi `tests/backend/setup/ensure-regression-users.ps1` truoc khi vao suite de giam flake do thieu baseline users.
+- `module.auth-hardening.ps1` hien quote env theo kieu `set "NAME=value"` va cleanup dung PID listener tren `3100`, tranh de lai orphan node process sau khi suite ket thuc.
+- `module.user-import-export.ps1` da vao active tree va co verify full regression.
+- `module.api-token-timezone.ps1` da vao active tree va co verify theo activation round `2026-04-19 01:58:10 +07`.
+- Multi-agent review backlog da duoc ghi trong `backend-test-plan.md`, section `16. Coverage gaps to add`.
+- Cac nhom gap da duoc xac nhan gom:
+  - `CON-09` da duoc kich hoat vao `module.db-consistency.ps1` va verify bang round `2026-04-19 08:11:05 +07`
+  - `DB-05` da duoc kich hoat vao `module.db-consistency.ps1` va verify bang round `2026-04-19 11:50:21 +07`
+  - `DB-06` da duoc kich hoat vao `module.db-seed-cleanup.ps1` va verify bang round `2026-04-19 12:15:55 +07`
+  - `LOAD-01` da duoc chuyen khoi backlog sang active/verified catalog bang `tests/backend/perf/perf.load-smoke.k6.js`, verify `2026-04-19 12:57:02 +07`
+  - `LOAD-02` da duoc chuyen khoi backlog sang active/verified catalog bang `tests/backend/perf/perf.spike-public.k6.js`, verify `2026-04-19 13:43:09 +07`
+  - `LOAD-03` da duoc chuyen khoi backlog sang active/verified catalog bang `tests/backend/perf/perf.write-contention.k6.js`, verify `2026-04-19 14:32:36 +07`, latest harness re-verify `2026-04-24 21:26:01 +07` qua `tests/backend/runners/run-backend-perf-write-contention.ps1`
+  - `LOAD-04` da duoc chuyen khoi backlog sang active/verified catalog bang `tests/backend/perf/perf.analytics-read.k6.js`, verify `2026-04-19 17:11:15 +07`
+  - current gap catalog con lai: `LOAD-05+`
+- Ma tran uu tien va suite mapping da duoc tach rieng sang:
+  - `backend-test-scenario-matrix.md`
+  - `backend-test-suite-backlog.md`
+- `purchase-orders` da duoc wire vao `AppModule` trong round `2026-04-24`; pre-fix route thi `404`, post-fix route da tra `401` khong token va `200` cho director.
+- `inventory/*` da live tu truoc qua transitive imports; no khong con la blocker runtime.
+- `BE-SUP-04` da duoc chuyen sang `active_automated` bang `tests/backend/suites/modules/extended/module.purchase-inventory.ps1` trong round `2026-04-24 16:48:58 +07`.
+- Activation trace cho `BE-SUP-04`: `FAILED_PRODUCT + FAILED_HARNESS -> FIXED_PRODUCT -> FIXED_HARNESS -> PASSED`, `50 PASS / 14 FAIL` sau do `84 PASS / 0 FAIL`.
+- Related ripple rerun cung round: `module.supply-chain.ps1` = `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `28 PASS / 0 FAIL`.
+- `return-request resolve` da xanh trong env hien tai; van nen giu preflight transaction support vi luong nay se fail neu Mongo roi ve standalone.
+- Latest targeted DB/media verification:
+  - `module.db-seed-cleanup.ps1`: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`, `50 PASS / 0 FAIL`
+  - `module.media-chat-config.ps1`: `BLOCKED_ENV -> FIXED_ENV -> PASSED`, `33 PASS / 0 FAIL`
+
+## Dedup Notes
+
+- `test-financial-control.ps1` da chuyen sang `legacy/superseded/`
+  - Da duoc bao phu phan lon boi `module.finance-control-funds.ps1` va `module.finance-survival-alerts.ps1`.
+- `test-ripple-order-to-finance.ps1` da chuyen sang `legacy/superseded/`
+  - Da duoc bao phu phan lon boi `e2e.order-to-cashflow.ps1` va `e2e.order-finance-impact.ps1`.
+- `TEST-PLAN.md` cu da chuyen sang `legacy/docs/`
+  - Khong con la baseline hien hanh.
+- `test-all-modules-results.json` cu da chuyen sang `legacy/artifacts/`
+  - Chi giu de doi chieu lich su.

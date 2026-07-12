@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { LaborStatement, LaborStatementDocument } from './schemas/labor-statement.schema';
 import { LaborCost1, LaborCost1Document } from './schemas/labor-cost1.schema';
 import { CreateLaborStatementDto } from './dto/create-labor-statement.dto';
 import { AddLaborPaymentDto } from './dto/add-labor-payment.dto';
 import { UpdateKpiDto } from './dto/update-kpi.dto';
 import { SalaryConfigService } from '../salary-config/salary-config.service';
+import { FinanceEvents } from '../finance/events/finance-events.constants';
 
 @Injectable()
 export class LaborStatementService {
@@ -18,6 +20,7 @@ export class LaborStatementService {
     @InjectModel(LaborCost1.name)
     private readonly laborCostModel: Model<LaborCost1Document>,
     private readonly salaryConfigService: SalaryConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private parseDateInput(input: string | Date, fieldName: string): Date {
@@ -110,7 +113,7 @@ export class LaborStatementService {
 
     // 4. Lấy cấu hình lương để tính bonus
     const salaryConfig = await this.salaryConfigService.findByUserId(employeeId);
-    
+
     // 5. Tính attendance bonus (thưởng chuyên cần theo số giờ)
     let attendanceBonus = 0;
     if (salaryConfig?.attendanceTiers && salaryConfig.attendanceTiers.length > 0) {
@@ -136,7 +139,7 @@ export class LaborStatementService {
           loginTimes.push(loginDate);
         }
       }
-      
+
       const punctualityResult = this.salaryConfigService.calculatePunctualityBonus(
         loginTimes,
         salaryConfig.punctualityRules,
@@ -152,16 +155,16 @@ export class LaborStatementService {
     // 7.5 Tính dueDate từ periodTo + paymentDays (CFO Spec v3.2)
     const paymentDays = salaryConfig?.paymentDays || [5]; // Mặc định ngày 5
     const periodEndDate = new Date(periodEnd);
-    
+
     // Tìm ngày thanh toán gần nhất SAU periodTo
     let dueDate: Date;
     const nextMonth = new Date(periodEndDate);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    
+
     // Lấy ngày thanh toán đầu tiên trong tháng sau
     const payDay = Math.min(...paymentDays);
     dueDate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), payDay);
-    
+
     // Nếu dueDate < periodTo (trường hợp edge), lùi thêm 1 tháng
     if (dueDate <= periodEndDate) {
       dueDate.setMonth(dueDate.getMonth() + 1);
@@ -200,15 +203,19 @@ export class LaborStatementService {
     // 9. Cập nhật paymentStatus của các phiên làm việc
     await this.laborCostModel.updateMany(
       { _id: { $in: laborCostIds } },
-      { 
-        $set: { 
+      {
+        $set: {
           paymentStatus: 'in_statement',
-          statementId: saved._id 
-        } 
+          statementId: saved._id
+        }
       }
     );
 
     this.logger.log(`Created labor statement ${saved._id} for employee ${employeeId} (attendance: ${attendanceBonus}, punctuality: ${punctualityBonus})`);
+    this.eventEmitter.emit(FinanceEvents.LABOR_STATEMENT_UPDATED, {
+      statementId: saved._id.toString(),
+      amountChanged: true,
+    });
     return saved;
   }
 
@@ -228,7 +235,7 @@ export class LaborStatementService {
 
     // Lấy cấu hình lương để tính KPI bonus
     const salaryConfig = await this.salaryConfigService.findByUserId(statement.employeeId.toString());
-    
+
     let kpiBonus = 0;
     if (salaryConfig?.kpiBonusTiers && salaryConfig.kpiBonusTiers.length > 0) {
       kpiBonus = this.salaryConfigService.calculateKpiBonus(
@@ -244,13 +251,17 @@ export class LaborStatementService {
     statement.kpiUpdatedAt = new Date();
 
     // Tính lại closing balance (bao gồm KPI bonus)
-    const totalOwed = statement.openingBalance + statement.periodCost 
-      + statement.bonus + statement.attendanceBonus + kpiBonus + statement.punctualityBonus 
+    const totalOwed = statement.openingBalance + statement.periodCost
+      + statement.bonus + statement.attendanceBonus + kpiBonus + statement.punctualityBonus
       - statement.deduction - statement.statementPaymentTotal;
     statement.closingBalance = totalOwed;
 
     const saved = await statement.save();
     this.logger.log(`Updated KPI for statement ${statementId}: ${dto.kpiPercent}% → bonus ${kpiBonus}`);
+    this.eventEmitter.emit(FinanceEvents.LABOR_STATEMENT_UPDATED, {
+      statementId,
+      amountChanged: true,
+    });
     return saved;
   }
 
@@ -308,8 +319,8 @@ export class LaborStatementService {
     statement.statementPaymentTotal = statement.payments.reduce((sum, p) => sum + p.amount, 0);
 
     // Tính lại closing balance (bao gồm tất cả bonus)
-    const totalOwed = statement.openingBalance + statement.periodCost 
-      + statement.bonus + statement.attendanceBonus + statement.kpiBonus + statement.punctualityBonus 
+    const totalOwed = statement.openingBalance + statement.periodCost
+      + statement.bonus + statement.attendanceBonus + statement.kpiBonus + statement.punctualityBonus
       - statement.deduction;
     statement.closingBalance = totalOwed - statement.statementPaymentTotal;
 
@@ -322,19 +333,24 @@ export class LaborStatementService {
       // Cập nhật paymentStatus của các phiên làm việc
       await this.laborCostModel.updateMany(
         { _id: { $in: statement.laborCostIds } },
-        { 
-          $set: { 
+        {
+          $set: {
             paymentStatus: 'paid',
             paid: true,
             paidAt: new Date(dto.paidAt)
-          } 
+          }
         }
       );
 
       this.logger.log(`Statement ${statementId} auto-closed after payment`);
     }
 
-    return statement.save();
+    const saved = await statement.save();
+    this.eventEmitter.emit(FinanceEvents.LABOR_STATEMENT_UPDATED, {
+      statementId,
+      amountChanged: true,
+    });
+    return saved;
   }
 
   /**
@@ -357,17 +373,24 @@ export class LaborStatementService {
     // Cập nhật paymentStatus của các phiên làm việc
     await this.laborCostModel.updateMany(
       { _id: { $in: statement.laborCostIds } },
-      { 
-        $set: { 
+      {
+        $set: {
           paymentStatus: 'paid',
           paid: true,
           paidAt: new Date()
-        } 
+        }
       }
     );
 
     this.logger.log(`Closed statement ${statementId}`);
-    return statement.save();
+    const saved = await statement.save();
+    this.eventEmitter.emit(FinanceEvents.LABOR_STATEMENT_CLOSED, {
+      statementId,
+      oldStatus: 'open',
+      newStatus: 'closed',
+      amountChanged: false,
+    });
+    return saved;
   }
 
   /**
@@ -390,17 +413,22 @@ export class LaborStatementService {
     // Cập nhật paymentStatus của các phiên làm việc về in_statement
     await this.laborCostModel.updateMany(
       { _id: { $in: statement.laborCostIds } },
-      { 
-        $set: { 
+      {
+        $set: {
           paymentStatus: 'in_statement',
           paid: false,
           paidAt: undefined
-        } 
+        }
       }
     );
 
     this.logger.log(`Reopened statement ${statementId}`);
-    return statement.save();
+    const saved = await statement.save();
+    this.eventEmitter.emit(FinanceEvents.LABOR_STATEMENT_UPDATED, {
+      statementId,
+      amountChanged: true,
+    });
+    return saved;
   }
 
   /**
@@ -424,7 +452,10 @@ export class LaborStatementService {
 
     await this.statementModel.findByIdAndDelete(statementId);
     this.logger.log(`Deleted statement ${statementId}`);
-    
+
+    // Issue 3: Emit event on deletion so snapshot/cache is invalidated (Deletion Events)
+    this.eventEmitter.emit(FinanceEvents.LABOR_STATEMENT_UPDATED, { statementId });
+
     return { deleted: true, id: statementId };
   }
 
@@ -494,16 +525,16 @@ export class LaborStatementService {
    */
   async getTotalUnpaidLabor() {
     const result = await this.statementModel.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           status: { $in: ['draft', 'open'] } // Chưa close
-        } 
+        }
       },
-      { 
-        $group: { 
-          _id: null, 
+      {
+        $group: {
+          _id: null,
           total: { $sum: '$closingBalance' } // Tổng số tiền còn nợ
-        } 
+        }
       }
     ]);
 
@@ -568,13 +599,13 @@ export class LaborStatementService {
     totalPayrollIncurred: number;     // Lương phát sinh (gross trước khấu trừ)
     totalPayrollBonus: number;        // Thưởng thêm
     totalPayrollDeduction: number;    // Khấu trừ (BHXH, phạt, tạm ứng)
-    
+
     // === TỔNG HỢP NET ===
     totalPayrollNetPayable: number;   // = incurred + bonus - deduction
     totalPayrollPaid: number;         // Lương đã trả
     totalPayrollUnpaid: number;       // Lương chưa trả = netPayable - paid
     totalPayrollDue14d: number;       // Đến hạn trong 14 ngày (Committed)
-    
+
     // === CHI TIẾT THEO NHÂN VIÊN ===
     byEmployee: {
       employeeId: string;
@@ -587,14 +618,14 @@ export class LaborStatementService {
       nextDueDate?: string;           // Ngày thanh toán tiếp theo
       lastPaymentDate?: string;       // Lần trả gần nhất
     }[];
-    
+
     // === SCHEDULE ===
     paymentPolicy: 'biweekly' | 'monthly';
     defaultPayDaysOfMonth: number[];  // [5] hoặc [5, 20]
-    
+
     // === DUE BY DAY (CFO Spec v3.2 - for Forecast 7D) ===
     dueByDay7d: { date: string; amount: number }[];
-    
+
     // === METADATA ===
     asOfDate: string;
     timezone: string;
@@ -602,7 +633,7 @@ export class LaborStatementService {
     generatedAt: string;
     totalStatements: number;
     openStatements: number;
-    
+
     // === WARNINGS ===
     alerts: string[];
   }> {
@@ -680,7 +711,7 @@ export class LaborStatementService {
     // Tính tổng closingBalance theo từng ngày dueDate trong 7 ngày tới
     const sevenDaysEnd = new Date();
     sevenDaysEnd.setDate(sevenDaysEnd.getDate() + 7);
-    
+
     const dueByDayAgg = await this.statementModel.aggregate([
       {
         $match: {
@@ -704,7 +735,7 @@ export class LaborStatementService {
         },
       },
     ]);
-    
+
     const dueByDay7d: { date: string; amount: number }[] = dueByDayAgg;
 
     // Chi tiết theo nhân viên (có thêm gross/deduction/net)
@@ -793,7 +824,7 @@ export class LaborStatementService {
 
     // === WARNINGS ===
     const alerts: string[] = [];
-    
+
     // Cảnh báo nếu có nhân viên chưa được trả quá hạn
     const overdueEmployees = byEmployeeAgg.filter(e => {
       if (!e.nextDueDate) return false;

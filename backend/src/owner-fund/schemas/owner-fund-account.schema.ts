@@ -33,6 +33,10 @@ export class OwnerFundAccount {
   @Prop()
   bankAccountName: string; // Tên chủ tài khoản
 
+  // Monotonic write token used to serialize bank -> Owner Fund transfers.
+  @Prop({ default: 0, select: false })
+  transferVersion: number;
+
   @Prop({ default: true })
   isActive: boolean;
 
@@ -41,3 +45,15 @@ export class OwnerFundAccount {
 }
 
 export const OwnerFundAccountSchema = SchemaFactory.createForClass(OwnerFundAccount);
+
+// The ERP has one canonical active Owner Fund account. Historical inactive
+// accounts may remain, but concurrent bootstraps must never create two active
+// balances that different transactions could select independently.
+OwnerFundAccountSchema.index(
+  { isActive: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isActive: true },
+    name: 'uniq_owner_fund_active_account',
+  },
+);

@@ -3,7 +3,7 @@
  */
 const mongoose = require('mongoose');
 
-const MONGODB_URI = 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const MONGODB_URI = process.env.MONGODB_URI;
 const FB_TOKEN = 'EAALpkpYobJ8BP2d4EyMqWk7Ua9P3yvOhH6dbIYylCL6cSk4yAvjQX294Km2Hf9ZCiouKqnJlIcUZCHkzz0qfvKjQiRo4x9mKHec1tk6yhRCaVYu0UKCBZCxCZBgavrFtXWJyoYql26iY9z5WcwMZAuHu49S429Eb5XsZCQ934woMrwqjpjJBgDSsuYVaD2ZA7tjRtXjyl5TRyWuL9C4jWrUfi7mUQPtEglRCucKN7AT';
 
 const apiTokenSchema = new mongoose.Schema({

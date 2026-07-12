@@ -1,0 +1,843 @@
+{
+  "executive_summary": {
+    "erp_ready_for_pre_export_gate": "partial",
+    "ready_capabilities": [
+      "Read-only AI Data Pack builders and safe decision gates",
+      "Google Ads read-only sync with durable sync runs and mutation-query rejection",
+      "Local timestamps on most required ERP sources",
+      "Existing role permissions and secret redaction"
+    ],
+    "missing_foundation": [
+      "ExportJob",
+      "Source registry and approved threshold policy",
+      "Cross-source freshness gate",
+      "Immutable snapshot",
+      "Distributed source locks and export idempotency",
+      "Uniform provider sync-run contract"
+    ],
+    "safe_existing_read_only_sync": [
+      "google_ads"
+    ],
+    "partial_sync_requiring_adapter_audit": [
+      "meta_ads",
+      "tiktok_ads",
+      "advertising_costs",
+      "facebook_ad_group_metadata"
+    ],
+    "unsupported_or_not_configured": [
+      "zalo_ads",
+      "external_accounting",
+      "durable_sale_activity",
+      "customer_referral",
+      "operations_sla_history"
+    ],
+    "can_code_pr_2_3b_now": false,
+    "smallest_scope_after_approval": "ExportJob plus cached-export wrapper plus DB-only freshness assessment; no provider calls."
+  },
+  "scope_control": {
+    "included": [
+      "Repository and sample-export inspection",
+      "Source/freshness/sync inventory",
+      "Freshness gate and export lifecycle specification",
+      "Security/RBAC review",
+      "PR-2.3B implementation plan"
+    ],
+    "excluded": [
+      "Source code changes",
+      "Migration, endpoint, model or schema creation",
+      "Provider API calls or sync execution",
+      "Provider mutation",
+      "OpenAI/upload/action/import/dry-run/live execution",
+      "Database changes",
+      "PR-2.3B or Phase 3 implementation"
+    ],
+    "working_tree_note": "Existing unrelated/untracked work was observed and not modified."
+  },
+  "source_inventory": [
+    {
+      "source_key": "google_ads",
+      "domain": "ads",
+      "business_importance": "critical",
+      "current_erp_support": "found",
+      "existing": "GoogleAdsReadonlySyncService and google_ads_sync_runs",
+      "read_only_sync_available": "yes",
+      "freshness_signal_available": "sync_run_and_lastSyncAt",
+      "staleness_risk": "medium",
+      "provider_mutation_risk": "low_when_direct_adapter_only",
+      "recommended_v1_behavior": "Allowlisted adapter only after lock/timeout approval",
+      "recommended_v2_behavior": "Per-account coverage and unified source-run contract",
+      "priority": "P0"
+    },
+    {
+      "source_key": "meta_ads",
+      "domain": "ads",
+      "business_importance": "critical_when_active",
+      "current_erp_support": "partial",
+      "existing": "Facebook advertising-cost and ad-group metadata sync services",
+      "read_only_sync_available": "partial",
+      "freshness_signal_available": "max_updatedAt_and_lastSyncAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "medium",
+      "recommended_v1_behavior": "Assess local watermark only",
+      "recommended_v2_behavior": "Isolated audited adapter and durable run",
+      "priority": "P0"
+    },
+    {
+      "source_key": "tiktok_ads",
+      "domain": "ads",
+      "business_importance": "critical_when_active",
+      "current_erp_support": "partial",
+      "existing": "TikTok advertising-cost sync service",
+      "read_only_sync_available": "partial",
+      "freshness_signal_available": "max_updatedAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "medium",
+      "recommended_v1_behavior": "Assess local watermark only",
+      "recommended_v2_behavior": "Isolated audited adapter and durable run",
+      "priority": "P0"
+    },
+    {
+      "source_key": "zalo_ads",
+      "domain": "ads",
+      "business_importance": "optional_until_configured",
+      "current_erp_support": "missing",
+      "existing": "Enums and token validation only",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "none",
+      "staleness_risk": "unknown",
+      "provider_mutation_risk": "unclear",
+      "recommended_v1_behavior": "unsupported_or_not_configured",
+      "recommended_v2_behavior": "Dedicated integration only after approval",
+      "priority": "P2"
+    },
+    {
+      "source_key": "advertising_costs",
+      "domain": "ads_profit",
+      "business_importance": "critical",
+      "current_erp_support": "partial",
+      "existing": "AdvertisingCost plus Facebook/Google/TikTok sync and health",
+      "read_only_sync_available": "partial",
+      "freshness_signal_available": "max_updatedAt_and_latest_record_date",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "medium",
+      "recommended_v1_behavior": "Local watermark and coverage only",
+      "recommended_v2_behavior": "Unified source-of-truth and durable run",
+      "priority": "P0"
+    },
+    {
+      "source_key": "crm_leads",
+      "domain": "crm",
+      "business_importance": "critical",
+      "current_erp_support": "partial",
+      "existing": "MarketingLead explicit and inferred records",
+      "read_only_sync_available": "no_external_sync",
+      "freshness_signal_available": "max_updatedAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "Local watermark with inference warning",
+      "recommended_v2_behavior": "Durable ingestion run and activity model",
+      "priority": "P0"
+    },
+    {
+      "source_key": "lead_activity",
+      "domain": "crm",
+      "business_importance": "important",
+      "current_erp_support": "partial",
+      "existing": "Lead and chat timestamps",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt",
+      "staleness_risk": "medium",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "Partial local activity watermark",
+      "recommended_v2_behavior": "Durable activity model",
+      "priority": "P1"
+    },
+    {
+      "source_key": "sale_activity",
+      "domain": "sales",
+      "business_importance": "important",
+      "current_erp_support": "partial",
+      "existing": "Assignment, first response and follow-up fields",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "Partial and weak",
+      "recommended_v2_behavior": "Durable call/activity/status history",
+      "priority": "P1"
+    },
+    {
+      "source_key": "orders",
+      "domain": "orders_profit",
+      "business_importance": "critical",
+      "current_erp_support": "found",
+      "existing": "TestOrder2 local ERP records",
+      "read_only_sync_available": "no_external_sync",
+      "freshness_signal_available": "max_updatedAt_and_report_date_coverage",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "high_if_sheet_sync_or_recalculation_called",
+      "recommended_v1_behavior": "DB-only watermark; exclude sheet sync",
+      "recommended_v2_behavior": "Canonical event/source watermark",
+      "priority": "P0"
+    },
+    {
+      "source_key": "payments",
+      "domain": "finance_profit",
+      "business_importance": "critical",
+      "current_erp_support": "partial",
+      "existing": "Order payment fields, statements and loan payments",
+      "read_only_sync_available": "no_external_sync",
+      "freshness_signal_available": "max_payment_and_updatedAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "high_if_payment_sync_methods_called",
+      "recommended_v1_behavior": "DB-only watermark",
+      "recommended_v2_behavior": "Canonical payment ledger",
+      "priority": "P0"
+    },
+    {
+      "source_key": "accounting",
+      "domain": "finance",
+      "business_importance": "critical_if_claimed",
+      "current_erp_support": "unclear",
+      "existing": "No canonical external accounting sync found",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "none",
+      "staleness_risk": "unknown",
+      "provider_mutation_risk": "unclear",
+      "recommended_v1_behavior": "missing_or_unsupported",
+      "recommended_v2_behavior": "Dedicated approved integration",
+      "priority": "P1"
+    },
+    {
+      "source_key": "finance_cashflow",
+      "domain": "finance",
+      "business_importance": "critical",
+      "current_erp_support": "partial",
+      "existing": "FinancialControlService, FinanceService and local finance collections",
+      "read_only_sync_available": "no_external_sync",
+      "freshness_signal_available": "max_updatedAt_and_calculation_time",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "high_if_budget_or_execution_services_called",
+      "recommended_v1_behavior": "DB-only collection watermarks",
+      "recommended_v2_behavior": "Canonical finance snapshot/run",
+      "priority": "P0"
+    },
+    {
+      "source_key": "loans_debt_schedule",
+      "domain": "finance",
+      "business_importance": "critical",
+      "current_erp_support": "found",
+      "existing": "Loan contracts and repayments",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt_plus_schedule_coverage",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "high_if_payment_or_disbursement_called",
+      "recommended_v1_behavior": "DB-only freshness plus completeness gate",
+      "recommended_v2_behavior": "Versioned debt schedule",
+      "priority": "P0"
+    },
+    {
+      "source_key": "supplier_settlement",
+      "domain": "dropship_profit",
+      "business_importance": "critical_candidate",
+      "current_erp_support": "partial",
+      "existing": "Supplier payable and statements",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt_and_paidAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "high_if_statement_methods_called",
+      "recommended_v1_behavior": "DB-only watermark; criticality needs approval",
+      "recommended_v2_behavior": "Versioned settlement ledger",
+      "priority": "P0"
+    },
+    {
+      "source_key": "tier2_agent_commission",
+      "domain": "dropship_profit",
+      "business_importance": "critical_candidate",
+      "current_erp_support": "partial",
+      "existing": "Agent statements and payments",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt_and_paidAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "high_if_payment_sync_called",
+      "recommended_v1_behavior": "DB-only watermark; policy needs approval",
+      "recommended_v2_behavior": "Versioned commission ledger",
+      "priority": "P0"
+    },
+    {
+      "source_key": "product_service_mapping",
+      "domain": "mapping",
+      "business_importance": "critical_for_scale",
+      "current_erp_support": "partial",
+      "existing": "Products, categories and ad-group mappings",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt_plus_mapping_completion",
+      "staleness_risk": "medium",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "DB-only freshness plus mapping gate",
+      "recommended_v2_behavior": "Versioned mapping",
+      "priority": "P0"
+    },
+    {
+      "source_key": "operations_status",
+      "domain": "operations",
+      "business_importance": "important",
+      "current_erp_support": "partial",
+      "existing": "Current order status counts only",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_order_updatedAt",
+      "staleness_risk": "high",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "Current status only and cautious",
+      "recommended_v2_behavior": "SLA and status history",
+      "priority": "P1"
+    },
+    {
+      "source_key": "return_refund",
+      "domain": "profit_operations",
+      "business_importance": "important",
+      "current_erp_support": "partial",
+      "existing": "ReturnRequest and ReturnReport",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt_and_resolvedAt",
+      "staleness_risk": "medium",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "DB-only watermark",
+      "recommended_v2_behavior": "Durable return/refund ledger",
+      "priority": "P1"
+    },
+    {
+      "source_key": "customer_referral",
+      "domain": "growth_ltv",
+      "business_importance": "optional",
+      "current_erp_support": "missing",
+      "existing": "No durable referral graph",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "none",
+      "staleness_risk": "unknown",
+      "provider_mutation_risk": "low",
+      "recommended_v1_behavior": "unsupported_or_schema_only",
+      "recommended_v2_behavior": "Dedicated referral model",
+      "priority": "P2"
+    },
+    {
+      "source_key": "decision_history",
+      "domain": "governance",
+      "business_importance": "important",
+      "current_erp_support": "partial",
+      "existing": "Google action logs/evaluations and legacy evaluations",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt_and_executedAt",
+      "staleness_risk": "medium",
+      "provider_mutation_risk": "high_if_action_services_called",
+      "recommended_v1_behavior": "Read-only history watermark",
+      "recommended_v2_behavior": "Unified decision history",
+      "priority": "P1"
+    },
+    {
+      "source_key": "system_settings_director_inputs",
+      "domain": "manual_policy",
+      "business_importance": "important",
+      "current_erp_support": "partial_or_not_configured",
+      "existing": "system_settings",
+      "read_only_sync_available": "no",
+      "freshness_signal_available": "max_updatedAt",
+      "staleness_risk": "medium",
+      "provider_mutation_risk": "high_if_update_called",
+      "recommended_v1_behavior": "Read-only; absence is not_configured",
+      "recommended_v2_behavior": "Approved/versioned director inputs",
+      "priority": "P1"
+    }
+  ],
+  "sync_capabilities": [
+    {
+      "source": "google_ads",
+      "status": "safe_foundation",
+      "details": "SearchStream-only service, rejects mutate query, durable sync run, entity lastSyncAt.",
+      "restriction": "Direct narrow adapter only; add lock, timeout and idempotency."
+    },
+    {
+      "source": "advertising_costs",
+      "status": "partial",
+      "details": "Facebook/Google/TikTok provider reads and local upserts with health.",
+      "restriction": "No uniform durable run; broad finance pipeline also recalculates business data."
+    },
+    {
+      "source": "crm_leads",
+      "status": "local_derivation_only",
+      "details": "Explicit and inferred leads from chat, pending orders and orders.",
+      "restriction": "Not proof of external CRM sync."
+    },
+    {
+      "source": "orders_payments_settlement",
+      "status": "local_watermark_only",
+      "details": "Timestamps are available.",
+      "restriction": "Never call sheet sync, payment sync, close/reopen or recalculation from pre-export."
+    }
+  ],
+  "freshness_requirements": [
+    {
+      "source": "google_ads",
+      "max_staleness_minutes": 60,
+      "hard_stale_minutes": 180,
+      "official_behavior": "block_if_configured_critical_and_not_fresh",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "can_recommend_ads_scale=false"
+    },
+    {
+      "source": "meta_ads",
+      "max_staleness_minutes": 180,
+      "hard_stale_minutes": 720,
+      "official_behavior": "block_if_active_critical",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "no_strong_meta_scale_conclusion"
+    },
+    {
+      "source": "tiktok_ads",
+      "max_staleness_minutes": 180,
+      "hard_stale_minutes": 720,
+      "official_behavior": "block_if_active_critical",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "no_strong_tiktok_scale_conclusion"
+    },
+    {
+      "source": "zalo_ads",
+      "max_staleness_minutes": null,
+      "hard_stale_minutes": null,
+      "official_behavior": "unsupported_or_not_configured",
+      "partial_behavior": "allow_if_optional",
+      "decision_impact": "no_zalo_conclusion"
+    },
+    {
+      "source": "advertising_costs",
+      "max_staleness_minutes": 360,
+      "hard_stale_minutes": 1440,
+      "official_behavior": "block_strong_ads_profit_conclusion",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "ads_and_profit_cautious"
+    },
+    {
+      "source": "crm_leads",
+      "max_staleness_minutes": 120,
+      "hard_stale_minutes": 480,
+      "official_behavior": "block_strong_sales_conclusion",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "sales_performance_cautious"
+    },
+    {
+      "source": "orders",
+      "max_staleness_minutes": 60,
+      "hard_stale_minutes": 240,
+      "official_behavior": "block_strong_profit_and_operations",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "can_conclude_profit=false"
+    },
+    {
+      "source": "payments",
+      "max_staleness_minutes": 120,
+      "hard_stale_minutes": 720,
+      "official_behavior": "block_realized_profit_and_cash",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "realized_profit_and_cash_cautious"
+    },
+    {
+      "source": "finance_cashflow",
+      "max_staleness_minutes": 60,
+      "hard_stale_minutes": 240,
+      "official_behavior": "block_director_budget_and_cash_decision",
+      "partial_behavior": "allow_with_strong_warning",
+      "decision_impact": "no_budget_increase_or_strong_loan_conclusion"
+    },
+    {
+      "source": "loans_debt_schedule",
+      "max_staleness_minutes": 1440,
+      "hard_stale_minutes": 2880,
+      "official_behavior": "block_if_stale_or_incomplete",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "no_strong_debt_conclusion"
+    },
+    {
+      "source": "supplier_settlement",
+      "max_staleness_minutes": 1440,
+      "hard_stale_minutes": 2880,
+      "official_behavior": "proposed_block_product_supplier_scale_requires_approval",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "no_strong_supplier_scale"
+    },
+    {
+      "source": "tier2_agent_commission",
+      "max_staleness_minutes": 1440,
+      "hard_stale_minutes": 2880,
+      "official_behavior": "proposed_block_realized_margin_requires_approval",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "profit_cautious"
+    },
+    {
+      "source": "product_service_mapping",
+      "max_staleness_minutes": 1440,
+      "hard_stale_minutes": 4320,
+      "official_behavior": "block_scale_if_stale_or_mapping_incomplete",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "scale_blocked"
+    },
+    {
+      "source": "operations_status",
+      "max_staleness_minutes": 120,
+      "hard_stale_minutes": 480,
+      "official_behavior": "block_strong_capacity_conclusion",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "operations_cautious"
+    },
+    {
+      "source": "return_refund",
+      "max_staleness_minutes": 1440,
+      "hard_stale_minutes": 2880,
+      "official_behavior": "optional_initially_but_blocks_adjusted_conclusion",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "no_return_adjusted_strong_conclusion"
+    },
+    {
+      "source": "decision_history",
+      "max_staleness_minutes": 1440,
+      "hard_stale_minutes": 4320,
+      "official_behavior": "warning_unless_governance_review_requested",
+      "partial_behavior": "allow_with_warning",
+      "decision_impact": "history_completeness_warning"
+    }
+  ],
+  "export_modes": [
+    {
+      "mode": "official_export",
+      "default_sync_policy": "sync_required",
+      "default_allow_partial_export": false,
+      "behavior": "Strict critical-source freshness and coverage gate; allowlisted read-only sync only; block on unresolved critical failure."
+    },
+    {
+      "mode": "partial_export",
+      "default_sync_policy": "sync_if_stale",
+      "default_allow_partial_export": true,
+      "behavior": "May export with explicit warnings, blocking reasons and lowered decision gates."
+    },
+    {
+      "mode": "cached_export",
+      "default_sync_policy": "export_cached",
+      "default_allow_partial_export": true,
+      "behavior": "Never sync; technical/test use; cached flag required."
+    }
+  ],
+  "technical_design": {
+    "proposed_directory": "backend/src/ai-data-pack/pre-export-sync/",
+    "services": [
+      "ai-data-pack-export-job.service.ts",
+      "ai-data-pack-pre-export-sync.service.ts",
+      "ai-data-pack-freshness-gate.service.ts",
+      "ai-data-pack-snapshot.service.ts",
+      "pre-export-sync.contract.ts",
+      "source-registry.ts"
+    ],
+    "future_schemas_after_approval": [
+      "ai-data-pack-export-job.schema.ts",
+      "ai-data-pack-source-sync-run.schema.ts",
+      "ai-data-pack-snapshot.schema.ts"
+    ],
+    "source_registry_policy": "Code/config allowlist first; no mutable registry enabling arbitrary services.",
+    "adapter_operations": [
+      "assessFreshness",
+      "syncReadOnly_optional",
+      "captureWatermark"
+    ],
+    "forbidden_adapter_capabilities": [
+      "mutate",
+      "apply",
+      "execute",
+      "approve",
+      "pause",
+      "create_or_delete_provider_entity",
+      "budget_update",
+      "sheet_write",
+      "statement_payment",
+      "order_recalculation",
+      "auto_control"
+    ],
+    "future_endpoints": [
+      "POST /api/ai/data-pack/export-jobs",
+      "GET /api/ai/data-pack/export-jobs/:jobId",
+      "GET /api/ai/data-pack/export-jobs/:jobId/download?file=..."
+    ]
+  },
+  "metadata_contract_additions": {
+    "field": "metadata.pre_export_sync",
+    "required_fields": [
+      "export_job_id",
+      "export_mode",
+      "sync_policy",
+      "policy_version",
+      "snapshot_id",
+      "snapshot_started_at",
+      "snapshot_finished_at",
+      "overall_sync_status",
+      "cached_export",
+      "official_export_allowed",
+      "sources"
+    ],
+    "source_fields": [
+      "source",
+      "status",
+      "freshness_status",
+      "coverage_status",
+      "last_source_data_at",
+      "last_successful_sync_at",
+      "freshness_minutes",
+      "max_staleness_minutes",
+      "sync_run_id",
+      "records_inserted",
+      "records_updated",
+      "error_code",
+      "sanitized_error"
+    ],
+    "never_expose": [
+      "credentials",
+      "tokens",
+      "authorization_headers",
+      "raw_provider_response",
+      "stack_trace",
+      "unnecessary_PII"
+    ]
+  },
+  "data_quality_additions": [
+    "ads_data_freshness_hours",
+    "crm_data_freshness_hours",
+    "orders_data_freshness_hours",
+    "payments_data_freshness_hours",
+    "finance_data_freshness_hours",
+    "supplier_settlement_freshness_hours",
+    "return_refund_freshness_hours",
+    "source_sync_success_rate",
+    "source_sync_blocking_reasons",
+    "stale_source_count",
+    "critical_stale_source_count",
+    "missing_source_count",
+    "unsupported_source_count",
+    "report_date_coverage_rate",
+    "cached_export_flag",
+    "official_export_allowed",
+    "partial_export_allowed"
+  ],
+  "decision_gate_impacts": [
+    {
+      "gate": "can_conclude_profit",
+      "rule": "false when required orders, payments, ad costs, settlement or returns freshness/coverage fails"
+    },
+    {
+      "gate": "can_recommend_ads_scale",
+      "rule": "false when ads, attribution, product mapping, finance or required settlement fails"
+    },
+    {
+      "gate": "can_use_ltv_strongly",
+      "rule": "remains false until durable customer/order/referral mapping and fresh coverage exist"
+    },
+    {
+      "gate": "can_generate_action_draft",
+      "rule": "may remain true but draft carries freshness blocks and no live authority"
+    },
+    {
+      "gate": "can_import_action_file",
+      "rule": "must remain false in PR-2.3B"
+    },
+    {
+      "gate": "can_dry_run",
+      "rule": "must remain false in PR-2.3B"
+    },
+    {
+      "gate": "can_execute_live",
+      "rule": "must remain false in PR-2.3B"
+    }
+  ],
+  "concurrency_idempotency": {
+    "export_lock_scope": "normalized report_date + sorted pack_types + requested_by for active official jobs",
+    "idempotency_components": [
+      "report_date",
+      "sorted_pack_types",
+      "sorted_formats",
+      "export_mode",
+      "sync_policy",
+      "policy_version",
+      "requested_by"
+    ],
+    "source_lock": "Provider source plus normalized account/customer scope and date range",
+    "fresh_skip": "skipped_fresh_enough when threshold and coverage pass",
+    "timeout_seconds_initial_proposal": 120,
+    "max_transient_retries_initial_proposal": 1,
+    "non_retryable": [
+      "not_configured",
+      "unsupported",
+      "authentication_or_policy_rejection",
+      "mutation_guard_failure"
+    ],
+    "lifecycle": [
+      "pending",
+      "checking_freshness",
+      "syncing",
+      "checking_freshness",
+      "snapshotting",
+      "exporting",
+      "completed_or_completed_with_warnings_or_blocked_or_failed"
+    ]
+  },
+  "security_permission": {
+    "current_gap": "Pack read permissions exist; export-job create/read/download/sync-detail permissions do not.",
+    "proposed_permissions": [
+      "ai-data-pack.export.cached.create",
+      "ai-data-pack.export.partial.create",
+      "ai-data-pack.export.official.create",
+      "ai-data-pack.export.job.read",
+      "ai-data-pack.export.download",
+      "ai-data-pack.export.sync-detail.read",
+      "ai-data-pack.source-sync.readonly.execute"
+    ],
+    "recommended_roles": {
+      "official_export": "Director and explicitly approved technical admin",
+      "partial_export": "Director or Manager subject to pack read permission",
+      "cached_export": "Technical/admin and approved reviewers",
+      "sync_failure_detail": "Restricted sanitized view"
+    },
+    "audit_required": true,
+    "section_level_rbac_required_before_sensitive_sections": true,
+    "security_rules": [
+      "Never log or return secrets, tokens, credentials or raw provider bodies",
+      "Never inject broad mutation-capable services into the pre-export orchestrator",
+      "Intersect job read/download permission with requested pack permission"
+    ]
+  },
+  "implementation_plan_pr_2_3b": [
+    {
+      "sub_pr": "PR-2.3B-1",
+      "scope": "ExportJob plus cached-export wrapper, idempotency and audit",
+      "tests_required": [
+        "cached export never syncs",
+        "cached flag present",
+        "duplicate active job prevented",
+        "no provider/action service called"
+      ],
+      "acceptance_criteria": "Deterministic cached job lifecycle and artifacts; existing GET behavior unchanged.",
+      "not_included": "Provider sync and new action flows",
+      "risk": "Artifact retention and multi-pod locking"
+    },
+    {
+      "sub_pr": "PR-2.3B-2",
+      "scope": "Source registry plus DB-only freshness and coverage gate",
+      "tests_required": [
+        "fresh/stale/missing/not_configured/unsupported",
+        "coverage gate",
+        "official block",
+        "partial warnings"
+      ],
+      "acceptance_criteria": "Every source result explains evidence and no provider call occurs.",
+      "not_included": "Provider adapters",
+      "risk": "Threshold and criticality approval"
+    },
+    {
+      "sub_pr": "PR-2.3B-3",
+      "scope": "Google Ads read-only adapter, source lock, timeout and run linkage",
+      "tests_required": [
+        "search-only provider mock",
+        "mutate rejection",
+        "duplicate sync lock",
+        "failure block",
+        "fresh skip"
+      ],
+      "acceptance_criteria": "No mutation-capable service injected; durable run linked to ExportJob.",
+      "not_included": "Meta/TikTok/Zalo and action execution",
+      "risk": "Provider latency, auth and per-account partial coverage"
+    },
+    {
+      "sub_pr": "PR-2.3B-4",
+      "scope": "Metadata, DQ, decision-gate and snapshot integration",
+      "tests_required": [
+        "metadata in JSON/XLSX",
+        "stale-source gates",
+        "freshness distinct from completeness",
+        "checksums"
+      ],
+      "acceptance_criteria": "All packs expose consistent policy/job/source facts.",
+      "not_included": "New BA domains",
+      "risk": "Schema-version compatibility"
+    },
+    {
+      "sub_pr": "PR-2.3B-5",
+      "scope": "Job endpoints, permissions, download and sanitized audit responses",
+      "tests_required": [
+        "RBAC matrix",
+        "ownership/download checks",
+        "no secret/PII leakage",
+        "invalid policy rejection"
+      ],
+      "acceptance_criteria": "Only authorized actors can create/read/download appropriate jobs.",
+      "not_included": "Import/dry-run/live execution",
+      "risk": "Section-level access and artifact storage"
+    }
+  ],
+  "tests_required": [
+    "export_cached does not sync and marks cached_export=true",
+    "sync_if_stale skips fresh source",
+    "sync_if_stale plans allowlisted sync when stale",
+    "sync_required blocks unresolved critical stale/failure",
+    "allow_partial_export creates completed_with_warnings",
+    "fresh timestamp without report-date coverage fails",
+    "ads stale sets can_recommend_ads_scale=false",
+    "finance stale blocks strong budget/loan/cash conclusions",
+    "orders/payments stale sets can_conclude_profit=false",
+    "no provider mutation call",
+    "no OpenAI/upload/action/import/dry-run/live execution",
+    "no sheet sync/payment sync/recalculation/auto-control",
+    "no secret/PII/raw provider error leakage",
+    "source lock prevents duplicate sync",
+    "export idempotency prevents duplicate official job",
+    "timeouts and retries are bounded",
+    "metadata.pre_export_sync is present in all requested packs",
+    "existing GET exports remain side-effect-free"
+  ],
+  "director_questions": [
+    "Should official export block completely when configured Google Ads sync fails?",
+    "What are the approved stale thresholds for ads, finance, orders, payments and CRM?",
+    "Which sources are critical versus optional for each pack?",
+    "How should a configured channel with no report-date rows be classified?",
+    "Can cached export ever be used for real decisions?",
+    "Who may create official, partial and cached exports?",
+    "May Manager create partial Marketer exports?",
+    "Should Investor retain Director Pack access after sensitive sections are added?",
+    "Is section-level RBAC required before supplier, tier-2 or payroll data?",
+    "Does stale finance always block official Director export?",
+    "Does stale supplier settlement block product/supplier scale?",
+    "Is tier-2 agent commission critical to realized profit?",
+    "Does stale return/refund block official export or only adjusted conclusions?",
+    "Are inferred MarketingLead records acceptable for official sales analysis?",
+    "Can current-status-only operations data support capacity conclusions?",
+    "Must official export cover report-date data, latest data, or both?",
+    "What is artifact and audit retention?",
+    "May provider sync succeed partially by account/channel?",
+    "Does threshold/policy version change require separate approval?",
+    "Is separate approval required before enabling Google Ads adapter after DB-only gate?"
+  ],
+  "final_recommendation": {
+    "proceed_to_pr_2_3b": "yes_after_review_and_approval",
+    "do_not_auto_code_now": true,
+    "review_required": "ChatGPT Web Pro Extended plus Director/BA approval",
+    "first_safe_slice": "PR-2.3B-1 ExportJob plus cached wrapper only",
+    "second_safe_slice": "PR-2.3B-2 source registry plus DB-only freshness gate",
+    "provider_sync_requires_separate_review": true,
+    "absolutely_not_yet": [
+      "Meta/TikTok/Zalo provider orchestration",
+      "External accounting",
+      "Action import",
+      "Generic dry-run",
+      "Live execution",
+      "OpenAI/upload flows",
+      "Provider mutation",
+      "Auto-control",
+      "Sheet write",
+      "Payment/settlement mutation",
+      "Phase 3"
+    ]
+  }
+}

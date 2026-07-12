@@ -8,7 +8,7 @@
  * - Gợi ý tối ưu hóa (trả gốc sớm để giảm lãi)
  */
 
-import { Injectable, Logger, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
@@ -16,6 +16,7 @@ import { LoanRepayment, LoanRepaymentDocument } from './schemas/loan-repayment.s
 import { LoanPayment, LoanPaymentDocument, LoanPaymentType, PaymentSource } from './schemas/loan-payment.schema';
 import { CashflowEntry, CashflowEntryDocument } from './schemas/cashflow-entry.schema';
 import { FinancialControlService } from './financial-control.service';
+import { FinanceService } from './finance.service';
 import { OwnerFundService } from '../owner-fund/owner-fund.service';
 import {
   LoanDashboardDto,
@@ -46,6 +47,7 @@ export class LoanManagementService {
     private readonly financialControlService: FinancialControlService,
     @Inject(forwardRef(() => OwnerFundService))
     private readonly ownerFundService: OwnerFundService,
+    private readonly financeService: FinanceService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════
@@ -149,8 +151,11 @@ export class LoanManagementService {
 
     // Lấy các kỳ trả chưa thanh toán
     const unpaidRepayments = await this.repaymentModel.find({
-      loanId: new Types.ObjectId(loanId),
       paid: { $ne: true },
+      $or: [
+        { loanId },
+        { loanId: new Types.ObjectId(loanId) },
+      ],
     }).sort({ dueDate: 1 }).lean();
 
     const today = new Date();
@@ -160,7 +165,7 @@ export class LoanManagementService {
     const scheduledPayments: ScheduledPaymentOption[] = unpaidRepayments.map(r => {
       const dueDate = r.dueDate ? new Date(r.dueDate) : null;
       const isOverdue = dueDate ? dueDate < today : false;
-      const daysPastDue = dueDate && isOverdue 
+      const daysPastDue = dueDate && isOverdue
         ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
         : 0;
 
@@ -249,11 +254,26 @@ export class LoanManagementService {
   // CREATE PAYMENT - Thực hiện thanh toán
   // ═══════════════════════════════════════════════════════════
 
-  async createPayment(loanId: string, dto: CreateLoanPaymentDto): Promise<PaymentResultDto> {
+  async createPayment(
+    loanId: string,
+    dto: CreateLoanPaymentDto,
+    actorId?: string,
+  ): Promise<PaymentResultDto> {
     this.logger.log(`Creating payment for loan ${loanId}: ${JSON.stringify(dto)}`);
 
+    const idempotencyKey = `loan-payment:${String(dto.idempotencyKey || '').trim()}`;
+    if (idempotencyKey === 'loan-payment:') {
+      throw new BadRequestException('idempotencyKey is required for loan payments');
+    }
+    if (await this.paymentModel.exists({ idempotencyKey })) {
+      throw new ConflictException('Loan payment with this idempotencyKey was already processed');
+    }
+    if (!actorId || !Types.ObjectId.isValid(actorId)) {
+      throw new BadRequestException('Authenticated actor id is invalid');
+    }
+
     // 1. Validate loan exists
-    const loan = await this.loanModel.findById(loanId);
+    let loan = await this.loanModel.findById(loanId);
     if (!loan) {
       throw new NotFoundException(`Loan ${loanId} not found`);
     }
@@ -263,20 +283,71 @@ export class LoanManagementService {
     }
 
     // 2. Validate source has enough balance
-    await this.validatePaymentSource(dto.source, dto.amount, dto.sourceAccountId);
+    await this.validatePaymentSource(
+      loanId,
+      dto.source,
+      dto.amount,
+      dto.sourceAccountId,
+      dto.paymentType as LoanPaymentType,
+      dto.repaymentId,
+    );
+
+    const session = await this.paymentModel.db.startSession();
+    let payment: LoanPaymentDocument;
+    let newBankBalance: number | undefined;
+    let newOwnerFundBalance: number | undefined;
+    let amountToPrincipal = 0;
+    let amountToInterest = 0;
+
+    session.startTransaction();
+    try {
+      const loanQuery = this.loanModel.findById(loanId);
+      loanQuery.session(session);
+      loan = await loanQuery.exec();
+      if (!loan || loan.status === 'closed') {
+        throw new BadRequestException('Loan is unavailable for payment');
+      }
+
+      if (dto.source === PaymentSource.BANK_BALANCE) {
+        await this.financeService.acquireCashflowSerializationLock(session);
+        // Re-check after the shared database lock so two payments on different
+        // loans cannot both spend the same bank balance snapshot.
+        await this.validatePaymentSource(
+          loanId,
+          dto.source,
+          dto.amount,
+          dto.sourceAccountId,
+          dto.paymentType as LoanPaymentType,
+          dto.repaymentId,
+        );
+      }
 
     // 3. Calculate payment allocation
-    const { amountToPrincipal, amountToInterest } = this.allocatePayment(
+    ({ amountToPrincipal, amountToInterest } = this.allocatePayment(
       dto.paymentType as LoanPaymentType,
       dto.amount,
       loan,
       dto.repaymentId,
-    );
+    ));
+
+    if (dto.paymentType === LoanPaymentType.SCHEDULED && dto.repaymentId) {
+      const scheduledRepayment = await this.repaymentModel.findOne({
+        _id: dto.repaymentId,
+        loanId: new Types.ObjectId(loanId),
+        paid: { $ne: true },
+      }).session(session).lean();
+      if (!scheduledRepayment) {
+        throw new BadRequestException('Scheduled repayment was already paid or no longer exists');
+      }
+      amountToPrincipal = Number(scheduledRepayment.amountPrincipal || 0);
+      amountToInterest = Number(scheduledRepayment.amountInterest || 0);
+    }
 
     const principalBefore = loan.principalRemaining || 0;
 
     // 4. Create payment record
-    const payment = new this.paymentModel({
+    payment = new this.paymentModel({
+      idempotencyKey,
       loanId: new Types.ObjectId(loanId),
       amount: dto.amount,
       paymentType: dto.paymentType,
@@ -290,9 +361,10 @@ export class LoanManagementService {
       repaymentId: dto.repaymentId ? new Types.ObjectId(dto.repaymentId) : undefined,
       principalBeforePayment: principalBefore,
       principalAfterPayment: principalBefore - amountToPrincipal,
+      createdBy: new Types.ObjectId(actorId),
     });
 
-    await payment.save();
+    await payment.save({ session });
 
     // 5. Update loan
     loan.principalRemaining = (loan.principalRemaining || 0) - amountToPrincipal;
@@ -304,14 +376,14 @@ export class LoanManagementService {
       loan.status = 'closed';
     }
 
-    await loan.save();
+    await loan.save({ session });
 
     // 6. Mark repayment as paid if applicable
     if (dto.repaymentId && dto.paymentType === LoanPaymentType.SCHEDULED) {
       await this.repaymentModel.findByIdAndUpdate(dto.repaymentId, {
         paid: true,
         paidDate: new Date(),
-      });
+      }, { session });
     }
 
     // 7. Create cashflow entry (Cash Out)
@@ -324,24 +396,20 @@ export class LoanManagementService {
       referenceId: String(payment._id),
       category: 'loan_payment',
     });
-    await cashflow.save();
+    await cashflow.save({ session });
 
     // 8. Deduct from source
-    let newBankBalance: number | undefined;
-    let newOwnerFundBalance: number | undefined;
-
     if (dto.source === PaymentSource.OWNER_FUND && dto.sourceAccountId) {
       // Deduct from Owner Fund
       try {
-        await this.ownerFundService.deductFromAccount(dto.sourceAccountId, dto.amount, {
+        newOwnerFundBalance = await this.ownerFundService.deductFromAccount(dto.sourceAccountId, dto.amount, {
           category: 'loan_payment',
           description: `Thanh toán khoản vay: ${loan.name}`,
           referenceId: String(payment._id),
-        });
-        const account = await this.ownerFundService.getFundAccountById(dto.sourceAccountId);
-        newOwnerFundBalance = account?.balance;
+        }, session);
       } catch (err) {
         this.logger.error('Failed to deduct from Owner Fund', err);
+        throw err;
       }
     } else {
       // Bank Balance is tracked through cashflow entries
@@ -352,6 +420,21 @@ export class LoanManagementService {
         this.logger.warn('Failed to get new bank balance');
       }
     }
+
+      await session.commitTransaction();
+    } catch (error) {
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
+      if ((error as any)?.code === 11000) {
+        throw new ConflictException('Loan payment with this idempotencyKey was already processed');
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    this.financialControlService.invalidateCache(`loan-payment:create:${payment._id}`);
 
     // 9. Calculate savings
     const interestRate = loan.interestRate || 0;
@@ -486,18 +569,18 @@ export class LoanManagementService {
     return loans.map(loan => {
       const loanId = String(loan._id);
       const loanRepayments = repayments.filter(r => String(r.loanId) === loanId);
-      
+
       // Next due
       const futureRepayments = loanRepayments
         .filter(r => r.dueDate && new Date(r.dueDate) >= today)
         .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 
       const nextDue = futureRepayments[0];
-      const nextDueDate = nextDue?.dueDate 
-        ? new Date(nextDue.dueDate).toISOString().split('T')[0] 
+      const nextDueDate = nextDue?.dueDate
+        ? new Date(nextDue.dueDate).toISOString().split('T')[0]
         : null;
-      const nextDueAmount = nextDue 
-        ? (nextDue.amountPrincipal || 0) + (nextDue.amountInterest || 0) 
+      const nextDueAmount = nextDue
+        ? (nextDue.amountPrincipal || 0) + (nextDue.amountInterest || 0)
         : 0;
 
       // Overdue for this loan
@@ -602,8 +685,8 @@ export class LoanManagementService {
 
     // Early payment suggestion
     const topLoan = activeLoans[0];
-    const suggestedPayment = topLoan 
-      ? Math.min(freeCash * 0.5, topLoan.principalRemaining) 
+    const suggestedPayment = topLoan
+      ? Math.min(freeCash * 0.5, topLoan.principalRemaining)
       : 0;
     const monthlySavings = suggestedPayment * ((topLoan?.effectiveRate || 0) / 100 / 12);
     const annualSavings = monthlySavings * 12;
@@ -623,19 +706,73 @@ export class LoanManagementService {
     };
   }
 
-  private async validatePaymentSource(source: string, amount: number, sourceAccountId?: string) {
+  private async validatePaymentSource(
+    loanId: string,
+    source: string,
+    amount: number,
+    sourceAccountId?: string,
+    paymentType?: LoanPaymentType,
+    repaymentId?: string,
+  ) {
+    let scheduledAmount = 0;
+    let scheduledDueDate: Date | null = null;
+    if (paymentType === LoanPaymentType.SCHEDULED) {
+      if (!repaymentId || !Types.ObjectId.isValid(repaymentId)) {
+        throw new BadRequestException('A valid repaymentId is required for scheduled payments');
+      }
+      const repayment = await this.repaymentModel.findOne({
+        _id: repaymentId,
+        loanId: new Types.ObjectId(loanId),
+        paid: { $ne: true },
+      }).lean();
+      if (!repayment) {
+        throw new BadRequestException('Scheduled repayment was not found or has already been paid');
+      }
+      scheduledAmount = Number(repayment.amountPrincipal || 0) + Number(repayment.amountInterest || 0);
+      if (!Number.isFinite(scheduledAmount) || scheduledAmount <= 0 || Math.abs(amount - scheduledAmount) > 0.01) {
+        throw new BadRequestException(
+          `Scheduled payment must equal ${this.formatCurrency(Math.max(0, scheduledAmount || 0))}`,
+        );
+      }
+      scheduledDueDate = repayment.dueDate ? new Date(repayment.dueDate) : null;
+    }
+
     if (source === PaymentSource.BANK_BALANCE) {
       try {
-        const fcDashboard = await this.financialControlService.getDashboard();
-        const freeCash = fcDashboard.freeCash || 0;
-        if (amount > freeCash) {
+        this.financialControlService.invalidateCache('loan-payment:validate-bank-balance');
+        const fcDashboard = await this.financialControlService.getDashboard(true);
+        const bankBalance = Number(fcDashboard.bankBalance);
+        const freeCash = Number(fcDashboard.freeCash);
+        if (!Number.isFinite(bankBalance) || !Number.isFinite(freeCash)) {
+          throw new BadRequestException('Financial Control returned an invalid bank balance');
+        }
+
+        let available = Math.max(0, freeCash);
+        if (paymentType === LoanPaymentType.SCHEDULED) {
+          const windowDays = Number(fcDashboard.config?.CommittedWindowDays);
+          const committedCutoff = new Date();
+          committedCutoff.setDate(committedCutoff.getDate() + (Number.isFinite(windowDays) ? windowDays : 0));
+          const isCommitted = Boolean(
+            scheduledDueDate &&
+            !Number.isNaN(scheduledDueDate.getTime()) &&
+            scheduledDueDate <= committedCutoff
+          );
+          if (isCommitted) {
+            // The scheduled payment is already included in committedCash. Restore
+            // only its reservation while preserving all other commitments.
+            available = Math.min(bankBalance, Math.max(0, freeCash + scheduledAmount));
+          }
+        }
+
+        if (amount > bankBalance || amount > available) {
           throw new BadRequestException(
-            `Insufficient Bank Balance. Available: ${this.formatCurrency(freeCash)}, Requested: ${this.formatCurrency(amount)}`
+            `Insufficient Bank Balance. Available: ${this.formatCurrency(Math.min(bankBalance, available))}, Requested: ${this.formatCurrency(amount)}`,
           );
         }
       } catch (err) {
         if (err instanceof BadRequestException) throw err;
-        this.logger.warn('Failed to validate bank balance');
+        this.logger.warn('Failed to validate bank balance through Financial Control');
+        throw new BadRequestException('Financial Control is unavailable; loan payment was not executed');
       }
     } else if (source === PaymentSource.OWNER_FUND) {
       if (!sourceAccountId) {

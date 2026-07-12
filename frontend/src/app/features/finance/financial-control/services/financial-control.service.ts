@@ -17,7 +17,9 @@ import {
   Forecast7DResult,
   OptimalAdsSuggestionResult,
   ModuleHealthResult,
-  ActionSuggestionsResult
+  ActionSuggestionsResult,
+  FinancialControlConfig,
+  TaxObligationSnapshot,
 } from '../models/financial-control.model';
 
 @Injectable({
@@ -75,6 +77,22 @@ export class FinancialControlService {
     return this.http.get<ActionSuggestionsResult>(`${this.financialControlUrl}/actions`);
   }
 
+  getConfig(): Observable<FinancialControlConfig> {
+    return this.http.get<FinancialControlConfig>(`${this.financialControlUrl}/config`);
+  }
+
+  updateConfig(config: Partial<FinancialControlConfig>): Observable<FinancialControlConfig> {
+    return this.http.patch<FinancialControlConfig>(`${this.financialControlUrl}/config`, config);
+  }
+
+  getTaxObligation(): Observable<TaxObligationSnapshot | null> {
+    return this.http.get<TaxObligationSnapshot | null>(`${this.financialControlUrl}/tax-obligation`);
+  }
+
+  updateTaxObligation(snapshot: TaxObligationSnapshot): Observable<TaxObligationSnapshot> {
+    return this.http.put<TaxObligationSnapshot>(`${this.financialControlUrl}/tax-obligation`, snapshot);
+  }
+
   // ═══════════════════════════════════════════════════════════
   // LEGACY APIs (backward compatible)
   // ═══════════════════════════════════════════════════════════
@@ -108,12 +126,12 @@ export class FinancialControlService {
   private mapOverviewToDashboard(overview: Record<string, any>): FinancialControlData {
     const bankBalance = overview['validation']?.bankBalance || 0;
     const committedCash = overview['committedCash']?.stock?.current || 0;
-    
+
     /**
      * TIỀN KHẢ DỤNG (Free Cash)
      * =========================
      * CÔNG THỨC: freeCash = bankBalance - committedCash
-     * 
+     *
      * Ý nghĩa: Số tiền THỰC SỰ có thể chi tiêu, đã trừ đi các khoản phải trả
      */
     const freeCash = Math.max(0, bankBalance - committedCash);
@@ -123,36 +141,36 @@ export class FinancialControlService {
      * SURVIVAL RUNWAY (Thời gian sống còn)
      * ====================================
      * CÔNG THỨC: Survival Runway = Free Cash / Monthly Burn Rate
-     * 
+     *
      * Trong đó:
      * - Free Cash = Bank Balance - Committed Cash (tiền thực sự khả dụng)
      * - Monthly Burn Rate = Lương nhân công + Chi phí vận hành cố định
-     * 
+     *
      * Kết quả: Số THÁNG còn chạy được nếu không có doanh thu mới
-     * 
+     *
      * Phân loại:
      * - >= 6 tháng: 🟢 AN TOÀN (safe zone)
      * - 3-6 tháng: 🟡 KHÁ ỔN (building buffer)
      * - 1-3 tháng: 🟠 CẢNH BÁO (warning zone)
      * - < 1 tháng: 🔴 NGUY HIỂM (critical - hành động ngay)
-     * 
+     *
      * Ví dụ:
      * - Free Cash: 280M (Bank 350M - Committed 70M)
      * - Monthly Burn Rate: 70M/tháng (Lương 50M + Vận hành 20M)
      * → Survival Runway = 280M / 70M = 4.0 tháng 🟡 KHÁ ỔN
-     * 
+     *
      * Ý nghĩa:
      * - Đo khả năng chịu đựng SAI LẦM / KHỦNG HOẢNG
      * - Nếu ads không hiệu quả, công ty còn chạy được bao lâu?
      * - Thời gian để sửa sai, pivot, tận dụng cơ hội
-     * 
+     *
      * ⚠️ KHÁC VỚI Reserve Fund Health:
      * - Survival Runway: Dùng FREE CASH (toàn bộ)
      * - Reserve Health: Dùng RESERVE FUND (20% profit allocation)
      */
     const monthlyBurnRate = (overview['survivalBuffer']?.threshold?.max || 210000000) / 3; // Target là 3 tháng
     const survivalRunway = monthlyBurnRate > 0 ? freeCash / monthlyBurnRate : 0;
-    
+
     // Normalize survival runway to 0-1 scale for display (0=critical, 1=safe)
     // 6+ months = 1.0 (safe), 3 months = 0.5 (building), 1 month = 0.17 (warning), <1 month = critical
     const survivalHealth = Math.min(1.0, survivalRunway / 6);

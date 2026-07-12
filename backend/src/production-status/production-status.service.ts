@@ -2,7 +2,7 @@
  * File: production-status.service.ts
  * Mục đích: Nghiệp vụ cho trạng thái sản xuất và truy cập dữ liệu.
  */
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ProductionStatus, ProductionStatusDocument } from './schemas/production-status.schema';
@@ -14,11 +14,21 @@ import { UpdateProductionStatusDto } from './dto/update-production-status.dto';
  * Cung cấp các phương thức CRUD và các tính năng bổ sung
  */
 @Injectable()
-export class ProductionStatusService {
+export class ProductionStatusService implements OnModuleInit {
+  private readonly logger = new Logger(ProductionStatusService.name);
+
   constructor(
     @InjectModel(ProductionStatus.name) 
     private productionStatusModel: Model<ProductionStatusDocument>,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.ensureDefaultStatuses();
+    } catch (error: any) {
+      this.logger.warn(`Failed to bootstrap production statuses: ${error?.message || error}`);
+    }
+  }
 
   /**
    * Tạo mới trạng thái sản xuất
@@ -53,6 +63,7 @@ export class ProductionStatusService {
    */
   async findAll(isActive?: boolean): Promise<ProductionStatus[]> {
     try {
+      await this.ensureDefaultStatuses();
       const filter = isActive !== undefined ? { isActive } : {};
       return this.productionStatusModel
         .find(filter)
@@ -180,5 +191,35 @@ export class ProductionStatusService {
     } catch (error) {
       throw new Error(`Lỗi khi lấy thống kê trạng thái sản xuất: ${error.message}`);
     }
+  }
+  async ensureDefaultStatuses(): Promise<void> {
+    const count = await this.productionStatusModel.estimatedDocumentCount();
+    if (count > 0) return;
+
+    await this.productionStatusModel.insertMany([
+      {
+        name: 'Chưa làm',
+        color: '#9CA3AF',
+        description: 'Đơn hàng đã tạo nhưng chưa bắt đầu sản xuất',
+        order: 1,
+        isActive: true,
+      },
+      {
+        name: 'Đang làm',
+        color: '#3B82F6',
+        description: 'Đơn hàng đang được xử lý sản xuất',
+        order: 2,
+        isActive: true,
+      },
+      {
+        name: 'Đã trả kết quả',
+        color: '#22C55E',
+        description: 'Đơn hàng hoàn tất sản xuất và đủ điều kiện tạo supplier payable',
+        order: 3,
+        isActive: true,
+      },
+    ], { ordered: true });
+
+    this.logger.log('Bootstrapped default production statuses');
   }
 }

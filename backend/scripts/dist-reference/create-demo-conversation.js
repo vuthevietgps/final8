@@ -7,7 +7,7 @@ try {
     require('dotenv').config();
 }
 catch (_a) { }
-const DEFAULT_CONN = 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const DEFAULT_CONN = process.env.MONGODB_URI;
 const MONGO = process.env.MONGODB_URI || DEFAULT_CONN;
 async function run() {
     await mongoose_1.default.connect(MONGO);

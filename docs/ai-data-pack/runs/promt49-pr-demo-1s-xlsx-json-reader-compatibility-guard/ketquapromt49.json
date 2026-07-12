@@ -1,0 +1,76 @@
+{
+  "phase": "PR-DEMO-1S",
+  "status": "implemented_reader_compatibility_guard",
+  "output_root": "docs/ai-data-pack/runs/promt49-pr-demo-1s-xlsx-json-reader-compatibility-guard",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target": "xlsx_json_reader_compatibility_guard",
+  "director_section_path": "sections[\"16_operation_capacity\"].data.operation_capacity.operational_risk_findings",
+  "json_reader_guard_present": true,
+  "xlsx_exporter_guard_present": true,
+  "nested_section_shape_handled": true,
+  "targeted_findings_checked": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "prompt45_guard_preserved": true,
+  "prompt46_guard_preserved": true,
+  "prompt47_guard_preserved": true,
+  "code_changed": true,
+  "business_logic_changed": false,
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+      "working_directory": "backend",
+      "initial_result": "failed_before_fix",
+      "initial_failure": "XLSX writer rejected a nested operation_capacity cell longer than 32767 characters.",
+      "final_result": "passed",
+      "test_suites": "1 passed, 1 total",
+      "tests": "38 passed, 38 total"
+    },
+    {
+      "command": "npm run build",
+      "working_directory": "backend",
+      "result": "passed"
+    }
+  ],
+  "static_scans_classified": true,
+  "static_scans": [
+    {
+      "name": "provider_action_live_scan",
+      "result": "classified_existing_matches_no_prompt49_provider_or_execution_addition"
+    },
+    {
+      "name": "mutation_db_business_scan",
+      "result": "classified_existing_matches_and_prompt49_test_guard_text_only"
+    },
+    {
+      "name": "secret_token_scan",
+      "result": "classified_existing_token_redaction_matches_no_prompt49_secret"
+    }
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "chatgpt_web_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "server_mongodb_used": false,
+    "db_migration_added": false,
+    "business_mutation_added": false,
+    "new_export_download_endpoint_added": false
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": ""
+  },
+  "next_recommendation": "Pause for human BA/QA review, or proceed only to a separate no-code BA threshold-source spec or concrete downstream reader guard. Do not open action/provider execution automatically."
+}

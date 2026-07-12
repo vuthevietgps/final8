@@ -20,18 +20,18 @@ export class AdGroup {
   @Prop({ type: Types.ObjectId, ref: 'Fanpage', required: true, index: true })
   fanpageId: Types.ObjectId; // Tham chiáº¿u fanpage
 
-  @Prop({ type: Types.ObjectId, ref: 'ProductCategory', required: true, index: true })
-  productCategoryId: Types.ObjectId; // Tham chiáº¿u danh má»¥c sáº£n pháº©m
+  @Prop({ type: Types.ObjectId, ref: 'ProductCategory', index: true })
+  productCategoryId?: Types.ObjectId; // Danh muc san pham (metadata tuy chon)
 
   @Prop({
     type: [{ type: Types.ObjectId, ref: 'Product' }],
-    required: true,
+    default: [],
     validate: {
-      validator: (products: Types.ObjectId[]) => Array.isArray(products) && products.length === 1,
-      message: 'Mỗi nhóm quảng cáo phải gắn đúng 1 sản phẩm',
+      validator: (products?: Types.ObjectId[]) => !products || (Array.isArray(products) && products.length <= 1),
+      message: 'Moi nhom quang cao chi duoc gan toi da 1 san pham',
     },
   })
-  selectedProducts: Types.ObjectId[]; // Danh sÃ¡ch sáº£n pháº©m Ä‘Æ°á»£c chá»n
+  selectedProducts?: Types.ObjectId[]; // Metadata san pham tuy chon
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   agentId: Types.ObjectId; // Tham chiáº¿u Ä‘áº¡i lÃ½ (user role: agent)
@@ -41,6 +41,9 @@ export class AdGroup {
 
   @Prop({ type: Types.ObjectId, ref: 'User', index: true })
   assignedEmployeeId?: Types.ObjectId; // NhÃ¢n viÃªn phá»¥ trÃ¡ch nhÃ³m quáº£ng cÃ¡o nÃ y
+
+  @Prop({ type: Date })
+  lastOperatorActivityAt?: Date; // Moc thao tac ERP gan nhat cua nguoi phu trach ads
 
   // ThÃ´ng tin mÃ´ táº£ vÃ  ná»™i dung
   @Prop({ trim: true })
@@ -94,6 +97,12 @@ export class AdGroup {
 
   @Prop({ trim: true })
   campaignId?: string;
+
+  @Prop({ trim: true })
+  campaignBudgetId?: string;
+
+  @Prop({ trim: true })
+  campaignBudgetResourceName?: string;
 
   // Nháº­t kÃ½ Ä‘á»“ng bá»™
   @Prop() lastSyncAt?: Date;

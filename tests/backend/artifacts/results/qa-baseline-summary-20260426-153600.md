@@ -1,0 +1,40 @@
+# QA Baseline Summary
+
+- Executed at: `2026-04-26 15:27-15:39 +07`
+- Scope:
+  - full backend module regression through local bootstrap
+  - targeted `e2e.return-ripple.ps1` rerun against a dedicated valid backend target
+  - backend production build
+  - frontend production build
+  - backend Jest unit script
+  - backend Jest e2e script
+  - frontend Angular/Karma unit tests
+- Authoritative backend regression:
+  - `tests/backend/artifacts/results/module-regression-20260426-152839.json`
+  - Result: `1262 PASS / 0 FAIL / 0 BLOCKED`
+  - Suites: `27/27`
+  - Entrypoint: `powershell -ExecutionPolicy Bypass -File .\test-all-modules.ps1`
+  - Runtime: dedicated local backend on port `53590`
+  - Mongo: `mongodb://127.0.0.1:27017/htxbachgia_module_regression_local_20260426152742`
+- Targeted return-ripple closure:
+  - `tests/backend/artifacts/results/e2e.return-ripple-valid-target-20260426-153436.log`
+  - Result: `64 PASS / 0 FAIL`
+  - Runtime: dedicated local backend on port `54517`
+  - Mongo: `mongodb://127.0.0.1:27017/htxbachgia_return_ripple_local_20260426153436`
+  - This supersedes the earlier `e2e.return-ripple-rerun-20260425-121611.log` health-check-only failure, which targeted `localhost:3000` without a healthy backend.
+- Build gates:
+  - `backend`: `npm run build` passed.
+  - `frontend`: `npm run build` passed.
+  - Frontend build warning retained: `src/app/features/ads-budget/ads-budget.component.css` exceeds the 20.00 kB CSS budget by `3.92 kB`; warning only, not a build failure.
+- Unit/e2e script gates:
+  - `backend npm test`: ran without `--passWithNoTests`; result `FAILED_TEST_CONFIG`, no `*.spec.ts` files found under Jest root `backend/src`.
+    - Log: `tests/backend/artifacts/results/backend-jest-test-20260426-153853.log`
+  - `backend npm run test:e2e`: result `FAILED_TEST_CONFIG`, configured file `backend/test/jest-e2e.json` is missing.
+    - Log: `tests/backend/artifacts/results/backend-jest-e2e-test-20260426-153908.log`
+  - `frontend npm test -- --watch=false --browsers=ChromeHeadless`: `3 SUCCESS / 0 FAIL`.
+    - Log: `tests/backend/artifacts/results/frontend-karma-test-20260426-153919.log`
+- Residual QA notes:
+  - Backend API/module regression is green on a reproducible local bootstrap path.
+  - Frontend unit tests are green for the current 3-spec suite.
+  - Backend Jest unit/e2e scripts are not usable as green gates yet because the repo currently lacks Jest unit specs and the configured Jest e2e config file.
+  - The active backend safety net remains the PowerShell API/regression catalog under `tests/backend`.

@@ -1,0 +1,136 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-3C",
+    "status": "completed_internal_source_sync_policy_no_public_export_flow",
+    "code_changed": true,
+    "provider_calls": false,
+    "real_sync_performed_in_tests": false,
+    "provider_mutation": false,
+    "provider_validate_only": false,
+    "public_endpoint_added": false,
+    "official_or_partial_public_export_added": false,
+    "existing_get_exports_changed": false,
+    "cached_export_semantics_changed": false,
+    "exportjob_internal_prepareSourcesForExportJob_added": true,
+    "module_level_provider_wiring_changed": false,
+    "google_ads_adapter_allowed_source_only": true,
+    "non_google_sources_db_only": true,
+    "export_cached_calls_adapter": false,
+    "post_sync_db_assessment_required": true,
+    "decision_gates_live_actions": false
+  },
+  "implementation": {
+    "new_files": [
+      "backend/src/ai-data-pack/source-sync/source-sync-result.types.ts",
+      "backend/src/ai-data-pack/source-sync/source-sync-policy.service.ts",
+      "backend/src/ai-data-pack/source-sync/source-sync-orchestrator.service.ts",
+      "backend/src/ai-data-pack/source-sync/source-sync-orchestrator.service.spec.ts"
+    ],
+    "modified_files": [
+      "backend/src/ai-data-pack/export-jobs/export-job.service.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job.service.spec.ts"
+    ],
+    "reused_modules": [
+      "FreshnessGateService",
+      "FreshnessDecisionGate",
+      "AI_DATA_PACK_GOOGLE_ADS_READONLY_ADAPTER",
+      "GOOGLE_ADS_READONLY_SYNC_EXECUTE_PERMISSION",
+      "GoogleAdsReadOnlySyncInput",
+      "ProviderReadOnlySyncResult"
+    ]
+  },
+  "policy_behavior": {
+    "export_cached": {
+      "adapter_called": false,
+      "post_assessment": "same_as_pre_assessment"
+    },
+    "sync_if_stale": {
+      "fresh_covered": "skip_adapter",
+      "stale_or_missing": "call_google_ads_adapter_when_scope_and_permission_valid",
+      "adapter_failure": "warning_and_db_post_assessment"
+    },
+    "sync_required": {
+      "fresh_covered": "skip_adapter",
+      "stale_or_missing": "call_google_ads_adapter_when_scope_and_permission_valid",
+      "adapter_unavailable_or_failed": "blocking_reason",
+      "post_assessment_not_fresh_covered": "blocking_reason"
+    },
+    "unsupported_or_non_google_sources": "db_only_no_adapter_call"
+  },
+  "source_impact_statuses": [
+    "fresh_covered",
+    "no_records_for_report_date",
+    "not_synced",
+    "not_configured",
+    "unsupported",
+    "stale",
+    "sync_failed"
+  ],
+  "security": {
+    "internal_execute_permission": "ai-data-pack.source-sync.google-ads.readonly.execute",
+    "google_ads_read_permission_authorizes_execution": false,
+    "broad_director_manager_permission_binding_added": false,
+    "secrets_stored_or_logged": false,
+    "adapter_result_safety_booleans_false": true
+  },
+  "tests_run": [
+    {
+      "command": "npm run build",
+      "result": "pass"
+    },
+    {
+      "command": "npm test -- --runInBand google-ads-readonly",
+      "result": "pass",
+      "suites": 7,
+      "tests": 41
+    },
+    {
+      "command": "npm test -- --runInBand source-sync",
+      "result": "pass",
+      "suites": 2,
+      "tests": 13
+    },
+    {
+      "command": "npm test -- --runInBand source-registry",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand export-job",
+      "result": "pass",
+      "suites": 1,
+      "tests": 12
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "pass",
+      "suites": 12,
+      "tests": 91
+    },
+    {
+      "command": "npm test -- --runInBand google-ads",
+      "result": "pass",
+      "suites": 19,
+      "tests": 119
+    },
+    {
+      "command": "npx prettier --check scoped Prompt 10 TypeScript",
+      "result": "pass"
+    }
+  ],
+  "risks_and_assumptions": [
+    "Module-level provider wiring was not changed because ai-data-pack.module.ts is outside the allowed Prompt 10 scope.",
+    "Official/partial export job creation remains unimplemented.",
+    "Customer IDs must be supplied by the internal caller and approved by the adapter scope policy.",
+    "Existing source-registry DB assessments control final decision gates.",
+    "No public endpoint or live action path was added."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "recommended_next_review": "module wiring and internal official/partial export lifecycle design",
+    "do_not_add_public_endpoints": true,
+    "do_not_add_action_import_or_live_execution": true,
+    "do_not_start_phase_3": true
+  }
+}

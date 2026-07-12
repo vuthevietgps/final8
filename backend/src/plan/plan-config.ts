@@ -22,6 +22,7 @@ const PROFESSIONAL_MODULES = [
   'pending-order', 'order-update', 'order-sheet-sync',
   'inventory', 'google-sync', 'return-request', 'return-report',
   'ad-group', 'advertising-cost', 'api-token', 'fanpage',
+  'openai-config', 'chat-message', 'ai-operator', 'ai-marketing',
   'ad-group-profit-report', 'ad-report',
   'employee-ads-kpi', 'ads-alerts', 'agent-receivable', 'ops-action',
   'purchase',

@@ -1,7 +1,7 @@
 <div class="openai-config-container">
   <!-- Header với title và action buttons -->
   <div class="header">
-    <h2>🤖 Quản lý Cấu hình OpenAI</h2>
+    <h2>AI API Key & Prompt (OpenAI)</h2>
     <div class="header-actions">
       <button type="button" class="btn btn-primary" (click)="openAddModal()" [disabled]="loading()">
         ➕ Thêm cấu hình
@@ -29,8 +29,9 @@
       <thead>
         <tr>
           <th>Tên cấu hình</th>
+          <th>Dùng cho</th>
           <th>Model</th>
-          <th>API Key</th>
+          <th>AI API Key</th>
           <th>Temperature</th>
           <th>Max Tokens</th>
           <th>Scope</th>
@@ -46,6 +47,9 @@
               <div class="config-name">{{ config.name }}</div>
               <div class="config-desc" *ngIf="config.description">{{ config.description }}</div>
             </div>
+          </td>
+          <td>
+            <span class="purpose-badge">{{ purposeLabel(config.purpose) }}</span>
           </td>
           <td>
             <span class="model-badge">{{ config.model }}</span>
@@ -136,6 +140,15 @@
 
             <div class="form-row">
               <div class="form-group">
+                <label for="purpose">Dùng cho</label>
+                <select id="purpose"
+                        [value]="formData().purpose || 'admin-assistant'"
+                        (change)="onInputChange($event, 'purpose')">
+                  <option *ngFor="let option of purposeOptions" [value]="option.value">{{ option.label }}</option>
+                </select>
+                <small>Trợ lý quản trị và chatbot khách hàng dùng API key/model độc lập.</small>
+              </div>
+              <div class="form-group">
                 <label for="status">Trạng thái</label>
                 <select id="status" 
                         [value]="formData().status || 'active'" 
@@ -159,23 +172,22 @@
             <h4>Cấu hình OpenAI</h4>
             
             <div class="form-group">
-              <label for="model">Model OpenAI *</label>
+              <label for="model">OpenAI Model *</label>
               <select id="model" 
-                      [value]="formData().model || 'gpt-4o-mini'" 
+                      [value]="formData().model || 'gpt-5.5'"
                       (change)="onInputChange($event, 'model')">
-                <option value="gpt-4o-mini">gpt-4o-mini</option>
-                <option value="gpt-4o">gpt-4o</option>
-                <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-                <option value="o4-mini">o4-mini (reasoning)</option>
-                <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-                <option value="gpt-4.1">gpt-4.1</option>
-                <option value="gpt-4.1-nano">gpt-4.1-nano</option>
-                <option value="o3-mini">o3-mini</option>
+                <option *ngFor="let option of modelOptions" [value]="option.value">{{ option.label }}</option>
               </select>
+              <input type="text"
+                     class="model-custom-input"
+                     [value]="formData().model || ''"
+                     (input)="onInputChange($event, 'model')"
+                     placeholder="Hoặc nhập model tùy chỉnh, ví dụ: gpt-5.5">
+              <small>Trợ lý quản trị dùng cấu hình global đang active/default. Chọn model mạnh hơn sẽ tăng chất lượng nhưng có thể tăng chi phí và độ trễ.</small>
             </div>
 
             <div class="form-group">
-              <label for="apiKey">OpenAI API Key *</label>
+              <label for="apiKey">AI API Key (OpenAI) *</label>
               <div class="input-with-icon">
                 <input type="password" id="apiKey" 
                        [value]="formData().apiKey || ''" 
@@ -186,17 +198,17 @@
                 </button>
               </div>
               <small *ngIf="testResult() && !error()" style="border-left-color:#00b894; color:#1a6b46;">✅ {{ testResult() }}</small>
-              <small>API key từ OpenAI platform (https://platform.openai.com/api-keys)</small>
+              <small>Nhập OpenAI API Key tại đây; không dùng Ads API Tokens của Meta/Google/TikTok.</small>
             </div>
 
             <div class="form-row">
               <div class="form-group">
                 <label for="maxTokens">Max Tokens *</label>
                 <input type="number" id="maxTokens" 
-                       [value]="formData().maxTokens || 150" 
+                       [value]="formData().maxTokens || 1200"
                        (input)="onNumberChange($event, 'maxTokens')" 
-                       min="1" max="4000">
-                <small>Số token tối đa cho mỗi response (50-4000)</small>
+                       min="1" max="32000">
+                <small>Số token tối đa cho mỗi response (1-32000)</small>
               </div>
               <div class="form-group">
                 <label for="temperature">Temperature *</label>
@@ -213,6 +225,20 @@
           <div class="form-section">
             <h4>Tham số AI</h4>
             
+            <div class="form-group">
+              <label for="reasoningEffort">Reasoning effort</label>
+              <select id="reasoningEffort"
+                      [value]="formData().reasoningEffort || 'medium'"
+                      (change)="onInputChange($event, 'reasoningEffort')">
+                <option value="none">none - nhanh nhất</option>
+                <option value="low">low - tiết kiệm</option>
+                <option value="medium">medium - cân bằng</option>
+                <option value="high">high - kỹ hơn</option>
+                <option value="xhigh">xhigh - khó nhất, tốn nhất</option>
+              </select>
+              <small>Chỉ áp dụng cho model reasoning như GPT-5 hoặc o-series; model khác sẽ tự bỏ qua.</small>
+            </div>
+
             <div class="form-group">
               <label for="systemPrompt">System Prompt *</label>
               <textarea id="systemPrompt" 

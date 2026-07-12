@@ -1,0 +1,21 @@
+# QA Owner-Fund Orphan Cleanup Summary
+
+- Executed at: `2026-04-25 11:56:15 +07`
+- Scope:
+  - local validation of snapshot-scoped orphan-fixture cleanup helper
+  - real QA DB pre-audit, dry-run classification, apply, serial verify, and idempotent re-apply
+  - no canonical active full rerun in this round because no runtime product code path changed
+- Case results:
+  - `tests/backend/suites/modules/extended/module.owner-fund-orphan-fixture-cleanup.ps1`: `FAILED_HARNESS -> FIXED_HARNESS -> PASSED`, final `44 PASS / 0 FAIL / 0 BLOCKED`
+  - `owner-fund-orphan-owner-audit-real-20260425-115356.json`: `FAILED_PRODUCT`, `15` orphan owner refs, `37` orphan withdrawals, `26` orphan fund transactions
+  - `owner-fund-orphan-cleanup-dryrun-real-20260425-115356.json`: `FAILED_PRODUCT`, `15` eligible exact fixture clusters (`11` `module.owner-fund-loan`, `4` `synthetic.emergency-owner-fund`), `0` blocked, `0` unknown, `63` candidate docs
+  - `owner-fund-orphan-cleanup-apply-real-20260425-115356.json`: `FAILED_PRODUCT -> FIXED_DATA`, deleted `37` orphan withdrawals + `26` orphan fund transactions = `63` docs
+  - `owner-fund-orphan-owner-audit-verify-real-20260425-120005.json`: `PASSED`, `0` orphan owner refs, `0` orphan withdrawals, `0` orphan fund transactions
+  - `owner-fund-orphan-cleanup-idempotent-real-20260425-120005.json`: `PASSED`, deleted `0` docs
+- Bug / risk classification:
+  - residual real-QA orphan rows in this snapshot were exact-match historical fixture residue, not a generic owner-identity restore problem for the current repair path
+  - helper remains snapshot-scoped/manual and blocks `--apply` if any `blocked` or `unknown` cluster is present
+  - `synthetic.emergency-owner-fund` is a safe classifier for `4` clusters with E2E-style marker strings and linked withdrawal/fund-transaction rows; it does not prove provenance to any current active suite
+- Traceability notes:
+  - `owner-fund-orphan-owner-audit-verify-real-20260425-115356.json` was generated in parallel with `apply` and is retained only as a discarded race artifact
+  - latest canonical active full regression remains [module-regression-20260425-002807.json](/C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/tests/backend/artifacts/results/module-regression-20260425-002807.json): `1254 PASS / 0 FAIL / 0 BLOCKED`, `27/27` suites

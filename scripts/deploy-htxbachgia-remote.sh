@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 TAG="${1:-latest}"
 SSH_USER="${SSH_USER:-admin-001}"
-SSH_HOST="${SSH_HOST:-192.168.100.237}"
+SSH_HOST="${SSH_HOST:-htxbachgia.shop}"
 SSH_PORT="${SSH_PORT:-22}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 SSH_STRICT_HOST_KEY_CHECKING="${SSH_STRICT_HOST_KEY_CHECKING:-accept-new}"

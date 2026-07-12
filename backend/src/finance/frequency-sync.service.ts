@@ -3,24 +3,26 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
 import { AdGroup } from '../ad-group/schemas/ad-group.schema';
+import { AdvertisingCostFacebookSyncService } from '../advertising-cost/advertising-cost.facebook-sync.service';
+import { AdvertisingCostTiktokSyncService } from '../advertising-cost/advertising-cost.tiktok-sync.service';
 
 /**
  * Frequency Sync Service
- * 
+ *
  * Responsible for syncing frequency metrics from Facebook Graph API.
- * 
+ *
  * Frequency = Average number of times each person saw the ad
  * Reach = Number of unique people who saw the ad
  * Audience Size = Total targeting audience size
- * 
+ *
  * Why Frequency Matters:
  * - Frequency < 1.5: Healthy, audience not saturated
  * - Frequency 1.5-2.5: Moderate, cap scale rate to prevent fatigue
  * - Frequency > 2.5: Saturated, recommend horizontal scaling
- * 
+ *
  * Facebook API Endpoint:
  * GET /{ad-set-id}/insights?fields=frequency,reach
- * 
+ *
  * Cronjob Schedule:
  * - Runs daily at 03:00 AM (after auto-scale execution at 02:00 AM)
  * - Updates all active ad groups
@@ -33,23 +35,29 @@ export class FrequencySyncService {
   constructor(
     @InjectModel(AdGroup.name)
     private readonly adGroupModel: Model<AdGroup>,
+    private readonly facebookSyncService: AdvertisingCostFacebookSyncService,
+    private readonly tiktokSyncService: AdvertisingCostTiktokSyncService,
   ) {}
 
   /**
    * Daily cronjob to sync frequency metrics from Facebook API.
-   * Runs at 03:00 AM every day.
+   * Runs at 09:00 AM every day (Asia/Ho_Chi_Minh).
+   * Chạy sau AutoScale (08:30) để không ảnh hưởng tới quyết định scale.
    */
-  @Cron('0 3 * * *')
+  @Cron('0 9 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async runDailyFrequencySync() {
     this.logger.log('🔄 Starting daily frequency sync...');
-    
+
     try {
+      // Facebook + TikTok both expose frequency/reach metrics
       const activeAdGroups = await this.adGroupModel.find({
         isActive: true,
-        provider: 'facebook', // Only Facebook has frequency metrics
+        platform: { $in: ['facebook', 'tiktok'] },
       });
 
-      this.logger.log(`Found ${activeAdGroups.length} active Facebook ad groups`);
+      const fbCount = activeAdGroups.filter(g => g.platform === 'facebook').length;
+      const ttCount = activeAdGroups.filter(g => g.platform === 'tiktok').length;
+      this.logger.log(`Found ${activeAdGroups.length} active ad groups (Facebook: ${fbCount}, TikTok: ${ttCount})`);
 
       let successCount = 0;
       let errorCount = 0;
@@ -76,14 +84,21 @@ export class FrequencySyncService {
 
   /**
    * Sync frequency metrics for a single ad group.
-   * 
+   *
    * @param adGroup - The ad group to sync
    */
   async syncFrequencyForAdGroup(adGroup: AdGroup) {
     const { adGroupId } = adGroup;
 
-    // Fetch metrics from Facebook API
-    const metrics = await this.fetchFrequencyFromFacebook(adGroupId);
+    // Yesterday's date — frequency metrics are synced for the previous day
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() - 1);
+    const dayISO = targetDate.toISOString().split('T')[0];
+
+    // Fetch metrics từ API/DB theo từng platform
+    const metrics = adGroup.platform === 'tiktok'
+      ? await this.fetchFrequencyFromTiktok(adGroupId, dayISO)
+      : await this.fetchFrequencyFromFacebook(adGroupId, dayISO);
 
     if (!metrics) {
       this.logger.warn(`No metrics returned for ad group ${adGroupId}`);
@@ -109,81 +124,43 @@ export class FrequencySyncService {
   }
 
   /**
-   * Fetch frequency metrics from Facebook Graph API.
-   * 
-   * Facebook API Documentation:
-   * https://developers.facebook.com/docs/marketing-api/insights
-   * 
-   * Endpoint:
-   * GET /{ad-set-id}/insights?fields=frequency,reach,actions
-   * 
-   * @param adGroupId - Facebook ad set ID
-   * @returns Frequency metrics or null if failed
+   * Fetch frequency + reach metrics from Facebook Graph API for a given adset and date.
+   * Delegates token management and HTTP logic to AdvertisingCostFacebookSyncService.
+   *
+   * @param adGroupId - Facebook adset ID stored in AdGroup.adGroupId
+   * @param dayISO    - ISO date string 'YYYY-MM-DD' to query
    */
   private async fetchFrequencyFromFacebook(
     adGroupId: string,
+    dayISO: string,
   ): Promise<{ frequency: number; reach: number; audienceSize: number } | null> {
-    try {
-      // TODO: Implement actual Facebook API call
-      // For now, return mock data for development
-      
-      // Example implementation:
-      // const accessToken = await this.getFacebookAccessToken();
-      // const response = await fetch(
-      //   `https://graph.facebook.com/v18.0/${adGroupId}/insights?fields=frequency,reach&access_token=${accessToken}`
-      // );
-      // const data = await response.json();
-      // 
-      // return {
-      //   frequency: data.data[0].frequency,
-      //   reach: data.data[0].reach,
-      //   audienceSize: await this.getTargetingAudienceSize(adGroupId),
-      // };
-
-      // MOCK DATA for development (remove when implementing real API)
-      this.logger.warn(`⚠️ Using mock data for ad group ${adGroupId} - implement Facebook API`);
-      
-      return {
-        frequency: 1.2 + Math.random() * 2, // Random between 1.2 and 3.2
-        reach: Math.floor(50000 + Math.random() * 150000), // Random between 50k and 200k
-        audienceSize: Math.floor(500000 + Math.random() * 1500000), // Random between 500k and 2M
-      };
-    } catch (error) {
-      this.logger.error(
-        `Failed to fetch frequency from Facebook for ${adGroupId}: ${error.message}`,
-      );
-      return null;
-    }
+    const metrics = await this.facebookSyncService.fetchFrequencyMetrics(adGroupId, dayISO);
+    if (!metrics) return null;
+    return {
+      frequency: metrics.frequency,
+      reach: metrics.reach,
+      // Targeting audience size requires a separate API call not covered by insights.
+      // Set to 0; update via manual process or dedicated audience-size endpoint.
+      audienceSize: 0,
+    };
   }
 
   /**
-   * Get Facebook access token.
-   * 
-   * TODO: Implement proper token management:
-   * - Store tokens securely in database
-   * - Handle token refresh
-   * - Support multiple ad accounts
+   * Lấy frequency + reach cho một TikTok ad group.
+   * Đọc từ collection advertisingcosts (đã được lưu lúc 00:00 bởi TiktokSyncService).
    */
-  private async getFacebookAccessToken(): Promise<string> {
-    // TODO: Implement token retrieval
-    // For now, return placeholder
-    return process.env.FACEBOOK_ACCESS_TOKEN || 'PLACEHOLDER_TOKEN';
-  }
-
-  /**
-   * Get targeting audience size from Facebook.
-   * 
-   * Facebook API endpoint:
-   * GET /{ad-set-id}?fields=targeting_optimization,targeting
-   */
-  private async getTargetingAudienceSize(adGroupId: string): Promise<number> {
-    // TODO: Implement actual API call
-    return 1000000; // Default 1M
+  private async fetchFrequencyFromTiktok(
+    adGroupId: string,
+    dayISO: string,
+  ): Promise<{ frequency: number; reach: number; audienceSize: number } | null> {
+    const metrics = await this.tiktokSyncService.fetchFrequencyMetrics(adGroupId, dayISO);
+    if (!metrics) return null;
+    return { frequency: metrics.frequency, reach: metrics.reach, audienceSize: 0 };
   }
 
   /**
    * Manual trigger for frequency sync (for specific ad group).
-   * 
+   *
    * @param adGroupId - MongoDB _id of the ad group
    */
   async syncSingleAdGroup(adGroupId: string) {
@@ -195,10 +172,9 @@ export class FrequencySyncService {
       throw new Error(`Ad group ${adGroupId} not found`);
     }
 
-    // Check if ad group has provider field (may not exist in schema)
-    // if (adGroup.provider !== 'facebook') {
-    //   throw new Error(`Ad group ${adGroupId} is not a Facebook ad group`);
-    // }
+    if (adGroup.platform !== 'facebook' && adGroup.platform !== 'tiktok') {
+      throw new Error(`Ad group ${adGroupId} does not support frequency sync (platform: ${adGroup.platform})`);
+    }
 
     await this.syncFrequencyForAdGroup(adGroup);
 
@@ -213,7 +189,7 @@ export class FrequencySyncService {
 
   /**
    * Get frequency statistics for all active ad groups.
-   * 
+   *
    * Returns summary:
    * - Total ad groups
    * - Average frequency
@@ -224,7 +200,7 @@ export class FrequencySyncService {
   async getFrequencyStatistics() {
     const adGroups = await this.adGroupModel.find({
       isActive: true,
-      provider: 'facebook',
+      platform: { $in: ['facebook', 'tiktok'] },
       frequency: { $exists: true, $ne: null },
     });
 
@@ -282,7 +258,7 @@ export class FrequencySyncService {
     const adGroups = await this.adGroupModel
       .find({
         isActive: true,
-        provider: 'facebook',
+        platform: { $in: ['facebook', 'tiktok'] },
         frequency: { $gte: 2.5 },
       })
       .sort({ frequency: -1 });

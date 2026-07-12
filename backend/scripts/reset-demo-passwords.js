@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 // Reset demo user passwords to a known value for local testing
-const uri = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev';
+const uri = process.env.MONGODB_URI;
 const targets = [
   'admin@dropshipping.com',
   'vutheviet@gmail.com',

@@ -2,12 +2,32 @@
 <div class="fanpage-container">
   <div class="header">
     <h2>📘 Quản lý Fanpage</h2>
-    <div class="header-actions">
+    <div class="header-actions" *ngIf="activeTab() === 'management'">
+      <button class="btn-secondary" (click)="syncFromSystemToken()" [disabled]="syncingSystemToken()">
+        {{ syncingSystemToken() ? 'Đang đồng bộ...' : '🔄 Đồng bộ Fanpage từ Meta' }}
+      </button>
       <button class="btn-primary" (click)="openAddModal()">
         ➕ Thêm mới
       </button>
     </div>
   </div>
+  <div class="page-tabs">
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab() === 'management'"
+      (click)="setActiveTab('management')">
+      Quản lý Fanpage
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab() === 'token-guide'"
+      (click)="setActiveTab('token-guide')">
+      Cách lấy Page Access Token vĩnh viễn
+    </button>
+  </div>
+
 
   <!-- Thông báo lỗi -->
   <div *ngIf="error()" class="alert alert-error">
@@ -15,9 +35,20 @@
     <button (click)="error.set(null)" class="btn-close">×</button>
   </div>
 
+  <div *ngIf="success()" class="alert alert-success">
+    {{ success() }}
+    <button (click)="success.set(null)" class="btn-close">×</button>
+  </div>
+
+  <ng-container *ngIf="activeTab() === 'management'; else tokenGuideTab">
   <!-- Loading -->
   <div *ngIf="loading()" class="loading">
     Đang tải dữ liệu...
+  </div>
+
+  <div *ngIf="!loading()" class="token-mode-note">
+    Page access token được quản lý tự động từ <strong>Ads API Tokens → Sync page token từ System User</strong>.
+    Ô Access Token trong form chỉ dùng khi cần override thủ công.
   </div>
 
   <!-- Bảng danh sách fanpage -->
@@ -31,7 +62,7 @@
           <th>Trạng thái</th>
           <th>Kết nối</th>
           <th>OpenAI Config</th>
-          <th>Token</th>
+          <th>Page token</th>
           <th>Hành động</th>
         </tr>
       </thead>
@@ -60,6 +91,9 @@
                   {{ fanpage.aiEnabled ? '🤖 AI Bật' : '⭕ AI Tắt' }}
                 </span>
                 <small *ngIf="fanpage.openAIConfigId" style="display:block;opacity:.6;font-size:10px;">Cfg: {{ fanpage.openAIConfigId.slice(-6) }}</small>
+                <small style="display:block;opacity:.75;font-size:10px;">
+                  {{ fanpage.subscribedWebhook ? 'Webhook: Đã đăng ký' : 'Webhook: Chưa đăng ký' }}
+                </small>
               </div>
             </div>
           </td>
@@ -123,7 +157,7 @@
                   </small>
                 </ng-container>
                 <ng-template #noAccess>
-                  <div class="muted">Chưa có</div>
+                  <div class="muted">Chưa có token (hãy Đồng bộ từ System Token)</div>
                 </ng-template>
               </ng-template>
             </div>
@@ -154,6 +188,77 @@
       </tbody>
     </table>
   </div>
+
+  </ng-container>
+
+  <ng-template #tokenGuideTab>
+    <section class="guide-container">
+      <h3>Cách lấy Page Access Token vĩnh viễn (long-lived)</h3>
+      <p>
+        Meta không cam kết token "never-expiring" tuyệt đối. Token trang có thể sống rất lâu,
+        nhưng vẫn có thể bị thu hồi nếu thay đổi quyền admin, đổi mật khẩu hoặc bị gỡ quyền app.
+      </p>
+
+      <div class="guide-card">
+        <h4>Bước 1: Chuẩn bị app Meta</h4>
+        <ol>
+          <li>Tạo app loại Business trong Meta for Developers.</li>
+          <li>Thêm Facebook Login và cấp các quyền cần thiết.</li>
+          <li>
+            Quyền khuyến nghị: <code>pages_show_list</code>, <code>pages_read_engagement</code>,
+            <code>pages_manage_metadata</code>, <code>pages_manage_posts</code>, <code>pages_messaging</code>.
+          </li>
+        </ol>
+      </div>
+
+      <div class="guide-card">
+        <h4>Bước 2: Lấy User Access Token ngắn hạn</h4>
+        <ol>
+          <li>Dùng Graph API Explorer hoặc luồng Facebook Login của app.</li>
+          <li>Đăng nhập đầy đủ quyền và copy user token ngắn hạn.</li>
+        </ol>
+      </div>
+
+      <div class="guide-card">
+        <h4>Bước 3: Đổi sang User Token dài hạn (khoảng 60 ngày)</h4>
+        <pre><code>GET https://graph.facebook.com/v23.0/oauth/access_token
+  ?grant_type=fb_exchange_token
+  &client_id=&lt;APP_ID&gt;
+  &client_secret=&lt;APP_SECRET&gt;
+  &fb_exchange_token=&lt;SHORT_LIVED_USER_TOKEN&gt;</code></pre>
+      </div>
+
+      <div class="guide-card">
+        <h4>Bước 4: Lấy Page Access Token từ User Token dài hạn</h4>
+        <pre><code>GET https://graph.facebook.com/v23.0/&lt;PAGE_ID&gt;
+  ?fields=access_token,name
+  &access_token=&lt;LONG_LIVED_USER_TOKEN&gt;</code></pre>
+        <p>Dùng giá trị <code>access_token</code> trả về để nhập vào form Fanpage.</p>
+      </div>
+
+      <div class="guide-card">
+        <h4>Bước 5: Kiểm tra token trước khi lưu</h4>
+        <pre><code>GET https://graph.facebook.com/v23.0/debug_token
+  ?input_token=&lt;PAGE_ACCESS_TOKEN&gt;
+  &access_token=&lt;APP_ID&gt;|&lt;APP_SECRET&gt;</code></pre>
+        <ul>
+          <li><code>is_valid = true</code></li>
+          <li>Token có đủ scopes cần dùng</li>
+          <li>Page ID trong token khớp với fanpage mục tiêu</li>
+        </ul>
+      </div>
+
+      <div class="guide-card guide-note">
+        <h4>Áp dụng vào hệ thống</h4>
+        <ol>
+          <li>Quay lại tab <strong>Quản lý Fanpage</strong>.</li>
+          <li>Thêm hoặc sửa fanpage, dán token vào ô <strong>Access Token</strong>.</li>
+          <li>Bấm <strong>Test Access Token</strong> để xác nhận trước khi lưu.</li>
+        </ol>
+      </div>
+    </section>
+  </ng-template>
+
 </div>
 
 <!-- Modal thêm/sửa fanpage -->
@@ -191,14 +296,21 @@
 
       <!-- Access Token -->
       <div class="form-group">
-        <label for="accessToken">Access Token **</label>
+        <label for="accessToken">
+          Access Token {{ editingFanpage() ? '(tuỳ chọn khi chỉnh sửa)' : '(tuỳ chọn - trống sẽ tự lấy từ System Token)' }}
+        </label>
         <textarea 
           id="accessToken"
           [value]="formData().accessToken || ''"
           (input)="onInputChange($event, 'accessToken')"
-          placeholder="Nhập access token"
+          [placeholder]="editingFanpage()
+            ? 'Để trống để giữ token hiện tại. Chỉ nhập khi muốn thay token thủ công.'
+            : 'Để trống để hệ thống tự lấy token từ System User Token (nếu có quyền)'"
           rows="3"
-          required></textarea>
+        ></textarea>
+        <div class="field-note">
+          Khuyến nghị: quản lý Page/Ads token tại <strong>Ads API Tokens</strong> và dùng <strong>Sync page token từ System User</strong>.
+        </div>
       </div>
 
       <!-- Trạng thái và ngày -->

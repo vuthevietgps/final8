@@ -8,6 +8,8 @@ import { Model } from 'mongoose';
 import { ApiToken, ApiTokenDocument } from './schemas/api-token.schema';
 import { Fanpage, FanpageDocument } from '../fanpage/schemas/fanpage.schema';
 import fetch from 'node-fetch';
+import { decryptToken, encryptToken, hashToken } from './crypto.util';
+import { redactSecretString } from '../common/utils/secret-redaction.util';
 
 @Injectable()
 export class EnhancedApiTokenService {
@@ -18,15 +20,27 @@ export class EnhancedApiTokenService {
     @InjectModel(Fanpage.name) private fanpageModel: Model<FanpageDocument>,
   ) {}
 
+  private getRawToken(token?: Partial<ApiTokenDocument> | null): string | undefined {
+    if (!token) return undefined;
+    if (token.tokenEnc) {
+      const decrypted = decryptToken(token.tokenEnc);
+      if (decrypted) return decrypted;
+    }
+    // Legacy read compatibility only. All writes below remove this field.
+    return token.token;
+  }
+
   /**
    * Enhanced token validation with auto-recovery
    */
   async validateWithRecovery(tokenId: string): Promise<any> {
-    const token = await this.tokenModel.findById(tokenId);
+    const token = await this.tokenModel.findById(tokenId).select('+token');
     if (!token) throw new Error('Token not found');
 
     // Try validate current token
-    const validationResult = await this.validateFacebookToken(token.token);
+    const rawToken = this.getRawToken(token);
+    if (!rawToken) throw new Error('Token value is unavailable');
+    const validationResult = await this.validateFacebookToken(rawToken);
     
     if (validationResult.isValid) {
       // Token is still valid
@@ -46,13 +60,17 @@ export class EnhancedApiTokenService {
     // Method 1: Try to refresh using Facebook refresh token flow
     const refreshResult = await this.attemptTokenRefresh(token);
     if (refreshResult.success) {
-      return { status: 'recovered', message: 'Token refreshed successfully', newToken: refreshResult.token };
+      return { status: 'recovered', message: 'Token refreshed successfully' };
     }
 
     // Method 2: Check for backup tokens
     const backupResult = await this.activateBackupToken(String(token.fanpageId));
     if (backupResult.success) {
-      return { status: 'failover', message: 'Switched to backup token', activeToken: backupResult.token };
+      return {
+        status: 'failover',
+        message: 'Switched to backup token',
+        activeTokenId: backupResult.tokenId,
+      };
     }
 
     // Method 3: Send notification for manual intervention
@@ -91,7 +109,7 @@ export class EnhancedApiTokenService {
       this.logger.log('Token refresh not implemented yet - requires OAuth integration');
       return { success: false };
     } catch (error) {
-      this.logger.error('Token refresh failed:', error.message);
+      this.logger.error(`Token refresh failed: ${redactSecretString(error?.message || String(error))}`);
       return { success: false };
     }
   }
@@ -99,7 +117,7 @@ export class EnhancedApiTokenService {
   /**
    * Activate backup token for the same fanpage
    */
-  private async activateBackupToken(fanpageId: string): Promise<{success: boolean, token?: ApiTokenDocument}> {
+  private async activateBackupToken(fanpageId: string): Promise<{success: boolean, tokenId?: string}> {
     try {
       // Find another valid token for the same fanpage
       const backupTokens = await this.tokenModel.find({
@@ -107,30 +125,33 @@ export class EnhancedApiTokenService {
         status: 'active',
         lastCheckStatus: { $in: ['valid', 'unknown'] },
         _id: { $ne: fanpageId } // Exclude current token
-      }).sort({ lastCheckedAt: -1 });
+      }).select('+token').sort({ lastCheckedAt: -1 });
 
       if (backupTokens.length > 0) {
         const backupToken = backupTokens[0];
         
         // Validate backup token
-        const validation = await this.validateFacebookToken(backupToken.token);
+        const backupRawToken = this.getRawToken(backupToken);
+        if (!backupRawToken) return { success: false };
+        const validation = await this.validateFacebookToken(backupRawToken);
         if (validation.isValid) {
           // Set backup as primary
           await this.tokenModel.findByIdAndUpdate(backupToken._id, { isPrimary: true });
           
           // Update fanpage to use backup token
           await this.fanpageModel.findByIdAndUpdate(fanpageId, {
-            accessToken: backupToken.token
+            $set: { hasAccessToken: true },
+            $unset: { accessToken: 1 },
           });
 
           this.logger.log(`Activated backup token for fanpage ${fanpageId}`);
-          return { success: true, token: backupToken };
+          return { success: true, tokenId: String(backupToken._id) };
         }
       }
 
       return { success: false };
     } catch (error) {
-      this.logger.error('Backup token activation failed:', error.message);
+      this.logger.error(`Backup token activation failed: ${redactSecretString(error?.message || String(error))}`);
       return { success: false };
     }
   }
@@ -161,7 +182,7 @@ export class EnhancedApiTokenService {
       // });
       
     } catch (error) {
-      this.logger.error('Failed to send token expiry notification:', error.message);
+      this.logger.error(`Failed to send token expiry notification: ${redactSecretString(error?.message || String(error))}`);
     }
   }
 
@@ -178,7 +199,8 @@ export class EnhancedApiTokenService {
     // Create backup token record
     const backupToken = new this.tokenModel({
       name: `Backup Token - ${new Date().toISOString()}`,
-      token,
+      tokenEnc: encryptToken(token),
+      tokenHash: hashToken(token),
       provider: 'facebook',
       fanpageId,
       isPrimary: false, // Backup tokens are not primary
@@ -204,19 +226,30 @@ export class EnhancedApiTokenService {
     }
 
     // Update token in database
-    const updatedToken = await this.tokenModel.findByIdAndUpdate(tokenId, {
-      token: newToken,
-      lastCheckStatus: 'valid',
-      lastCheckMessage: validation.message,
-      lastCheckedAt: new Date(),
-      consecutiveFail: 0,
-      nextCheckAt: this.calculateNextCheck()
-    }, { new: true });
+    const updatedToken = await this.tokenModel.findByIdAndUpdate(
+      tokenId,
+      {
+        $set: {
+          tokenEnc: encryptToken(newToken),
+          tokenHash: hashToken(newToken),
+          lastCheckStatus: 'valid',
+          lastCheckMessage: validation.message,
+          lastCheckedAt: new Date(),
+          consecutiveFail: 0,
+          nextCheckAt: this.calculateNextCheck(),
+        },
+        $unset: { token: 1 },
+      },
+      { new: true },
+    );
+
+    if (!updatedToken) throw new Error('Token not found');
 
     // Update associated fanpage
     if (updatedToken.isPrimary) {
       await this.fanpageModel.findByIdAndUpdate(String(updatedToken.fanpageId), {
-        accessToken: newToken
+        $set: { hasAccessToken: true },
+        $unset: { accessToken: 1 },
       });
     }
 
@@ -264,7 +297,7 @@ export class EnhancedApiTokenService {
     } catch (error) {
       return {
         isValid: false,
-        message: 'Lỗi kết nối khi validate token: ' + error.message
+        message: 'Lỗi kết nối khi validate token: ' + redactSecretString(error?.message || String(error))
       };
     }
   }

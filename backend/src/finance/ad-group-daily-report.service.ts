@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
@@ -7,7 +7,9 @@ import { Product, ProductDocument } from '../product/schemas/product.schema';
 import { AdGroupDailyReport, AdGroupDailyReportDocument } from './schemas/ad-group-daily-report.schema';
 import { CapitalAllocationSnapshot, CapitalAllocationSnapshotDocument } from './schemas/capital-allocation-snapshot.schema';
 import { AdsDailySpending, AdsDailySpendingDocument } from './schemas/ads-daily-spending.schema';
-import { Cron, CronExpression } from '@nestjs/schedule';
+
+const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const BUSINESS_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 type OptimalSpendMode = 'legacy' | 'product-x';
 type ReturnAssumptionSource = 'product' | 'fallback' | 'mixed';
@@ -83,6 +85,12 @@ interface OptimalSpendSuggestionResponse {
   defaultAssumedReturnRatePercent: number;
 }
 
+interface SpendPolicy {
+  minStartBudget: number;
+  upperCapMultiplier: number;
+  lowerCapMultiplier: number;
+}
+
 @Injectable()
 export class AdGroupDailyReportService {
   private readonly logger = new Logger(AdGroupDailyReportService.name);
@@ -97,23 +105,18 @@ export class AdGroupDailyReportService {
   ) {}
 
   /**
-   * Đồng bộ dữ liệu từ ordertest2 vào collection ad_group_daily_reports
-   * Chạy tự động mỗi ngày lúc 3:00 AM sau khi recalculate orders
+   * Đồng bộ dữ liệu từ ordertest2 vào collection ad_group_daily_reports.
+   * Triggered by the centralized 06:00 orchestration after ad cost allocation completes.
    */
-  @Cron('0 3 * * *', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-  })
   async syncFromOrderTest2(targetDate?: string) {
-    const date = targetDate || new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0];
+    const date = targetDate || this.getBusinessDateStringDaysAgo(1);
     this.logger.log(`🔄 Bắt đầu đồng bộ ad group daily report cho ngày ${date}`);
 
     try {
-      const startDate = new Date(date);
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
+      const { start: startDate, end: endDate } = this.getBusinessDayRangeUtc(date);
 
-      // Aggregate từ ordertest2
-      const aggregated = await this.orderModel.aggregate([
+      // 1. Aggregate doanh thu & lợi nhuận từ test-order2
+      const orderAggregated = await this.orderModel.aggregate([
         {
           $match: {
             orderDate: { $gte: startDate, $lte: endDate },
@@ -123,26 +126,77 @@ export class AdGroupDailyReportService {
         {
           $group: {
             _id: '$adGroupId',
-            netProfit: { $sum: '$netProfit' },
-            adsCost: { $sum: '$adsCost' }
-          }
-        },
-        {
-          $project: {
-            adGroupId: '$_id',
-            netProfit: 1,
-            adsCost: 1
+            // Tổng giá trị lợi nhuận đã phân bổ (với các chi phí cơ bản của sản phẩm)
+            // Lợi nhuận của từng đơn hàng từ hàm orderCalculation (chưa có ads cost)
+            grossProfit: { $sum: '$grossProfit' },
+            orderNetProfit: { $sum: '$netProfit' } // Net profit sau phân bổ chi phí có ads (có thể thiếu tính chính xác nếu là 0 order)
           }
         }
       ]);
 
+      // 2. Lấy chi phí ads THỰC TẾ từ collections advertisingcosts
+      const adsAggregated = await this.orderModel.db.collection('advertisingcosts').aggregate([
+        {
+          $match: {
+            $or: [
+              { date: { $gte: startDate, $lte: endDate } },
+              { date }
+            ]
+          }
+        },
+        {
+          $group: {
+            _id: '$adGroupId',
+            actualSpent: { $sum: '$spentAmount' }
+          }
+        }
+      ]).toArray();
+
+      // 3. Merge dữ liệu lại bằng adGroupId
+      const mergedMap = new Map();
+
+      // Tạo entry từ order
+      for (const item of orderAggregated) {
+        mergedMap.set(item._id, {
+          adGroupId: item._id,
+          grossProfit: item.grossProfit || 0,
+          orderNetProfit: item.orderNetProfit || 0,
+          adsCost: 0,
+          netProfit: item.orderNetProfit || 0
+        });
+      }
+
+      // Xử lý actual ads cost, bao gồm cả nhóm 0 đơn
+      for (const adsItem of adsAggregated) {
+        const agId = adsItem._id;
+        const actualAds = adsItem.actualSpent || 0;
+
+        if (mergedMap.has(agId)) {
+          const mapping = mergedMap.get(agId);
+          mapping.adsCost = actualAds;
+          // recalculate netProfit from gross - adsCost
+          mapping.netProfit = mapping.grossProfit - actualAds;
+        } else {
+          // Lãi khống: 0 đơn nhưng có chi tiêu Ads
+          mergedMap.set(agId, {
+            adGroupId: agId,
+            grossProfit: 0,
+            orderNetProfit: -actualAds,
+            adsCost: actualAds,
+            netProfit: -actualAds
+          });
+        }
+      }
+
+      const finalAggregated = Array.from(mergedMap.values());
+
       // Lấy thông tin ad group
-      const adGroupIds = aggregated.map(item => item.adGroupId);
+      const adGroupIds = finalAggregated.map(item => item.adGroupId);
       const adGroups = await this.adGroupModel.find({ adGroupId: { $in: adGroupIds } }).exec();
       const adGroupMap = new Map(adGroups.map(ag => [ag.adGroupId, ag]));
 
       // Upsert vào collection
-      const bulkOps = aggregated.map(item => {
+      const bulkOps = finalAggregated.map(item => {
         const adGroup = adGroupMap.get(item.adGroupId);
         return {
           updateOne: {
@@ -168,7 +222,7 @@ export class AdGroupDailyReportService {
         this.logger.log(`✅ Đồng bộ thành công: ${result.upsertedCount} mới, ${result.modifiedCount} cập nhật`);
 
         // Tự động cập nhật reinvestmentUsed với tổng chi phí ads trong ngày
-        const totalAdsCost = aggregated.reduce((sum, item) => sum + item.adsCost, 0);
+        const totalAdsCost = finalAggregated.reduce((sum, item) => sum + item.adsCost, 0);
         if (totalAdsCost > 0) {
           await this.updateReinvestmentUsed(date, totalAdsCost);
         }
@@ -278,8 +332,8 @@ export class AdGroupDailyReportService {
           _id: '$adGroupId',
           adGroupName: { $first: '$adGroupName' },
           platform: { $first: '$platform' },
-          adsCost: { $sum: '$adsCost' },
-          netProfit: { $sum: '$netProfit' }
+          allocatedAdsCost: { $sum: '$adsCost' },
+          netProfitWithAllocatedCost: { $sum: '$netProfit' }
         }
       },
       {
@@ -311,22 +365,27 @@ export class AdGroupDailyReportService {
   async getOptimalSpendSuggestions(options?: {
     mode?: OptimalSpendMode;
     defaultAssumedReturnRatePercent?: number;
+    minStartBudget?: number;
+    upperCapMultiplier?: number;
+    lowerCapMultiplier?: number;
   }): Promise<OptimalSpendSuggestionResponse> {
     const mode: OptimalSpendMode = options?.mode === 'product-x' ? 'product-x' : 'legacy';
     const defaultAssumedReturnRatePercent = this.clampReturnRatePercent(
       options?.defaultAssumedReturnRatePercent,
       20,
     );
+    const spendPolicy = this.normalizeSpendPolicy(options);
 
     if (mode === 'product-x') {
-      return this.getOptimalSpendSuggestionsByProductX(defaultAssumedReturnRatePercent);
+      return this.getOptimalSpendSuggestionsByProductX(defaultAssumedReturnRatePercent, spendPolicy);
     }
 
-    return this.getOptimalSpendSuggestionsLegacy(defaultAssumedReturnRatePercent);
+    return this.getOptimalSpendSuggestionsLegacy(defaultAssumedReturnRatePercent, spendPolicy);
   }
 
   private async getOptimalSpendSuggestionsLegacy(
     defaultAssumedReturnRatePercent: number,
+    spendPolicy: SpendPolicy,
   ): Promise<OptimalSpendSuggestionResponse> {
     const dateStr = this.getDateStringDaysAgo(30);
     const yesterdayStr = this.getDateStringDaysAgo(1);
@@ -343,6 +402,7 @@ export class AdGroupDailyReportService {
       adGroupMap,
       yesterdayStr,
       mode: 'legacy',
+      spendPolicy,
     });
 
     return {
@@ -354,6 +414,7 @@ export class AdGroupDailyReportService {
 
   private async getOptimalSpendSuggestionsByProductX(
     defaultAssumedReturnRatePercent: number,
+    spendPolicy: SpendPolicy,
   ): Promise<OptimalSpendSuggestionResponse> {
     const dateStr = this.getDateStringDaysAgo(30);
     const yesterdayStr = this.getDateStringDaysAgo(1);
@@ -406,6 +467,7 @@ export class AdGroupDailyReportService {
             $dateToString: {
               format: '%Y-%m-%d',
               date: '$orderDate',
+              timezone: BUSINESS_TIME_ZONE,
             },
           },
           productId: {
@@ -602,6 +664,7 @@ export class AdGroupDailyReportService {
       yesterdayStr,
       mode: 'product-x',
       productXContextByAdGroup,
+      spendPolicy,
     });
 
     return {
@@ -617,6 +680,7 @@ export class AdGroupDailyReportService {
     yesterdayStr: string;
     mode: OptimalSpendMode;
     productXContextByAdGroup?: Map<string, ProductXContext>;
+    spendPolicy: SpendPolicy;
   }): Omit<OptimalSpendSuggestionResponse, 'mode' | 'defaultAssumedReturnRatePercent'> {
     const suggestions = new Map<string, { suggestedSpend: number; suggestedSpendWithCap: number; reason: string; confidence: number }>();
     const adGroupSuggestions: OptimalSpendSuggestionItem[] = [];
@@ -638,13 +702,15 @@ export class AdGroupDailyReportService {
       const spendYesterday = yesterdayRecord?.adsCost || 0;
       const profitYesterday = yesterdayRecord?.netProfit || 0;
 
-      const MIN_START_BUDGET = 60000;
       const sortedByDateDescForAvg = [...records].sort((a, b) => b.date.localeCompare(a.date));
       const last3DaysRecords = sortedByDateDescForAvg.slice(0, 3);
       const avgLast3Days = last3DaysRecords.length > 0
         ? last3DaysRecords.reduce((sum, r) => sum + (r.adsCost || 0), 0) / last3DaysRecords.length
         : 0;
-      const baselineSpend = Math.max(spendYesterday, avgLast3Days, MIN_START_BUDGET);
+      const baselineSpend = Math.max(spendYesterday, avgLast3Days, params.spendPolicy.minStartBudget);
+      const upperCap = Math.round(baselineSpend * params.spendPolicy.upperCapMultiplier);
+      const lowerCap = Math.round(baselineSpend * params.spendPolicy.lowerCapMultiplier);
+      const applyPolicyCaps = (value: number) => Math.max(lowerCap, Math.min(upperCap, value));
 
       let consecutiveNegativeDays = 0;
       const sortedByDateDesc = [...records].sort((a, b) => b.date.localeCompare(a.date));
@@ -682,7 +748,7 @@ export class AdGroupDailyReportService {
 
       if (records.length < 3) {
         const suggestedSpend = Math.round(currentAvgSpend);
-        const suggestedSpendWithCap = suggestedSpend;
+        const suggestedSpendWithCap = applyPolicyCaps(suggestedSpend);
         const suggestion = {
           suggestedSpend,
           suggestedSpendWithCap,
@@ -712,7 +778,7 @@ export class AdGroupDailyReportService {
 
       if (marginalProfits.length === 0) {
         const suggestedSpend = Math.round(currentAvgSpend);
-        const suggestedSpendWithCap = suggestedSpend;
+        const suggestedSpendWithCap = applyPolicyCaps(suggestedSpend);
         const suggestion = {
           suggestedSpend,
           suggestedSpendWithCap,
@@ -760,9 +826,7 @@ export class AdGroupDailyReportService {
       }
 
       suggestedSpend = Math.max(0, Math.round(suggestedSpend));
-      const upperCap = Math.round(baselineSpend * 1.20);
-      const lowerCap = Math.round(baselineSpend * 0.70);
-      const suggestedSpendWithCap = Math.max(lowerCap, Math.min(upperCap, suggestedSpend));
+      const suggestedSpendWithCap = applyPolicyCaps(suggestedSpend);
 
       const suggestion = { suggestedSpend, suggestedSpendWithCap, reason, confidence };
       suggestions.set(adGroupId, suggestion);
@@ -787,6 +851,28 @@ export class AdGroupDailyReportService {
       totalSuggestedSpend,
       totalSuggestedSpendWithCap,
       totalCurrentSpend,
+    };
+  }
+
+  private normalizeSpendPolicy(options?: {
+    minStartBudget?: number;
+    upperCapMultiplier?: number;
+    lowerCapMultiplier?: number;
+  }): SpendPolicy {
+    const minStartBudget = Number.isFinite(options?.minStartBudget)
+      ? Math.max(0, Number(options?.minStartBudget))
+      : 60_000;
+    const upperCapMultiplier = Number.isFinite(options?.upperCapMultiplier)
+      ? Math.max(1, Number(options?.upperCapMultiplier))
+      : 1.2;
+    const requestedLowerCap = Number.isFinite(options?.lowerCapMultiplier)
+      ? Math.max(0, Number(options?.lowerCapMultiplier))
+      : 0.7;
+
+    return {
+      minStartBudget,
+      upperCapMultiplier,
+      lowerCapMultiplier: Math.min(requestedLowerCap, upperCapMultiplier),
     };
   }
 
@@ -815,14 +901,37 @@ export class AdGroupDailyReportService {
   }
 
   private getDateStringDaysAgo(daysAgo: number): string {
-    const date = this.getDateObjectDaysAgo(daysAgo);
-    return date.toISOString().split('T')[0];
+    return this.getBusinessDateStringDaysAgo(daysAgo);
   }
 
   private getDateObjectDaysAgo(daysAgo: number): Date {
-    const date = new Date();
-    date.setDate(date.getDate() - daysAgo);
-    return date;
+    return this.getBusinessDayRangeUtc(this.getBusinessDateStringDaysAgo(daysAgo)).start;
+  }
+
+  private getBusinessDateString(date: Date): string {
+    const shifted = new Date(date.getTime() + BUSINESS_UTC_OFFSET_MS);
+    return shifted.toISOString().slice(0, 10);
+  }
+
+  private getBusinessDateStringDaysAgo(daysAgo: number): string {
+    const shiftedNow = new Date(Date.now() + BUSINESS_UTC_OFFSET_MS);
+    shiftedNow.setUTCDate(shiftedNow.getUTCDate() - daysAgo);
+    return shiftedNow.toISOString().slice(0, 10);
+  }
+
+  private getBusinessDayRangeUtc(date: string): { start: Date; end: Date } {
+    const [year, month, day] = String(date || '')
+      .split('-')
+      .map((value) => Number(value));
+
+    if (![year, month, day].every(Number.isFinite)) {
+      throw new Error(`Invalid business date: ${date}`);
+    }
+
+    return {
+      start: new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - BUSINESS_UTC_OFFSET_MS),
+      end: new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - BUSINESS_UTC_OFFSET_MS),
+    };
   }
 
   private clampReturnRatePercent(value: unknown, fallback: number): number {
@@ -867,7 +976,7 @@ export class AdGroupDailyReportService {
   /**
    * Cập nhật reinvestmentUsed của snapshot với chi phí ads trong ngày
    * IDEMPOTENT: Chỉ cập nhật 1 lần cho mỗi ngày, tránh trùng lặp khi re-sync
-   * 
+   *
    * LOGIC:
    * 1. Tìm snapshot của ngày đó (hoặc gần nhất trước ngày đó)
    * 2. Kiểm tra đã track chi phí ngày này chưa (dựa vào ads_daily_spendings)
@@ -939,7 +1048,3 @@ export class AdGroupDailyReportService {
     }
   }
 }
-
-
-
-

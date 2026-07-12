@@ -1,0 +1,433 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-4A",
+    "status": "completed_policy_spec_no_code",
+    "code_changed": false,
+    "docs_changed": true,
+    "provider_calls": false,
+    "provider_mutation": false,
+    "provider_validate_only": false,
+    "public_endpoint_added": false,
+    "official_or_partial_export_code_added": false,
+    "action_import_added": false,
+    "dry_run_or_live_added": false,
+    "openai_upload_added": false,
+    "phase_3_started": false,
+    "missing_input_files": []
+  },
+  "export_modes": [
+    {
+      "mode": "cached_export",
+      "sync_policy": "export_cached",
+      "provider_call": "never",
+      "purpose": "Existing cached/read-only DB export and fixtures.",
+      "completion": "Export current DB data with cached metadata.",
+      "strong_decisions": "cautious unless embedded freshness and coverage metadata independently passes."
+    },
+    {
+      "mode": "official_export",
+      "sync_policy": "sync_required",
+      "provider_call": "only through internal source-sync policy for approved adapters",
+      "purpose": "Director-approved official Data Pack.",
+      "completion": "Requires post-sync DB-only assessment to pass for critical sources or an explicit Director/BA exemption.",
+      "strong_decisions": "allowed only for decision gates whose required sources pass."
+    },
+    {
+      "mode": "partial_export",
+      "sync_policy": "sync_if_stale",
+      "provider_call": "optional through internal source-sync policy",
+      "purpose": "Review pack when some sources are stale, missing, unsupported, or not configured.",
+      "completion": "Completes with warnings and locked affected gates.",
+      "strong_decisions": "not allowed for affected domains."
+    }
+  ],
+  "source_criticality": [
+    {
+      "sourceKey": "google_ads",
+      "pack_relevance": ["director", "marketer", "data_quality", "mapping"],
+      "director_criticality": "critical",
+      "marketer_criticality": "critical",
+      "freshness_requirement": "<=60 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "google_ads readonly adapter via internal source-sync only",
+      "if_stale": "official sync_required must attempt sync if scope permits; block ads scale if still stale",
+      "if_missing": "block official ads claims; partial warning",
+      "if_unsupported": "block official ads claims; partial warning",
+      "decision_gates_affected": ["canRecommendAdsScale"]
+    },
+    {
+      "sourceKey": "advertising_costs",
+      "pack_relevance": ["director", "marketer", "data_quality"],
+      "director_criticality": "critical",
+      "marketer_criticality": "critical",
+      "freshness_requirement": "<=360 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only in PR-2.3B",
+      "if_stale": "block ads scale and strong profit",
+      "if_missing": "block ads scale and strong profit",
+      "if_unsupported": "block ads scale and strong profit",
+      "decision_gates_affected": ["canRecommendAdsScale", "canConcludeProfitStrongly"]
+    },
+    {
+      "sourceKey": "crm_leads",
+      "pack_relevance": ["director", "marketer", "data_quality", "mapping"],
+      "director_criticality": "critical",
+      "marketer_criticality": "critical",
+      "freshness_requirement": "<=120 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "lock sales-today and funnel conclusions",
+      "if_missing": "lock sales-today and funnel conclusions",
+      "if_unsupported": "lock sales-today and funnel conclusions",
+      "decision_gates_affected": ["canEvaluateSalesToday"]
+    },
+    {
+      "sourceKey": "orders",
+      "pack_relevance": ["director", "marketer", "data_quality", "mapping"],
+      "director_criticality": "critical",
+      "marketer_criticality": "critical",
+      "freshness_requirement": "<=60 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "block profit/conversion/operations strong conclusions",
+      "if_missing": "block profit/conversion/operations strong conclusions",
+      "if_unsupported": "block profit/conversion/operations strong conclusions",
+      "decision_gates_affected": ["canConcludeProfitStrongly"]
+    },
+    {
+      "sourceKey": "payments_or_order_payments",
+      "business_alias": "payments/order_payment_evidence",
+      "pack_relevance": ["director", "data_quality", "mapping"],
+      "director_criticality": "critical",
+      "marketer_criticality": "important",
+      "freshness_requirement": "<=120 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "cash-adjusted profit and payment conclusions become cautious",
+      "if_missing": "block cash-adjusted profit",
+      "if_unsupported": "block cash-adjusted profit",
+      "decision_gates_affected": ["canConcludeProfitStrongly", "canUseCashForBudgetIncrease"]
+    },
+    {
+      "sourceKey": "finance",
+      "pack_relevance": ["director", "data_quality"],
+      "director_criticality": "critical",
+      "marketer_criticality": "optional",
+      "freshness_requirement": "<=60 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "block budget increase and cash safety claims",
+      "if_missing": "block budget increase and cash safety claims",
+      "if_unsupported": "block budget increase and cash safety claims",
+      "decision_gates_affected": ["canUseCashForBudgetIncrease"]
+    },
+    {
+      "sourceKey": "loans_debt",
+      "pack_relevance": ["director", "data_quality"],
+      "director_criticality": "critical",
+      "marketer_criticality": "optional",
+      "freshness_requirement": "<=1440 minutes",
+      "coverage_requirement": "date_range_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "block debt-safe budget increase",
+      "if_missing": "block debt-safe budget increase",
+      "if_unsupported": "block debt-safe budget increase",
+      "decision_gates_affected": ["canUseCashForBudgetIncrease"]
+    },
+    {
+      "sourceKey": "product_mapping",
+      "pack_relevance": ["director", "marketer", "data_quality", "mapping"],
+      "director_criticality": "critical",
+      "marketer_criticality": "critical",
+      "freshness_requirement": "<=1440 minutes",
+      "coverage_requirement": "not_applicable",
+      "sync_method": "DB-only",
+      "if_stale": "lock ads scale, product ranking, LTV claims",
+      "if_missing": "lock ads scale, product ranking, LTV claims",
+      "if_unsupported": "lock ads scale, product ranking, LTV claims",
+      "decision_gates_affected": ["canRecommendAdsScale", "canUseLtvStrongly"]
+    },
+    {
+      "sourceKey": "operations",
+      "pack_relevance": ["director", "data_quality"],
+      "director_criticality": "important",
+      "marketer_criticality": "optional",
+      "freshness_requirement": "<=120 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "operations/SLA conclusions become cautious",
+      "if_missing": "block operations/SLA strong conclusions",
+      "if_unsupported": "block operations/SLA strong conclusions",
+      "decision_gates_affected": ["operations_capacity_claims"]
+    },
+    {
+      "sourceKey": "decision_history",
+      "pack_relevance": ["director", "data_quality", "decision_history"],
+      "director_criticality": "important",
+      "marketer_criticality": "optional",
+      "freshness_requirement": "<=1440 minutes",
+      "coverage_requirement": "report_date_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "learning and rollback claims become cautious",
+      "if_missing": "no strong learning conclusion",
+      "if_unsupported": "no strong learning conclusion",
+      "decision_gates_affected": ["decision_learning_claims"]
+    },
+    {
+      "sourceKey": "supplier_settlement",
+      "pack_relevance": ["director", "data_quality", "mapping"],
+      "director_criticality": "important",
+      "marketer_criticality": "optional",
+      "policy_note": "Exact supplier settlement criticality remains Director/BA policy-pending.",
+      "freshness_requirement": "<=1440 minutes",
+      "coverage_requirement": "date_range_count covered",
+      "sync_method": "DB-only",
+      "if_stale": "supplier allocation and cash-adjusted profit become cautious",
+      "if_missing": "block supplier/cash-adjusted strong claims",
+      "if_unsupported": "block supplier/cash-adjusted strong claims",
+      "decision_gates_affected": ["canConcludeProfitStrongly", "supplier_allocation_claims"]
+    },
+    {
+      "sourceKey": "customer_referral",
+      "pack_relevance": ["director", "marketer", "data_quality", "mapping"],
+      "director_criticality": "optional",
+      "marketer_criticality": "important",
+      "freshness_requirement": "unsupported until durable referral source exists",
+      "coverage_requirement": "unsupported",
+      "sync_method": "none",
+      "if_stale": "not applicable until supported",
+      "if_missing": "block LTV/referral-adjusted strong claims",
+      "if_unsupported": "block LTV/referral-adjusted strong claims",
+      "decision_gates_affected": ["canUseLtvStrongly"]
+    },
+    {
+      "sourceKey": "external_market",
+      "pack_relevance": ["director", "marketer"],
+      "director_criticality": "optional",
+      "marketer_criticality": "optional",
+      "freshness_requirement": "unsupported until external source is defined",
+      "coverage_requirement": "unsupported",
+      "sync_method": "none",
+      "if_stale": "not applicable until supported",
+      "if_missing": "market conclusion must be research-only",
+      "if_unsupported": "market conclusion must be research-only",
+      "decision_gates_affected": ["market_opportunity_claims"]
+    },
+    {
+      "sourceKey": "employee_activity_payroll",
+      "pack_relevance": ["director", "data_quality", "mapping"],
+      "director_criticality": "unsupported",
+      "marketer_criticality": "unsupported",
+      "policy_note": "Sensitive section RBAC is required if this source becomes supported later.",
+      "freshness_requirement": "unsupported until unified attendance/work/payroll source exists",
+      "coverage_requirement": "unsupported",
+      "sync_method": "none",
+      "if_stale": "not applicable until supported",
+      "if_missing": "block employee ranking/payroll integrity claims",
+      "if_unsupported": "block employee ranking/payroll integrity claims",
+      "decision_gates_affected": ["canRankEmployeesStrongly"]
+    }
+  ],
+  "freshness_coverage_policy": [
+    {
+      "term": "freshnessStatus",
+      "values": ["fresh", "stale", "missing", "not_configured", "unsupported", "unknown"],
+      "rule": "freshness describes source recency only."
+    },
+    {
+      "term": "coverageStatus",
+      "values": ["covered", "no_records_for_report_date", "missing", "not_applicable", "unsupported", "unknown"],
+      "rule": "coverage describes report-date or date-range evidence and is separate from freshness."
+    },
+    {
+      "term": "sourceImpactStatus",
+      "values": ["fresh_covered", "no_records_for_report_date", "not_synced", "not_configured", "unsupported", "stale", "partial", "weak_mapping", "estimated", "realized"],
+      "rule": "source impact must preserve why a source cannot support a decision."
+    },
+    {
+      "term": "dataQualityStatus",
+      "values": ["ok", "partial", "weak", "missing", "stale", "estimated", "realized"],
+      "rule": "quality status must not convert estimated or partial data into realized fact."
+    },
+    {
+      "term": "decisionGateImpact",
+      "rule": "Provider success is not freshness. Post-sync DB-only assessment controls gates. Fresh timestamp plus no_records_for_report_date is not verified zero."
+    }
+  ],
+  "decision_gates": [
+    {
+      "gate": "canGenerateActionDraft",
+      "current_pr_value": true,
+      "policy": "May be true for safe draft/recommendation output only when metadata, warnings, and redaction are present."
+    },
+    {
+      "gate": "canImportActionFile",
+      "current_pr_value": false,
+      "policy": "Must remain false in PR-2.3B official/partial/cached export."
+    },
+    {
+      "gate": "canDryRun",
+      "current_pr_value": false,
+      "policy": "Must remain false in PR-2.3B official/partial/cached export."
+    },
+    {
+      "gate": "canExecuteLive",
+      "current_pr_value": false,
+      "policy": "Must remain false in PR-2.3B official/partial/cached export."
+    },
+    {
+      "gate": "canRecommendAdsScale",
+      "requires": ["google_ads", "advertising_costs", "product_mapping"],
+      "policy": "All required sources must be fresh_covered; budget increase also requires finance/debt/payment gates."
+    },
+    {
+      "gate": "canConcludeProfitStrongly",
+      "requires": ["orders", "payments_or_order_payments", "advertising_costs", "product_mapping"],
+      "policy": "Dropship cash-adjusted profit also requires supplier settlement policy to pass."
+    },
+    {
+      "gate": "canUseLtvStrongly",
+      "requires": ["customer_referral", "product_mapping"],
+      "policy": "False until referral source and customer/order mapping are supported and fresh."
+    },
+    {
+      "gate": "canRankEmployeesStrongly",
+      "requires": ["employee_activity_payroll"],
+      "policy": "False until source exists, is fresh/covered, and sensitive-section RBAC is granted."
+    },
+    {
+      "gate": "canUseCashForBudgetIncrease",
+      "requires": ["finance", "loans_debt", "payments_or_order_payments"],
+      "policy": "Requires Director-visible finance permission and fresh/covered cash/debt/payment evidence."
+    }
+  ],
+  "rbac_policy": [
+    {
+      "question": "Who can create official export?",
+      "answer": "Director or explicitly delegated internal service with ai-data-pack.export.official.create."
+    },
+    {
+      "question": "Who can create partial export?",
+      "answer": "Director, or reviewer/manager only with ai-data-pack.export.partial.create and redaction profile."
+    },
+    {
+      "question": "Who can view sync detail?",
+      "answer": "Users with ai-data-pack.export.sync-detail.read; details must be sanitized."
+    },
+    {
+      "question": "Who can download artifact?",
+      "answer": "Requester, Director, or users with ai-data-pack.export.artifact.download, subject to section redaction."
+    },
+    {
+      "question": "Who can view sensitive finance/supplier/employee/payroll fields?",
+      "answer": "Only users with section-specific permissions."
+    },
+    {
+      "question": "Is section-level RBAC required?",
+      "answer": "Yes."
+    },
+    {
+      "question": "Can investor read full Director Pack?",
+      "answer": "No by default; provide a redacted investor profile."
+    }
+  ],
+  "lifecycle_policy": [
+    {
+      "mode": "cached_export",
+      "allowed_transitions": ["requested->snapshotting", "snapshotting->exporting", "exporting->completed", "requested->failed", "requested->expired"],
+      "failure_behavior": "failed for render/storage errors; expired for stale unstarted request",
+      "reuse_idempotency": "reportDate+packTypes+formats+requester+policyVersion+mode+redactionProfile",
+      "audit_fields": ["exportMode", "syncPolicy", "cachedExport", "requestedBy", "policyVersion", "checksums"]
+    },
+    {
+      "mode": "official_export",
+      "allowed_transitions": ["requested->pre_assessing", "pre_assessing->syncing_sources", "pre_assessing->post_assessing", "syncing_sources->post_assessing", "post_assessing->snapshotting", "snapshotting->exporting", "exporting->completed", "post_assessing->blocked", "any_non_terminal->failed", "requested->expired"],
+      "failure_behavior": "blocked for policy/freshness failures; failed for system errors",
+      "reuse_idempotency": "mode+reportDate+packTypes+formats+requester+policyVersion+sourceScope+redactionProfile",
+      "audit_fields": ["preAssessment", "adapterDecisions", "postAssessment", "decisionGates", "blockingReasons", "snapshotId", "artifactManifest"]
+    },
+    {
+      "mode": "partial_export",
+      "allowed_transitions": ["requested->pre_assessing", "pre_assessing->syncing_sources", "pre_assessing->post_assessing", "syncing_sources->post_assessing", "post_assessing->snapshotting", "snapshotting->exporting", "exporting->completed_with_warnings", "post_assessing->blocked_for_security_or_rbac", "any_non_terminal->failed", "requested->expired"],
+      "failure_behavior": "completed_with_warnings for data weakness; blocked only for security/RBAC/artifact safety failures",
+      "reuse_idempotency": "mode+reportDate+packTypes+formats+requester+policyVersion+sourceScope+redactionProfile",
+      "audit_fields": ["warnings", "sourceImpact", "lockedDecisionGates", "snapshotId", "artifactManifest"]
+    }
+  ],
+  "artifact_policy": [
+    {
+      "field": "snapshot_point",
+      "rule": "After post-assessment and before export rendering."
+    },
+    {
+      "field": "data_content_checksum",
+      "rule": "Deterministic checksum of business data excluding runtime-only export metadata."
+    },
+    {
+      "field": "runtime_export_checksum",
+      "rule": "Checksum including runtime metadata such as job ID and export timestamp."
+    },
+    {
+      "field": "artifact_checksum",
+      "rule": "Checksum of the generated artifact bytes."
+    },
+    {
+      "field": "manifest",
+      "rule": "Includes files, pack types, format, row counts, source metadata, warnings, blocking reasons, checksums."
+    },
+    {
+      "field": "contains_pii",
+      "rule": "Boolean plus section-level indicators."
+    },
+    {
+      "field": "redaction_level",
+      "rule": "internal_full, director, manager_redacted, investor_redacted, external_redacted."
+    },
+    {
+      "field": "retention_policy",
+      "rule": "Recommended defaults: official 90 days, partial 30 days, cached 7 days, configurable before implementation."
+    },
+    {
+      "field": "download_expiry",
+      "rule": "Short-lived links, recommended 15 minutes."
+    }
+  ],
+  "chatgpt_web_behavior": [
+    "Must know export mode: official, partial, or cached.",
+    "Must know stale, missing, not_configured, unsupported, and no_records_for_report_date source states.",
+    "Must know which decision gates are locked.",
+    "Must not invent numbers or treat partial as full.",
+    "Must distinguish estimated, realized, expected, confirmed, and received cash.",
+    "May create safe action draft only.",
+    "Must not create executable action, provider mutation, dry-run request, payroll change, supplier penalty, or live ads change."
+  ],
+  "future_tests": [
+    "official export blocks when critical source stale and sync fails",
+    "partial export completes with warnings",
+    "cached export never syncs",
+    "Google Ads sync policy uses adapter only under policy",
+    "post-sync DB-only assessment controls gates",
+    "public endpoint RBAC denies unauthorized",
+    "artifact download requires permission",
+    "section-level redaction works",
+    "no action/import/dry-run/live opened",
+    "no provider mutation",
+    "no false zero"
+  ],
+  "risks_and_open_questions": [
+    "Director/BA must approve exact freshness thresholds and downgrade policy.",
+    "Supplier settlement criticality remains policy-pending.",
+    "Investor redaction profile needs explicit business approval.",
+    "Retention defaults need legal/business approval before implementation.",
+    "Customer scope discovery for Google Ads is not defined in this policy.",
+    "Employee/payroll source remains unsupported and sensitive.",
+    "Public endpoint design may require a separate RBAC/artifact spec before lifecycle implementation."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "do_not_create_prompt12": true,
+    "recommended_next_if_policy_accepted": "PR-2.3B-4B - Official/Partial Export Lifecycle Implementation, internal only",
+    "recommended_next_if_rbac_public_surface_unclear": "PR-2.3B-4B - RBAC/Artifact/Download Technical Spec, no code",
+    "do_not_jump_to": ["OpenAI/upload", "action import", "approval workflow", "dry-run", "live execution", "Phase 3"]
+  }
+}

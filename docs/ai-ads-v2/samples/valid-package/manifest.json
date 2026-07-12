@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "2.0",
+  "planId": "PLAN-20260612-001",
+  "sourceExportId": "EXP-20260612-001",
+  "generatedAt": "2026-06-12T10:00:00+07:00",
+  "generator": "chatgpt-web",
+  "targetProvider": "google",
+  "currency": "VND",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "executionMode": "pending_approval",
+  "hashes": {
+    "action_plan.json": "7409d72b2c2b13aef8181e51aaee8e67dcf9a56355971481ee182764ab25decc",
+    "executive_summary.md": "dece7263304b76b34b5b9fa2bbbdaa2d50324995c316991c71c14bb8611624fb",
+    "human_review_checklist.md": "bd170273fec6d0b478038096a02a9bd14d403e69868a8f86844b2029c62c1957",
+    "creative_variants.csv": "b6ea5dc215011b08c5f30259edf1b2b833ba13ab348dd4f487ce74453e5b4ed0",
+    "keyword_plan.csv": "652d97d09193a7ad44a35b31a5f03654ecfe993d3e36dfefe421b0ae60d1e726",
+    "validation_rules.json": "b84c7ad4df77528989ce828b3b7666d84db9987defce6a929503cabbfa15c92f",
+    "risk_register.md": "34c79cc92e40b39132442041b92896179a831dacb63bc44c9816747a9a82996a",
+    "rollback_plan.md": "4f126cb7e1b02e2136dd24323038458ec1587229f0250f8ad8ad4971838c1bc6"
+  }
+}

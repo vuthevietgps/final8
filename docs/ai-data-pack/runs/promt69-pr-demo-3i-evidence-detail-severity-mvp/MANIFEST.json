@@ -1,0 +1,55 @@
+{
+  "prompt": "Prompt69 / PR-DEMO-3I",
+  "packet_name": "evidence_detail_and_severity_report_mvp_readonly_implementation",
+  "status": "implemented_readonly_mvp",
+  "generated_date": "2026-06-15",
+  "workspace_root": "C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16",
+  "run_dir": "C:/Users/PC/Documents/code/htxbachgia.shop/final8-version16/docs/ai-data-pack/runs/promt69-pr-demo-3i-evidence-detail-severity-mvp",
+  "output_files": [
+    "MANIFEST.json",
+    "RESULT.md",
+    "IMPLEMENTATION_SUMMARY.md",
+    "REVIEW_PACKET.md"
+  ],
+  "code_changed": true,
+  "production_db_used": false,
+  "db_read_or_write_added": false,
+  "provider_or_api_call_added": false,
+  "action_or_mutation_added": false,
+  "xlsx_exporter_changed": false,
+  "canonical_director_path": "sections[\"16_operation_capacity\"].data.operation_capacity.operational_risk_findings",
+  "canonical_finding_keys": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "changed_files": [
+    "backend/src/ai-data-pack/evidence-detail/evidence-detail.contract.ts",
+    "backend/src/ai-data-pack/evidence-detail/evidence-detail.helper.ts",
+    "backend/src/ai-data-pack/evidence-detail/evidence-detail.helper.spec.ts",
+    "backend/src/ai-data-pack/severity-scoring/severity-scoring.contract.ts",
+    "backend/src/ai-data-pack/severity-scoring/severity-scoring.helper.ts",
+    "backend/src/ai-data-pack/severity-scoring/severity-scoring.helper.spec.ts",
+    "backend/src/ai-data-pack/queries/operations-capacity.query.ts",
+    "backend/src/ai-data-pack/ai-data-pack.service.spec.ts"
+  ],
+  "verification": {
+    "tests": {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts src/ai-data-pack/evidence-detail/evidence-detail.helper.spec.ts src/ai-data-pack/severity-scoring/severity-scoring.helper.spec.ts src/ai-data-pack/source-freshness/source-freshness.helper.spec.ts src/ai-data-pack/threshold-registry/threshold-source.resolver.spec.ts --runInBand",
+      "status": "passed",
+      "test_suites": 5,
+      "tests": 61
+    },
+    "build": {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    "static_scans": {
+      "full_repo_scan_status": "completed_with_pre_existing_matches",
+      "changed_scope_status": "no new provider/db-write/secret branch detected",
+      "classification": "Full-scope matches are pre-existing ads/provider/token/write modules or ai-data-pack guard strings. Prompt69 changed scope only contains read-only not_allowed_actions guard text, existing ai-data-pack safety tests, and redaction tests."
+    }
+  }
+}

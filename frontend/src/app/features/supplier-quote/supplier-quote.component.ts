@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ProductService } from '../product/product.service';
 import { SupplierService, Supplier } from '../supplier/supplier.service';
 import { SupplierQuoteApi, SupplierQuote } from './supplier-quote.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-supplier-quote',
@@ -29,14 +30,17 @@ export class SupplierQuoteComponent implements OnInit {
 
   filterProduct = signal<string>('');
   filterSupplier = signal<string>('');
+  filterApprovalStatus = signal<'' | 'pending' | 'approved' | 'rejected'>('');
 
   isSubmitting = signal(false);
+  actionQuoteId = signal<string | null>(null);
   error = signal<string | null>(null);
 
   constructor(
     private productService: ProductService,
     private supplierService: SupplierService,
     private api: SupplierQuoteApi,
+    private authService: AuthService,
   ) {}
 
   ngOnInit(): void {
@@ -56,7 +60,12 @@ export class SupplierQuoteComponent implements OnInit {
   }
 
   refresh(): void {
-    this.api.list({ productId: this.filterProduct() || undefined, supplierId: this.filterSupplier() || undefined, limit: 100 }).subscribe({
+    this.api.list({
+      productId: this.filterProduct() || undefined,
+      supplierId: this.filterSupplier() || undefined,
+      approvalStatus: this.filterApprovalStatus() || undefined,
+      limit: 100,
+    }).subscribe({
       next: (res) => this.quotes.set(res.data || []),
       error: (e) => { console.error(e); this.error.set('Không thể tải báo giá'); }
     });
@@ -103,5 +112,109 @@ export class SupplierQuoteComponent implements OnInit {
   productName(id: string): string {
     const p = this.products().find(x => x._id === id);
     return p?.name || id;
+  }
+
+  canApprove(): boolean {
+    return this.authService.hasPermission('supplier-quotes.approve');
+  }
+
+  hasTrustedProvenance(quote: SupplierQuote): boolean {
+    return quote.provenanceComplete === true
+      || (!!quote.createdBy && !!quote.lastCommercialEditedBy);
+  }
+
+  isMakerOrEditor(quote: SupplierQuote): boolean {
+    const userId = this.authService.user()?.id;
+    return !!userId && (userId === quote.createdBy || userId === quote.lastCommercialEditedBy);
+  }
+
+  canDecideQuote(quote: SupplierQuote): boolean {
+    return this.canApprove() && this.hasTrustedProvenance(quote) && !this.isMakerOrEditor(quote);
+  }
+
+  decisionBlockReason(quote: SupplierQuote): string {
+    if (!this.hasTrustedProvenance(quote)) {
+      return 'Báo giá cũ thiếu provenance: một người cần nhận bàn giao, sau đó người khác duyệt.';
+    }
+    if (this.isMakerOrEditor(quote)) {
+      return 'Người tạo/chỉnh điều khoản gần nhất không được tự duyệt hoặc từ chối.';
+    }
+    return '';
+  }
+
+  approvalStatus(quote: SupplierQuote): 'pending' | 'approved' | 'rejected' {
+    return quote.approvalStatus === 'approved' || quote.approvalStatus === 'rejected'
+      ? quote.approvalStatus
+      : 'pending';
+  }
+
+  approvalLabel(quote: SupplierQuote): string {
+    const labels = {
+      pending: 'Chờ duyệt',
+      approved: 'Đã duyệt',
+      rejected: 'Từ chối',
+    } as const;
+    return labels[this.approvalStatus(quote)];
+  }
+
+  lastDecisionActor(quote: SupplierQuote): string {
+    const history = quote.approvalHistory || [];
+    return history.length ? history[history.length - 1].actorLabel || '' : '';
+  }
+
+  approveQuote(quote: SupplierQuote): void {
+    if (!quote._id || !this.canDecideQuote(quote) || this.actionQuoteId()) return;
+    if (!confirm('Duyệt báo giá này để cho phép sử dụng trong nghiệp vụ?')) return;
+    this.actionQuoteId.set(quote._id);
+    this.error.set(null);
+    this.api.approve(quote._id).subscribe({
+      next: (updated) => {
+        this.replaceQuote(updated);
+        this.actionQuoteId.set(null);
+      },
+      error: (e) => {
+        this.error.set(e?.error?.message || 'Không thể duyệt báo giá');
+        this.actionQuoteId.set(null);
+      },
+    });
+  }
+
+  rejectQuote(quote: SupplierQuote): void {
+    if (!quote._id || !this.canDecideQuote(quote) || this.actionQuoteId()) return;
+    const reason = window.prompt('Nhập lý do từ chối báo giá:')?.trim();
+    if (!reason) return;
+    this.actionQuoteId.set(quote._id);
+    this.error.set(null);
+    this.api.reject(quote._id, reason).subscribe({
+      next: (updated) => {
+        this.replaceQuote(updated);
+        this.actionQuoteId.set(null);
+      },
+      error: (e) => {
+        this.error.set(e?.error?.message || 'Không thể từ chối báo giá');
+        this.actionQuoteId.set(null);
+      },
+    });
+  }
+
+  claimProvenance(quote: SupplierQuote): void {
+    if (!quote._id || this.hasTrustedProvenance(quote) || this.actionQuoteId()) return;
+    if (!confirm('Nhận bàn giao provenance cho báo giá cũ? Sau thao tác này phải có người khác duyệt.')) return;
+    this.actionQuoteId.set(quote._id);
+    this.error.set(null);
+    this.api.claimProvenance(quote._id).subscribe({
+      next: (updated) => {
+        this.replaceQuote(updated);
+        this.actionQuoteId.set(null);
+      },
+      error: (e) => {
+        this.error.set(e?.error?.message || 'Không thể nhận bàn giao provenance');
+        this.actionQuoteId.set(null);
+      },
+    });
+  }
+
+  private replaceQuote(updated: SupplierQuote): void {
+    this.quotes.update((items) => items.map((item) => item._id === updated._id ? updated : item));
   }
 }

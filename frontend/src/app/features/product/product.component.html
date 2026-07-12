@@ -78,7 +78,7 @@
           <th>Danh Mục</th>
           <th>Nhà Cung Cấp</th>
           <th>Hạn S.Dụng</th>
-          <th>X Ho�n (%)</th>
+          <th>X Hoàn (%)</th>
           <th>Trạng Thái</th>
           <th></th>
         </tr>
@@ -189,7 +189,7 @@
             type="number"
             id="usageDurationMonths"
             min="1"
-            [value]="formData().usageDurationMonths || 1"
+            [value]="formData().usageDurationMonths || 12"
             (input)="onInputChange('usageDurationMonths', $event)"
             placeholder="Ví dụ: 12"
           />
@@ -207,6 +207,41 @@
             (input)="onInputChange('assumedReturnRatePercent', $event)"
             placeholder="Ví dụ: 20"
           />
+        </div>
+
+        <div class="form-group">
+          <label for="importPrice">Giá nhập (VND)</label>
+          <input type="number" id="importPrice" min="0" step="1000"
+            [value]="formData().importPrice ?? 0"
+            (input)="onInputChange('importPrice', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="shippingCost">Phí vận chuyển nhập (VND)</label>
+          <input type="number" id="shippingCost" min="0" step="1000"
+            [value]="formData().shippingCost ?? 0"
+            (input)="onInputChange('shippingCost', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="packagingCost">Phí đóng gói (VND)</label>
+          <input type="number" id="packagingCost" min="0" step="1000"
+            [value]="formData().packagingCost ?? 0"
+            (input)="onInputChange('packagingCost', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="minStock">Tồn kho tối thiểu</label>
+          <input type="number" id="minStock" min="0" step="1"
+            [value]="formData().minStock ?? 0"
+            (input)="onInputChange('minStock', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="maxStock">Tồn kho tối đa</label>
+          <input type="number" id="maxStock" min="0" step="1"
+            [value]="formData().maxStock ?? 0"
+            (input)="onInputChange('maxStock', $event)" />
         </div>
 
         <div class="form-group">
@@ -232,6 +267,18 @@
       </div>
 
       <div class="form-grid full-width">
+        <div class="form-group">
+          <label for="resourceLink">Link tài nguyên sản phẩm</label>
+          <input type="url" id="resourceLink"
+            [value]="formData().resourceLink || ''"
+            (input)="onInputChange('resourceLink', $event)" />
+        </div>
+        <div class="form-group">
+          <label for="notes">Ghi chú vận hành</label>
+          <textarea id="notes" rows="3"
+            [value]="formData().notes || ''"
+            (input)="onInputChange('notes', $event)"></textarea>
+        </div>
         <div class="form-group">
           <label>Nhà Cung Cấp</label>
           <div class="supplier-list">
@@ -316,7 +363,7 @@
             type="number"
             id="edit-usageDurationMonths"
             min="1"
-            [value]="formData().usageDurationMonths || 1"
+            [value]="formData().usageDurationMonths || 12"
             (input)="onInputChange('usageDurationMonths', $event)"
             placeholder="Ví dụ: 12"
           />
@@ -334,6 +381,41 @@
             (input)="onInputChange('assumedReturnRatePercent', $event)"
             placeholder="Ví dụ: 20"
           />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-importPrice">Giá nhập (VND)</label>
+          <input type="number" id="edit-importPrice" min="0" step="1000"
+            [value]="formData().importPrice ?? 0"
+            (input)="onInputChange('importPrice', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-shippingCost">Phí vận chuyển nhập (VND)</label>
+          <input type="number" id="edit-shippingCost" min="0" step="1000"
+            [value]="formData().shippingCost ?? 0"
+            (input)="onInputChange('shippingCost', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-packagingCost">Phí đóng gói (VND)</label>
+          <input type="number" id="edit-packagingCost" min="0" step="1000"
+            [value]="formData().packagingCost ?? 0"
+            (input)="onInputChange('packagingCost', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-minStock">Tồn kho tối thiểu</label>
+          <input type="number" id="edit-minStock" min="0" step="1"
+            [value]="formData().minStock ?? 0"
+            (input)="onInputChange('minStock', $event)" />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-maxStock">Tồn kho tối đa</label>
+          <input type="number" id="edit-maxStock" min="0" step="1"
+            [value]="formData().maxStock ?? 0"
+            (input)="onInputChange('maxStock', $event)" />
         </div>
 
         <div class="form-group">
@@ -359,6 +441,18 @@
       </div>
 
       <div class="form-grid full-width">
+        <div class="form-group">
+          <label for="edit-resourceLink">Link tài nguyên sản phẩm</label>
+          <input type="url" id="edit-resourceLink"
+            [value]="formData().resourceLink || ''"
+            (input)="onInputChange('resourceLink', $event)" />
+        </div>
+        <div class="form-group">
+          <label for="edit-notes">Ghi chú vận hành</label>
+          <textarea id="edit-notes" rows="3"
+            [value]="formData().notes || ''"
+            (input)="onInputChange('notes', $event)"></textarea>
+        </div>
         <div class="form-group">
           <label>Nhà Cung Cấp</label>
           <div class="supplier-list">

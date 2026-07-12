@@ -21,7 +21,7 @@ dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
 
 const MONGODB_URI =
   process.env.MONGODB_URI ||
-  'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev';
+  process.env.MONGODB_URI;
 
 // Mapping từ trạng thái cũ sang trạng thái chuẩn
 const STATUS_MAPPING: Record<string, string> = {

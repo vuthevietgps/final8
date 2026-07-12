@@ -5,6 +5,7 @@ import { TestOrder2Service } from './test-order2.service';
 import { OrderCalculationService } from './services/order-calculation.service';
 import { OrderPaymentService } from './services/order-payment.service';
 import { OrderReportService } from './services/order-report.service';
+import { OrderCronService } from './services/order-cron.service';
 import { TestOrder2ExportService } from './test-order2-export.service';
 import { TestOrder2ExportJsonService } from './test-order2-export-json.service';
 import { TestOrder2ImportService } from './test-order2-import.service';
@@ -36,6 +37,7 @@ import { DeliveryStatusModule } from '../delivery-status/delivery-status.module'
     OrderCalculationService,
     OrderPaymentService,
     OrderReportService,
+    OrderCronService,
     TestOrder2Service,
     TestOrder2ExportService,
     TestOrder2ExportJsonService,

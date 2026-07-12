@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 SSH_USER="${SSH_USER:-admin-001}"
-SSH_HOST="${SSH_HOST:-192.168.100.237}"
+SSH_HOST="${SSH_HOST:-htxbachgia.shop}"
 SSH_PORT="${SSH_PORT:-22}"
 TARGET="${SSH_USER}@${SSH_HOST}"
 

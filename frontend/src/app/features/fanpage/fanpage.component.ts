@@ -6,7 +6,7 @@
 import { Component, OnInit, OnDestroy, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FanpageService, Fanpage, CreateFanpageRequest } from './fanpage.service';
+import { FanpageService, Fanpage, CreateFanpageRequest, FanpageSyncResponse } from './fanpage.service';
 import { OpenAIConfigService, OpenAIConfig } from '../openai-config/openai-config.service';
 import { ProductService } from '../product/product.service';
 import { ApiTokenService, ApiToken } from '../api-token/api-token.service';
@@ -31,6 +31,8 @@ interface ProductVariation {
   customImages?: string[];
 }
 
+type FanpageTab = 'management' | 'token-guide';
+
 @Component({
   selector: 'app-fanpage',
   standalone: true,
@@ -45,9 +47,11 @@ export class FanpageComponent implements OnInit, OnDestroy {
   private apiTokenService = inject(ApiTokenService);
 
   // State signals
+  activeTab = signal<FanpageTab>('management');
   fanpages = signal<Fanpage[]>([]);
   loading = signal(false);
   error = signal<string | null>(null);
+  success = signal<string | null>(null);
   showAddModal = signal(false);
   editingFanpage = signal<Fanpage | null>(null);
 
@@ -79,6 +83,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
   // Token states
   tokens = signal<ApiToken[]>([]);
   tokenLoading = signal(false);
+  syncingSystemToken = signal(false);
   validatingTokenFor = signal<string | null>(null); // fanpageId currently validating
   testingTokenFor = signal<string | null>(null); // fanpageId currently testing access token
   accessTokenStatuses = signal<Map<string, {status: string, detail?: string, lastTested?: Date}>>(new Map());
@@ -94,11 +99,13 @@ export class FanpageComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(){
-    this.load(); this.loadAIConfigs();
+    this.load();
+    this.loadAIConfigs();
+    this.loadTokens();
     // Refresh token list every 120s only when tab is visible to reduce load
     this.tokenRefreshTimer = setInterval(() => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-
+        this.loadTokens();
       }
     }, 120000);
 
@@ -120,6 +127,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
     this.service.list().subscribe({
       next: data => {
         this.fanpages.set(data);
+        this.loadTokens();
         this.loading.set(false);
       },
       error: err => {
@@ -177,6 +185,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
   saveFanpage(){
     const raw = this.formData();
     const data: any = this.buildPayload(raw);
+    const editing = this.editingFanpage();
     
     // Validation
     if (!data.pageId?.trim()) {
@@ -187,13 +196,17 @@ export class FanpageComponent implements OnInit, OnDestroy {
       alert('Vui lòng nhập tên fanpage');
       return;
     }
-    if (!data.accessToken?.trim()) {
-      alert('Vui lòng nhập Access Token');
+    const tokenInput = String(data.accessToken || '').trim();
+    if (!tokenInput) delete data.accessToken;
+    if (!editing && this.isMaskedToken(tokenInput)) {
+      alert('Access Token đang ở dạng che (****). Vui lòng dán token thật khi tạo thủ công.');
       return;
     }
-
-    const editing = this.editingFanpage();
     if (editing) {
+      // Keep current token if user leaves field empty or unchanged (masked value).
+      if (!tokenInput || this.isMaskedToken(tokenInput)) {
+        delete data.accessToken;
+      }
       // Cập nhật fanpage existing
       this.service.update(editing._id, data).subscribe({
         next: updated => {
@@ -248,9 +261,21 @@ export class FanpageComponent implements OnInit, OnDestroy {
   private buildPayload(src: any){
     if(!src) return {};
   const allowed = ['pageId','name','accessToken','status','avatarUrl','connectedBy','defaultProductGroup','description','messageQuota','subscriberCount','sentThisMonth','aiEnabled','subscribedWebhook','timezone','openAIConfigId'];
+    const objectIdFields = new Set(['connectedBy', 'defaultProductGroup', 'openAIConfigId']);
     const out: any = {};
-    for(const k of allowed){ if(src[k] !== undefined && src[k] !== null) out[k]=src[k]; }
+    for(const k of allowed){
+      const v = src[k];
+      if(v === undefined || v === null) continue;
+      if (objectIdFields.has(k) && typeof v === 'string' && !v.trim()) continue;
+      out[k]=v;
+    }
     return out;
+  }
+
+  private isMaskedToken(value?: string): boolean {
+    const token = String(value || '').trim();
+    if (!token) return false;
+    return /^\*{4,}[^*]{0,8}$/.test(token);
   }
 
   /**
@@ -310,7 +335,8 @@ export class FanpageComponent implements OnInit, OnDestroy {
     } else if (error?.error?.message) {
       errorMessage = error.error.message;
     }
-    
+
+    this.success.set(null);
     this.error.set(errorMessage);
     console.error('Fanpage API Error:', error);
   }
@@ -346,9 +372,64 @@ export class FanpageComponent implements OnInit, OnDestroy {
     this.updateFormField(field, target.checked);
   }
 
+  setActiveTab(tab: FanpageTab) {
+    this.activeTab.set(tab);
+    if (tab === 'management' && this.fanpages().length === 0 && !this.loading()) {
+      this.load();
+    }
+    if (tab === 'management') {
+      this.loadTokens();
+    }
+  }
+
   trackById(index: number, item: Fanpage){ return item._id; }
 
   // ======== TOKEN HELPERS ========
+  private loadTokens(){
+    this.tokenLoading.set(true);
+    this.apiTokenService.list().subscribe({
+      next: list => {
+        this.tokens.set(list.filter(t => t.provider === 'facebook'));
+        this.tokenLoading.set(false);
+      },
+      error: _ => { this.tokenLoading.set(false); }
+    });
+  }
+
+  syncFromSystemToken(){
+    if (this.syncingSystemToken()) return;
+    this.syncingSystemToken.set(true);
+    this.error.set(null);
+    this.success.set(null);
+    this.service.syncFromMeta().subscribe({
+      next: (result: FanpageSyncResponse) => {
+        this.syncingSystemToken.set(false);
+        this.success.set(this.buildSyncSuccessMessage(result));
+        this.load();
+        this.loadTokens();
+      },
+      error: err => {
+        this.syncingSystemToken.set(false);
+        this.handleError(err, 'Đồng bộ từ System Token thất bại');
+      }
+    });
+  }
+
+  private buildSyncSuccessMessage(result: FanpageSyncResponse): string {
+    const summary = result.data;
+    const base = `Dong bo thanh cong. Tim thay ${summary.total} trang (Moi: ${summary.inserted}, Cap nhat: ${summary.updated}). Webhook OK: ${summary.webhookSubscribed}`;
+    if (!summary.webhookFailed) {
+      return `${base}.`;
+    }
+
+    const failedPages = (result.errors || [])
+      .slice(0, 2)
+      .map((item) => item.name || item.pageId)
+      .join(', ');
+
+    return `${base}, that bai: ${summary.webhookFailed}${failedPages ? ` (${failedPages})` : ''}.`;
+  }
+
   private tokensForFanpage(fanpageId: string){ return this.tokens().filter(t => t.fanpageId === fanpageId); }
   hasApiTokens(fanpageId: string){ return this.tokensForFanpage(fanpageId).length > 0; }
   hasFanpageAccessToken(fp: Fanpage){ return !!fp.accessToken; }
@@ -369,7 +450,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
   }
   checkToken(f: Fanpage){
     const t = this.getPrimaryToken(f._id);
-    if(!t) { alert('Fanpage chưa có API Token. Vào mục API & Token để thêm.'); return; }
+    if(!t) { alert('Fanpage chưa có Ads/Page Access Token. Vào mục Ads API Tokens để thêm.'); return; }
     this.validatingTokenFor.set(f._id);
     this.apiTokenService.validate(t._id).subscribe({
       next: updated => {
@@ -647,7 +728,7 @@ export class FanpageComponent implements OnInit, OnDestroy {
     this.formData.set({
       pageId: fanpage.pageId,
       name: fanpage.name,
-      accessToken: fanpage.accessToken,
+      accessToken: '',
       status: fanpage.status,
       avatarUrl: fanpage.avatarUrl,
       description: fanpage.description,

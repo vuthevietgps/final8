@@ -4,7 +4,7 @@
 
 const { MongoClient, ObjectId } = require('mongodb');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 async function createTestWithProductCost() {
   const client = new MongoClient(MONGODB_URI);

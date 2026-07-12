@@ -1,0 +1,27 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="40" fill="#FFF7FA"/>
+  <rect x="40" y="40" width="1120" height="640" rx="32" fill="#FFFCFD" stroke="#F3D9E2" stroke-width="2"/>
+  <text x="88" y="118" fill="#9D174D" font-family="Segoe UI, Arial, sans-serif" font-size="46" font-weight="700">Incident escalation map</text>
+  <text x="88" y="160" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22">Khong om tat ca mot minh. Escalate dung luc de bao ve toc do cua doi.</text>
+  <rect x="88" y="224" width="1024" height="118" rx="28" fill="#FFF1F2"/>
+  <rect x="88" y="372" width="1024" height="118" rx="28" fill="#FEF3C7"/>
+  <rect x="88" y="520" width="1024" height="118" rx="28" fill="#DBEAFE"/>
+  <text x="130" y="292" fill="#9D174D" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Tang 1 - Nhan vien xu ly</text>
+  <text x="130" y="324" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Dung checklist chuan neu rui ro thap va khong anh huong KPI / SLA lon.</text>
+  <text x="130" y="440" fill="#92400E" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Tang 2 - Manager vao cuoc</text>
+  <text x="130" y="472" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Can thiep khi co nguy co lang phi ngan sach, tre SLA, nghen team hoac loi lap lai.</text>
+  <text x="130" y="588" fill="#1D4ED8" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Tang 3 - Giam doc quyet</text>
+  <text x="130" y="620" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="20">Dung khi su co cham tien lon, doi chien luoc, anh huong thuong hieu hoac can phe duyet dac biet.</text>
+  <rect x="770" y="242" width="288" height="82" rx="22" fill="#FFFFFF" stroke="#F3D9E2" stroke-width="2"/>
+  <text x="802" y="278" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Signal</text>
+  <text x="802" y="306" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="18">Nhan ra loi, tag owner, chup bang chung</text>
+  <rect x="770" y="390" width="288" height="82" rx="22" fill="#FFFFFF" stroke="#F3D9E2" stroke-width="2"/>
+  <text x="802" y="426" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Decision</text>
+  <text x="802" y="454" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="18">Manager chot huong va muc uu tien</text>
+  <rect x="770" y="538" width="288" height="82" rx="22" fill="#FFFFFF" stroke="#F3D9E2" stroke-width="2"/>
+  <text x="802" y="574" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Escalation</text>
+  <text x="802" y="602" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="18">Gui len voi so lieu, de xuat va deadline</text>
+  <path d="M714 282H770" stroke="#9D174D" stroke-width="6" stroke-linecap="round"/>
+  <path d="M714 430H770" stroke="#92400E" stroke-width="6" stroke-linecap="round"/>
+  <path d="M714 578H770" stroke="#1D4ED8" stroke-width="6" stroke-linecap="round"/>
+</svg>

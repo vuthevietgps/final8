@@ -3,7 +3,7 @@
  * Mục đích: Định nghĩa schema Mongoose cho Tài Khoản Quảng Cáo.
  */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type AdAccountDocument = AdAccount & Document;
 
@@ -17,6 +17,9 @@ export class AdAccount {
 
   @Prop({ required: true, enum: ['facebook', 'google', 'tiktok', 'zalo', 'shopee', 'lazada'], index: true })
   accountType: 'facebook' | 'google' | 'tiktok' | 'zalo' | 'shopee' | 'lazada'; // Loại tài khoản quảng cáo
+
+  @Prop({ enum: ['direct', 'bm', 'mcc', 'bc'], default: 'direct', index: true })
+  managementMode?: 'direct' | 'bm' | 'mcc' | 'bc'; // direct / BM / MCC / BC
 
   @Prop({ default: true, index: true })
   isActive: boolean; // Trạng thái hoạt động
@@ -36,6 +39,12 @@ export class AdAccount {
 
   @Prop({ trim: true })
   businessName?: string;
+
+  @Prop({ trim: true, index: true })
+  businessCenterId?: string; // TikTok Business Center ID
+
+  @Prop({ trim: true })
+  businessCenterName?: string; // TikTok Business Center name
 
   @Prop({ type: Number })
   spendCap?: number;
@@ -57,6 +66,15 @@ export class AdAccount {
 
   // Google Ads: login customer ID (manager) để thực thi API
   @Prop({ trim: true }) loginCustomerId?: string;
+
+  @Prop({ enum: ['system', 'account', 'manual'], default: 'system' })
+  tokenSource?: 'system' | 'account' | 'manual';
+
+  @Prop({ type: Types.ObjectId, ref: 'User', index: true })
+  adsManagerUserId?: Types.ObjectId; // Nguoi phu trach ads noi bo
+
+  @Prop({ type: Date })
+  lastOperatorActivityAt?: Date; // Moc hoat dong ERP gan nhat cua nguoi phu trach ads
 }
 
 export const AdAccountSchema = SchemaFactory.createForClass(AdAccount);

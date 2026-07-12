@@ -20,11 +20,14 @@ import {
   BadRequestException,
   Get,
   Res,
-  HttpStatus
+  HttpStatus,
+  UseGuards
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { ImportUserService, ImportResult } from './import-user.service';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 // Interface cho kết quả import với message
 interface ImportResultWithMessage extends ImportResult {
@@ -32,6 +35,8 @@ interface ImportResultWithMessage extends ImportResult {
 }
 
 @Controller('import-users') // Base route: /import-users
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('users')
 export class ImportUserController {
   constructor(private readonly importUserService: ImportUserService) {}
 

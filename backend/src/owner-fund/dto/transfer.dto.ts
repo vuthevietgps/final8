@@ -1,6 +1,10 @@
-import { IsString, IsNumber, IsOptional, IsDateString, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsDateString, Min, MaxLength } from 'class-validator';
 
 export class TransferToOwnerFundDto {
+  @IsString()
+  @MaxLength(200)
+  idempotencyKey: string;
+
   @IsNumber()
   @Min(1000)
   amount: number;
@@ -23,6 +27,10 @@ export class TransferToOwnerFundDto {
 }
 
 export class TransferFromOwnerFundDto {
+  @IsString()
+  @MaxLength(200)
+  idempotencyKey: string;
+
   @IsNumber()
   @Min(1000)
   amount: number;
@@ -45,6 +53,10 @@ export class TransferFromOwnerFundDto {
 }
 
 export class OwnerWithdrawFromFundDto {
+  @IsString()
+  @MaxLength(200)
+  idempotencyKey: string;
+
   @IsNumber()
   @Min(1000)
   amount: number;

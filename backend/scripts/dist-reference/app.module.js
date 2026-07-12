@@ -76,7 +76,7 @@ exports.AppModule = AppModule = __decorate([
                     fileSize: 10 * 1024 * 1024,
                 },
             }),
-            mongoose_1.MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system', {
+            mongoose_1.MongooseModule.forRoot(process.env.MONGODB_URI, {
                 connectionFactory: (connection) => {
                     connection.on('connected', () => {
                         console.log('MongoDB connected with UTF-8 support');

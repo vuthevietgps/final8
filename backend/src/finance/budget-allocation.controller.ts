@@ -16,6 +16,7 @@ export class BudgetAllocationController {
    * Tự động phân bổ nguồn vốn vào ad groups
    */
   @Post('auto')
+  @RequirePermissions('finance', 'google-ads.execute')
   async autoAllocate(
     @Body() body: {
       dryRun?: boolean;

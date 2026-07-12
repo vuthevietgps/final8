@@ -16,8 +16,13 @@ export class Fanpage {
   @Prop({ required: true, trim: true })
   name: string;
 
-  @Prop({ required: true })
-  accessToken: string; // Page access token
+  /** Legacy read-only field. New writes persist credentials in ApiToken.tokenEnc. */
+  @Prop({ required: false, select: false })
+  accessToken?: string;
+
+  /** Non-secret readiness marker for UI/reporting without reading credentials. */
+  @Prop({ default: false, index: true })
+  hasAccessToken: boolean;
 
   @Prop({ enum: ['active','inactive'], default: 'active', index: true })
   status: 'active' | 'inactive';

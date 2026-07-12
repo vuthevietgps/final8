@@ -1,0 +1,582 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-4D",
+    "status": "completed_public_create_status_spec_no_code",
+    "code_changed": false,
+    "docs_changed": true,
+    "migration_added": false,
+    "public_endpoint_added": false,
+    "download_endpoint_added": false,
+    "download_token_added": false,
+    "artifact_bytes_implemented": false,
+    "row_level_redaction_implemented": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_or_live_added": false,
+    "provider_call": false,
+    "provider_mutation": false,
+    "provider_validate_only": false,
+    "phase_3_started": false,
+    "download_endpoint": "out_of_scope",
+    "download_token": "out_of_scope",
+    "artifact_bytes": "out_of_scope",
+    "missing_mandatory_inputs": [],
+    "missing_optional_inputs": [
+      "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger*.md",
+      "docs/ai-data-pack/lo-trinh-ai-data-pack-roadmap*.md",
+      "docs/ai-data-pack/truc-giu-ba-ai-data-pack*.md"
+    ]
+  },
+  "endpoint_inventory": [
+    {
+      "method": "POST",
+      "path": "/ai-data-pack/exports",
+      "purpose": "Request cached, official, or partial export.",
+      "allowed_modes": ["cached_export", "official_export", "partial_export"],
+      "required_permission": "mode_specific_create_permission",
+      "input_fields": [
+        "exportMode",
+        "reportDate",
+        "dateFrom",
+        "dateTo",
+        "packTypes",
+        "formats",
+        "redactionProfile",
+        "sectionAccessProfile",
+        "sourceScope",
+        "googleAdsCustomerIds",
+        "allowDowngradeToPartial",
+        "idempotencyKey",
+        "policyVersion"
+      ],
+      "forbidden_input_fields": [
+        "provider credentials",
+        "raw provider query",
+        "GAQL",
+        "action plan",
+        "approval payload",
+        "dryRun",
+        "liveExecution",
+        "OpenAI upload payload",
+        "downloadNow",
+        "publicUrl",
+        "artifactStoragePath",
+        "roleOverride",
+        "redactionOverride"
+      ],
+      "response_fields": [
+        "jobId",
+        "exportMode",
+        "syncPolicy",
+        "status",
+        "redactionProfile",
+        "packTypes",
+        "formats",
+        "warnings",
+        "blockingReasons",
+        "allowedNextActions"
+      ],
+      "redaction_behavior": "job_summary_only_no_artifact_bytes_no_download_token",
+      "audit_event": "export_create_requested/export_create_accepted/export_create_denied",
+      "rate_limit": "per_actor_and_per_mode_create_limit",
+      "idempotency": "required",
+      "security_denial_behavior": "fail_closed_generic_denial_internal_audit"
+    },
+    {
+      "method": "GET",
+      "path": "/ai-data-pack/exports/:jobId/status",
+      "purpose": "Read redacted job status summary.",
+      "allowed_modes": ["cached_export", "official_export", "partial_export"],
+      "required_permission": "ai-data-pack.export.status.read",
+      "input_fields": ["jobId"],
+      "forbidden_input_fields": ["artifactStoragePath", "downloadToken", "redactionOverride"],
+      "response_fields": [
+        "jobId",
+        "exportMode",
+        "syncPolicy",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "completedAt",
+        "redactionProfile",
+        "packTypes",
+        "formats",
+        "sourceImpactSummary",
+        "decisionGateSummary",
+        "warnings",
+        "blockingReasons",
+        "artifactManifestSummary",
+        "allowedNextActions",
+        "omittedSections",
+        "responseRedaction"
+      ],
+      "redaction_behavior": "profile_bound_status_response_with_omitted_sections",
+      "audit_event": "export_status_viewed/export_status_denied",
+      "rate_limit": "per_actor_per_job_status_polling_limit",
+      "idempotency": "not_applicable_read_only",
+      "security_denial_behavior": "403_or_404_style_denial_without_leaking_job_existence"
+    },
+    {
+      "method": "GET",
+      "path": "/ai-data-pack/exports/:jobId",
+      "purpose": "Read redacted export job detail without artifact bytes or storage path.",
+      "allowed_modes": ["cached_export", "official_export", "partial_export"],
+      "required_permission": "ai-data-pack.export.status.read and optionally ai-data-pack.export.audit.read",
+      "input_fields": ["jobId"],
+      "forbidden_input_fields": ["artifactStoragePath", "downloadToken", "rawAuditPayload"],
+      "response_fields": [
+        "jobId",
+        "exportMode",
+        "syncPolicy",
+        "status",
+        "policyVersion",
+        "redactionProfile",
+        "sectionAccessProfile",
+        "manifestSummary",
+        "sanitizedAuditSummary",
+        "warnings",
+        "blockingReasons",
+        "allowedNextActions",
+        "responseRedaction"
+      ],
+      "redaction_behavior": "job_detail_redacted_by_profile_no_full_manifest_storage_key",
+      "audit_event": "export_detail_viewed/export_detail_denied",
+      "rate_limit": "per_actor_per_job_detail_read_limit",
+      "idempotency": "not_applicable_read_only",
+      "security_denial_behavior": "generic_denial_internal_reason_audited"
+    },
+    {
+      "method": "GET",
+      "path": "/ai-data-pack/exports/:jobId/sync-summary",
+      "purpose": "Read sanitized source-sync summary for authorized users.",
+      "allowed_modes": ["official_export", "partial_export"],
+      "required_permission": "ai-data-pack.export.sync-detail.read",
+      "input_fields": ["jobId"],
+      "forbidden_input_fields": ["rawProviderPayload", "rawHttpHeaders", "tokens", "credentials"],
+      "response_fields": [
+        "sourceKey",
+        "freshnessStatus",
+        "coverageStatus",
+        "sourceImpactStatus",
+        "adapterAttempted",
+        "providerSyncAttempted",
+        "sanitizedErrorCategories",
+        "postAssessment",
+        "decisionGateImpact"
+      ],
+      "redaction_behavior": "sanitized_categories_no_raw_provider_or_account_topology",
+      "audit_event": "sync_summary_viewed/sync_summary_denied",
+      "rate_limit": "privileged_sync_summary_read_limit",
+      "idempotency": "not_applicable_read_only",
+      "security_denial_behavior": "deny_default_for_manager_investor_external_unassigned_reviewer"
+    }
+  ],
+  "create_endpoint_contract": {
+    "path": "/ai-data-pack/exports",
+    "method": "POST",
+    "allowed_export_modes": ["cached_export", "official_export", "partial_export"],
+    "permission_by_mode": {
+      "cached_export": "ai-data-pack.export.cached.create",
+      "official_export": "ai-data-pack.export.official.create",
+      "partial_export": "ai-data-pack.export.partial.create"
+    },
+    "input_fields": [
+      "exportMode",
+      "reportDate",
+      "dateFrom",
+      "dateTo",
+      "packTypes",
+      "formats",
+      "redactionProfile",
+      "sectionAccessProfile",
+      "sourceScope",
+      "googleAdsCustomerIds",
+      "allowDowngradeToPartial",
+      "idempotencyKey",
+      "policyVersion"
+    ],
+    "forbidden_input_fields": [
+      "provider credentials",
+      "raw provider query / GAQL",
+      "action plan",
+      "approval payload",
+      "dryRun",
+      "liveExecution",
+      "OpenAI upload payload",
+      "downloadNow",
+      "publicUrl",
+      "artifactStoragePath",
+      "roleOverride",
+      "redactionOverride"
+    ],
+    "rules": [
+      "fail closed if permission/profile mismatch",
+      "do not return artifact bytes",
+      "do not return download token",
+      "create response returns job summary only",
+      "official/partial call internal lifecycle method only",
+      "cached keeps cached behavior and never triggers source sync",
+      "no provider call outside internal lifecycle policy",
+      "no action/import/dry-run/live gate opens",
+      "no silent downgrade unless allowDowngradeToPartial=true"
+    ],
+    "response_fields": [
+      "jobId",
+      "exportMode",
+      "syncPolicy",
+      "status",
+      "createdAt",
+      "redactionProfile",
+      "sectionAccessProfile",
+      "packTypes",
+      "formats",
+      "warnings",
+      "blockingReasons",
+      "allowedNextActions",
+      "responseRedaction"
+    ]
+  },
+  "status_endpoint_contract": {
+    "path": "/ai-data-pack/exports/:jobId/status",
+    "method": "GET",
+    "required_permission": "ai-data-pack.export.status.read",
+    "allowed_response_fields": [
+      "jobId",
+      "exportMode",
+      "syncPolicy",
+      "status",
+      "createdAt",
+      "updatedAt",
+      "completedAt",
+      "redactionProfile",
+      "packTypes",
+      "formats",
+      "sourceImpactSummary",
+      "decisionGateSummary",
+      "warnings",
+      "blockingReasons",
+      "artifactManifestSummary",
+      "allowedNextActions",
+      "omittedSections",
+      "responseRedaction"
+    ],
+    "forbidden_response_fields": [
+      "storageLocation full key",
+      "download token",
+      "raw provider response",
+      "raw sync errors",
+      "credentials",
+      "tokens",
+      "stack trace",
+      "raw PII",
+      "full finance/supplier/employee sections"
+    ],
+    "allowed_next_actions": [
+      "view_status",
+      "request_new_export",
+      "request_partial_if_blocked"
+    ],
+    "forbidden_next_actions": [
+      "download",
+      "upload_to_openai",
+      "import_action",
+      "dry_run",
+      "execute_live"
+    ],
+    "redaction_behavior": "actor_profile_bound_with_omitted_sections_and_manifest_only_indicator"
+  },
+  "sync_summary_endpoint_contract": {
+    "path": "/ai-data-pack/exports/:jobId/sync-summary",
+    "method": "GET",
+    "required_permission": "ai-data-pack.export.sync-detail.read",
+    "output_fields": [
+      "sourceKey",
+      "freshnessStatus",
+      "coverageStatus",
+      "sourceImpactStatus",
+      "adapterAttempted",
+      "providerSyncAttempted",
+      "sanitizedErrorCategories",
+      "postAssessment",
+      "decisionGateImpact"
+    ],
+    "forbidden_fields": [
+      "raw provider payload",
+      "raw HTTP headers",
+      "raw provider request/response",
+      "OAuth/access/refresh token",
+      "customer/account topology beyond authorized scope",
+      "stack trace"
+    ],
+    "default_denied_profiles": [
+      "manager_marketer",
+      "investor_redacted",
+      "external_consultant_redacted",
+      "reviewer_partial"
+    ],
+    "redaction_behavior": "sanitized_source_status_only"
+  },
+  "request_validation_and_idempotency": {
+    "idempotency_key_required": true,
+    "idempotency_scope": [
+      "requester",
+      "exportMode",
+      "reportDate",
+      "dateFrom/dateTo",
+      "packTypes",
+      "formats",
+      "redactionProfile",
+      "sectionAccessProfile",
+      "sourceScope",
+      "policyVersion",
+      "idempotencyKey"
+    ],
+    "duplicate_request_behavior": "return same redacted active job summary and audit idempotent_request_reused",
+    "expired_idempotency_behavior": "require new idempotency key after terminal retention window or return generic conflict",
+    "input_validation": {
+      "dates": "YYYY-MM-DD and dateFrom <= dateTo",
+      "large_date_range": "reject unless explicitly policy-approved",
+      "packTypes": "supported and bounded",
+      "formats": "json/xlsx only and bounded",
+      "redactionProfile": "supported and actor-compatible",
+      "sectionAccessProfile": "supported and actor-compatible",
+      "sourceScope": "authorized bounded sources and customer IDs only",
+      "policyVersion": "recognized"
+    },
+    "downgrade": {
+      "silent_downgrade_allowed": false,
+      "requires_allowDowngradeToPartial": true,
+      "audit_reason_required": true
+    }
+  },
+  "response_redaction_policy": [
+    {
+      "profile": "director_full",
+      "status_visibility": "full job status, sanitized provider status, manifest summary",
+      "sync_summary": "allowed if permission granted",
+      "omitted_sections": ["raw tokens", "raw provider payload", "stack trace"],
+      "must_label_redacted": false
+    },
+    {
+      "profile": "director_redacted",
+      "status_visibility": "full workflow status with sensitive sections redacted",
+      "sync_summary": "sanitized only if permission granted",
+      "omitted_sections": ["raw PII", "raw tokens", "raw provider payload"],
+      "must_label_redacted": true
+    },
+    {
+      "profile": "manager_marketer",
+      "status_visibility": "assigned partial/cached jobs only",
+      "sync_summary": "denied by default",
+      "omitted_sections": ["finance", "employee", "supplier commission", "customer PII", "sync detail"],
+      "must_label_redacted": true
+    },
+    {
+      "profile": "finance_operator",
+      "status_visibility": "assigned finance-scoped jobs",
+      "sync_summary": "sanitized only if granted",
+      "omitted_sections": ["customer PII by default", "raw provider payload", "employee detail by default"],
+      "must_label_redacted": true
+    },
+    {
+      "profile": "reviewer_partial",
+      "status_visibility": "assigned partial jobs only",
+      "sync_summary": "denied by default",
+      "omitted_sections": ["finance detail", "supplier commission", "customer PII", "employee sensitive", "sync detail"],
+      "must_label_redacted": true
+    },
+    {
+      "profile": "investor_redacted",
+      "status_visibility": "assigned redacted summary only",
+      "sync_summary": "denied",
+      "omitted_sections": ["full Director Pack", "customer PII", "employee sensitive", "supplier detail", "finance detail", "sync detail", "audit detail"],
+      "must_label_redacted": true
+    },
+    {
+      "profile": "external_consultant_redacted",
+      "status_visibility": "assigned redacted summary only",
+      "sync_summary": "denied",
+      "omitted_sections": ["finance detail", "customer PII", "employee sensitive", "supplier commission", "sync detail", "audit detail"],
+      "must_label_redacted": true
+    },
+    {
+      "profile": "system_internal_worker",
+      "status_visibility": "no human read surface by default",
+      "sync_summary": "no human read surface",
+      "omitted_sections": ["all human endpoint data"],
+      "must_label_redacted": true
+    }
+  ],
+  "rbac_denial_policy": [
+    {
+      "case": "missing permission",
+      "behavior": "fail closed, generic denial, audit exact permission internally, no source sync on denied create"
+    },
+    {
+      "case": "profile mismatch",
+      "behavior": "fail closed, audit requested and actor profiles, do not leak sensitive sections"
+    },
+    {
+      "case": "artifact profile mismatch",
+      "behavior": "deny; download remains out of scope but status must not expose artifact details"
+    },
+    {
+      "case": "job owner mismatch",
+      "behavior": "403 or 404-style denial according to security policy, audit internal reason"
+    },
+    {
+      "case": "unassigned reviewer",
+      "behavior": "deny status/detail/sync summary by default"
+    },
+    {
+      "case": "investor trying full pack",
+      "behavior": "deny, require investor_redacted assigned artifact policy in later phase"
+    },
+    {
+      "case": "manager trying finance/employee detail",
+      "behavior": "deny or omit sections and label response redacted"
+    },
+    {
+      "case": "system worker trying human download/read",
+      "behavior": "deny by default; system worker cannot use human read/download surfaces"
+    }
+  ],
+  "audit_events": [
+    {
+      "event": "export_create_requested",
+      "fields": ["actor", "profile", "permission_checked", "exportMode", "redactionProfile", "idempotencyKeyHash", "timestamp", "sanitized_reason"]
+    },
+    {
+      "event": "export_create_denied",
+      "fields": ["actor", "profile", "permission_checked", "exportMode", "redactionProfile", "idempotencyKeyHash", "timestamp", "sanitized_reason"]
+    },
+    {
+      "event": "export_create_accepted",
+      "fields": ["actor", "profile", "permission_checked", "jobId", "exportMode", "redactionProfile", "idempotencyKeyHash", "timestamp"]
+    },
+    {
+      "event": "export_status_viewed",
+      "fields": ["actor", "profile", "permission_checked", "jobId", "redactionProfile", "timestamp"]
+    },
+    {
+      "event": "export_status_denied",
+      "fields": ["actor", "profile", "permission_checked", "jobId_if_known", "timestamp", "sanitized_reason"]
+    },
+    {
+      "event": "sync_summary_viewed",
+      "fields": ["actor", "profile", "permission_checked", "jobId", "timestamp"]
+    },
+    {
+      "event": "sync_summary_denied",
+      "fields": ["actor", "profile", "permission_checked", "jobId_if_known", "timestamp", "sanitized_reason"]
+    },
+    {
+      "event": "rbac_denied",
+      "fields": ["actor", "profile", "permission_checked", "jobId_if_known", "exportMode_if_known", "redactionProfile", "timestamp", "sanitized_reason"]
+    },
+    {
+      "event": "redaction_profile_applied",
+      "fields": ["actor", "profile", "jobId", "redactionProfile", "omittedSections", "timestamp"]
+    },
+    {
+      "event": "idempotent_request_reused",
+      "fields": ["actor", "profile", "jobId", "exportMode", "idempotencyKeyHash", "timestamp"]
+    },
+    {
+      "event": "invalid_request_rejected",
+      "fields": ["actor", "profile", "permission_checked", "exportMode_if_known", "idempotencyKeyHash_if_valid", "timestamp", "sanitized_reason"]
+    }
+  ],
+  "rate_limit_abuse_controls": [
+    {
+      "control": "per actor create rate limit",
+      "policy": "cap create requests per actor; stricter for official_export"
+    },
+    {
+      "control": "per mode rate limit",
+      "policy": "official_export lower quota than partial_export and cached_export"
+    },
+    {
+      "control": "per job status polling limit",
+      "policy": "cap status polls per actor/job window"
+    },
+    {
+      "control": "sync summary read limit",
+      "policy": "privileged endpoint with tighter per actor/job cap"
+    },
+    {
+      "control": "idempotency replay limit",
+      "policy": "repeated replay returns same job but throttles excessive calls"
+    },
+    {
+      "control": "large date range rejection",
+      "policy": "reject ranges over implementation-defined max without explicit policy"
+    },
+    {
+      "control": "pack size limits",
+      "policy": "bound packTypes count and generated manifest summary size"
+    },
+    {
+      "control": "format limits",
+      "policy": "allow only json/xlsx and bounded format count"
+    },
+    {
+      "control": "concurrent official export limit",
+      "policy": "limit official exports per actor and globally"
+    },
+    {
+      "control": "concurrent source-sync limit reuse",
+      "policy": "reuse or queue source sync; never spawn unbounded provider reads"
+    },
+    {
+      "control": "repeated denial throttling",
+      "policy": "audit and throttle repeated denied/invalid requests"
+    }
+  ],
+  "future_tests": [
+    "unauthorized create official denied",
+    "manager cannot create official by default",
+    "partial creator permission enforced",
+    "idempotency returns same job",
+    "cached create never triggers sync",
+    "official create calls internal lifecycle only",
+    "status denied to unrelated user",
+    "status response redacted by profile",
+    "sync summary denied to manager/investor",
+    "sync summary sanitized",
+    "create rejects dryRun/live/OpenAI/action payload",
+    "create rejects raw provider query/credentials",
+    "no download token returned",
+    "no artifact bytes returned",
+    "no public storage path returned",
+    "no provider mutation/validateOnly",
+    "no existing GET export behavior changed"
+  ],
+  "risks_and_open_questions": [
+    "Endpoint implementation still needs route-level auth integration.",
+    "Row-level redaction is still not implemented.",
+    "Official/partial rendering remains manifest-only.",
+    "Exact rate-limit values need owner approval.",
+    "Exact 404-vs-403 job existence policy needs security approval.",
+    "Whether cached create should be public/admin or remain internal requires product approval.",
+    "GET /exports/:jobId audit detail expansion should wait for a separate audit-read policy decision.",
+    "Download endpoint and token policy remain separate future work."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "do_not_create_prompt15": true,
+    "recommended_next_if_spec_accepted": "PR-2.3B-4E - Public Create/Status Endpoint Implementation, no download",
+    "recommended_next_if_risk_remains": "PR-2.3B-4D-H1 - Public Endpoint Spec Fix",
+    "do_not_jump_to": [
+      "download endpoint",
+      "download token",
+      "OpenAI/upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "Phase 3"
+    ]
+  }
+}

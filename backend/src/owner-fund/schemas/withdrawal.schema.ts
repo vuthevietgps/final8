@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, SchemaTypes, Types } from 'mongoose';
 
 export type WithdrawalDocument = Withdrawal & Document;
 
@@ -22,7 +22,7 @@ export enum WithdrawalType {
  */
 @Schema({ timestamps: true, collection: 'withdrawals' })
 export class Withdrawal {
-  @Prop({ type: Types.ObjectId, ref: 'Owner', required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Owner', required: true })
   ownerId: Types.ObjectId;
 
   @Prop({ required: true })
@@ -43,7 +43,7 @@ export class Withdrawal {
   @Prop()
   completedDate: Date;
 
-  @Prop({ type: Types.ObjectId, ref: 'User' })
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User' })
   approvedBy: Types.ObjectId;
 
   @Prop()

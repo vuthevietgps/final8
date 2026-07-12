@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "2.0",
+  "planId": "PLAN-20260612-INVALID02",
+  "sourceExportId": "EXP-20260612-001",
+  "targetProvider": "google",
+  "currency": "VND",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "executionMode": "pending_approval",
+  "analysisSummary": {
+    "mainConclusion": "Invalid live campaign creation.",
+    "dataQuality": "good"
+  },
+  "actions": [
+    {
+      "actionId": "ACT102",
+      "provider": "google",
+      "actionType": "create_search_campaign",
+      "customerId": "1234567890",
+      "resourceType": "campaign",
+      "operation": "create",
+      "typedPayload": {
+        "campaignName": "Unsafe Campaign",
+        "budgetName": "Unsafe Budget",
+        "dailyBudget": 500000,
+        "advertisingChannelType": "SEARCH",
+        "status": "ENABLED",
+        "biddingStrategyType": "MAXIMIZE_CONVERSIONS",
+        "startDate": "2026-06-13",
+        "finalUrl": "https://htxbachgia.shop/"
+      },
+      "reason": "Invalid fixture.",
+      "evidence": {},
+      "confidence": 0.5,
+      "risk": "high",
+      "dataQuality": "good",
+      "approvalRequired": true,
+      "idempotencyKey": "PLAN-20260612-INVALID02:ACT102",
+      "rollbackIf": []
+    }
+  ]
+}

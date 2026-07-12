@@ -1,4 +1,4 @@
-/** Component quản lý API Tokens (danh sách + validate + rotate tối giản) */
+/** Component quản lý Ads API Tokens (danh sách + validate + rotate tối giản) */
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -31,12 +31,21 @@ export class ApiTokenComponent implements OnInit {
     this.rotateForm.update(f => ({ ...f, [key]: value }));
   }
   syncLoading = signal(false);
+  syncSystemLoading = signal(false);
   sync(){
     if(this.syncLoading()) return;
     this.syncLoading.set(true);
     this.service.syncFromFanpages().subscribe({
       next: res => { if(res.items?.length){ this.tokens.update(arr=>[...res.items, ...arr]); } this.syncLoading.set(false); },
       error: e => { this.error.set(e?.error?.message||'Sync lỗi'); this.syncLoading.set(false); }
+    });
+  }
+  syncSystemUser(){
+    if(this.syncSystemLoading()) return;
+    this.syncSystemLoading.set(true);
+    this.service.syncFromSystemUser().subscribe({
+      next: () => { this.load(); this.syncSystemLoading.set(false); },
+      error: e => { this.error.set(e?.error?.message||'Sync system token lỗi'); this.syncSystemLoading.set(false); }
     });
   }
 

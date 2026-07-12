@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { AgentPaymentService, AgentPaymentOpsSummary, AgentBreakdown } from './agent-payment.service';
 import { UserService } from '../user/user.service';
 import { Order, PaymentBatch } from './models/payment.model';
@@ -45,6 +46,7 @@ export class AgentPaymentComponent implements OnInit {
 
   // Math reference for template
   Math = Math;
+  private readonly cdr = inject(ChangeDetectorRef);
 
   // Batch modal
   showBatchModal = false;
@@ -66,12 +68,16 @@ export class AgentPaymentComponent implements OnInit {
     private userService: UserService
   ) {}
 
+  private syncView(): void {
+    this.cdr.detectChanges();
+  }
+
   ngOnInit() {
     this.loadAgents();
     this.loadOpsSummary();  // CFO Spec v2.0
     this.loadPendingOrders();
     this.loadBatches();
-    
+
     // Set default date to today
     const today = new Date().toISOString().split('T')[0];
     this.batchForm.paidDate = today;
@@ -81,45 +87,52 @@ export class AgentPaymentComponent implements OnInit {
   async loadOpsSummary() {
     this.summaryLoading = true;
     try {
-      const summary = await this.service.getOpsSummary({
+      this.syncView();
+      const summary = await firstValueFrom(this.service.getOpsSummary({
         agentId: this.agentId || undefined,
         fromDate: this.fromDate || undefined,
         toDate: this.toDate || undefined
-      }).toPromise();
-      
+      }));
+
       this.opsSummary = summary || null;
     } catch (err) {
       console.error('Error loading ops summary:', err);
     } finally {
       this.summaryLoading = false;
+      this.syncView();
     }
   }
 
   async loadAgents() {
     try {
       // CHỈ load EXTERNAL AGENT (internal agent không cần trả hoa hồng)
-      const users = await this.userService.getUsers('EXTERNAL_AGENT', true).toPromise();
-      this.agents = users || [];
+      this.syncView();
+      const users = await firstValueFrom(this.userService.getAgents());
+      this.agents = (users || []).filter(user => user.role === 'external_agent');
     } catch (err) {
       console.error('Error loading agents:', err);
+    } finally {
+      this.syncView();
     }
   }
 
   async loadPendingOrders() {
     this.loading = true;
     try {
-      const res = await this.service.getPendingOrders({
+      this.syncView();
+      const res = await firstValueFrom(this.service.getPendingOrders({
         agentId: this.agentId || undefined,
         from: this.fromDate || undefined,
         to: this.toDate || undefined
-      }).toPromise();
-      
+      }));
+
       this.pendingOrders = (res?.orders || []).map(o => ({ ...o, selected: false }));
     } catch (err) {
       console.error('Error loading pending orders:', err);
       alert('Lỗi tải đơn hàng: ' + (err as any)?.error?.message || (err as any)?.message);
     } finally {
       this.loading = false;
+      this.syncView();
     }
   }
 
@@ -135,15 +148,17 @@ export class AgentPaymentComponent implements OnInit {
   async loadBatches() {
     this.batchesLoading = true;
     try {
-      const batches = await this.service.getPaymentBatches({
+      this.syncView();
+      const batches = await firstValueFrom(this.service.getPaymentBatches({
         agentId: this.agentId || undefined
-      }).toPromise();
-      
+      }));
+
       this.batches = batches || [];
     } catch (err) {
       console.error('Error loading batches:', err);
     } finally {
       this.batchesLoading = false;
+      this.syncView();
     }
   }
 
@@ -192,30 +207,22 @@ export class AgentPaymentComponent implements OnInit {
 
   calculateCommission(order: Order): number {
     /**
-     * Hoa hồng đại lý (EXTERNAL AGENT):
-     * 
-     * CASE 1: Giao thành công (COD > 0)
-     * commission = COD - (agentQuote × quantity) - shippingFee - returnFee
-     * VD: 500k - (300k × 1) - 25k - 0 = 175k (DƯƠNG - Trả cho đại lý)
-     * 
-     * CASE 2: Hàng hoàn (COD = 0)
-     * commission = 0 - (supplierQuote × quantity) - shippingFee - returnFee
-     * VD: 0 - (200k × 1) - 25k - 15k = -240k (ÂM - Đại lý nợ công ty)
+     * Use the backend payment snapshot so pending rows, created batches,
+     * history, finance reports, and batch detail modal stay consistent.
      */
-    const codAmount = order.codAmount || 0;
-    const agentQuote = order.agentQuote || 0;
-    const supplierQuote = order.supplierQuote || 0;
-    const quantity = order.quantity || 1;
-    const shippingFee = order.shippingFee || 0;
-    const returnFee = order.returnFee || 0;
-    
-    if (order.orderStatus === 'Hàng hoàn') {
-      // Hàng hoàn: Đại lý phải chịu chi phí NCC + phí ship + phí hoàn
-      return 0 - (supplierQuote * quantity) - shippingFee - returnFee;
-    } else {
-      // Giao thành công: Đại lý được hoa hồng
-      return codAmount - (agentQuote * quantity) - shippingFee - returnFee;
+    if (typeof order.agentPaidAmount === 'number' && Number.isFinite(order.agentPaidAmount)) {
+      return order.agentPaidAmount;
     }
+
+    const codAmount = Number(order.codAmount || 0);
+    const agentQuote = Number(order.agentQuote || 0);
+    const quantity = Number(order.quantity || 1);
+
+    if (order.orderStatus === 'Hàng hoàn') {
+      return 0 - (agentQuote * quantity);
+    }
+
+    return codAmount - (agentQuote * quantity);
   }
 
   openCreateBatchModal() {
@@ -286,7 +293,7 @@ export class AgentPaymentComponent implements OnInit {
     }
 
     const orderIds = this.selectedOrders.map(o => o._id);
-    
+
     // Parse attachments from comma-separated string
     const attachments = this.batchForm.attachments
       ? this.batchForm.attachments.split(',').map(s => s.trim()).filter(s => s)
@@ -294,7 +301,7 @@ export class AgentPaymentComponent implements OnInit {
 
     try {
       // CFO Spec v2.0: Sử dụng atomic API với threshold validation
-      const result = await this.service.createPaymentBatchAtomic({
+      const result = await firstValueFrom(this.service.createPaymentBatchAtomic({
         orderIds,
         batchId: this.batchForm.batchId,
         paidDate: this.batchForm.paidDate,
@@ -302,7 +309,7 @@ export class AgentPaymentComponent implements OnInit {
         attachments: attachments.length > 0 ? attachments : undefined,
         confirmOverThreshold: this.batchForm.confirmOverThreshold || undefined,
         confirmedBy: this.selectedTotal > THRESHOLD ? 'current-user-id' : undefined // TODO: Get from auth
-      }).toPromise();
+      }));
 
       // Hiển thị kết quả chi tiết
       let message = `✅ Đã tạo phiếu ${this.batchForm.batchId}\n`;
@@ -322,16 +329,17 @@ export class AgentPaymentComponent implements OnInit {
       if (result?.warning) {
         message += `\n\n${result.warning}`;
       }
-      
+
       alert(message);
-      
+
       this.closeBatchModal();
       this.batchForm.note = '';
       this.batchForm.attachments = '';
       this.batchForm.confirmOverThreshold = false;
-      
+
       // Reload all data
       await this.applyFilters();
+      this.syncView();
     } catch (err) {
       console.error('Error creating batch:', err);
       alert('Lỗi tạo lượt thanh toán: ' + (err as any)?.error?.message || (err as any)?.message);
@@ -341,13 +349,16 @@ export class AgentPaymentComponent implements OnInit {
   async viewBatch(batch: PaymentBatch) {
     this.selectedBatch = batch;
     this.showViewBatchModal = true;
+    this.syncView();
 
     try {
-      const orders = await this.service.getOrdersInBatch(batch.batchId).toPromise();
+      const orders = await firstValueFrom(this.service.getOrdersInBatch(batch.batchId));
       this.batchOrders = orders || [];
     } catch (err) {
       console.error('Error loading batch orders:', err);
       alert('Lỗi tải đơn hàng: ' + (err as any)?.error?.message || (err as any)?.message);
+    } finally {
+      this.syncView();
     }
   }
 
@@ -355,6 +366,7 @@ export class AgentPaymentComponent implements OnInit {
     this.showViewBatchModal = false;
     this.selectedBatch = null;
     this.batchOrders = [];
+    this.syncView();
   }
 
   exportBatch(batch: PaymentBatch) {
@@ -370,11 +382,11 @@ export class AgentPaymentComponent implements OnInit {
         (batch.attachments || []).join('; ')
       ]
     ];
-    
+
     // Add BOM for UTF-8
     const BOM = '\uFEFF';
     const csvContent = BOM + rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -403,7 +415,7 @@ export class AgentPaymentComponent implements OnInit {
     this.agentId = agentId;
     this.showAllAgents = false;  // Reset to top 10 view
     await this.applyFilters();
-    
+
     // Scroll to pending orders section
     const pendingSection = document.getElementById('pending-orders-section');
     if (pendingSection) {
@@ -424,7 +436,7 @@ export class AgentPaymentComponent implements OnInit {
   // Payable only orders (commission > 0)
   get payableOnlyOrders(): Order[] {
     let orders = this.pendingOrders.filter(o => this.calculateCommission(o) > 0);
-    
+
     // Apply aging filter
     if (this.agingFilter) {
       orders = orders.filter(o => {
@@ -437,7 +449,7 @@ export class AgentPaymentComponent implements OnInit {
         }
       });
     }
-    
+
     return orders;
   }
 
@@ -469,8 +481,10 @@ export class AgentPaymentComponent implements OnInit {
         this.activeAgingFilter = '';
         break;
       case 'paid':
-        // Scroll to payment history section
-        const historySection = document.querySelector('.card:has(h3:contains("Lịch Sử"))');
+        // Scroll to payment history section without unsupported CSS selectors
+        const historySection = Array.from(document.querySelectorAll('.card')).find(card =>
+          card.textContent?.includes('Lịch Sử Phiếu Thanh Toán') || card.textContent?.includes('Lịch Sử')
+        ) as HTMLElement | undefined;
         if (historySection) {
           historySection.scrollIntoView({ behavior: 'smooth' });
         }
@@ -494,7 +508,7 @@ export class AgentPaymentComponent implements OnInit {
         this.activeAgingFilter = '>14 ngày';
         break;
     }
-    
+
     // Scroll to orders section
     const pendingSection = document.getElementById('pending-orders-section');
     if (pendingSection) {
@@ -511,7 +525,7 @@ export class AgentPaymentComponent implements OnInit {
   setQuickDateFilter(filter: string) {
     this.quickDateFilter = filter;
     const today = new Date();
-    
+
     switch (filter) {
       case 'today':
         this.fromDate = this.toDate = today.toISOString().split('T')[0];
@@ -537,7 +551,7 @@ export class AgentPaymentComponent implements OnInit {
         this.fromDateDisplay = this.toDateDisplay = '';
         break;
     }
-    
+
     this.applyFilters();
   }
 
@@ -564,7 +578,7 @@ export class AgentPaymentComponent implements OnInit {
       const month = parseInt(parts[1], 10) - 1;
       const year = parseInt(parts[2], 10);
       const date = new Date(year, month, day);
-      
+
       if (!isNaN(date.getTime())) {
         const isoDate = date.toISOString().split('T')[0];
         if (field === 'from') this.fromDate = isoDate;
@@ -572,7 +586,7 @@ export class AgentPaymentComponent implements OnInit {
         return;
       }
     }
-    
+
     // Invalid format - reset
     if (field === 'from') {
       this.fromDate = '';
@@ -634,7 +648,7 @@ export class AgentPaymentComponent implements OnInit {
 
     const BOM = '\uFEFF';
     const csvContent = BOM + [headers, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

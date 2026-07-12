@@ -44,20 +44,26 @@ export class AuthService {
       'ad-accounts', 'ad-groups', 'advertising-costs',
       'labor-costs', 'other-costs', 'salary-config',
       // Newly explicit permissions used by Sidebar
-      'customers', 'purchase-costs', 'fanpages', 'openai-configs', 'api-tokens', 'chat-messages', 'pending-orders',
+      'customers', 'purchase-costs', 'fanpages', 'openai-configs', 'api-tokens', 'chat-messages', 'ai-assistant', 'pending-orders',
+      'supplier-quotes.approve', 'orders.confirm-business',
       'quotes', 'reports', 'export', 'import', 'settings',
       // Ngân sách Ads & KPI - Director có quyền xem
-      'ads-budget', 'employee-ads-kpi', 'finance',
+      'ads-budget', 'employee-ads-kpi', 'manager-handbook', 'finance', 'finance.budget-buckets.manage', 'finance.policy.manage',
       // Quỹ Owner - Chỉ Director có quyền
       'owner-fund',
       // Cập nhật đơn hàng từ Excel
-      'order-update'
+      'order-update',
+      'google-ads.read', 'google-ads.plan', 'google-ads.approve', 'google-ads.execute',
+      'google-ads.credentials.read', 'google-ads.credentials.write', 'google-ads.emergency-pause',
+      'ai-data-pack.marketer.read'
     ],
     [UserRole.MANAGER]: [
+      'orders-test2', 'pending-orders', 'orders.confirm-business',
       'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Ads + media
-      'fanpages', 'openai-configs', 'api-tokens', 'chat-messages',
+      'fanpages', 'openai-configs', 'chat-messages', 'ai-assistant',
       // Ads budget + KPI
-      'ads-budget', 'employee-ads-kpi'
+      'ads-budget', 'employee-ads-kpi', 'manager-handbook', 'reports',
+      'google-ads.read', 'google-ads.plan', 'ai-data-pack.marketer.read'
     ],
     [UserRole.EMPLOYEE]: [
       'orders-test2', 'order-update', 'chat-messages'
@@ -200,15 +206,17 @@ export class AuthService {
   }
 
   hasPermission(permission: string): boolean {
-    const userRole = this.userSignal()?.role;
-    if (!userRole) return false;
-    
-    const permissions = this.rolePermissions[userRole] || [];
-    return permissions.includes(permission);
+    return this.getCurrentPermissions().includes(permission);
   }
 
   hasAnyPermission(permissions: string[]): boolean {
     return permissions.some(permission => this.hasPermission(permission));
+  }
+
+  getCurrentPermissions(): string[] {
+    const userRole = this.userSignal()?.role;
+    if (!userRole) return [];
+    return [...(this.rolePermissions[userRole] || [])];
   }
 
   getToken(): string | null {

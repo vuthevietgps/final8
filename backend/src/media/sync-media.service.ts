@@ -6,41 +6,61 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Media, MediaDocument } from './schemas/media.schema';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const MEDIA_DIR = process.env.MEDIA_DIR || path.join(process.cwd(), 'uploads', 'media');
+function resolveMediaDir(): string {
+  const envDir = process.env.MEDIA_DIR;
+  const candidates = [
+    envDir,
+    path.join(process.cwd(), '..', 'media'),
+    path.join(process.cwd(), '..', 'uploads', 'media'),
+    path.join(process.cwd(), 'uploads', 'media'),
+  ].filter(Boolean) as string[];
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir)) return dir;
+    } catch {}
+  }
+
+  const fallback = path.join(process.cwd(), 'uploads', 'media');
+  try {
+    fs.mkdirSync(fallback, { recursive: true });
+  } catch {}
+  return fallback;
+}
+
+const MEDIA_DIR = resolveMediaDir();
 const PUBLIC_BASE = process.env.MEDIA_PUBLIC_BASE || '/media';
 
 @Injectable()
 export class SyncMediaService {
   constructor(
-    @InjectModel(Media.name) private mediaModel: Model<MediaDocument>
+    @InjectModel(Media.name) private mediaModel: Model<MediaDocument>,
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
   ) {}
 
   /**
    * 🔄 MASTER SYNC - Đồng bộ hoàn toàn 3 lớp dữ liệu
    */
   async masterSync() {
-    const results = {
-      phase1: await this.syncFilesToDatabase(),
-      // Note: Phase 2 (DB -> Products) is handled by ProductService now to avoid schema injection issues
-      phase2: { mediaRecords: 0, validReferences: 0, invalidReferencesRemoved: 0, errors: ['Phase 2 delegated to ProductService via /products/cleanup-images'] }, 
-      phase3: await this.cleanOrphanedFiles(),
+    const phase1 = await this.syncFilesToDatabase();
+    const phase2 = await this.syncDatabaseToProducts();
+    const phase3 = await this.cleanOrphanedFiles();
+
+    return {
+      phase1,
+      phase2,
+      phase3,
       summary: {
-        totalFiles: 0,
-        totalMediaRecords: 0,
-        totalProductReferences: 0,
-        syncedSuccessfully: true
+        totalFiles: phase1.filesFound,
+        totalMediaRecords: phase2.mediaRecords,
+        totalProductReferences: phase2.validReferences,
+        syncedSuccessfully: [...phase1.errors, ...phase2.errors, ...phase3.errors].length === 0,
       }
     };
-
-    // Tính toán summary
-    results.summary.totalFiles = results.phase1.filesFound;
-  results.summary.totalMediaRecords = (results.phase2 as any).mediaRecords || 0;
-  results.summary.totalProductReferences = (results.phase2 as any).validReferences || 0;
-
-    return results;
   }
 
   /**
@@ -102,8 +122,6 @@ export class SyncMediaService {
 
     try {
       // Import Product model
-      const mongoose = require('mongoose');
-      const Product = mongoose.model('Product');
 
       // Lấy tất cả valid media URLs
       const validMediaUrls = new Set();
@@ -113,7 +131,7 @@ export class SyncMediaService {
       mediaRecords.forEach(media => validMediaUrls.add(media.url));
 
       // Clean product references
-      const products = await Product.find({});
+      const products = await this.productModel.find({});
       
       for (const product of products) {
         let hasChanges = false;
@@ -139,33 +157,26 @@ export class SyncMediaService {
         // Clean fanpage variation images
         if (product.fanpageVariations && product.fanpageVariations.length > 0) {
           for (const variation of product.fanpageVariations) {
-            // customImages can be string or array, handle both cases
-            if (variation.customImages) {
-              if (typeof variation.customImages === 'string') {
-                // Single image URL as string
-                if (variation.customImages && !validMediaUrls.has(variation.customImages)) {
-                  variation.customImages = '';
-                  results.invalidReferencesRemoved++;
-                  hasChanges = true;
-                } else if (variation.customImages) {
-                  results.validReferences++;
-                }
-              } else if (Array.isArray(variation.customImages) && variation.customImages.length > 0) {
-                // Multiple images as array
-                const validCustomImages = variation.customImages.filter(url => {
-                  if (validMediaUrls.has(url)) {
-                    results.validReferences++;
-                    return true;
-                  } else {
-                    results.invalidReferencesRemoved++;
-                    return false;
-                  }
-                });
+            const rawCustomImages = Array.isArray(variation.customImages)
+              ? variation.customImages
+              : typeof (variation as any).customImages === 'string' && (variation as any).customImages
+                ? [(variation as any).customImages]
+                : [];
 
-                if (validCustomImages.length !== variation.customImages.length) {
-                  variation.customImages = validCustomImages;
-                  hasChanges = true;
+            if (rawCustomImages.length > 0) {
+              const validCustomImages = rawCustomImages.filter(url => {
+                if (validMediaUrls.has(url)) {
+                  results.validReferences++;
+                  return true;
+                } else {
+                  results.invalidReferencesRemoved++;
+                  return false;
                 }
+              });
+
+              if (validCustomImages.length !== rawCustomImages.length) {
+                variation.customImages = validCustomImages;
+                hasChanges = true;
               }
             }
           }

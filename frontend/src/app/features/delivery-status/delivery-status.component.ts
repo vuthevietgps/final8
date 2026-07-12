@@ -1,9 +1,9 @@
 /**
  * File: features/delivery-status/delivery-status.component.ts
- * Mục đích: Giao diện quản lý Trạng thái giao hàng - chỉnh sửa inline (không form), giống Trạng thái sản xuất.
+ * Purpose: Inline CRUD UI for delivery statuses.
  */
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DeliveryStatusService } from './delivery-status.service';
 import { CreateDeliveryStatusDto, DeliveryStatus } from './models/delivery-status.model';
@@ -13,83 +13,129 @@ import { CreateDeliveryStatusDto, DeliveryStatus } from './models/delivery-statu
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-  <div class="delivery-status-page">
-    <div class="toolbar">
-      <div class="left">
-        <h2>🚚 Trạng Thái Giao Hàng</h2>
+    <div class="delivery-status-page">
+      <div class="toolbar">
+        <div class="left">
+          <h2>🚚 Trạng Thái Giao Hàng</h2>
+        </div>
+        <div class="right">
+          <button class="btn btn-primary" (click)="addNew()">➕ Thêm mới</button>
+          <button class="btn" (click)="refresh()">🔄 Làm mới</button>
+        </div>
       </div>
-      <div class="right">
-        <button class="btn btn-primary" (click)="addNew()">➕ Thêm mới</button>
-        <button class="btn" (click)="refresh()">🔄 Làm mới</button>
+
+      <div class="table-wrapper" *ngIf="!isLoading(); else loadingTpl">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tên trạng thái</th>
+              <th>Icon</th>
+              <th>Màu sắc</th>
+              <th>Mô tả</th>
+              <th>Thứ tự</th>
+              <th title="Kích hoạt">✓</th>
+              <th title="Trạng thái kết thúc">Cuối</th>
+              <th title="Trigger thanh toán NCC + hoa hồng">💰</th>
+              <th title="Trạng thái hoàn hàng">↩️</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let status of deliveryStatuses(); trackBy: trackById"
+              [class.payment-trigger]="status.isPaymentTrigger"
+            >
+              <td>
+                <input
+                  class="form-control input-inline"
+                  [value]="status.name"
+                  (blur)="updateField(status, 'name', $any($event.target).value)"
+                  placeholder="Tên trạng thái"
+                />
+              </td>
+              <td>
+                <select
+                  class="form-control input-inline"
+                  [value]="status.icon"
+                  (change)="updateField(status, 'icon', $any($event.target).value)"
+                >
+                  <option *ngIf="!hasIconOption(status.icon)" [value]="status.icon">{{ status.icon }}</option>
+                  <option *ngFor="let option of iconOptions" [value]="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </td>
+              <td>
+                <input
+                  type="color"
+                  class="form-control input-color"
+                  [value]="status.color"
+                  (change)="updateField(status, 'color', $any($event.target).value)"
+                />
+              </td>
+              <td>
+                <input
+                  class="form-control input-inline"
+                  [value]="status.description || ''"
+                  (blur)="updateField(status, 'description', $any($event.target).value)"
+                  placeholder="Mô tả"
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  class="form-control input-inline input-number"
+                  [value]="status.order || 0"
+                  (blur)="updateField(status, 'order', +$any($event.target).value)"
+                  min="0"
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  [checked]="status.isActive"
+                  (change)="updateField(status, 'isActive', $any($event.target).checked)"
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  [checked]="status.isFinal"
+                  (change)="updateField(status, 'isFinal', $any($event.target).checked)"
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  [checked]="status.isPaymentTrigger"
+                  (change)="updateField(status, 'isPaymentTrigger', $any($event.target).checked)"
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  [checked]="status.isReturnStatus"
+                  (change)="updateField(status, 'isReturnStatus', $any($event.target).checked)"
+                />
+              </td>
+              <td>
+                <button class="btn btn-sm btn-danger" (click)="remove(status._id!)">Xóa</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+
+      <ng-template #loadingTpl>
+        <div class="loading">Đang tải...</div>
+      </ng-template>
+
+      <div *ngIf="error()" class="error">{{ error() }}</div>
     </div>
-
-    <div class="table-wrapper" *ngIf="!isLoading(); else loadingTpl">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tên trạng thái</th>
-            <th>Icon</th>
-            <th>Màu sắc</th>
-            <th>Mô tả</th>
-            <th>Thứ tự</th>
-            <th title="Kích hoạt">✓</th>
-            <th title="Trạng thái kết thúc">Cuối</th>
-            <th title="Trigger thanh toán NCC + hoa hồng">💰</th>
-            <th title="Trạng thái hoàn hàng (tính phí hoàn)">↩️</th>
-            <th>Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let s of deliveryStatuses(); trackBy: trackById" [class.payment-trigger]="s.isPaymentTrigger">
-            <td>
-              <input class="form-control input-inline" [value]="s.name" (blur)="updateField(s, 'name', $any($event.target).value)" placeholder="Tên trạng thái">
-            </td>
-            <td>
-              <select class="form-control input-inline" [value]="s.icon" (change)="updateField(s, 'icon', $any($event.target).value)">
-                <option value="📦">📦</option>
-                <option value="🚚">🚚</option>
-                <option value="✅">✅</option>
-                <option value="↩️">↩️</option>
-                <option value="❌">❌</option>
-                <option value="🔄">🔄</option>
-              </select>
-            </td>
-            <td>
-              <input type="color" class="form-control input-color" [value]="s.color" (change)="updateField(s, 'color', $any($event.target).value)">
-            </td>
-            <td>
-              <input class="form-control input-inline" [value]="s.description || ''" (blur)="updateField(s, 'description', $any($event.target).value)" placeholder="Mô tả">
-            </td>
-            <td>
-              <input type="number" class="form-control input-inline input-number" [value]="s.order || 0" (blur)="updateField(s, 'order', +$any($event.target).value)" min="0">
-            </td>
-            <td>
-              <input type="checkbox" class="form-check-input" [checked]="s.isActive" (change)="updateField(s, 'isActive', $any($event.target).checked)">
-            </td>
-            <td>
-              <input type="checkbox" class="form-check-input" [checked]="s.isFinal" (change)="updateField(s, 'isFinal', $any($event.target).checked)">
-            </td>
-            <td>
-              <input type="checkbox" class="form-check-input" [checked]="s.isPaymentTrigger" (change)="updateField(s, 'isPaymentTrigger', $any($event.target).checked)" title="Trigger thanh toán">
-            </td>
-            <td>
-              <input type="checkbox" class="form-check-input" [checked]="s.isReturnStatus" (change)="updateField(s, 'isReturnStatus', $any($event.target).checked)" title="Trạng thái hoàn">
-            </td>
-            <td>
-              <button class="btn btn-sm btn-danger" (click)="remove(s._id!)">Xóa</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <ng-template #loadingTpl>
-      <div class="loading">Đang tải...</div>
-    </ng-template>
-
-    <div *ngIf="error()" class="error">{{ error() }}</div>
-  </div>
   `,
   styles: [`
     .delivery-status-page { padding: 16px; }
@@ -114,10 +160,26 @@ import { CreateDeliveryStatusDto, DeliveryStatus } from './models/delivery-statu
     .data-table tbody tr:hover { background: #f9fafb; }
     .data-table tbody tr.payment-trigger { background: #ecfdf5; border-left: 3px solid #22c55e; }
     .data-table tbody tr.payment-trigger:hover { background: #dcfce7; }
-  `]
+  `],
 })
 export class DeliveryStatusComponent implements OnInit {
-  private svc = inject(DeliveryStatusService);
+  private readonly svc = inject(DeliveryStatusService);
+  private readonly draftBaseName = 'Trạng thái mới';
+
+  readonly iconOptions = [
+    { value: 'box', label: '📦 Box' },
+    { value: 'truck', label: '🚚 Truck' },
+    { value: 'check', label: '✅ Check' },
+    { value: 'return', label: '↩️ Return' },
+    { value: 'cross', label: '❌ Cross' },
+    { value: 'refresh', label: '🔄 Refresh' },
+    { value: '📦', label: '📦 Legacy' },
+    { value: '🚚', label: '🚚 Legacy' },
+    { value: '✅', label: '✅ Legacy' },
+    { value: '↩️', label: '↩️ Legacy' },
+    { value: '❌', label: '❌ Legacy' },
+    { value: '🔄', label: '🔄 Legacy' },
+  ];
 
   deliveryStatuses = signal<DeliveryStatus[]>([]);
   isLoading = signal(false);
@@ -131,48 +193,94 @@ export class DeliveryStatusComponent implements OnInit {
     this.isLoading.set(true);
     this.error.set(null);
     this.svc.getAll().subscribe({
-      next: (list) => { this.deliveryStatuses.set(list); this.isLoading.set(false); },
-      error: (e) => { this.error.set(e?.message || 'Lỗi tải dữ liệu'); this.isLoading.set(false); }
+      next: (list) => {
+        this.deliveryStatuses.set(list);
+        this.isLoading.set(false);
+      },
+      error: (error) => {
+        this.error.set(error?.message || 'Lỗi tải dữ liệu');
+        this.isLoading.set(false);
+      },
     });
   }
 
-  refresh(): void { this.load(); }
+  refresh(): void {
+    this.load();
+  }
 
   addNew(): void {
     const data: CreateDeliveryStatusDto = {
-      name: 'Trạng thái mới',
+      name: this.getNextDraftName(),
       description: 'Mô tả trạng thái mới',
       color: '#3498db',
-      icon: '🚚',
+      icon: 'truck',
       isActive: true,
       isFinal: false,
       isPaymentTrigger: false,
       isReturnStatus: false,
       order: this.deliveryStatuses().length,
     };
+
     this.svc.create(data).subscribe({
-      next: (created) => { this.deliveryStatuses.update(list => [created, ...list]); },
-      error: (e) => { this.error.set('Lỗi khi thêm trạng thái: ' + (e?.message || e)); }
+      next: (created) => {
+        this.deliveryStatuses.update((list) => [created, ...list]);
+      },
+      error: (error) => {
+        this.error.set('Lỗi khi thêm trạng thái: ' + (error?.message || error));
+      },
     });
   }
 
-  updateField(s: DeliveryStatus, field: keyof DeliveryStatus, value: any): void {
-    const patch: Partial<DeliveryStatus> = { [field]: value } as any;
-    this.svc.update(s._id!, patch).subscribe({
+  updateField(status: DeliveryStatus, field: keyof DeliveryStatus, value: unknown): void {
+    const patch: Partial<DeliveryStatus> = { [field]: value } as Partial<DeliveryStatus>;
+    this.svc.update(status._id!, patch).subscribe({
       next: (updated) => {
-        this.deliveryStatuses.update(list => list.map(i => i._id === updated._id ? updated : i));
+        this.deliveryStatuses.update((list) =>
+          list.map((item) => (item._id === updated._id ? updated : item)),
+        );
       },
-      error: (e) => { this.error.set('Lỗi cập nhật: ' + (e?.message || e)); }
+      error: (error) => {
+        this.error.set('Lỗi cập nhật: ' + (error?.message || error));
+      },
     });
   }
 
   remove(id: string): void {
     if (!confirm('Xóa trạng thái này?')) return;
     this.svc.delete(id).subscribe({
-      next: () => { this.deliveryStatuses.update(list => list.filter(i => i._id !== id)); },
-      error: (e) => { this.error.set('Lỗi xóa: ' + (e?.message || e)); }
+      next: () => {
+        this.deliveryStatuses.update((list) => list.filter((item) => item._id !== id));
+      },
+      error: (error) => {
+        this.error.set('Lỗi xóa: ' + (error?.message || error));
+      },
     });
   }
 
-  trackById(index: number, item: DeliveryStatus): string { return item._id!; }
+  hasIconOption(icon: string): boolean {
+    return this.iconOptions.some((option) => option.value === icon);
+  }
+
+  trackById(index: number, item: DeliveryStatus): string {
+    return item._id!;
+  }
+
+  private getNextDraftName(): string {
+    const names = new Set(
+      this.deliveryStatuses()
+        .map((status) => status.name?.trim().toLowerCase())
+        .filter((name): name is string => !!name),
+    );
+
+    if (!names.has(this.draftBaseName.toLowerCase())) {
+      return this.draftBaseName;
+    }
+
+    let index = 2;
+    while (names.has(`${this.draftBaseName} ${index}`.toLowerCase())) {
+      index++;
+    }
+
+    return `${this.draftBaseName} ${index}`;
+  }
 }

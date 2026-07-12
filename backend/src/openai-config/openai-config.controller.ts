@@ -20,19 +20,27 @@ export class OpenAIConfigController {
 
   @Post()
   @RequirePermissions('openai-configs')
-  create(@Body() dto: CreateOpenAIConfigDto) { return this.service.create(dto); }
+  async create(@Body() dto: CreateOpenAIConfigDto) {
+    return this.service.toPublicConfig(await this.service.create(dto));
+  }
 
   @Get()
   @RequirePermissions('openai-configs')
-  findAll(@Query() q?: any) { return this.service.findAll(q || {}); }
+  async findAll(@Query() q?: any) {
+    return this.service.toPublicConfigs(await this.service.findAll(q || {}));
+  }
 
   @Get(':id')
   @RequirePermissions('openai-configs')
-  findOne(@Param('id') id: string) { return this.service.findOne(id); }
+  async findOne(@Param('id') id: string) {
+    return this.service.toPublicConfig(await this.service.findOne(id));
+  }
 
   @Patch(':id')
   @RequirePermissions('openai-configs')
-  update(@Param('id') id: string, @Body() dto: UpdateOpenAIConfigDto) { return this.service.update(id, dto); }
+  async update(@Param('id') id: string, @Body() dto: UpdateOpenAIConfigDto) {
+    return this.service.toPublicConfig(await this.service.update(id, dto));
+  }
 
   @Delete(':id')
   @RequirePermissions('openai-configs')

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Pilot scoreboard</title>
+  <desc id="desc">Minh họa pilot scoreboard với scope, KPI và tiêu chí go or no-go.</desc>
+  <rect width="1200" height="720" rx="32" fill="#173f3c"/>
+  <rect x="78" y="74" width="1044" height="572" rx="30" fill="#fffaf2"/>
+  <rect x="112" y="114" width="320" height="492" rx="28" fill="#f2e5d4"/>
+  <rect x="464" y="114" width="624" height="200" rx="28" fill="#dce9e3"/>
+  <rect x="464" y="338" width="624" height="268" rx="28" fill="#f7efe2"/>
+  <text x="146" y="166" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">PILOT SCOPE</text>
+  <text x="146" y="214" fill="#123b39" font-size="34" font-family="Georgia, serif" font-weight="700">1 lop • 2 tuan</text>
+  <text x="146" y="258" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">8 phu huynh muc tieu</text>
+  <text x="146" y="296" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">10 hoc vien toi da</text>
+  <text x="146" y="334" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">4 session dau de do gate</text>
+  <text x="494" y="166" fill="#1f5852" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">GO KPI</text>
+  <text x="494" y="216" fill="#1f5852" font-size="24" font-family="Trebuchet MS, sans-serif">Wallet du so du / duyet top-up ≥ 95%</text>
+  <text x="494" y="252" fill="#1f5852" font-size="24" font-family="Trebuchet MS, sans-serif">Attendance dung ngay ≥ 90%</text>
+  <text x="494" y="288" fill="#1f5852" font-size="24" font-family="Trebuchet MS, sans-serif">Teaching report hoan tat = 100%</text>
+  <text x="494" y="376" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">NO-GO / HOLD</text>
+  <text x="494" y="426" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Bat ky session nao close khi attendance thieu</text>
+  <text x="494" y="462" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Chenh ledger khong ve 0 sau doi soat</text>
+  <text x="494" y="498" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Payroll preview co teacher report bi thieu</text>
+  <text x="494" y="534" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif">Sale dua hoc vien vao lop truoc finance gate</text>
+  <circle cx="976" cy="466" r="94" fill="#123b39"/>
+  <circle cx="976" cy="466" r="68" fill="#2f7767"/>
+  <circle cx="976" cy="466" r="42" fill="#e4a547"/>
+  <text x="930" y="474" fill="#fffaf2" font-size="28" font-family="Trebuchet MS, sans-serif" font-weight="700">GO</text>
+</svg>

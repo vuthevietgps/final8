@@ -1,2 +1,0 @@
-return-report/ad-group: PASS
-agent-payables/summary: PASS

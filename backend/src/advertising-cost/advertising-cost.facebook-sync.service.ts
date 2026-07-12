@@ -12,9 +12,11 @@ import { AdvertisingCost, AdvertisingCostDocument } from './schemas/advertising-
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { ApiToken, ApiTokenDocument } from '../api-token/schemas/api-token.schema';
+import { ApiTokenService } from '../api-token/api-token.service';
 import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
+import { getMetaGraphApiVersion } from '../common/ads-api-version';
 
-const FB_GRAPH_API_VERSION = process.env.FB_GRAPH_API_VERSION || 'v19.0';
+const FB_GRAPH_API_VERSION = getMetaGraphApiVersion();
 const FB_SYNC_FAILURE_ALERT_THRESHOLD = Number(process.env.FB_SYNC_FAILURE_ALERT_THRESHOLD || 2);
 
 @Injectable()
@@ -30,11 +32,14 @@ export class AdvertisingCostFacebookSyncService {
     @InjectModel(AdAccount.name) private readonly adAccountModel: Model<AdAccountDocument>,
     @InjectModel(ApiToken.name) private readonly tokenModel: Model<ApiTokenDocument>,
     private readonly recalculationQueue: AdvertisingCostRecalculationQueueService,
+    private readonly apiTokenService: ApiTokenService,
   ) {}
 
   /** Lấy access token Facebook ưu tiên từ env, sau đó từ ApiToken collection */
   private async getAccessToken(): Promise<string | undefined> {
     if (process.env.FB_ADS_ACCESS_TOKEN) return process.env.FB_ADS_ACCESS_TOKEN.trim();
+    const systemRaw = await this.apiTokenService.getRawAccessTokenForAdsManagement();
+    if (systemRaw) return systemRaw;
     // Ưu tiên token hợp lệ gần đây và đánh dấu primary
     const preferred = await this.tokenModel.findOne({ provider: 'facebook', status: 'active', lastCheckStatus: 'valid' })
       .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 }).lean();
@@ -143,7 +148,7 @@ export class AdvertisingCostFacebookSyncService {
       costPerMessagingConversation: Number((doc as any).costPerMessagingConversation || 0),
       messagingFirstReply: Number((doc as any).messagingFirstReply || 0),
     };
-    await this.costModel.updateOne({ adGroupId, date }, { $set: payload }, { upsert: true });
+    await this.costModel.updateOne({ channel: 'facebook', adGroupId, date }, { $set: payload }, { upsert: true });
   }
 
   /** Gọi Graph API lấy insights cho adset (adGroupId) trong 1 ngày */
@@ -251,6 +256,30 @@ export class AdvertisingCostFacebookSyncService {
       this.logger.warn(`FB conversation metrics error for ${adsetId}: ${err?.response?.status} ${err?.response?.data?.error?.message || err?.message}`);
       return null;
     }
+  }
+
+  /**
+   * Lấy metrics frequency + reach cho một adset trong ngày cụ thể.
+   * Public method dùng bởi FrequencySyncService để update adGroups collection.
+   *
+   * @param adsetId - Facebook adset ID (= adGroupId trong DB)
+   * @param dayISO  - Ngày cần lấy dữ liệu, định dạng 'YYYY-MM-DD'
+   */
+  async fetchFrequencyMetrics(
+    adsetId: string,
+    dayISO: string,
+  ): Promise<{ frequency: number; reach: number } | null> {
+    const token = await this.getAccessToken();
+    if (!token) {
+      this.logger.warn(`Missing Facebook access token for frequency sync of adset ${adsetId}`);
+      return null;
+    }
+    const ins = await this.fetchAdsetInsights(adsetId, token, dayISO);
+    if (!ins) return null;
+    return {
+      frequency: ins.frequency,
+      reach: ins.reach,
+    };
   }
 
   /** Đồng bộ cho 1 ngày cố định (YYYY-MM-DD). Trả về số adGroup được lưu. */
@@ -434,8 +463,10 @@ export class AdvertisingCostFacebookSyncService {
     return results;
   }
 
-  /** Cron hàng ngày 06:00 chạy sync hôm qua và recalculate orders */
-  @Cron('0 6 * * *')
+  /**
+   * Manual fallback only.
+   * The primary 06:00 execution is handled by Finance/DataCollectionService.
+   */
   async cronDaily() {
     try {
       const yesterday = new Date();

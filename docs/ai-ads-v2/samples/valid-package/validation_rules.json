@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "2.0",
+  "actionPlanSchema": "../../contracts/action-plan.schema.json",
+  "approvalRequired": true,
+  "provider": "google",
+  "currency": "VND",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "newCampaignStatus": "PAUSED",
+  "allowedKeywordMatchTypes": ["EXACT", "PHRASE", "BROAD"],
+  "rsaMinimum": {
+    "headlines": 3,
+    "descriptions": 2,
+    "finalUrlRequired": true
+  }
+}

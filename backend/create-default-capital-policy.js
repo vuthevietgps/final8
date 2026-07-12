@@ -5,7 +5,7 @@
 
 const mongoose = require('mongoose');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 const capitalAllocationPolicySchema = new mongoose.Schema({
   name: String,

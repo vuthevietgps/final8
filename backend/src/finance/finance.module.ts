@@ -46,17 +46,26 @@ import { LaborStatement, LaborStatementSchema } from '../labor-cost1/schemas/lab
 import { OtherCost, OtherCostSchema } from '../other-cost/schemas/other-cost.schema';
 import { AdvertisingCost, AdvertisingCostSchema } from '../advertising-cost/schemas/advertising-cost.schema';
 import { Product, ProductSchema } from '../product/schemas/product.schema';
+import { ProductCategory, ProductCategorySchema } from '../product-category/schemas/product-category.schema';
+import { SystemSettings, SystemSettingsSchema } from './schemas/system-settings.schema';
+import { CashflowSummarySnapshot, CashflowSummarySnapshotSchema } from './schemas/cashflow-summary-snapshot.schema';
+import { TaxObligationAudit, TaxObligationAuditSchema } from './schemas/tax-obligation-audit.schema';
+import { FinanceAlertEvent, FinanceAlertEventSchema } from './schemas/finance-alert-event.schema';
+import { CashflowSnapshotService } from './cashflow-snapshot.service';
 // CFO Spec v3.1: Import modules for cashflow summary
 import { SupplierPayableModule } from '../supplier-payable/supplier-payable.module';
 import { AgentReceivableModule } from '../agent-receivable/agent-receivable.module';
 import { LaborCost1Module } from '../labor-cost1/labor-cost1.module';
 import { OtherCostModule } from '../other-cost/other-cost.module';
-import { AdvertisingCostModule } from '../advertising-cost/advertising-cost.module';
 import { OwnerFundModule } from '../owner-fund/owner-fund.module';
 // TODO: Rebuild this module from OrderTest2
 import { AdGroupProfitReportModule } from '../ad-group-profit-report/ad-group-profit-report.module';
 import { AIOptimizationModule } from '../advertising-optimization/ai-optimization/ai-optimization.module';
 import { QualityControlModule } from '../advertising-optimization/quality-control/quality-control.module';
+import { FinanceEventListenerService } from './events/finance-event-listener.service';
+import { FinancialSnapshotRebuildController } from './financial-snapshot-rebuild.controller';
+import { AdvertisingCostModule } from '../advertising-cost/advertising-cost.module';
+import { TestOrder2Module } from '../test-order2/test-order2.module';
 
 @Module({
   imports: [
@@ -82,6 +91,11 @@ import { QualityControlModule } from '../advertising-optimization/quality-contro
       { name: OtherCost.name, schema: OtherCostSchema },
       { name: AdvertisingCost.name, schema: AdvertisingCostSchema },
       { name: Product.name, schema: ProductSchema },
+      { name: ProductCategory.name, schema: ProductCategorySchema },
+      { name: SystemSettings.name, schema: SystemSettingsSchema },
+      { name: CashflowSummarySnapshot.name, schema: CashflowSummarySnapshotSchema },
+      { name: TaxObligationAudit.name, schema: TaxObligationAuditSchema },
+      { name: FinanceAlertEvent.name, schema: FinanceAlertEventSchema },
     ]),
     // TODO: Rebuild from OrderTest2
     forwardRef(() => AdGroupProfitReportModule),
@@ -92,8 +106,9 @@ import { QualityControlModule } from '../advertising-optimization/quality-contro
     forwardRef(() => AgentReceivableModule),
     forwardRef(() => LaborCost1Module),
     forwardRef(() => OtherCostModule),
-    forwardRef(() => AdvertisingCostModule),
     forwardRef(() => OwnerFundModule),
+    forwardRef(() => AdvertisingCostModule),
+    forwardRef(() => TestOrder2Module),
   ],
   controllers: [
     FinanceController, 
@@ -102,6 +117,7 @@ import { QualityControlModule } from '../advertising-optimization/quality-contro
     AdGroupDailyReportController, 
     FundsController,
     FinancialControlController,
+    FinancialSnapshotRebuildController,
     LoanManagementController,
   ],
   providers: [
@@ -124,6 +140,9 @@ import { QualityControlModule } from '../advertising-optimization/quality-contro
     FrequencySyncService,
     ExecutiveReportService,
     DataCollectionService,
+    // Phase 3: Snapshot store + event-driven cache invalidation
+    CashflowSnapshotService,
+    FinanceEventListenerService,
   ],
   exports: [
     FinanceService, 
@@ -142,6 +161,7 @@ import { QualityControlModule } from '../advertising-optimization/quality-contro
     FrequencySyncService,
     ExecutiveReportService,
     DataCollectionService,
+    CashflowSnapshotService,
   ],
 })
 export class FinanceModule {}

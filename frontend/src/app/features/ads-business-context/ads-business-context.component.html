@@ -1,0 +1,157 @@
+<section class="context-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">AI Ads V2 · ERP business context</p>
+      <h1>Landing pages &amp; business notes</h1>
+      <p>Quản lý ngữ cảnh ERP cho export phân tích. Không có thao tác provider hoặc publish quảng cáo.</p>
+    </div>
+    <button type="button" class="secondary" (click)="refresh()" [disabled]="loading()">Làm mới</button>
+  </header>
+
+  <div *ngIf="error()" class="notice error">{{ error() }}</div>
+  <div *ngIf="success()" class="notice success">{{ success() }}</div>
+
+  <div class="grid">
+    <article class="panel">
+      <div class="panel-title">
+        <div>
+          <h2>Landing page approval</h2>
+          <p>Thay đổi URL, sản phẩm, tiêu đề hoặc CTA sẽ reset về chờ duyệt.</p>
+        </div>
+        <span class="count">{{ landingPages().length }}</span>
+      </div>
+
+      <div class="form-grid" *ngIf="canWrite()">
+        <label class="wide">URL
+          <input type="url" [(ngModel)]="landingUrl" placeholder="https://example.com/offer" />
+        </label>
+        <label>Sản phẩm
+          <select [(ngModel)]="landingProductId">
+            <option value="">Chọn sản phẩm</option>
+            <option *ngFor="let product of products()" [value]="product._id">{{ product.name }}</option>
+          </select>
+        </label>
+        <label>Tiêu đề
+          <input [(ngModel)]="landingTitle" maxlength="200" />
+        </label>
+        <label>CTA chính
+          <input [(ngModel)]="landingMainCta" maxlength="200" />
+        </label>
+        <label>Kiểm tra gần nhất
+          <input type="datetime-local" [(ngModel)]="landingLastCheckedAt" />
+        </label>
+        <label class="wide">Ghi chú
+          <textarea [(ngModel)]="landingNotes" rows="2" maxlength="2000"></textarea>
+        </label>
+        <div class="form-actions wide">
+          <button type="button" class="primary" (click)="saveLandingPage()" [disabled]="saving()">
+            {{ landingEditId ? 'Cập nhật landing page' : 'Tạo landing page' }}
+          </button>
+          <button *ngIf="landingEditId" type="button" class="secondary" (click)="resetLandingForm()">Hủy sửa</button>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="record" *ngFor="let page of landingPages()">
+          <div class="record-top">
+            <div>
+              <a [href]="page.url" target="_blank" rel="noopener noreferrer">{{ page.title || page.domain }}</a>
+              <p>{{ page.domain }} · {{ productName(page.productId) }}</p>
+            </div>
+            <span class="status" [class]="'status ' + page.approvalStatus">{{ page.approvalStatus }}</span>
+          </div>
+          <p *ngIf="page.mainCta"><strong>CTA:</strong> {{ page.mainCta }}</p>
+          <p *ngIf="page.notes">{{ page.notes }}</p>
+          <p class="muted" *ngIf="page.rejectionReason">Lý do từ chối: {{ page.rejectionReason }}</p>
+          <div class="record-actions">
+            <button *ngIf="canWrite()" type="button" class="secondary" (click)="editLandingPage(page)">Sửa</button>
+            <button *ngIf="canApprove() && page.approvalStatus !== 'approved'" type="button" class="approve" (click)="approveLandingPage(page)" [disabled]="!!actionId()">Duyệt</button>
+            <button *ngIf="canApprove() && page.approvalStatus !== 'rejected'" type="button" class="reject" (click)="rejectLandingPage(page)" [disabled]="!!actionId()">Từ chối</button>
+          </div>
+        </div>
+        <p class="empty" *ngIf="!loading() && !landingPages().length">Chưa có landing page.</p>
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-title">
+        <div>
+          <h2>Business daily notes</h2>
+          <p>Ghi nhận biến động ads, tài chính, vận hành và nguồn cung theo ngày.</p>
+        </div>
+        <span class="count">{{ dailyNotes().length }}</span>
+      </div>
+
+      <div class="form-grid" *ngIf="canWrite()">
+        <label>Ngày
+          <input type="date" [(ngModel)]="noteDate" />
+        </label>
+        <label>Nguồn
+          <select [(ngModel)]="noteSource">
+            <option *ngFor="let source of noteSources" [value]="source">{{ source }}</option>
+          </select>
+        </label>
+        <label>Mức độ
+          <select [(ngModel)]="noteSeverity">
+            <option value="info">info</option>
+            <option value="warning">warning</option>
+            <option value="critical">critical</option>
+          </select>
+        </label>
+        <label>Sản phẩm liên quan
+          <select [(ngModel)]="affectedProductId">
+            <option value="">Không chỉ định</option>
+            <option *ngFor="let product of products()" [value]="product._id">{{ product.name }}</option>
+          </select>
+        </label>
+        <label class="wide">Tóm tắt
+          <input [(ngModel)]="noteSummary" maxlength="1000" />
+        </label>
+        <label>Customer ID
+          <input [(ngModel)]="affectedCustomerId" maxlength="64" />
+        </label>
+        <label>Campaign ID
+          <input [(ngModel)]="affectedCampaignId" maxlength="64" />
+        </label>
+        <label>Ad Group ID
+          <input [(ngModel)]="affectedAdGroupId" maxlength="64" />
+        </label>
+        <label class="wide">Chi tiết
+          <textarea [(ngModel)]="noteNotes" rows="2" maxlength="4000"></textarea>
+        </label>
+        <label class="wide">Bất thường, mỗi dòng một mục
+          <textarea [(ngModel)]="noteAnomalies" rows="3"></textarea>
+        </label>
+        <div class="form-actions wide">
+          <button type="button" class="primary" (click)="saveDailyNote()" [disabled]="saving()">
+            {{ noteEditId ? 'Cập nhật business note' : 'Tạo business note' }}
+          </button>
+          <button *ngIf="noteEditId" type="button" class="secondary" (click)="resetNoteForm()">Hủy sửa</button>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="record" *ngFor="let note of dailyNotes()">
+          <div class="record-top">
+            <div>
+              <strong>{{ note.date }} · {{ note.summary }}</strong>
+              <p>{{ note.source }}<span *ngIf="note.updatedBy"> · {{ note.updatedBy }}</span></p>
+            </div>
+            <span class="severity" [class]="'severity ' + note.severity">{{ note.severity }}</span>
+          </div>
+          <p *ngIf="note.notes">{{ note.notes }}</p>
+          <ul *ngIf="note.anomalies?.length">
+            <li *ngFor="let anomaly of note.anomalies">{{ anomaly }}</li>
+          </ul>
+          <p class="muted" *ngIf="note.affectedAdGroupId || note.affectedCampaignId">
+            Campaign {{ note.affectedCampaignId || '—' }} · Ad Group {{ note.affectedAdGroupId || '—' }}
+          </p>
+          <div class="record-actions" *ngIf="canWrite()">
+            <button type="button" class="secondary" (click)="editDailyNote(note)">Sửa</button>
+          </div>
+        </div>
+        <p class="empty" *ngIf="!loading() && !dailyNotes().length">Chưa có business note.</p>
+      </div>
+    </article>
+  </div>
+</section>

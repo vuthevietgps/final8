@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://htxbachgia.shop/schemas/ai-ads-v2/execution-plan-manifest.schema.json",
+  "title": "AI Ads V2 Execution Plan Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "planId", "sourceExportId", "generatedAt", "generator", "targetProvider", "currency", "timezone", "executionMode", "hashes"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "planId": { "type": "string", "pattern": "^PLAN-[A-Z0-9][A-Z0-9_-]{5,79}$" },
+    "sourceExportId": { "type": "string", "pattern": "^EXP-[A-Z0-9][A-Z0-9_-]{5,79}$" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "generator": { "const": "chatgpt-web" },
+    "targetProvider": { "const": "google" },
+    "currency": { "const": "VND" },
+    "timezone": { "const": "Asia/Ho_Chi_Minh" },
+    "executionMode": { "const": "pending_approval" },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+      "required": ["action_plan.json"]
+    }
+  }
+}

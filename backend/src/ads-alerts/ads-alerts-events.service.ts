@@ -14,6 +14,7 @@ export interface AdsAlert {
   category: AlertCategory;
   title: string;
   message: string;
+  dedupeKey?: string;
   adGroupId?: string;
   adGroupName?: string;
   platform?: string;
@@ -40,10 +41,12 @@ export interface AdsAlertEvent {
   alertId?: string;
 }
 
+export type CreateAlertParams = Omit<AdsAlert, 'id' | 'createdAt' | 'isRead'>;
+
 @Injectable()
 export class AdsAlertsEventsService {
   private subject = new Subject<AdsAlertEvent>();
-  
+
   // Store alerts in memory for quick access
   private alertsStore = new BehaviorSubject<AdsAlert[]>([]);
   private unreadCount = new BehaviorSubject<number>(0);
@@ -53,10 +56,10 @@ export class AdsAlertsEventsService {
    */
   emit(event: AdsAlertEvent): void {
     this.subject.next(event);
-    
+
     // Update store based on event type
     const currentAlerts = this.alertsStore.value;
-    
+
     switch (event.type) {
       case 'new-alert':
         if (event.alert) {
@@ -66,17 +69,17 @@ export class AdsAlertsEventsService {
           this.updateUnreadCount();
         }
         break;
-        
+
       case 'update-alert':
         if (event.alert) {
-          const updated = currentAlerts.map(a => 
+          const updated = currentAlerts.map(a =>
             a.id === event.alert!.id ? event.alert! : a
           );
           this.alertsStore.next(updated);
           this.updateUnreadCount();
         }
         break;
-        
+
       case 'dismiss-alert':
         if (event.alertId) {
           const filtered = currentAlerts.filter(a => a.id !== event.alertId);
@@ -84,7 +87,7 @@ export class AdsAlertsEventsService {
           this.updateUnreadCount();
         }
         break;
-        
+
       case 'clear-all':
         this.alertsStore.next([]);
         this.unreadCount.next(0);
@@ -105,15 +108,15 @@ export class AdsAlertsEventsService {
   getAllAlerts(): AdsAlert[] {
     // Filter out expired alerts
     const now = new Date();
-    const validAlerts = this.alertsStore.value.filter(a => 
+    const validAlerts = this.alertsStore.value.filter(a =>
       !a.expiresAt || new Date(a.expiresAt) > now
     );
-    
+
     if (validAlerts.length !== this.alertsStore.value.length) {
       this.alertsStore.next(validAlerts);
       this.updateUnreadCount();
     }
-    
+
     return validAlerts;
   }
 
@@ -129,12 +132,12 @@ export class AdsAlertsEventsService {
    */
   markAsRead(alertId: string): void {
     const alerts = this.alertsStore.value;
-    const updated = alerts.map(a => 
+    const updated = alerts.map(a =>
       a.id === alertId ? { ...a, isRead: true } : a
     );
     this.alertsStore.next(updated);
     this.updateUnreadCount();
-    
+
     const alert = updated.find(a => a.id === alertId);
     if (alert) {
       this.emit({ type: 'update-alert', alert });
@@ -170,17 +173,42 @@ export class AdsAlertsEventsService {
     this.unreadCount.next(count);
   }
 
+  private isAlertActive(alert: AdsAlert, now: Date = new Date()): boolean {
+    return !alert.expiresAt || new Date(alert.expiresAt) > now;
+  }
+
   /**
    * Create and emit a new alert
    */
-  createAlert(params: Omit<AdsAlert, 'id' | 'createdAt' | 'isRead'>): AdsAlert {
+  createAlert(params: CreateAlertParams): AdsAlert {
+    if (params.dedupeKey) {
+      const existing = this.getAllAlerts().find(
+        (alert) =>
+          alert.dedupeKey === params.dedupeKey &&
+          this.isAlertActive(alert),
+      );
+
+      if (existing) {
+        const updated: AdsAlert = {
+          ...existing,
+          ...params,
+          id: existing.id,
+          createdAt: existing.createdAt,
+          isRead: false,
+        };
+
+        this.emit({ type: 'update-alert', alert: updated });
+        return updated;
+      }
+    }
+
     const alert: AdsAlert = {
       ...params,
       id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       isRead: false,
       createdAt: new Date(),
     };
-    
+
     this.emit({ type: 'new-alert', alert });
     return alert;
   }

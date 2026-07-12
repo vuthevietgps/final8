@@ -1,10 +1,9 @@
-﻿/**
- * File: ad-group/ad-group.service.ts
- * Má»¥c Ä‘Ã­ch: Xá»­ lÃ½ nghiá»‡p vá»¥ NhÃ³m Quáº£ng CÃ¡o (CRUD, filter).
+/**
+ * AdGroup service.
  */
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
+import { FilterQuery, Model } from 'mongoose';
 import { AdGroup, AdGroupDocument } from './schemas/ad-group.schema';
 import { CreateAdGroupDto } from './dto/create-ad-group.dto';
 import { UpdateAdGroupDto } from './dto/update-ad-group.dto';
@@ -21,52 +20,91 @@ export class AdGroupService {
     @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
   ) {}
 
-  private normalizeSingleProductSelection(selectedProducts: unknown): string[] {
+  private normalizeSelectedProducts(selectedProducts: unknown): string[] {
+    if (selectedProducts === undefined || selectedProducts === null) {
+      return [];
+    }
     if (!Array.isArray(selectedProducts)) {
-      throw new BadRequestException('Phải chọn đúng 1 sản phẩm cho nhóm quảng cáo');
+      throw new BadRequestException('selectedProducts phai la mang neu duoc gui len');
     }
 
-    const normalized = Array.from(
-      new Set(
-        selectedProducts
-          .map((item) => String(item ?? '').trim())
-          .filter(Boolean),
-      ),
-    );
+    const normalized = Array.from(new Set(
+      selectedProducts
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean),
+    ));
 
-    if (normalized.length !== 1) {
-      throw new BadRequestException('Mỗi nhóm quảng cáo phải gắn đúng 1 sản phẩm');
+    if (normalized.length > 1) {
+      throw new BadRequestException('Moi nhom quang cao chi duoc gan toi da 1 san pham');
     }
 
     return normalized;
   }
 
-  private async validateProductInCategory(productId: string, productCategoryId: string): Promise<void> {
-    const exists = await this.productModel.exists({
-      _id: productId,
-      categoryId: productCategoryId,
-    });
+  private async resolveCategoryIdByProductId(productId: string): Promise<string> {
+    const product = await this.productModel
+      .findById(productId)
+      .select('categoryId')
+      .lean();
 
-    if (!exists) {
-      throw new BadRequestException('Sản phẩm đã chọn không thuộc danh mục sản phẩm của nhóm quảng cáo');
+    const categoryId = product?.categoryId ? String(product.categoryId) : '';
+    if (!categoryId) {
+      throw new BadRequestException('San pham da chon khong ton tai hoac chua co danh muc');
     }
+    return categoryId;
+  }
+
+  private async resolveProductContext(
+    selectedProducts: string[],
+    requestedCategoryId?: string,
+  ): Promise<{ selectedProducts?: string[]; productCategoryId?: string }> {
+    if (!selectedProducts.length) {
+      return {
+        selectedProducts: [],
+        productCategoryId: undefined,
+      };
+    }
+
+    const resolvedCategoryId = await this.resolveCategoryIdByProductId(selectedProducts[0]);
+    if (requestedCategoryId && String(requestedCategoryId) !== resolvedCategoryId) {
+      throw new BadRequestException('San pham da chon khong thuoc danh muc san pham da truyen');
+    }
+
+    return {
+      selectedProducts,
+      productCategoryId: resolvedCategoryId,
+    };
+  }
+
+  private baseQuery(filter: FilterQuery<AdGroupDocument>) {
+    return this.adGroupModel.find(filter)
+      .populate('fanpageId', 'name pageId')
+      .populate('productCategoryId', 'name description color icon')
+      .populate('selectedProducts', 'name categoryId status')
+      .populate('agentId', 'fullName name')
+      .populate('adAccountId', 'name accountId accountType managementMode businessCenterId businessCenterName')
+      .populate('assignedEmployeeId', 'fullName email role')
+      .sort({ createdAt: -1 });
   }
 
   async create(dto: CreateAdGroupDto): Promise<AdGroup> {
-    const selectedProducts = this.normalizeSingleProductSelection(dto.selectedProducts);
-    await this.validateProductInCategory(selectedProducts[0], dto.productCategoryId);
+    const productContext = await this.resolveProductContext(
+      this.normalizeSelectedProducts(dto.selectedProducts),
+      dto.productCategoryId,
+    );
 
     const created = new this.adGroupModel({
       ...dto,
-      selectedProducts,
+      productCategoryId: productContext.productCategoryId,
+      selectedProducts: productContext.selectedProducts,
       isActive: dto.isActive ?? true,
+      lastOperatorActivityAt: dto.platform === 'tiktok' ? new Date() : undefined,
     });
     try {
       return await created.save();
     } catch (e: any) {
-      // Mongo duplicate key error
       if (e?.code === 11000 && e?.keyPattern?.adGroupId) {
-        throw new BadRequestException('ID nhÃ³m quáº£ng cÃ¡o Ä‘Ã£ tá»“n táº¡i. Vui lÃ²ng nháº­p ID khÃ¡c.');
+        throw new BadRequestException('ID nhom quang cao da ton tai. Vui long nhap ID khac.');
       }
       throw e;
     }
@@ -77,29 +115,24 @@ export class AdGroupService {
     if (query?.platform) filter.platform = query.platform;
     if (query?.fanpageId) filter.fanpageId = query.fanpageId;
     if (query?.productCategoryId) filter.productCategoryId = query.productCategoryId;
+    if (query?.productId) filter.selectedProducts = query.productId;
     if (query?.agentId) filter.agentId = query.agentId;
+    if (query?.assignedEmployeeId) filter.assignedEmployeeId = query.assignedEmployeeId;
     if (query?.adAccountId) filter.adAccountId = query.adAccountId;
+    if (query?.adGroupId) filter.adGroupId = query.adGroupId;
     if (query?.isActive !== undefined) filter.isActive = query.isActive === 'true';
 
-    return this.adGroupModel.find(filter)
-      .populate('fanpageId', 'name pageId')
-      .populate('productCategoryId', 'name description color icon')
-      .populate('selectedProducts', 'name description price')
-      .populate('agentId', 'fullName name')
-      .populate('adAccountId', 'name accountId')
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.baseQuery(filter).exec();
   }
 
-  /**
-   * TÃ¬m kiáº¿m nhÃ³m quáº£ng cÃ¡o vá»›i bá»™ lá»c + tá»« khÃ³a (tÃªn hoáº·c adGroupId)
-   */
   async search(query?: any): Promise<AdGroup[]> {
     const filter: FilterQuery<AdGroupDocument> = {};
     if (query?.platform && query.platform !== 'all') filter.platform = query.platform;
     if (query?.fanpageId && query.fanpageId !== 'all') filter.fanpageId = query.fanpageId;
     if (query?.productCategoryId && query.productCategoryId !== 'all') filter.productCategoryId = query.productCategoryId;
+    if (query?.productId && query.productId !== 'all') filter.selectedProducts = query.productId;
     if (query?.agentId && query.agentId !== 'all') filter.agentId = query.agentId;
+    if (query?.assignedEmployeeId && query.assignedEmployeeId !== 'all') filter.assignedEmployeeId = query.assignedEmployeeId;
     if (query?.adAccountId && query.adAccountId !== 'all') filter.adAccountId = query.adAccountId;
     if (query?.status && query.status !== 'all') filter.isActive = query.status === 'active';
 
@@ -108,14 +141,7 @@ export class AdGroupService {
       filter.$or = [{ name: rx }, { adGroupId: rx }, { description: rx }];
     }
 
-    return this.adGroupModel.find(filter)
-      .populate('fanpageId', 'name pageId')
-      .populate('productCategoryId', 'name description color icon')
-      .populate('selectedProducts', 'name description price')
-      .populate('agentId', 'fullName name')
-      .populate('adAccountId', 'name accountId')
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.baseQuery(filter).exec();
   }
 
   async existsByAdGroupId(adGroupId: string): Promise<boolean> {
@@ -127,53 +153,58 @@ export class AdGroupService {
     const doc = await this.adGroupModel.findById(id)
       .populate('fanpageId', 'name pageId avatarUrl')
       .populate('productCategoryId', 'name description color icon')
-      .populate('selectedProducts', 'name description price images')
+      .populate('selectedProducts', 'name categoryId status images')
       .populate('agentId', 'fullName name')
-      .populate('adAccountId', 'name accountId')
+      .populate('adAccountId', 'name accountId accountType managementMode businessCenterId businessCenterName')
+      .populate('assignedEmployeeId', 'fullName email role')
       .exec();
-    if (!doc) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
+    if (!doc) throw new NotFoundException('Khong tim thay nhom quang cao');
     return doc;
   }
 
-  /**
-   * TÃ¬m Ad Group theo adGroupId vÃ  fanpageId (dÃ¹ng cho webhook)
-   * Phá»¥c vá»¥ AI chatbot khi nháº­n tin nháº¯n tá»« webhook
-   */
   async findByAdGroupIdAndFanpage(adGroupId: string, fanpageId: string): Promise<AdGroup | null> {
-    return this.adGroupModel.findOne({ 
-      adGroupId, 
+    return this.adGroupModel.findOne({
+      adGroupId,
       fanpageId,
-      isActive: true
+      isActive: true,
     })
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description')
-      .populate('selectedProducts', 'name description price images')
+      .populate('selectedProducts', 'name categoryId status images')
+      .populate('assignedEmployeeId', 'fullName email role')
       .exec();
   }
 
   async update(id: string, dto: UpdateAdGroupDto): Promise<AdGroup> {
     const existing = await this.adGroupModel
       .findById(id)
-      .select('productCategoryId selectedProducts')
+      .select('selectedProducts platform')
       .lean();
-    if (!existing) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
+    if (!existing) throw new NotFoundException('Khong tim thay nhom quang cao');
 
     const updatePayload: any = { ...dto };
-    const nextCategoryId = String(dto.productCategoryId ?? existing.productCategoryId ?? '');
 
-    let nextSelectedProducts: string[] | undefined;
     if (dto.selectedProducts !== undefined) {
-      nextSelectedProducts = this.normalizeSingleProductSelection(dto.selectedProducts);
-      updatePayload.selectedProducts = nextSelectedProducts;
+      const productContext = await this.resolveProductContext(
+        this.normalizeSelectedProducts(dto.selectedProducts),
+        dto.productCategoryId,
+      );
+      updatePayload.selectedProducts = productContext.selectedProducts;
+      updatePayload.productCategoryId = productContext.productCategoryId;
     } else if (dto.productCategoryId !== undefined) {
-      // Khi đổi danh mục mà không truyền selectedProducts, thử giữ sản phẩm hiện tại nếu hợp lệ.
-      const currentSelected = this.normalizeSingleProductSelection(existing.selectedProducts || []);
-      nextSelectedProducts = currentSelected;
-      updatePayload.selectedProducts = currentSelected;
+      delete updatePayload.productCategoryId;
     }
 
-    if (nextSelectedProducts) {
-      await this.validateProductInCategory(nextSelectedProducts[0], nextCategoryId);
+    const nextPlatform = (dto.platform as AdGroup['platform']) || existing.platform;
+    const shouldMarkOperatorActivity = nextPlatform === 'tiktok' && (
+      'assignedEmployeeId' in dto ||
+      'adAccountId' in dto ||
+      'notes' in dto ||
+      'description' in dto ||
+      'isActive' in dto
+    );
+    if (shouldMarkOperatorActivity) {
+      updatePayload.lastOperatorActivityAt = new Date();
     }
 
     const updated = await this.adGroupModel.findByIdAndUpdate(
@@ -183,21 +214,21 @@ export class AdGroupService {
     )
       .populate('fanpageId', 'name pageId')
       .populate('productCategoryId', 'name description color icon')
-      .populate('selectedProducts', 'name description price')
+      .populate('selectedProducts', 'name categoryId status')
       .populate('agentId', 'fullName name')
-      .populate('adAccountId', 'name accountId')
+      .populate('adAccountId', 'name accountId accountType managementMode businessCenterId businessCenterName')
+      .populate('assignedEmployeeId', 'fullName email role')
       .exec();
-    if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
+    if (!updated) throw new NotFoundException('Khong tim thay nhom quang cao');
     return updated;
   }
 
   async remove(id: string): Promise<void> {
     const existing = await this.adGroupModel.findById(id).select('adGroupId').lean();
-    if (!existing) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhÃ³m quáº£ng cÃ¡o');
+    if (!existing) throw new NotFoundException('Khong tim thay nhom quang cao');
 
     await this.adGroupModel.findByIdAndDelete(id).exec();
 
-    // Cascade cleanup vÃ¬ AdvertisingCost liÃªn káº¿t báº±ng adGroupId string.
     if (existing.adGroupId) {
       try {
         const cleanup = await this.advertisingCostModel.deleteMany({ adGroupId: existing.adGroupId });
@@ -208,13 +239,7 @@ export class AdGroupService {
     }
   }
 
-  /**
-   * Thống kê số lượng nhóm quảng cáo theo sản phẩm.
-   * Trả về mảng gồm { productId, productName, active, inactive }.
-   * productId is Product _id from products collection.
-   */
   async getCountsByProduct(): Promise<Array<{ productId: string; productName: string; active: number; inactive: number }>> {
-    // Always use products collection as the source of truth for product list.
     const rows = await this.productModel.aggregate([
       {
         $lookup: {
@@ -279,5 +304,3 @@ export class AdGroupService {
     return rows as Array<{ productId: string; productName: string; active: number; inactive: number }>;
   }
 }
-
-

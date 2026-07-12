@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, SchemaTypes, Types } from 'mongoose';
 
 export type FundTransactionDocument = FundTransaction & Document;
 
@@ -15,7 +15,7 @@ export enum FundTransactionCategory {
   REFUND = 'refund',                     // Hoàn tiền
   BANK_TRANSFER_IN = 'bank_transfer_in', // Chuyển từ Bank Balance vào Quỹ Owner
   OTHER_IN = 'other_in',                 // Khác (vào)
-  
+
   // Loại tiền RA
   WITHDRAWAL_PROFIT = 'withdrawal_profit',     // Rút lợi nhuận
   WITHDRAWAL_EMERGENCY = 'withdrawal_emergency', // Rút khẩn cấp
@@ -32,7 +32,10 @@ export enum FundTransactionCategory {
  */
 @Schema({ timestamps: true, collection: 'fund_transactions' })
 export class FundTransaction {
-  @Prop({ type: Types.ObjectId, ref: 'Owner', required: false })
+  @Prop({ trim: true })
+  idempotencyKey?: string;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Owner', required: false })
   ownerId?: Types.ObjectId;
 
   @Prop({ type: String, enum: FundTransactionType, required: true })
@@ -62,7 +65,7 @@ export class FundTransaction {
   @Prop()
   referenceType: string; // 'withdrawal', 'profit_report', 'manual'
 
-  @Prop({ type: Types.ObjectId, ref: 'User' })
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User' })
   createdBy: Types.ObjectId;
 
   @Prop({ default: 0 })
@@ -82,3 +85,7 @@ FundTransactionSchema.index({ ownerId: 1, date: -1 });
 FundTransactionSchema.index({ type: 1, date: -1 });
 FundTransactionSchema.index({ category: 1 });
 FundTransactionSchema.index({ date: -1 });
+FundTransactionSchema.index(
+  { idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
+);

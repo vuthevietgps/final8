@@ -14,7 +14,6 @@
 DOMAIN="htxbachgia.shop"
 PORT="8090"
 CONTAINER_NAME=$(echo $DOMAIN | sed 's/\./-/g')
-
 BACKEND_IMAGE_BASE="vutheviet/final8new"
 FRONTEND_IMAGE_BASE="vutheviet/final8new"
 
@@ -45,6 +44,16 @@ done
 if [ -z "$TAG_IN" ]; then TAG_IN="version14.0"; fi
 BACKEND_TAG="$TAG_IN"
 FRONTEND_TAG="$TAG_IN"
+
+MONGODB_URI_VALUE="${MONGODB_URI:-}"
+if [ -z "${JWT_SECRET:-}" ] || [ -z "${API_TOKEN_SECRET:-}" ] || [ -z "${MESSENGER_VERIFY_TOKEN:-}" ]; then
+  echo "Required production secrets are missing: JWT_SECRET, API_TOKEN_SECRET and MESSENGER_VERIFY_TOKEN."
+  exit 1
+fi
+if [ -z "$MONGODB_URI_VALUE" ]; then
+  echo "MONGODB_URI is missing. Inject it from the deployment secret environment."
+  exit 1
+fi
 
 echo "🏷️  Using image tags: backend=$BACKEND_TAG, frontend=$FRONTEND_TAG"
 
@@ -231,6 +240,32 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - MONGODB_URI=${MONGODB_URI_VALUE}
+      - REDIS_URL=${REDIS_URL:-}
+      - DB_READINESS_TIMEOUT_MS=${DB_READINESS_TIMEOUT_MS:-3000}
+      - JWT_SECRET=${JWT_SECRET}
+      - API_TOKEN_SECRET=${API_TOKEN_SECRET}
+      - MESSENGER_VERIFY_TOKEN=${MESSENGER_VERIFY_TOKEN}
+      - FB_VERIFY_TOKEN=${FB_VERIFY_TOKEN:-${MESSENGER_VERIFY_TOKEN}}
+      - AI_MARKETING_REQUIRE_APPROVAL=${AI_MARKETING_REQUIRE_APPROVAL:-true}
+      - AI_MARKETING_DRY_RUN=${AI_MARKETING_DRY_RUN:-true}
+      - AI_MARKETING_PROVIDER_EXECUTION_ENABLED=${AI_MARKETING_PROVIDER_EXECUTION_ENABLED:-false}
+      - GOOGLE_ADS_PRODUCTION_ENABLED=${GOOGLE_ADS_PRODUCTION_ENABLED:-false}
+      - GOOGLE_ADS_CLIENT_ID=${GOOGLE_ADS_CLIENT_ID:-}
+      - GOOGLE_ADS_CLIENT_SECRET=${GOOGLE_ADS_CLIENT_SECRET:-}
+      - GOOGLE_ADS_REFRESH_TOKEN=${GOOGLE_ADS_REFRESH_TOKEN:-}
+      - GOOGLE_ADS_DEVELOPER_TOKEN=${GOOGLE_ADS_DEVELOPER_TOKEN:-}
+      - GOOGLE_ADS_LOGIN_CUSTOMER_ID=${GOOGLE_ADS_LOGIN_CUSTOMER_ID:-}
+      - GOOGLE_ADS_API_VERSION=${GOOGLE_ADS_API_VERSION:-v24}
+      - GOOGLE_ADS_CUSTOMER_ID_ALLOWLIST=${GOOGLE_ADS_CUSTOMER_ID_ALLOWLIST:-}
+      - GOOGLE_ADS_LOGIN_CUSTOMER_ID_ALLOWLIST=${GOOGLE_ADS_LOGIN_CUSTOMER_ID_ALLOWLIST:-}
+      - GOOGLE_ADS_LANDING_PAGE_ALLOWLIST=${GOOGLE_ADS_LANDING_PAGE_ALLOWLIST:-}
+      - GOOGLE_ADS_PROVIDER_VALIDATION_TTL_MS=${GOOGLE_ADS_PROVIDER_VALIDATION_TTL_MS:-900000}
+      - GOOGLE_ADS_FINANCIAL_SYNC_MAX_AGE_MS=${GOOGLE_ADS_FINANCIAL_SYNC_MAX_AGE_MS:-900000}
+      - ADS_MANAGER_PROVIDER_VERIFICATION_TTL_MINUTES=${ADS_MANAGER_PROVIDER_VERIFICATION_TTL_MINUTES:-60}
+      - ADS_EVIDENCE_QUERY_CONCURRENCY=${ADS_EVIDENCE_QUERY_CONCURRENCY:-6}
+      - ADS_EVIDENCE_ORDER_PAGE_SIZE=${ADS_EVIDENCE_ORDER_PAGE_SIZE:-1000}
+      - ADS_EVIDENCE_MAX_ORDER_ROWS=${ADS_EVIDENCE_MAX_ORDER_ROWS:-50000}
       - BACKEND_ROOT=/app
       - MEDIA_DIR=/app/uploads/media
       - MEDIA_PUBLIC_BASE=/media
@@ -238,14 +273,14 @@ services:
       - FB_SENDING_ENABLED=1
       - AI_FB_SENDING_ENABLED=1
       - AI_FB_DELIVERY_RECOVERY_ENABLED=1
-      - CHAT_WEBHOOK_DEBUG=1
+      - CHAT_WEBHOOK_DEBUG=0
     volumes:
       - ./backend/uploads:/app/uploads
       - ./media:/app/uploads/media
     expose:
       - "3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12

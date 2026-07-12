@@ -1,6 +1,5 @@
 /**
- * File: advertising-cost/dto/create-advertising-cost.dto.ts
- * Mục đích: DTO tạo mới Chi Phí Quảng Cáo với validate.
+ * DTO for creating advertising cost records.
  */
 import { IsDateString, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
 
@@ -11,14 +10,26 @@ export class CreateAdvertisingCostDto {
 
   @IsOptional()
   @IsDateString()
-  date?: string; // Định dạng ISO, frontend sẽ nhập mm/dd/yyyy rồi convert
+  date?: string;
 
   @IsOptional()
   @IsNumber()
-  frequency?: number; // Không bắt buộc
+  frequency?: number;
 
   @IsString()
-  adGroupId: string; // Bắt buộc
+  adGroupId: string;
+
+  @IsOptional()
+  @IsString()
+  customerId?: string;
+
+  @IsOptional()
+  @IsString()
+  businessCenterId?: string;
+
+  @IsOptional()
+  @IsIn(['direct', 'bm', 'mcc', 'bc'])
+  managementMode?: 'direct' | 'bm' | 'mcc' | 'bc';
 
   @IsOptional()
   @IsNumber()
@@ -32,7 +43,6 @@ export class CreateAdvertisingCostDto {
   @IsNumber()
   cpc?: number;
 
-  // === NEW MESSAGING METRICS ===
   @IsOptional()
   @IsNumber()
   impressions?: number;
@@ -40,6 +50,22 @@ export class CreateAdvertisingCostDto {
   @IsOptional()
   @IsNumber()
   clicks?: number;
+
+  @IsOptional()
+  @IsNumber()
+  conversions?: number;
+
+  @IsOptional()
+  @IsNumber()
+  allConversions?: number;
+
+  @IsOptional()
+  @IsNumber()
+  conversionValue?: number;
+
+  @IsOptional()
+  @IsNumber()
+  costPerConversion?: number;
 
   @IsOptional()
   @IsNumber()

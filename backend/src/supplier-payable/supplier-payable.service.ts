@@ -1,6 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+/**
+ * ⚠️ WARNING ON TERMINOLOGY ⚠️
+ * Collection: `supplier-payable` (DB name: supplier_payables)
+ * Accounting Logic: Account Receivable (AR) — Tiền Nhà Cung Cấp Nợ và PHẢI TRẢ cho công ty
+ *   (Thu hộ COD trừ COGS = lợi nhuận NCC giữ hộ, phải truyền về cho hệ thống).
+ * Trong công thức Dòng tiền: Đây là INFLOW (Dòng tiền VÀO), không phải OUTFLOW.
+ * Tên collection giữ nguyên để tương thích ngược. Không đổi tên DB.
+ */
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateSupplierPayableDto } from './dto/create-supplier-payable.dto';
 import { AddPaymentDto } from './dto/add-payment.dto';
 import { SupplierPayable, SupplierPayableDocument } from './schemas/supplier-payable.schema';
@@ -12,10 +21,13 @@ import { StatementManagementService } from './services/statement-management.serv
 import { CsvExportService } from './services/csv-export.service';
 import { OrderIntegrationService } from './services/order-integration.service';
 import { computeTotals, assertObjectId, buildPeriodFilter } from './helpers/payable.helpers';
+import { FinanceEvents } from '../finance/events/finance-events.constants';
+import { SystemSettings, SystemSettingsDocument } from '../finance/schemas/system-settings.schema';
+import { DEFAULT_CONFIG } from '../finance/interfaces/financial-control.interface';
 
 /**
  * Main service for supplier payables - coordinates between domain services
- * 
+ *
  * Architecture:
  * - This service: Basic CRUD operations for payables
  * - StatementManagementService: Statement lifecycle management
@@ -25,14 +37,18 @@ import { computeTotals, assertObjectId, buildPeriodFilter } from './helpers/paya
  */
 @Injectable()
 export class SupplierPayableService {
+  private readonly logger = new Logger(SupplierPayableService.name);
+
   constructor(
     @InjectModel(SupplierPayable.name) private model: Model<SupplierPayableDocument>,
     @InjectModel(TestOrder2.name) private orderModel: Model<any>,
     @InjectModel(SupplierStatement.name) private statementModel: Model<SupplierStatementDocument>,
+    @InjectModel(SystemSettings.name) private settingsModel: Model<SystemSettingsDocument>,
     private pdfGenerator: StatementPdfGenerator,
     private statementService: StatementManagementService,
     private csvExportService: CsvExportService,
     private orderIntegrationService: OrderIntegrationService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   // ============ Payable CRUD Operations ============
@@ -41,19 +57,19 @@ export class SupplierPayableService {
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Cần ít nhất 1 dòng công nợ');
     }
-    
+
     const items = dto.items.map(it => ({
       productId: it.productId ? new Types.ObjectId(it.productId) : undefined,
       productNameSnap: it.productNameSnap,
       quantity: Number(it.quantity || 0),
       unitPrice: Number(it.unitPrice || 0),
-      amount: it.amount !== undefined 
-        ? Number(it.amount) 
+      amount: it.amount !== undefined
+        ? Number(it.amount)
         : Number(it.quantity || 0) * Number(it.unitPrice || 0),
     }));
-    
+
     const { totalAmount } = computeTotals(items, dto.totalAmount);
-    
+
     const doc = await this.model.create({
       supplierId: new Types.ObjectId(dto.supplierId),
       supplierNameSnap: dto.supplierNameSnap,
@@ -68,21 +84,21 @@ export class SupplierPayableService {
       status: dto.status || 'unpaid',
       payments: [],
     });
-    
+
     return doc.toObject();
   }
 
-  async findAll(params: { 
-    supplierId?: string; 
-    status?: string; 
-    from?: string; 
-    to?: string; 
-    page?: number; 
-    limit?: number 
+  async findAll(params: {
+    supplierId?: string;
+    status?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Math.min(200, Number(params.limit) || 50));
-    
+
     const query: any = {};
     if (params.supplierId) {
       query.supplierId = assertObjectId(params.supplierId, 'supplierId');
@@ -101,7 +117,7 @@ export class SupplierPayableService {
         (query.createdAt as any).$lte = to;
       }
     }
-    
+
     const [total, data] = await Promise.all([
       this.model.countDocuments(query),
       this.model.find(query)
@@ -110,15 +126,15 @@ export class SupplierPayableService {
         .limit(limit)
         .lean(),
     ]);
-    
-    return { 
-      data, 
-      pagination: { 
-        page, 
-        limit, 
-        total, 
-        totalPages: total ? Math.ceil(total / limit) : 0 
-      } 
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: total ? Math.ceil(total / limit) : 0
+      }
     };
   }
 
@@ -140,7 +156,7 @@ export class SupplierPayableService {
     if (!params.supplierId) {
       throw new BadRequestException('Thiếu supplierId');
     }
-    
+
     const supplierObjId = assertObjectId(params.supplierId, 'supplierId');
     const from = params.from ? new Date(params.from) : undefined;
     const to = params.to ? new Date(params.to) : undefined;
@@ -153,7 +169,7 @@ export class SupplierPayableService {
     const payablePeriodMatch: any = { ...matchSupplier };
     if (from || to) payablePeriodMatch.createdAt = buildPeriodFilter(from, to);
 
-    const [payablesBefore, payablesInPeriod, paymentsBefore, paymentsInPeriod, codInPeriod] = 
+    const [payablesBefore, payablesInPeriod, paymentsBefore, paymentsInPeriod, codInPeriod] =
       await Promise.all([
         this.model.aggregate([
           { $match: payableBeforeMatch },
@@ -172,7 +188,7 @@ export class SupplierPayableService {
         this.model.aggregate([
           { $match: matchSupplier },
           { $unwind: '$payments' },
-          (from || to) 
+          (from || to)
             ? { $match: { 'payments.paidAt': buildPeriodFilter(from, to) } }
             : { $match: {} },
           { $group: { _id: null, total: { $sum: '$payments.amount' } } },
@@ -200,7 +216,7 @@ export class SupplierPayableService {
         ]),
       ]);
 
-    const openingBalance = 
+    const openingBalance =
       Number(payablesBefore?.[0]?.total || 0) - Number(paymentsBefore?.[0]?.total || 0);
     const periodPayables = Number(payablesInPeriod?.[0]?.total || 0);
     const periodPayments = Number(paymentsInPeriod?.[0]?.total || 0);
@@ -235,11 +251,11 @@ export class SupplierPayableService {
     return this.statementService.upsertStatement(params);
   }
 
-  async listStatements(params: { 
-    supplierId?: string; 
-    from?: string; 
-    to?: string; 
-    status?: string 
+  async listStatements(params: {
+    supplierId?: string;
+    from?: string;
+    to?: string;
+    status?: string
   }) {
     return this.statementService.listStatements(params);
   }
@@ -249,13 +265,19 @@ export class SupplierPayableService {
   }
 
   async addStatementPayment(id: string, dto: AddPaymentDto) {
-    return this.statementService.addPaymentToStatement(id, {
+    const result = await this.statementService.addPaymentToStatement(id, {
       amount: dto.amount,
       method: dto.method,
       reference: dto.reference,
       notes: dto.notes,
       paidAt: dto.paidAt,
     });
+    this.eventEmitter.emit(FinanceEvents.SUPPLIER_PAYABLE_UPDATED, {
+      recordId: id,
+      supplierId: result?.supplierId?.toString() ?? '',
+      amountChanged: true,
+    });
+    return result;
   }
 
   async closeStatement(id: string) {
@@ -272,11 +294,11 @@ export class SupplierPayableService {
 
   // ============ CSV Export (delegated) ============
 
-  async exportCsv(params: { 
-    supplierId?: string; 
-    from?: string; 
-    to?: string; 
-    status?: string 
+  async exportCsv(params: {
+    supplierId?: string;
+    from?: string;
+    to?: string;
+    status?: string
   }) {
     return this.csvExportService.exportCsv(params);
   }
@@ -286,12 +308,12 @@ export class SupplierPayableService {
   async upsertForOrder(params: {
     orderId: string;
     supplierId: string;
-    items?: { 
-      productId?: string; 
-      productNameSnap?: string; 
-      quantity: number; 
-      unitPrice: number; 
-      amount?: number 
+    items?: {
+      productId?: string;
+      productNameSnap?: string;
+      quantity: number;
+      unitPrice: number;
+      amount?: number
     }[];
     totalAmount?: number;
     currency?: string;
@@ -316,7 +338,7 @@ export class SupplierPayableService {
    * Tổng hợp hoa hồng NCC (Supplier Settlement)
    * - NCC (Shopee/Lazada) trả tiền cho mình sau khi giao hàng thành công
    * - Đây là Cash Inflow (AR), không phải Cash Outflow
-   * 
+   *
    * CFO Sign-off:
    * 1. Basis thống nhất: unreceived = netEarned - received
    * 2. Adjustments ưu tiên từ statement (tránh double subtract)
@@ -327,12 +349,12 @@ export class SupplierPayableService {
     // === TỔNG HỢP GROSS ===
     totalCommissionGrossEarned: number; // Gross earned (trước adjustments)
     totalAdjustments: number;           // Điều chỉnh từ statement (hoàn/boom/phí) - số âm
-    
+
     // === TỔNG HỢP NET ===
     totalCommissionNetEarned: number;   // = grossEarned + adjustments
     totalCommissionReceived: number;    // Hoa hồng đã thu (cash-in đã xảy ra)
     totalCommissionUnreceived: number;  // = netEarned - received
-    
+
     // === FORECAST 7 NGÀY ===
     totalCommissionExpected7d: number;  // Dự kiến thu 7 ngày tới (net, sau onTimeRate)
     expectedInflowByDay: {
@@ -343,13 +365,13 @@ export class SupplierPayableService {
       netAmount: number;        // = gross + riskAdj + onTimeAdj
       orderCount: number;
     }[];
-    
+
     // === SHORT-FORM ALIASES ===
     grossEarned: number;
     unreceived: number;
     totalPaid: number;
     netAfterCod: number;
-    
+
     // === METADATA ===
     asOfDate: string;
     timezone: string;
@@ -361,13 +383,15 @@ export class SupplierPayableService {
       cycleDays: number;
       payWeekdays?: number[];
     };
+    settlementCycleSource: 'financial_control.SupplierCashCycleDays';
+    dueDateFallbackCount: number;
     generatedAt: string;
     totalStatements: number;
     openStatements: number;
   }> {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
-    const settlementCycleDays = 10; // Default: D+10
+    const settlementCycleDays = await this.getSupplierCashCycleDays();
     const defaultReturnRate = 0.05; // Fallback 5%
     const defaultOnTimeRate = 0.85; // Fallback 85% trả đúng hạn
     const minSampleSize = 50; // Số đơn tối thiểu để tính return rate động
@@ -375,7 +399,7 @@ export class SupplierPayableService {
     // === 1. TÍNH RETURN RATE ĐỘNG ===
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const returnRateAgg = await this.orderModel.aggregate([
       {
         $match: {
@@ -396,11 +420,11 @@ export class SupplierPayableService {
         }
       }
     ]);
-    
+
     const returnStats = returnRateAgg[0] || { totalDelivered: 0, totalReturned: 0 };
     const totalOrders30d = returnStats.totalDelivered + returnStats.totalReturned;
-    const returnRate = totalOrders30d >= minSampleSize 
-      ? returnStats.totalReturned / totalOrders30d 
+    const returnRate = totalOrders30d >= minSampleSize
+      ? returnStats.totalReturned / totalOrders30d
       : defaultReturnRate;
     const onTimeRate = defaultOnTimeRate; // TODO: Tính từ historical data nếu có
 
@@ -434,7 +458,7 @@ export class SupplierPayableService {
     // Vì adjustments = 0 có thể là giá trị hợp lệ (đã hoàn trả đúng 0)
     let totalAdjustments = stats.totalStatementAdjustments;
     const hasStatements = stats.totalStatements > 0;
-    
+
     if (!hasStatements) {
       // Chỉ tính từ orders nếu CHƯA CÓ statement nào (bootstrap mode)
       // Sau khi có statement đầu tiên, luôn dùng statement làm source of truth
@@ -491,7 +515,7 @@ export class SupplierPayableService {
         }
       }
     ]);
-    
+
     const totalCommissionGrossEarned = grossEarnedAgg[0]?.totalGrossEarned || 0;
     const totalCommissionNetEarned = totalCommissionGrossEarned + totalAdjustments;
     const totalCommissionReceived = stats.totalReceived;
@@ -518,6 +542,7 @@ export class SupplierPayableService {
     // 5a. Check open statements with upcoming settlement dates
     const openStatements = await this.statementModel.find({ status: 'open' }).lean();
     const statementInflowByDate = new Map<string, number>();
+    const statementEndBySupplier = new Map<string, number>();
 
     for (const stmt of openStatements) {
       // Expected payment date: periodTo + 3 business days buffer
@@ -529,13 +554,108 @@ export class SupplierPayableService {
       if (unpaid > 0) {
         statementInflowByDate.set(dateStr, (statementInflowByDate.get(dateStr) || 0) + unpaid);
       }
+      const supplierKey = String(stmt.supplierId || '');
+      const periodEnd = new Date(stmt.periodTo).getTime();
+      if (supplierKey && Number.isFinite(periodEnd)) {
+        statementEndBySupplier.set(
+          supplierKey,
+          Math.max(statementEndBySupplier.get(supplierKey) || 0, periodEnd),
+        );
+      }
     }
 
-    // 5b. Get total unreceived commission NOT in any open statement (D+N fallback)
-    // These are orders delivered but not yet included in any statement period
-    const latestStatementEnd = openStatements.length > 0
-      ? new Date(Math.max(...openStatements.map(s => new Date(s.periodTo).getTime())))
-      : null;
+    // Actual supplier receivable ledger is preferred over order-level D+N
+    // estimates. An explicit dueDate wins; only missing/invalid due dates use
+    // the canonical FinancialControlConfig.SupplierCashCycleDays fallback.
+    const outstandingPayables = await this.model
+      .find({ status: { $in: ['unpaid', 'partial'] }, balance: { $gt: 0 } })
+      .select('supplierId orderId balance totalAmount amountPaid dueDate createdAt updatedAt items')
+      .lean();
+    const dedupedPayables = this.dedupePayables(outstandingPayables as any[]);
+    const linkedOrderIds = Array.from(new Set(
+      dedupedPayables
+        .map((payable) => String(payable.orderId || ''))
+        .filter((value) => Types.ObjectId.isValid(value)),
+    )).map((value) => new Types.ObjectId(value));
+    const linkedOrders = linkedOrderIds.length
+      ? await this.orderModel.find({ _id: { $in: linkedOrderIds } })
+        .select('_id supplierId orderDate updatedAt')
+        .lean()
+      : [];
+    const linkedOrdersById = new Map(
+      (linkedOrders as any[]).map((order) => [String(order._id), order]),
+    );
+    const payableInflowByDate = new Map<string, number>();
+    const payableCountByDate = new Map<string, number>();
+    const payableOrderIds: Types.ObjectId[] = [];
+    let dueDateFallbackCount = 0;
+    const forecastStart = new Date(now);
+    forecastStart.setHours(0, 0, 0, 0);
+    const forecastEnd = new Date(forecastStart);
+    forecastEnd.setDate(forecastEnd.getDate() + 6);
+    forecastEnd.setHours(23, 59, 59, 999);
+
+    for (const rawPayable of dedupedPayables) {
+      const payable = rawPayable as any;
+      if (payable.orderId && Types.ObjectId.isValid(String(payable.orderId))) {
+        payableOrderIds.push(new Types.ObjectId(String(payable.orderId)));
+      }
+
+      const createdAt = new Date(payable.createdAt || now);
+      const supplierStatementEnd = statementEndBySupplier.get(String(payable.supplierId || ''));
+      const linkedOrder = payable.orderId
+        ? linkedOrdersById.get(String(payable.orderId))
+        : undefined;
+      if (supplierStatementEnd) {
+        if (!linkedOrder) {
+          // Without an order link there is no reliable way to prove that a
+          // payable is outside the supplier's open statement. Exclude it
+          // fail-closed instead of counting the same receivable twice.
+          continue;
+        }
+        const orderOccurredAt = new Date(linkedOrder.orderDate || linkedOrder.updatedAt || '');
+        if (Number.isFinite(orderOccurredAt.getTime())
+          && orderOccurredAt.getTime() <= supplierStatementEnd) {
+          // Use the underlying order date, not payable.createdAt. This still
+          // recognizes statement coverage when the payable row was created late.
+          continue;
+        }
+      }
+
+      const explicitDueDate = new Date(payable.dueDate || '');
+      let expectedDate: Date;
+      if (payable.dueDate && Number.isFinite(explicitDueDate.getTime())) {
+        expectedDate = explicitDueDate;
+      } else {
+        const fallbackBase = Number.isFinite(createdAt.getTime()) ? createdAt : now;
+        expectedDate = new Date(fallbackBase);
+        expectedDate.setDate(expectedDate.getDate() + settlementCycleDays);
+        dueDateFallbackCount += 1;
+      }
+      // Overdue receivables are shown as expected today rather than silently
+      // disappearing from the seven-day cash forecast.
+      if (expectedDate < forecastStart) expectedDate = new Date(forecastStart);
+      if (expectedDate > forecastEnd) continue;
+
+      const amount = Math.max(
+        0,
+        Number(payable.balance ?? (Number(payable.totalAmount || 0) - Number(payable.amountPaid || 0))),
+      );
+      if (amount <= 0) continue;
+      const dateStr = expectedDate.toISOString().split('T')[0];
+      payableInflowByDate.set(dateStr, (payableInflowByDate.get(dateStr) || 0) + amount);
+      payableCountByDate.set(dateStr, (payableCountByDate.get(dateStr) || 0) + 1);
+    }
+
+    // 5b. Get total unreceived commission NOT in a statement for that same
+    // supplier/account. Never use one supplier's period as a global cutoff.
+    const statementCoverage = Array.from(statementEndBySupplier.entries())
+      .map(([supplierId, periodEnd]) => ({
+        supplierId: Types.ObjectId.isValid(supplierId)
+          ? new Types.ObjectId(supplierId)
+          : supplierId,
+        periodEnd: new Date(periodEnd),
+      }));
 
     for (let d = 0; d < 7; d++) {
       const targetDate = new Date();
@@ -547,6 +667,7 @@ export class SupplierPayableService {
 
       // Use statement-based inflow if available for this date
       const statementAmount = statementInflowByDate.get(dateStr) || 0;
+      const payableAmount = payableInflowByDate.get(dateStr) || 0;
 
       // D+N fallback: orders delivered settlementCycleDays ago, not in any statement
       const deliveredDate = new Date(targetDate);
@@ -562,9 +683,21 @@ export class SupplierPayableService {
         updatedAt: { $gte: startOfDay, $lte: endOfDay },
         isActive: { $ne: false },
       };
-      // Exclude orders already covered by open statements
-      if (latestStatementEnd) {
-        matchFilter.orderDate = { $gt: latestStatementEnd };
+      // Exclude only orders covered by an open statement for the same supplier.
+      if (statementCoverage.length > 0) {
+        matchFilter.$nor = statementCoverage.map((coverage) => ({
+          supplierId: coverage.supplierId,
+          $or: [
+            { orderDate: { $lte: coverage.periodEnd } },
+            // Legacy orders may not have orderDate. In that case updatedAt is
+            // the established settlement fallback and must use the same
+            // supplier-scoped coverage boundary.
+            { orderDate: null, updatedAt: { $lte: coverage.periodEnd } },
+          ],
+        }));
+      }
+      if (payableOrderIds.length > 0) {
+        matchFilter._id = { $nin: payableOrderIds };
       }
 
       const dayAgg = await this.orderModel.aggregate([
@@ -585,10 +718,15 @@ export class SupplierPayableService {
         }
       ]);
 
-      grossAmount = statementAmount + (dayAgg[0]?.amount || 0);
-      orderCount = dayAgg[0]?.orderCount || 0;
+      const estimatedOrderAmount = dayAgg[0]?.amount || 0;
+      grossAmount = statementAmount + payableAmount + estimatedOrderAmount;
+      orderCount = (dayAgg[0]?.orderCount || 0) + (payableCountByDate.get(dateStr) || 0);
 
-      const riskAdjustment = -grossAmount * returnRate;
+      // Payable/statement balances are already reconciled ledger amounts. The
+      // return-rate haircut applies only to the order-level estimate.
+      const riskAdjustment = estimatedOrderAmount > 0
+        ? -estimatedOrderAmount * returnRate
+        : 0;
       const afterRisk = grossAmount + riskAdjustment;
       const onTimeAdjustment = -afterRisk * (1 - onTimeRate);
       const netAmount = afterRisk + onTimeAdjustment;
@@ -631,6 +769,8 @@ export class SupplierPayableService {
         type: 'D_PLUS_N',
         cycleDays: settlementCycleDays,
       },
+      settlementCycleSource: 'financial_control.SupplierCashCycleDays',
+      dueDateFallbackCount,
       generatedAt: now.toISOString(),
       totalStatements: stats.totalStatements,
       openStatements: stats.openStatements,
@@ -743,5 +883,75 @@ export class SupplierPayableService {
       totalStatements: summary.totalStatements,
       openStatements: summary.openStatements,
     };
+  }
+
+  private dedupePayables(rows: any[]): any[] {
+    const byIdentity = new Map<string, any>();
+    for (const row of rows || []) {
+      const identity = this.payableIdentity(row);
+      const current = byIdentity.get(identity);
+      if (!current || this.payableVersionTime(row) >= this.payableVersionTime(current)) {
+        byIdentity.set(identity, row);
+      }
+    }
+    return Array.from(byIdentity.values());
+  }
+
+  private payableIdentity(row: any): string {
+    const orderId = String(row?.orderId || '').trim();
+    if (Types.ObjectId.isValid(orderId)) return `order:${orderId}`;
+    const payableId = String(row?._id || '').trim();
+    if (Types.ObjectId.isValid(payableId)) return `payable:${payableId}`;
+    // Defensive fallback for imported/legacy rows without a usable Mongo id.
+    // The composite is stable and intentionally excludes updatedAt so repeat
+    // reads or duplicated fixtures collapse to one logical receivable.
+    const itemSignature = (row?.items || [])
+      .map((item: any) => [
+        String(item?.productId || ''),
+        Number(item?.quantity || 0),
+        Number(item?.amount ?? (Number(item?.quantity || 0) * Number(item?.unitPrice || 0))),
+      ].join(':'))
+      .sort()
+      .join('|');
+    return [
+      'legacy',
+      String(row?.supplierId || ''),
+      this.validDateKey(row?.dueDate),
+      this.validDateKey(row?.createdAt),
+      Number(row?.totalAmount || 0),
+      Number(row?.balance || 0),
+      itemSignature,
+    ].join(':');
+  }
+
+  private payableVersionTime(row: any): number {
+    const timestamp = new Date(row?.updatedAt || row?.createdAt || 0).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  private validDateKey(value: unknown): string {
+    const date = new Date(value as any);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : '';
+  }
+
+  private async getSupplierCashCycleDays(): Promise<number> {
+    try {
+      const setting = await this.settingsModel
+        .findOne({ key: 'financial_control' })
+        .select('value.SupplierCashCycleDays')
+        .lean();
+      const configured = Number((setting as any)?.value?.SupplierCashCycleDays);
+      if (Number.isInteger(configured) && configured >= 1 && configured <= 365) {
+        return configured;
+      }
+      this.logger.warn(
+        '[CASH_CYCLE] Canonical financial_control.SupplierCashCycleDays is missing or invalid; using canonical default',
+      );
+    } catch {
+      this.logger.warn(
+        '[CASH_CYCLE] Failed to read canonical financial control config; using canonical default',
+      );
+    }
+    return DEFAULT_CONFIG.SupplierCashCycleDays;
   }
 }

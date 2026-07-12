@@ -1,6 +1,7 @@
-import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TestOrder2, TestOrder2Document } from './schemas/test-order2.schema';
 import { CreateTestOrder2Dto } from './dto/create-test-order2.dto';
 import { Product, ProductDocument } from '../product/schemas/product.schema';
@@ -14,10 +15,15 @@ import {
   OrderStatus,
   PaymentStatus,
   AgentRole,
-  COMPLETED_ORDER_STATUSES,
   DEFAULT_VALUES,
   SUPPLIER_PAYABLE_AUTO_NOTE,
 } from './constants/test-order2.constants';
+import { FinanceEvents } from '../finance/events/finance-events.constants';
+import {
+  businessConfirmationAudit,
+  BusinessConfirmationSource,
+  stripBusinessConfirmationAuditFields,
+} from './business-confirmation.util';
 
 /** Fields that suppliers are allowed to update on their own orders */
 const SUPPLIER_EDITABLE_FIELDS = new Set([
@@ -27,10 +33,37 @@ const SUPPLIER_EDITABLE_FIELDS = new Set([
 ]);
 
 const SUPPLIER_ROLES = new Set(['internal_supplier', 'external_supplier']);
+const AGENT_ROLES = new Set(['internal_agent', 'external_agent']);
 
 @Injectable()
 export class TestOrder2Service {
   private readonly logger = new Logger(TestOrder2Service.name);
+  private readonly profitImpactFields = new Set([
+    'productId',
+    'quantity',
+    'agentId',
+    'adGroupId',
+    'isActive',
+    'orderStatus',
+    'orderDate',
+    'supplierId',
+    'supplierAppliedPrice',
+    'supplierQuote',
+    'agentAppliedPrice',
+    'agentQuote',
+    'shippingFee',
+    'returnFee',
+    'codAmount',
+    'grossProfit',
+    'advertisingCost',
+    'laborCostAllocation',
+    'otherCostAllocation',
+    'netProfit',
+  ]);
+
+  // Cache cho Agent Roles (tránh N+1 query khi update hàng loạt)
+
+  private agentRoleCache = new Map<string, string>();
 
   constructor(
     @InjectModel(TestOrder2.name) private model: Model<TestOrder2Document>,
@@ -40,6 +73,7 @@ export class TestOrder2Service {
     private readonly reportService: OrderReportService,
     private readonly supplierPayableService: SupplierPayableService,
     private readonly orderSheetSyncService: OrderSheetSyncService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private normalizeUsageDurationMonths(value: unknown): number | undefined {
@@ -49,10 +83,84 @@ export class TestOrder2Service {
     return rounded > 0 ? rounded : undefined;
   }
 
+  private normalizeAdGroupId(value: unknown): string | undefined {
+    const normalized = String(value ?? '').trim();
+    return normalized && normalized !== '0' ? normalized : undefined;
+  }
+
+  private foldOrderStatus(value: string): string {
+    return value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[\uFFFD?]/g, '')
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
+  private canonicalizeOrderStatus(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const raw = value.trim();
+    if (!raw) return raw;
+
+    const folded = this.foldOrderStatus(raw);
+    if (!folded) return raw;
+
+    if (/^chuacoma?vandon$/.test(folded) || /^chuacovandon$/.test(folded) || /^chuacmvdn$/.test(folded)) {
+      return 'Ch\u01b0a c\u00f3 m\u00e3 v\u1eadn \u0111\u01a1n';
+    }
+    if (/^danggiao$/.test(folded)) {
+      return '\u0110ang giao';
+    }
+    if (/^cholay$/.test(folded) || /^chlay$/.test(folded)) {
+      return 'Ch\u1edd l\u1ea5y';
+    }
+    if (/^giaothanhcong$/.test(folded) || /^giaothnhcng$/.test(folded)) {
+      return 'Giao th\u00e0nh c\u00f4ng';
+    }
+    if (
+      /^hanghoan$/.test(folded) ||
+      /^hoanhang$/.test(folded) ||
+      /^hnghon$/.test(folded) ||
+      /^honhng$/.test(folded)
+    ) {
+      return 'H\u00e0ng ho\u00e0n';
+    }
+    if (/^dadoisoat$/.test(folded) || /^dadsoat$/.test(folded) || /^doisoat$/.test(folded)) {
+      return '\u0110\u00e3 \u0111\u1ed1i so\u00e1t';
+    }
+    if (/^hoanthanh$/.test(folded) || /^honthnh$/.test(folded)) {
+      return 'Ho\u00e0n th\u00e0nh';
+    }
+
+    return raw;
+  }
+
   private getCurrentUserId(currentUser?: any): string | undefined {
     const rawId = currentUser?.id ?? currentUser?._id ?? currentUser?.userId ?? currentUser?.sub;
     if (!rawId) return undefined;
     return rawId instanceof Types.ObjectId ? rawId.toString() : String(rawId);
+  }
+
+  private hasProfitImpactChange(payload: Partial<TestOrder2>): boolean {
+    return Object.keys(payload || {}).some((key) => this.profitImpactFields.has(key));
+  }
+
+  private emitOrderProfitImpactEvent(order: Partial<TestOrder2> & { _id?: any }): void {
+    this.eventEmitter.emit(FinanceEvents.ORDER_COMPLETED, {
+      orderId: order._id ? String(order._id) : 'unknown',
+      orderDate: order.orderDate,
+      adGroupId: order.adGroupId,
+      supplierId: order.supplierId ? String(order.supplierId) : undefined,
+      agentId: order.agentId ? String(order.agentId) : undefined,
+      codAmount: order.codAmount,
+    });
+  }
+
+  private emitOrderProfitImpactEventForDate(orderId: string, orderDate?: Date | string): void {
+    this.eventEmitter.emit(FinanceEvents.ORDER_COMPLETED, {
+      orderId,
+      orderDate,
+    });
   }
 
   private async getProductUsageDurationMonths(productId?: Types.ObjectId | string): Promise<number | undefined> {
@@ -67,6 +175,33 @@ export class TestOrder2Service {
       .exec();
 
     return this.normalizeUsageDurationMonths(product?.usageDurationMonths);
+  }
+
+  private getOrderDateKey(value?: Date | string | null): string | undefined {
+    if (!value) return undefined;
+    const date = value instanceof Date ? new Date(value) : new Date(value);
+    if (Number.isNaN(date.getTime())) return undefined;
+    return date.toISOString().split('T')[0];
+  }
+
+  private async refreshOrderAllocationsForDates(
+    values: Array<Date | string | null | undefined>,
+  ): Promise<void> {
+    const uniqueDates = Array.from(
+      new Set(
+        values
+          .map((value) => this.getOrderDateKey(value))
+          .filter((value): value is string => !!value),
+      ),
+    );
+
+    for (const dateKey of uniqueDates) {
+      await this.calculationService.recalculateOrdersForDate(dateKey);
+    }
+  }
+
+  private async reloadOrderById(id: Types.ObjectId | string): Promise<TestOrder2Document | null> {
+    return this.model.findById(id);
   }
 
   // ============ ORDER LIFECYCLE HOOKS ============
@@ -140,6 +275,11 @@ export class TestOrder2Service {
 
     if (isPaymentTrigger) {
       this.logger.log(`Order ${doc._id} status changed to '${currentStatus}' (isPaymentTrigger=true, isReturn=${isReturn}) - triggering payment calculations`);
+      await this.calculationService.applyCompletedStatusFinancials(doc);
+      this.logger.log(`  â†’ Supplier payment amount calculated: ${doc.supplierPaidAmount}`);
+      this.logger.log(`  â†’ Agent payment amount calculated: ${doc.agentPaidAmount}`);
+      this.logger.log(`  â†’ Estimated gross profit: ${doc.grossProfit}`);
+      return;
 
       // 1. Tính số tiền NCC trả công ty (supplierPaidAmount)
       if (doc.supplierId) {
@@ -167,25 +307,38 @@ export class TestOrder2Service {
 
       // 2. Tính số tiền công ty trả đại lý (agentPaidAmount)
       if (doc.agentId) {
-        const agent = await this.model.db.collection('users').findOne(
-          { _id: doc.agentId },
-          { projection: { role: 1 } }
-        );
+        const agentIdStr = doc.agentId.toString();
+        let agentRole = this.agentRoleCache.get(agentIdStr);
 
-        const isExternalAgent = agent?.role === AgentRole.EXTERNAL;
+        // Chỉ query DB nếu chưa có trong cache
+        if (!agentRole) {
+          const agent = await this.model.db.collection('users').findOne(
+            { _id: doc.agentId },
+            { projection: { role: 1 } }
+          );
+          agentRole = agent?.role || 'unknown';
+          this.agentRoleCache.set(agentIdStr, agentRole);
+        }
+
+        const isExternalAgent = agentRole === AgentRole.EXTERNAL;
 
         if (isExternalAgent) {
           const codAmount = doc.codAmount || 0;
           const agentQuote = doc.agentQuote || 0;
           const quantity = doc.quantity || 1;
-          const shippingFee = doc.shippingFee || 0;
-          const returnFee = doc.returnFee || 0;
 
+          // ✅ Agent Commission = COD - agentQuote×qty  (xác nhận PO 15/03/2026)
+          // Phí vận chuyển do CÔNG TY chịu (không trừ vào hoa hồng đại lý).
+          // Hàng hoàn: commission âm = đại lý nợ lại công ty (clawback).
+          let commission = 0;
           if (isReturn) {
-            doc.agentPaidAmount = 0 - (agentQuote * quantity) - shippingFee - returnFee;
+            commission = 0 - (agentQuote * quantity);
           } else {
-            doc.agentPaidAmount = codAmount - (agentQuote * quantity) - shippingFee;
+            commission = codAmount - (agentQuote * quantity);
           }
+
+          doc.agentCommissionAmount = commission; // Ghi nhận chi phí hoa hồng (Accrual basis)
+          doc.agentPaidAmount = commission; // Ghi nhận dòng tiền thanh toán
 
           if (doc.agentPaymentStatus !== PaymentStatus.PAID) {
             doc.agentPaymentStatus = PaymentStatus.PENDING;
@@ -224,13 +377,17 @@ export class TestOrder2Service {
       throw new ForbiddenException('Nhà cung cấp không được phép tạo đơn hàng');
     }
 
+    if (currentUser && AGENT_ROLES.has(currentUser.role)) {
+      throw new ForbiddenException('Agent users can only view their own orders');
+    }
+
     const doc: Partial<TestOrder2> = {
       productId: dto.productId ? new Types.ObjectId(dto.productId) : undefined,
       productUsageDurationMonths: this.normalizeUsageDurationMonths(dto.productUsageDurationMonths),
       customerName: dto.customerName,
       quantity: dto.quantity ?? 1,
       agentId: dto.agentId ? new Types.ObjectId(dto.agentId) : undefined,
-      adGroupId: dto.adGroupId,
+      adGroupId: this.normalizeAdGroupId(dto.adGroupId),
       isActive: dto.isActive ?? true,
       productionStatus: dto.productionStatus ?? 'Chưa làm',
       orderStatus: dto.orderStatus ?? 'Chưa có mã vận đơn',
@@ -257,6 +414,10 @@ export class TestOrder2Service {
       productType: dto.productType,
     };
 
+    if (typeof doc.orderStatus === 'string') {
+      doc.orderStatus = this.canonicalizeOrderStatus(doc.orderStatus) ?? doc.orderStatus;
+    }
+
     if (!doc.productUsageDurationMonths && doc.productId) {
       doc.productUsageDurationMonths = await this.getProductUsageDurationMonths(doc.productId);
     }
@@ -264,20 +425,21 @@ export class TestOrder2Service {
     const created = new this.model(doc);
     await this.calculationService.autoCalculateQuoteFields(created);
     this.ensureCodCollectedIfDelivered(created as any, null);
+    await this.handleOrderStatusChange(created as any, null);
     const saved = await created.save();
     await this.createSupplierPayableIfEligible(saved, null);
+    await this.refreshOrderAllocationsForDates([saved.orderDate]);
 
-    if (saved.orderDate) {
-      this.calculationService.recalculateOrdersForDate(saved.orderDate).catch(err => {
-        this.logger.error('Failed to recalculate orders after create', err);
-      });
-    }
+    const hydrated = await this.reloadOrderById(saved._id);
+    const persistedOrder = hydrated || saved;
 
-    this.orderSheetSyncService.triggerSyncOnOrderChange(saved).catch(err => {
+    this.emitOrderProfitImpactEvent(persistedOrder);
+
+    this.orderSheetSyncService.triggerSyncOnOrderChange(persistedOrder).catch(err => {
       this.logger.error('Failed to trigger sheet sync after create', err);
     });
 
-    return saved;
+    return persistedOrder;
   }
 
   /**
@@ -308,6 +470,12 @@ export class TestOrder2Service {
 
   async findById(id: string, currentUser?: any) {
     const doc = await this.model.findById(id).lean();
+    if (doc && currentUser && AGENT_ROLES.has(currentUser.role)) {
+      const currentUserId = this.getCurrentUserId(currentUser);
+      if (!currentUserId || doc.agentId?.toString() !== currentUserId) {
+        throw new ForbiddenException('You can only view your own orders');
+      }
+    }
     if (doc && currentUser && SUPPLIER_ROLES.has(currentUser.role)) {
       const currentUserId = this.getCurrentUserId(currentUser);
       if (!currentUserId || doc.supplierId?.toString() !== currentUserId) {
@@ -318,6 +486,9 @@ export class TestOrder2Service {
   }
 
   async update(id: string, payload: Partial<TestOrder2>, currentUser?: any) {
+    // Defense in depth: DTO validation rejects these fields at the HTTP boundary,
+    // and the service also removes them so internal callers cannot spoof provenance.
+    payload = stripBusinessConfirmationAuditFields(payload as any) as Partial<TestOrder2>;
     const doc = await this.model.findById(id);
     if (!doc) return null;
 
@@ -336,6 +507,13 @@ export class TestOrder2Service {
       payload = filtered;
       if (Object.keys(payload).length === 0) return doc;
     }
+    if (currentUser && AGENT_ROLES.has(currentUser.role)) {
+      const currentUserId = this.getCurrentUserId(currentUser);
+      if (!currentUserId || doc.agentId?.toString() !== currentUserId) {
+        throw new ForbiddenException('You can only view your own orders');
+      }
+      throw new ForbiddenException('Agent users are not allowed to edit orders');
+    }
 
     const prevProductionStatus = doc.productionStatus;
     const prevOrderStatus = doc.orderStatus;
@@ -344,6 +522,9 @@ export class TestOrder2Service {
     const prevAgentId = doc.agentId?.toString();
 
     const updates: any = { ...payload };
+    if (Object.prototype.hasOwnProperty.call(updates, 'adGroupId')) {
+      updates.adGroupId = this.normalizeAdGroupId(updates.adGroupId);
+    }
     if (typeof updates.productId === 'string') updates.productId = new Types.ObjectId(updates.productId);
     if (typeof updates.agentId === 'string') updates.agentId = new Types.ObjectId(updates.agentId);
     if (typeof updates.supplierId === 'string') updates.supplierId = new Types.ObjectId(updates.supplierId);
@@ -360,6 +541,9 @@ export class TestOrder2Service {
 
     if (typeof (updates as any).codCollectedBySupplier === 'string') {
       (updates as any).codCollectedBySupplier = parseFloat((updates as any).codCollectedBySupplier) || 0;
+    }
+    if (typeof updates.orderStatus === 'string') {
+      updates.orderStatus = this.canonicalizeOrderStatus(updates.orderStatus) ?? updates.orderStatus;
     }
 
     // ============ SUPPLIER QUOTE SNAPSHOT IMMUTABILITY ============
@@ -425,17 +609,65 @@ export class TestOrder2Service {
     const saved = await doc.save();
     await this.createSupplierPayableIfEligible(saved as any, prevProductionStatus);
 
-    if (saved.orderDate) {
-      this.calculationService.recalculateOrdersForDate(saved.orderDate).catch(err => {
-        this.logger.error('Failed to recalculate orders after update', err);
-      });
+    const shouldRefreshAllocations =
+      this.hasProfitImpactChange(updates) || prevOrderStatus !== saved.orderStatus;
+
+    if (shouldRefreshAllocations) {
+      await this.refreshOrderAllocationsForDates([prevOrderDate, saved.orderDate]);
     }
 
-    this.orderSheetSyncService.triggerSyncOnOrderChange(saved).catch(err => {
+    const persistedOrder =
+      shouldRefreshAllocations
+        ? (await this.reloadOrderById(saved._id)) || saved
+        : saved;
+
+    if (shouldRefreshAllocations) {
+      if (newOrderDate && prevOrderDate && newOrderDate !== prevOrderDate) {
+        this.emitOrderProfitImpactEventForDate(String(persistedOrder._id), prevOrderDate);
+      }
+      this.emitOrderProfitImpactEvent(persistedOrder);
+    }
+
+    this.orderSheetSyncService.triggerSyncOnOrderChange(persistedOrder).catch(err => {
       this.logger.error('Failed to trigger sheet sync after update', err);
     });
 
-    return saved;
+    return persistedOrder;
+  }
+
+  /**
+   * Atomically transition an order from unconfirmed to business-confirmed.
+   * A retry never rewrites the original server timestamp, actor or source.
+   */
+  async confirmBusiness(
+    id: string,
+    currentUser: any,
+    source: BusinessConfirmationSource = 'erp_manual_confirmation',
+  ): Promise<TestOrder2Document> {
+    if (!Types.ObjectId.isValid(String(id || ''))) {
+      throw new BadRequestException('Order id is invalid');
+    }
+
+    const confirmation = businessConfirmationAudit(currentUser, source, new Date());
+    const objectId = new Types.ObjectId(id);
+    const confirmed = await this.model.findOneAndUpdate(
+      {
+        _id: objectId,
+        $or: [
+          { businessConfirmedAt: { $exists: false } },
+          { businessConfirmedAt: null },
+        ],
+      },
+      { $set: confirmation },
+      { new: true },
+    );
+    if (confirmed) return confirmed;
+
+    // Either the order does not exist or another request already committed the
+    // transition. Reading it back makes retries idempotent without overwriting.
+    const existing = await this.model.findById(objectId);
+    if (!existing) throw new NotFoundException('Order not found');
+    return existing;
   }
 
   async remove(id: string, currentUser?: any) {
@@ -443,15 +675,22 @@ export class TestOrder2Service {
       throw new ForbiddenException('Nhà cung cấp không được phép xóa đơn hàng');
     }
 
+    if (currentUser && AGENT_ROLES.has(currentUser.role)) {
+      throw new ForbiddenException('Agent users are not allowed to delete orders');
+    }
+
     const order = await this.model.findById(id);
-    const orderDate = order?.orderDate;
 
     await this.model.findByIdAndDelete(id);
 
-    if (orderDate) {
-      this.calculationService.recalculateOrdersForDate(orderDate).catch(err => {
-        this.logger.error('Failed to recalculate orders after delete', err);
-      });
+    if (order?.orderDate) {
+      await this.refreshOrderAllocationsForDates([order.orderDate]);
+    }
+
+    if (order) {
+      this.emitOrderProfitImpactEvent(order);
+    } else {
+      this.eventEmitter.emit(FinanceEvents.ORDER_COMPLETED, { orderId: id });
     }
 
     return { message: 'Deleted' };
@@ -463,7 +702,7 @@ export class TestOrder2Service {
       docs.push({
         customerName: `Khách hàng #${i + 1}`,
         quantity: 1 + (i % 3),
-        adGroupId: i % 2 === 0 ? '0' : `ADG_${1000 + i}`,
+        adGroupId: i % 2 === 0 ? undefined : `ADG_${1000 + i}`,
         isActive: true,
         productionStatus: 'Chưa làm',
         orderStatus: 'Chưa có mã vận đơn',
@@ -500,6 +739,7 @@ export class TestOrder2Service {
     const query: FilterQuery<TestOrder2Document> = {};
 
     const isSupplierUser = !!params.currentUser && SUPPLIER_ROLES.has(params.currentUser.role);
+    const isAgentUser = !!params.currentUser && AGENT_ROLES.has(params.currentUser.role);
 
     if (params.currentUser) {
       const userRole = params.currentUser.role;
@@ -511,6 +751,13 @@ export class TestOrder2Service {
         }
         query.supplierId = new Types.ObjectId(userId);
         this.logger.log(`Supplier ${userId} filtering orders by supplierId`);
+      }
+      if (userRole === 'internal_agent' || userRole === 'external_agent') {
+        if (!userId || !Types.ObjectId.isValid(userId)) {
+          throw new ForbiddenException('Khong xac dinh duoc tai khoan dai ly');
+        }
+        query.agentId = new Types.ObjectId(userId);
+        this.logger.log(`Agent ${userId} filtering orders by agentId`);
       }
     }
 
@@ -525,7 +772,7 @@ export class TestOrder2Service {
       });
     }
     if (params.productId) query.productId = new Types.ObjectId(params.productId);
-    if (params.agentId) query.agentId = new Types.ObjectId(params.agentId);
+    if (params.agentId && !isAgentUser) query.agentId = new Types.ObjectId(params.agentId);
     if (params.supplierId && !isSupplierUser) query.supplierId = new Types.ObjectId(params.supplierId);
     if (params.adGroupId) query.adGroupId = params.adGroupId;
     if (params.isActive !== undefined) {
@@ -661,14 +908,16 @@ export class TestOrder2Service {
     }
 
     order.grossProfit = await this.calculationService.calculateGrossProfit(order);
-    await this.calculationService.calculateCostAllocations(order as any);
-    order.netProfit = (order.grossProfit || 0) - (order.advertisingCost || 0) - (order.laborCostAllocation || 0) - (order.otherCostAllocation || 0);
-
     await order.save();
+    await this.refreshOrderAllocationsForDates([order.orderDate]);
 
-    this.logger.log(`Recalculated profits for order ${orderId}: grossProfit=${order.grossProfit}, netProfit=${order.netProfit}`);
+    const persistedOrder = (await this.reloadOrderById(orderId)) || order;
 
-    return order;
+    this.logger.log(
+      `Recalculated profits for order ${orderId}: grossProfit=${persistedOrder.grossProfit}, netProfit=${persistedOrder.netProfit}`,
+    );
+
+    return persistedOrder;
   }
 
   /**
@@ -686,36 +935,59 @@ export class TestOrder2Service {
     if (filters?.agentId) query.agentId = new Types.ObjectId(filters.agentId);
 
     const orders = await this.model.find(query);
+    const touchedDates = new Set<string>();
 
     let updated = 0;
     for (const order of orders) {
-      // Recalculate grossProfit first (ensures correct formula)
       order.grossProfit = await this.calculationService.calculateGrossProfit(order);
-      // Recalculate cost allocations (ad, labor, other) and netProfit
-      await this.calculationService.calculateCostAllocations(order as any);
-      // Ensure netProfit uses freshly calculated grossProfit
-      order.netProfit = (order.grossProfit || 0) - (order.advertisingCost || 0) - (order.laborCostAllocation || 0) - (order.otherCostAllocation || 0);
       await order.save();
+      const dateKey = this.getOrderDateKey(order.orderDate);
+      if (dateKey) {
+        touchedDates.add(dateKey);
+      }
       updated++;
     }
 
-    this.logger.log(`Recalculated profits for ${updated} orders`);
+    await this.refreshOrderAllocationsForDates(Array.from(touchedDates));
 
-    return { updated };
+    this.logger.log(`Recalculated profits for ${updated} orders across ${touchedDates.size} dates`);
+
+    return { updated, recalculatedDates: touchedDates.size };
   }
 
   // ============ PAYMENT DELEGATION ============
 
   async createSupplierPaymentBatch(dto: any) {
-    return this.paymentService.createSupplierPaymentBatch(dto);
+    const result = await this.paymentService.createSupplierPaymentBatch(dto);
+    this.eventEmitter.emit(FinanceEvents.ORDER_PAYMENT_UPDATED, {
+      orderId: 'batch',
+      paymentType: 'supplier',
+      oldStatus: 'pending',
+      newStatus: 'paid',
+    });
+    return result;
   }
 
   async createAgentPaymentBatch(dto: any) {
-    return this.paymentService.createAgentPaymentBatch(dto);
+    const result = await this.paymentService.createAgentPaymentBatch(dto);
+    this.eventEmitter.emit(FinanceEvents.ORDER_PAYMENT_UPDATED, {
+      orderId: 'batch',
+      paymentType: 'agent',
+      oldStatus: 'pending',
+      newStatus: 'paid',
+    });
+    return result;
   }
 
   async createAgentPaymentBatchAtomic(dto: any) {
-    return this.paymentService.createAgentPaymentBatchAtomic(dto);
+    const result = await this.paymentService.createAgentPaymentBatchAtomic(dto);
+    this.eventEmitter.emit(FinanceEvents.ORDER_PAYMENT_UPDATED, {
+      orderId: 'batch',
+      paymentType: 'agent',
+      oldStatus: 'pending',
+      newStatus: 'paid',
+    });
+    return result;
   }
 
   async getOrdersPendingSupplierPayment(filters?: any) {

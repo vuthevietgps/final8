@@ -1,8 +1,9 @@
-import { IsBoolean, IsDateString, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateLoanRepaymentDto {
+  @IsOptional()
   @IsString()
-  loanId: string;
+  loanId?: string;
 
   @IsNumber()
   amountPrincipal: number;
@@ -22,6 +23,10 @@ export class CreateLoanRepaymentDto {
   @IsOptional()
   @IsDateString()
   paidDate?: string;
+
+  @IsOptional()
+  @IsIn(['bank', 'owner_fund'])
+  fundingSource?: 'bank' | 'owner_fund';
 
   @IsOptional()
   @IsString()

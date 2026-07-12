@@ -177,6 +177,7 @@ export interface ScheduledPaymentOption {
 }
 
 export interface CreatePaymentRequest {
+  idempotencyKey?: string;
   paymentType: 'principal' | 'interest' | 'scheduled' | 'payoff';
   amount: number;
   source: 'bank_balance' | 'owner_fund';
@@ -237,6 +238,11 @@ export class LoanService {
 
   constructor(private http: HttpClient) {}
 
+  private createIdempotencyKey(prefix: string): string {
+    const uuid = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}-${uuid}`;
+  }
+
   listLoans(status?: string): Observable<LoanContract[]> {
     const url = status ? `${this.api}/loans?status=${status}` : `${this.api}/loans`;
     return this.http.get<LoanContract[]>(url);
@@ -271,8 +277,11 @@ export class LoanService {
   // ═══════════════════════════════════════════════════════════
 
   /** Ghi nhận giải ngân khoản vay */
-  recordDisbursement(loanId: string, payload: { amount: number; date?: string; notes?: string }): Observable<LoanContract> {
-    return this.http.post<LoanContract>(`${this.api}/loans/${loanId}/disburse`, payload);
+  recordDisbursement(loanId: string, payload: { amount: number; date?: string; notes?: string; idempotencyKey?: string }): Observable<LoanContract> {
+    return this.http.post<LoanContract>(`${this.api}/loans/${loanId}/disburse`, {
+      ...payload,
+      idempotencyKey: payload.idempotencyKey || this.createIdempotencyKey('loan-disbursement'),
+    });
   }
 
   /** Lấy tổng hợp thông tin vay nợ */
@@ -301,7 +310,10 @@ export class LoanService {
 
   /** Thực hiện thanh toán khoản vay */
   createPayment(loanId: string, payload: CreatePaymentRequest): Observable<PaymentResult> {
-    return this.http.post<PaymentResult>(`${this.managementApi}/loans/${loanId}/pay`, payload);
+    return this.http.post<PaymentResult>(`${this.managementApi}/loans/${loanId}/pay`, {
+      ...payload,
+      idempotencyKey: payload.idempotencyKey || this.createIdempotencyKey('loan-payment'),
+    });
   }
 
   /** Lịch sử thanh toán của một khoản vay */

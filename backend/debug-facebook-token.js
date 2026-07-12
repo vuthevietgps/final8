@@ -4,7 +4,7 @@
 const mongoose = require('mongoose');
 
 // Kết nối MongoDB
-const MONGODB_URI = 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 // Schema cho ApiToken
 const apiTokenSchema = new mongoose.Schema({

@@ -8,11 +8,13 @@ import { Fanpage, FanpageSchema } from './schemas/fanpage.schema';
 import { FanpageService } from './fanpage.service';
 import { FanpageController } from './fanpage.controller';
 import { OpenAIConfigModule } from '../openai-config/openai-config.module';
+import { ApiTokenModule } from '../api-token/api-token.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Fanpage.name, schema: FanpageSchema }]),
-    OpenAIConfigModule
+    OpenAIConfigModule,
+    ApiTokenModule,
   ],
   providers: [FanpageService],
   controllers: [FanpageController],

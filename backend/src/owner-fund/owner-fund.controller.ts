@@ -9,7 +9,6 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  Headers,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
@@ -24,6 +23,7 @@ import { TransferToOwnerFundDto, TransferFromOwnerFundDto, OwnerWithdrawFromFund
 import { WithdrawalStatus } from './schemas/withdrawal.schema';
 import { FundTransactionType, FundTransactionCategory } from './schemas/fund-transaction.schema';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @FeatureModule('owner-fund')
 @Controller('owner-fund')
@@ -200,9 +200,9 @@ export class OwnerFundController {
   @Post('fund-account/transfer-in')
   async transferToOwnerFund(
     @Body() dto: TransferToOwnerFundDto,
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() currentUser: any,
   ) {
-    return this.ownerFundService.transferToOwnerFund(dto, userId || 'system');
+    return this.ownerFundService.transferToOwnerFund(dto, String(currentUser?.id || ''));
   }
 
   /**
@@ -213,9 +213,9 @@ export class OwnerFundController {
   @Post('fund-account/transfer-out')
   async transferFromOwnerFund(
     @Body() dto: TransferFromOwnerFundDto,
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() currentUser: any,
   ) {
-    return this.ownerFundService.transferFromOwnerFund(dto, userId || 'system');
+    return this.ownerFundService.transferFromOwnerFund(dto, String(currentUser?.id || ''));
   }
 
   /**
@@ -226,9 +226,9 @@ export class OwnerFundController {
   @Post('fund-account/withdraw')
   async ownerWithdrawFromFund(
     @Body() dto: OwnerWithdrawFromFundDto,
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() currentUser: any,
   ) {
-    return this.ownerFundService.ownerWithdrawFromFund(dto, userId || 'system');
+    return this.ownerFundService.ownerWithdrawFromFund(dto, String(currentUser?.id || ''));
   }
 
   /**

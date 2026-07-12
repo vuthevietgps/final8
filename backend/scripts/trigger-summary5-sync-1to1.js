@@ -48,7 +48,7 @@ function triggerSync() {
 
 async function callServiceDirectly() {
   const { MongoClient } = require('mongodb');
-  const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
+  const MONGODB_URI = process.env.MONGODB_URI;
   
   const client = new MongoClient(MONGODB_URI);
   

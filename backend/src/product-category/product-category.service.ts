@@ -2,9 +2,9 @@
  * File: product-category.service.ts
  * Mục đích: Nghiệp vụ Nhóm Sản phẩm và truy cập dữ liệu.
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 import { ProductCategory, ProductCategoryDocument } from './schemas/product-category.schema';
@@ -13,7 +13,7 @@ import { ProductCategory, ProductCategoryDocument } from './schemas/product-cate
 export class ProductCategoryService {
   constructor(
     @InjectModel(ProductCategory.name) 
-    private productCategoryModel: Model<ProductCategoryDocument>
+    private productCategoryModel: Model<ProductCategoryDocument>,
   ) {}
 
   async create(createProductCategoryDto: CreateProductCategoryDto): Promise<ProductCategory> {
@@ -25,12 +25,26 @@ export class ProductCategoryService {
 
     // Tự động tạo code nếu không được cung cấp
     if (!createProductCategoryDto.code) {
-      const count = await this.productCategoryModel.countDocuments();
-      createProductCategoryDto.code = `CAT${String(count + 1).padStart(3, '0')}`;
+      const lastCategory = await this.productCategoryModel
+        .findOne({ code: /^CAT\d+$/ })
+        .sort({ code: -1 })
+        .select('code')
+        .lean();
+      const lastCode = lastCategory?.code;
+      const nextNumber = lastCode ? Number(String(lastCode).replace(/^CAT/, '')) + 1 : 1;
+      createProductCategoryDto.code = `CAT${String(nextNumber).padStart(3, '0')}`;
     }
 
     const createdCategory = new this.productCategoryModel(createProductCategoryDto);
-    return createdCategory.save();
+    try {
+      return await createdCategory.save();
+    } catch (error) {
+      const duplicateKeyCode = (error as { code?: number } | null)?.code;
+      if (duplicateKeyCode === 11000) {
+        throw new ConflictException('Product category already exists');
+      }
+      throw error;
+    }
   }
 
   async findAll(): Promise<ProductCategory[]> {
@@ -60,6 +74,13 @@ export class ProductCategoryService {
   }
 
   async remove(id: string): Promise<void> {
+    const productCount = await this.productCategoryModel.db
+      .collection('products')
+      .countDocuments({ categoryId: new Types.ObjectId(id) });
+    if (productCount > 0) {
+      throw new ConflictException('Cannot delete product category while products still reference it');
+    }
+
     const result = await this.productCategoryModel.findByIdAndDelete(id).exec();
     if (!result) {
       throw new NotFoundException(`Product Category with ID ${id} not found`);

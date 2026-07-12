@@ -39,7 +39,7 @@ export interface Fanpage {
 export interface CreateFanpageRequest {
   pageId: string;
   name: string;
-  accessToken: string;
+  accessToken?: string;
   status?: 'active' | 'inactive';
   avatarUrl?: string;
   connectedBy?: string;
@@ -61,6 +61,23 @@ export interface CreateFanpageRequest {
 
 export interface UpdateFanpageRequest extends Partial<CreateFanpageRequest> {}
 
+export interface FanpageSyncResponse {
+  success: boolean;
+  message: string;
+  data: {
+    total: number;
+    inserted: number;
+    updated: number;
+    tokensUpserted: number;
+    webhookSubscribed: number;
+    webhookFailed: number;
+    adAccountsTotal: number;
+    adAccountsCreated: number;
+    adAccountsUpdated: number;
+  };
+  errors?: Array<{ pageId: string; name: string; error: string }>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FanpageService {
   private baseUrl = `${environment.apiUrl}/fanpages`;
@@ -71,6 +88,7 @@ export class FanpageService {
   update(id: string, body: UpdateFanpageRequest): Observable<Fanpage> { return this.http.patch<Fanpage>(`${this.baseUrl}/${id}`, body); }
   delete(id: string) { return this.http.delete(`${this.baseUrl}/${id}`); }
   createAIConfig(id: string) { return this.http.post(`${this.baseUrl}/${id}/create-ai-config`, {}); }
+  syncFromMeta(): Observable<FanpageSyncResponse> { return this.http.post<FanpageSyncResponse>(`${this.baseUrl}/sync`, {}); }
 
   // Validate access token với Facebook Graph API
   validateAccessToken(id: string): Observable<{valid: boolean, error?: string, pageInfo?: any}> {

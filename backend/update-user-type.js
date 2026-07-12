@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const MONGODB_URI = 'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/smarterp-dev';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 async function updateUser() {
   await mongoose.connect(MONGODB_URI);

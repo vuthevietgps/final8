@@ -1,9 +1,8 @@
 /**
- * File: emergency-action/emergency-action.service.ts
- * Mục đích: Service quản lý trạng thái task khẩn cấp Ads Budget.
- * - CRUD task logs (upsert theo date+taskId)
- * - Toggle done/undone + trigger verification
- * - Cron check quá hạn → push SSE alert
+ * Service quan ly task khan cap cua Ads Budget.
+ * - Luu task theo ngay
+ * - Toggle done/undone va xac minh
+ * - Kiem tra task qua han de day alert
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -32,6 +31,14 @@ export interface BulkSyncTaskDto {
   targetSpend?: number;
 }
 
+export interface BulkSyncResult {
+  upserted: number;
+  existing: number;
+  updated: number;
+  removed: number;
+  reset: number;
+}
+
 @Injectable()
 export class EmergencyActionService {
   private readonly logger = new Logger(EmergencyActionService.name);
@@ -43,61 +50,76 @@ export class EmergencyActionService {
     private readonly alertsEventsService: AdsAlertsEventsService,
   ) {}
 
-  /**
-   * Lấy tất cả tasks của 1 ngày
-   */
   async getByDate(date: string) {
     return this.model.find({ date }).sort({ priority: -1 }).lean().exec();
   }
 
   /**
-   * Bulk upsert tasks cho 1 ngày (frontend gửi toàn bộ tasks sau khi build).
-   * Chỉ tạo mới nếu chưa có, giữ nguyên done/verification nếu đã có.
+   * Frontend gui toan bo task sau khi rebuild.
+   * - Tao moi neu chua co
+   * - Cap nhat task neu definition thay doi
+   * - Reset done/verification khi task definition thay doi
+   * - Xoa task pending da khong con trong payload moi
    */
   async bulkSync(
     date: string,
     tasks: BulkSyncTaskDto[],
-  ): Promise<{ upserted: number; existing: number }> {
+  ): Promise<BulkSyncResult> {
     let upserted = 0;
     let existing = 0;
+    let updated = 0;
+    let removed = 0;
+    let reset = 0;
+
+    const existingTasks = await this.model.find({ date }).exec();
+    const existingByTaskId = new Map(
+      existingTasks.map((task) => [task.taskId, task] as const),
+    );
+    const incomingTaskIds = new Set(tasks.map((task) => task.taskId));
 
     for (const task of tasks) {
-      const result = await this.model.updateOne(
-        { date, taskId: task.taskId },
-        {
-          $setOnInsert: {
-            date,
-            taskId: task.taskId,
-            taskType: task.taskType,
-            priority: task.priority,
-            platform: task.platform,
-            adGroupId: task.adGroupId,
-            adGroupName: task.adGroupName,
-            actionText: task.actionText,
-            reason: task.reason,
-            deadline: task.deadline,
-            currentSpend: task.currentSpend,
-            targetSpend: task.targetSpend,
-            done: false,
-            verificationStatus: 'pending',
-          },
-        },
-        { upsert: true },
-      );
+      const current = existingByTaskId.get(task.taskId);
 
-      if (result.upsertedCount > 0) {
+      if (!current) {
+        await this.model.create({
+          ...this.toTaskDocument(date, task),
+          done: false,
+          verificationStatus: 'pending',
+        });
         upserted++;
-      } else {
-        existing++;
+        continue;
       }
+
+      if (!this.hasTaskDefinitionChanged(current, task)) {
+        existing++;
+        continue;
+      }
+
+      updated++;
+      if (this.resetTaskExecutionState(current)) {
+        reset++;
+      }
+
+      Object.assign(current, this.toTaskDocument(date, task));
+      await current.save();
     }
 
-    return { upserted, existing };
+    const stalePendingTaskIds = existingTasks
+      .filter((task) => !task.done && !incomingTaskIds.has(task.taskId))
+      .map((task) => task.taskId);
+
+    if (stalePendingTaskIds.length > 0) {
+      const deleteResult = await this.model.deleteMany({
+        date,
+        done: false,
+        taskId: { $in: stalePendingTaskIds },
+      });
+      removed = deleteResult.deletedCount || 0;
+    }
+
+    return { upserted, existing, updated, removed, reset };
   }
 
-  /**
-   * Toggle done/undone 1 task + trigger verification nếu done=true
-   */
   async toggleDone(
     date: string,
     taskId: string,
@@ -115,28 +137,17 @@ export class EmergencyActionService {
       if (userId) task.doneBy = userId as any;
       if (userName) task.doneByName = userName;
 
-      // Trigger verification async (không block response)
       this.runVerification(task).catch((err) =>
         this.logger.warn(`Verification error for ${taskId}: ${err?.message}`),
       );
     } else {
-      // Undo
-      task.doneAt = undefined;
-      task.doneBy = undefined;
-      task.doneByName = undefined;
-      task.verificationStatus = 'pending';
-      task.verifiedAt = undefined;
-      task.verificationDetails = undefined;
-      task.actualSpendAfter = undefined;
+      this.resetTaskExecutionState(task);
     }
 
     await task.save();
-    return task.toObject();
+    return task;
   }
 
-  /**
-   * Chạy verification trên platform sau khi user tick "Đã xong"
-   */
   private async runVerification(task: EmergencyActionLogDocument): Promise<void> {
     const result = await this.verificationService.verify({
       taskType: task.taskType,
@@ -158,27 +169,23 @@ export class EmergencyActionService {
 
     await task.save();
 
-    // Nếu verification failed → emit alert
     if (result.status === 'failed') {
       this.alertsEventsService.createAlert({
         type: 'WARNING',
         category: 'BUDGET',
-        title: `Xác minh thất bại: ${task.adGroupName || task.taskId}`,
+        title: `Xac minh that bai: ${task.adGroupName || task.taskId}`,
         message: result.details,
+        dedupeKey: `emergency-verification:${task.date}:${task.taskId}`,
         adGroupId: task.adGroupId,
         adGroupName: task.adGroupName,
         platform: task.platform,
-        action: { type: 'REVIEW', label: 'Kiểm tra lại' },
+        action: { type: 'REVIEW', label: 'Kiem tra lai' },
       });
     }
   }
 
-  /**
-   * Lấy tasks quá hạn chưa xử lý
-   */
   async getOverdueTasks(date: string) {
     const now = new Date();
-    // Lấy giờ Vietnam (UTC+7)
     const vietnamHour = (now.getUTCHours() + 7) % 24;
 
     const allPending = await this.model.find({ date, done: false }).lean().exec();
@@ -189,15 +196,14 @@ export class EmergencyActionService {
   }
 
   /**
-   * Cron mỗi giờ (7h-22h Vietnam): kiểm tra tasks quá hạn và push SSE alert
+   * Chay dau moi gio tu 07:00 den 22:00 gio Viet Nam.
    */
-  @Cron('0 * 7-22 * * *', {
+  @Cron('0 0 7-22 * * *', {
     name: 'emergency-overdue-check',
     timeZone: 'Asia/Ho_Chi_Minh',
   })
   async checkOverdueTasks(): Promise<void> {
     const now = new Date();
-    // Tính ngày Vietnam (UTC+7)
     const vietnamTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const today = vietnamTime.toISOString().split('T')[0];
     const vietnamHour = vietnamTime.getUTCHours();
@@ -211,15 +217,15 @@ export class EmergencyActionService {
 
       overdueCount++;
 
-      // Tính end of day Vietnam cho expiresAt
       const endOfDay = new Date(vietnamTime);
-      endOfDay.setUTCHours(16, 59, 59, 999); // 23:59 Vietnam = 16:59 UTC
+      endOfDay.setUTCHours(16, 59, 59, 999);
 
       this.alertsEventsService.createAlert({
         type: 'CRITICAL',
         category: 'BUDGET',
-        title: `Quá hạn: ${(task.actionText || '').substring(0, 50)}`,
-        message: `Task "${task.taskType}" deadline ${task.deadline} chưa xử lý. ${task.reason}`,
+        title: `Qua han: ${(task.actionText || '').substring(0, 50)}`,
+        message: `Task "${task.taskType}" deadline ${task.deadline} chua xu ly. ${task.reason}`,
+        dedupeKey: `emergency-overdue:${today}:${task.taskId}`,
         adGroupId: task.adGroupId,
         adGroupName: task.adGroupName,
         platform: task.platform,
@@ -235,15 +241,69 @@ export class EmergencyActionService {
     }
   }
 
-  /**
-   * Parse deadline string → hour number
-   * "Trước 09:00" → 9, "Trước 11:00" → 11, "Xử lý ngay" → 7, "Trước 14:00" → 14
-   */
   private parseDeadlineHour(deadline: string): number {
     if (!deadline) return 23;
     const match = deadline.match(/(\d{1,2}):?\d{0,2}/);
     if (match) return parseInt(match[1], 10);
-    if (deadline.includes('ngay')) return 7; // "Xử lý ngay" → 7:00 sáng
-    return 23; // Fallback: cuối ngày
+    if (deadline.includes('ngay')) return 7;
+    return 23;
+  }
+
+  private toTaskDocument(date: string, task: BulkSyncTaskDto) {
+    return {
+      date,
+      taskId: task.taskId,
+      taskType: task.taskType,
+      priority: task.priority,
+      platform: task.platform,
+      adGroupId: task.adGroupId,
+      adGroupName: task.adGroupName,
+      actionText: task.actionText,
+      reason: task.reason,
+      deadline: task.deadline,
+      currentSpend: task.currentSpend,
+      targetSpend: task.targetSpend,
+    };
+  }
+
+  private hasTaskDefinitionChanged(
+    current: EmergencyActionLogDocument,
+    next: BulkSyncTaskDto,
+  ): boolean {
+    return (
+      current.taskType !== next.taskType ||
+      current.priority !== next.priority ||
+      current.platform !== next.platform ||
+      current.adGroupId !== next.adGroupId ||
+      current.adGroupName !== next.adGroupName ||
+      current.actionText !== next.actionText ||
+      current.reason !== next.reason ||
+      current.deadline !== next.deadline ||
+      current.currentSpend !== next.currentSpend ||
+      current.targetSpend !== next.targetSpend
+    );
+  }
+
+  private resetTaskExecutionState(task: EmergencyActionLogDocument): boolean {
+    const needsReset =
+      task.done ||
+      task.verificationStatus !== 'pending' ||
+      !!task.doneAt ||
+      !!task.doneBy ||
+      !!task.doneByName ||
+      !!task.verifiedAt ||
+      !!task.verificationDetails ||
+      task.actualSpendAfter != null;
+
+    task.done = false;
+    task.doneAt = undefined;
+    task.doneBy = undefined;
+    task.doneByName = undefined;
+    task.verificationStatus = 'pending';
+    task.verifiedAt = undefined;
+    task.verificationDetails = undefined;
+    task.actualSpendAfter = undefined;
+
+    return needsReset;
   }
 }

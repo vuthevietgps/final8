@@ -1,0 +1,145 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-3B-H2",
+    "status": "completed_internal_adapter_unblocked_no_exportjob_integration",
+    "code_changed": true,
+    "provider_calls": false,
+    "real_sync_performed_in_tests": false,
+    "provider_mutation": false,
+    "provider_validate_only": false,
+    "public_endpoint_added": false,
+    "official_or_partial_export_added": false,
+    "exportjob_integration_added": false,
+    "blocked_by_scope": false,
+    "blocked_by_transport_integration": false,
+    "actual_adapter_provider_sync": "enabled_for_internal_adapter_but_not_invoked_in_tests",
+    "legacy_searchStream_uses_enforced_wrapper": true,
+    "actual_write_telemetry": "implemented",
+    "complete_actual_write_interception": "sufficient_for_current_sync_path",
+    "ready_for_exportjob_integration": "maybe_ready_for_spec_review_only",
+    "missing_input_files": [
+      "docs/ai-ads-v2/00-index.md"
+    ],
+    "available_index_used": "docs/ai-ads-v2/00_README_INDEX.md"
+  },
+  "transport_refactor": {
+    "legacy_service": "backend/src/google-ads/google-ads-readonly-sync.service.ts",
+    "transport_wrapper": "GoogleAdsReadonlyTransportService",
+    "raw_axios_removed_from_legacy_sync": true,
+    "legacy_google_ads_url_removed": true,
+    "legacy_raw_gaql_removed": true,
+    "query_source": "adapter_owned_static_template_ids",
+    "absolute_deadline_propagated": true,
+    "caller_supplied_url_method_gaql_rejected_by_wrapper": true,
+    "mutation_validate_only_paths": false
+  },
+  "write_telemetry": {
+    "sync_method": "syncWithTelemetry",
+    "public_sync_telemetry_returned": false,
+    "telemetry_fields": [
+      "targetCollection",
+      "operationType",
+      "recordCount",
+      "deleteAttempted=false",
+      "sourceStep"
+    ],
+    "allowed_targets": [
+      "adaccounts.approved_sync_metadata",
+      "google_ads_campaigns",
+      "google_ads_campaign_budgets",
+      "google_ads_ad_groups",
+      "google_ads_keywords",
+      "google_ads_ads",
+      "google_ads_daily_metrics",
+      "google_ads_sync_runs"
+    ],
+    "adapter_rejects_missing_telemetry": true,
+    "adapter_rejects_forbidden_targets": true,
+    "adapter_rejects_delete_attempts": true,
+    "audit_persists_write_telemetry_summary": true
+  },
+  "adapter_binding": {
+    "raw_sync_port": "GoogleAdsReadonlySyncPortService",
+    "underlying_service": "GoogleAdsReadonlySyncService.syncWithTelemetry",
+    "broad_google_ads_module_imported": false,
+    "blocked_sync_port_removed": true,
+    "exported_adapter_only": true,
+    "exportjob_integration": false
+  },
+  "audit_bridge": {
+    "collection": "ai_data_pack_source_sync_audits",
+    "fields_received": [
+      "exportJobId",
+      "correlationId",
+      "sourceKey",
+      "scopeHash",
+      "policyVersion",
+      "lock outcome",
+      "attempt count",
+      "write telemetry summary",
+      "post assessment references",
+      "status",
+      "sanitized errors"
+    ],
+    "db_only_assessment_preserved": true
+  },
+  "tests_run": [
+    {
+      "command": "npm run build",
+      "result": "pass"
+    },
+    {
+      "command": "npm test -- --runInBand google-ads-readonly",
+      "result": "pass",
+      "suites": 7,
+      "tests": 41
+    },
+    {
+      "command": "npm test -- --runInBand source-sync",
+      "result": "pass",
+      "suites": 1,
+      "tests": 5
+    },
+    {
+      "command": "npm test -- --runInBand source-registry",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand export-job",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "pass",
+      "suites": 11,
+      "tests": 81
+    },
+    {
+      "command": "npm test -- --runInBand google-ads",
+      "result": "pass",
+      "suites": 19,
+      "tests": 119
+    },
+    {
+      "command": "npx prettier --check scoped Prompt 9 TypeScript",
+      "result": "pass"
+    }
+  ],
+  "risks_and_assumptions": [
+    "Adapter is not wired into ExportJob official/partial lifecycle.",
+    "Write interception is implemented for the current legacy sync service path, not as a global database write firewall.",
+    "The existing public Google Ads readonly sync route remains present; no new public endpoint was added.",
+    "Narrow permissions remain proposed and unbound to broad roles.",
+    "Next integration phase requires separate review and prompt."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "recommended_next_pr": "PR-2.3B-3C - Google Ads adapter integration into internal ExportJob source-sync policy",
+    "integration_pr_allowed_now": "only_after_separate_review_and_prompt",
+    "do_not_create_prompt10": true
+  }
+}

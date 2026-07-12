@@ -1,15 +1,15 @@
 export type AdChannel = 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other';
+export type ManagementMode = 'direct' | 'bm' | 'mcc' | 'bc';
 
 export interface AdvertisingCost {
   _id?: string;
-  date: string; // ISO string yyyy-mm-dd (UI hiển thị mm/dd/yyyy)
+  date: string;
   channel?: AdChannel;
   frequency?: number;
   adGroupId: string;
   spentAmount?: number;
   cpm?: number;
   cpc?: number;
-  // === NEW MESSAGING METRICS ===
   impressions?: number;
   clicks?: number;
   reach?: number;
@@ -17,10 +17,15 @@ export interface AdvertisingCost {
   costPerMessagingConversation?: number;
   messagingFirstReply?: number;
   createdAt?: string;
-  // Enriched fields (backend join via ad group -> ad account)
   adAccountId?: string;
   adAccountName?: string;
   adAccountAccountId?: string;
+  customerId?: string;
+  businessCenterId?: string;
+  businessCenterName?: string;
+  managementMode?: ManagementMode;
+  adsManagerUserId?: string;
+  assignedEmployeeId?: string;
 }
 
 export type CreateAdvertisingCost = Omit<AdvertisingCost, '_id' | 'createdAt'>;

@@ -7,20 +7,56 @@
 import { Injectable, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtherCost, OtherCostDocument, OpsCategory } from './schemas/other-cost.schema';
 import { CreateOtherCostDto } from './dto/create-other-cost.dto';
 import { UpdateOtherCostDto } from './dto/update-other-cost.dto';
 import { TestOrder2Service } from '../test-order2/test-order2.service';
+import { FinanceEvents } from '../finance/events/finance-events.constants';
 
 @Injectable()
 export class OtherCostService {
   private readonly logger = new Logger(OtherCostService.name);
+  private static readonly BUSINESS_TIMEZONE = 'Asia/Bangkok';
+  private static readonly BUSINESS_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+  private shiftToBusinessTimezone(date: Date): Date {
+    return new Date(date.getTime() + OtherCostService.BUSINESS_OFFSET_MS);
+  }
+
+  private formatBusinessDayIso(date: Date): string {
+    const shifted = this.shiftToBusinessTimezone(date);
+    const year = shifted.getUTCFullYear();
+    const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private startOfBusinessDay(dayIso: string): Date {
+    const [year, month, day] = dayIso.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day) - OtherCostService.BUSINESS_OFFSET_MS);
+  }
+
+  private endOfBusinessDay(dayIso: string): Date {
+    return new Date(this.startOfBusinessDay(dayIso).getTime() + 24 * 60 * 60 * 1000 - 1);
+  }
+
+  private parseRangeBoundary(value: string, endOfDay: boolean): Date {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return endOfDay ? this.endOfBusinessDay(trimmed) : this.startOfBusinessDay(trimmed);
+    }
+    return new Date(trimmed);
+  }
 
   private formatDayIso(date: Date, useUtc: boolean): string {
-    const year = useUtc ? date.getUTCFullYear() : date.getFullYear();
-    const month = String((useUtc ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
-    const day = String(useUtc ? date.getUTCDate() : date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    if (useUtc) {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    return this.formatBusinessDayIso(date);
   }
 
   /**
@@ -66,6 +102,7 @@ export class OtherCostService {
     private readonly otherCostModel: Model<OtherCostDocument>,
     @Inject(forwardRef(() => TestOrder2Service))
     private readonly testOrder2Service: TestOrder2Service,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -86,6 +123,7 @@ export class OtherCostService {
     const created = new this.otherCostModel(payload);
     const saved = await created.save();
     await this.triggerRecalculateForDates([saved.date as any]);
+    this.eventEmitter.emit(FinanceEvents.OTHER_COST_UPDATED, { costId: String(saved._id) });
     return saved;
   }
 
@@ -96,8 +134,8 @@ export class OtherCostService {
     const filter: any = {};
     if (from || to) {
       filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      if (from) filter.date.$gte = this.parseRangeBoundary(from, false);
+      if (to) filter.date.$lte = this.parseRangeBoundary(to, true);
     }
     return this.otherCostModel.find(filter).sort({ date: -1, createdAt: -1 }).exec();
   }
@@ -140,6 +178,7 @@ export class OtherCostService {
       .exec();
     if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­ Ä‘á»ƒ cáº­p nháº­t');
     await this.triggerRecalculateForDates([existing.date as any, updated.date as any]);
+    this.eventEmitter.emit(FinanceEvents.OTHER_COST_UPDATED, { costId: id });
     return updated;
   }
 
@@ -151,6 +190,8 @@ export class OtherCostService {
       .findByIdAndUpdate(id, { isConfirmed: true, confirmedAt: new Date() }, { new: true })
       .exec();
     if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­ Ä‘á»ƒ xÃ¡c nháº­n');
+    await this.triggerRecalculateForDates([updated.date as any]);
+    this.eventEmitter.emit(FinanceEvents.OTHER_COST_CONFIRMED, { costId: id, confirmed: true });
     return updated;
   }
 
@@ -164,6 +205,7 @@ export class OtherCostService {
     const deleted = await this.otherCostModel.findByIdAndDelete(id).exec();
     if (!deleted) throw new NotFoundException('Other cost not found');
     await this.triggerRecalculateForDates([existing.date as any]);
+    this.eventEmitter.emit(FinanceEvents.OTHER_COST_UPDATED, { costId: id });
     return { message: 'Xóa chi phí thành công' };
   }
 
@@ -174,8 +216,8 @@ export class OtherCostService {
     const match: any = {};
     if (from || to) {
       match.date = {};
-      if (from) match.date.$gte = new Date(from);
-      if (to) match.date.$lte = new Date(to);
+      if (from) match.date.$gte = this.parseRangeBoundary(from, false);
+      if (to) match.date.$lte = this.parseRangeBoundary(to, true);
     }
 
     const [result] = await this.otherCostModel.aggregate([
@@ -227,11 +269,12 @@ export class OtherCostService {
     alerts: string[];
   }> {
     const now = new Date();
-    const today = new Date(now.toISOString().split('T')[0]); // Start of today
+    const asOfDate = this.formatBusinessDayIso(now);
+    const today = this.startOfBusinessDay(asOfDate);
     const windowEnd = new Date(today);
-    windowEnd.setDate(windowEnd.getDate() + windowDays);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + windowDays);
     const day7End = new Date(today);
-    day7End.setDate(day7End.getDate() + 7);
+    day7End.setUTCDate(day7End.getUTCDate() + 7);
 
     // === 1. Tá»”NG Há»¢P ===
     // Tá»•ng Ä‘Ã£ tráº£ (isConfirmed = true)
@@ -271,7 +314,13 @@ export class OtherCostService {
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$dueDate' } },
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$dueDate',
+              timezone: OtherCostService.BUSINESS_TIMEZONE,
+            },
+          },
           amount: { $sum: '$amount' },
           count: { $sum: 1 },
         },
@@ -332,7 +381,13 @@ export class OtherCostService {
           nextDueDate: {
             $cond: [
               { $gt: ['$nextDueDate', null] },
-              { $dateToString: { format: '%Y-%m-%d', date: '$nextDueDate' } },
+              {
+                $dateToString: {
+                  format: '%Y-%m-%d',
+                  date: '$nextDueDate',
+                  timezone: OtherCostService.BUSINESS_TIMEZONE,
+                },
+              },
               null,
             ],
           },
@@ -384,8 +439,8 @@ export class OtherCostService {
       dueByDay7d: dueByDayAgg,
       byCategory: byCategoryAgg,
       metadata: {
-        asOfDate: today.toISOString().split('T')[0],
-        timezone: 'Asia/Bangkok',
+        asOfDate,
+        timezone: OtherCostService.BUSINESS_TIMEZONE,
         windowDays,
         generatedAt: now.toISOString(),
       },

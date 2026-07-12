@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery } from 'mongoose';
 import { ChatMessage, ChatMessageDocument } from './schemas/chat-message.schema';
@@ -7,13 +7,23 @@ import { CreateChatMessageDto } from './dto/create-chat-message.dto';
 import { UpdateChatMessageDto } from './dto/update-chat-message.dto';
 
 @Injectable()
-export class ChatMessageService {
+export class ChatMessageService implements OnModuleInit {
+  private readonly logger = new Logger(ChatMessageService.name);
   private readonly hiddenRecoveryNotePrefixes = ['[AUTO-RECOVER FB]', '[DA GUI LAI RA FB]'];
 
   constructor(
     @InjectModel(ChatMessage.name) private model: Model<ChatMessageDocument>,
     @InjectModel(Conversation.name) private convModel: Model<ConversationDocument>,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.cleanupLegacyPlatformKeys();
+      await this.alignPlatformIdempotencyIndexes();
+    } catch (error: any) {
+      this.logger.warn(`Failed to align chat message idempotency indexes: ${error?.message || error}`);
+    }
+  }
 
   private isHiddenRecoverySystemNote(content?: string | null): boolean {
     const text = String(content || '').trim().toUpperCase();
@@ -35,12 +45,177 @@ export class ChatMessageService {
     return ref;
   }
 
-  async create(dto: CreateChatMessageDto) {
+  private normalizeOptionalPlatformString(value: any): string | undefined {
+    const normalized = String(value ?? '').trim();
+    return normalized ? normalized : undefined;
+  }
+
+  private sanitizePlatformUniquenessFields(payload: Record<string, any>): void {
+    const platformMessageId = this.normalizeOptionalPlatformString(payload.platformMessageId);
+    const platformEventKey = this.normalizeOptionalPlatformString(payload.platformEventKey);
+
+    if (platformMessageId) {
+      payload.platformMessageId = platformMessageId;
+    } else {
+      delete payload.platformMessageId;
+    }
+
+    if (platformEventKey) {
+      payload.platformEventKey = platformEventKey;
+    } else {
+      delete payload.platformEventKey;
+    }
+  }
+
+  private async cleanupLegacyPlatformKeys(): Promise<void> {
+    await Promise.all([
+      this.model.updateMany({ platformMessageId: { $in: [null, ''] } } as any, { $unset: { platformMessageId: 1 } }).exec(),
+      this.model.updateMany({ platformEventKey: { $in: [null, ''] } } as any, { $unset: { platformEventKey: 1 } }).exec(),
+    ]);
+  }
+
+  private async ensurePartialUniqueIndex(
+    name: string,
+    key: Record<string, 1>,
+    partialField: 'platformMessageId' | 'platformEventKey',
+  ): Promise<void> {
+    const indexes = await this.model.collection.indexes();
+    const existing = indexes.find((index) => index.name === name);
+    const expectedPartial = (existing as any)?.partialFilterExpression?.[partialField]?.$type === 'string';
+    const isExpected =
+      Boolean(existing) &&
+      Boolean((existing as any)?.unique) &&
+      !Boolean((existing as any)?.sparse) &&
+      expectedPartial;
+
+    if (existing && !isExpected) {
+      await this.model.collection.dropIndex(name);
+    }
+
+    const refreshedIndexes = existing && !isExpected ? await this.model.collection.indexes() : indexes;
+    const stillExists = refreshedIndexes.some((index) => index.name === name);
+    if (!stillExists) {
+      await this.model.collection.createIndex(key, {
+        name,
+        unique: true,
+        partialFilterExpression: { [partialField]: { $type: 'string' } } as any,
+      });
+    }
+  }
+
+  private async alignPlatformIdempotencyIndexes(): Promise<void> {
+    await this.ensurePartialUniqueIndex(
+      'sourcePlatform_1_fanpageId_1_platformMessageId_1',
+      { sourcePlatform: 1, fanpageId: 1, platformMessageId: 1 },
+      'platformMessageId',
+    );
+    await this.ensurePartialUniqueIndex(
+      'sourcePlatform_1_fanpageId_1_platformEventKey_1',
+      { sourcePlatform: 1, fanpageId: 1, platformEventKey: 1 },
+      'platformEventKey',
+    );
+  }
+
+  private buildPlatformUniqueFilter(dto: CreateChatMessageDto): FilterQuery<ChatMessageDocument> | null {
+    const sourcePlatform = String((dto as any)?.sourcePlatform || '').trim();
+    const fanpageId = this.normalizeFanpageRef((dto as any)?.fanpageId);
+    const platformMessageId = this.normalizeOptionalPlatformString((dto as any)?.platformMessageId);
+    const platformEventKey = this.normalizeOptionalPlatformString((dto as any)?.platformEventKey);
+
+    if (!sourcePlatform || !fanpageId) return null;
+    if (platformMessageId) return { sourcePlatform, fanpageId, platformMessageId } as any;
+    if (platformEventKey) return { sourcePlatform, fanpageId, platformEventKey } as any;
+    return null;
+  }
+
+  private extractPlatformMessageId(rawResponse?: any): string | undefined {
+    const candidates = [
+      rawResponse?.message_id,
+      rawResponse?.text?.message_id,
+      rawResponse?.fb?.message_id,
+      rawResponse?.recovery?.messageId,
+      rawResponse?.raw?.message_id,
+    ];
+    for (const value of candidates) {
+      const id = String(value || '').trim();
+      if (id) return id;
+    }
+    return undefined;
+  }
+
+  private makeOutboundPlatformEventKey(fanpageId: string, senderPsid: string, content: string): string {
+    const stamp = Date.now().toString(36);
+    const rand = Math.random().toString(36).slice(2, 10);
+    const snippet = String(content || '').trim().slice(0, 40).replace(/\s+/g, '_');
+    return `out:${fanpageId}:${senderPsid}:${stamp}:${rand}:${snippet}`;
+  }
+
+  private inferDeliveryStatus(rawResponse?: any): 'sent' | 'failed' | 'skipped' {
+    if (this.extractPlatformMessageId(rawResponse)) return 'sent';
+
+    const statusHint = String(rawResponse?.message || rawResponse?.note || '').trim().toLowerCase();
+    if (
+      statusHint === 'skip' ||
+      statusHint === 'fb_sending_disabled' ||
+      statusHint === 'blocked_outside_24h' ||
+      statusHint === 'image_url_not_absolute'
+    ) {
+      return 'skipped';
+    }
+
+    if (
+      rawResponse?.ok === false ||
+      rawResponse?.error ||
+      rawResponse?.text?.error ||
+      rawResponse?.fb?.error
+    ) {
+      return 'failed';
+    }
+
+    return 'sent';
+  }
+
+  private async persistMessage(dto: CreateChatMessageDto): Promise<{ doc: ChatMessageDocument; created: boolean }> {
     const payload: any = { ...dto };
     if (dto.receivedAt) payload.receivedAt = new Date(dto.receivedAt);
-    const doc = await new this.model(payload).save();
-    await this.upsertConversationForMessage(doc);
+    this.sanitizePlatformUniquenessFields(payload);
+    const uniqueFilter = this.buildPlatformUniqueFilter(payload);
+
+    if (!uniqueFilter) {
+      const doc = await new this.model(payload).save();
+      await this.upsertConversationForMessage(doc);
+      return { doc, created: true };
+    }
+
+    try {
+      const writeResult: any = await this.model.updateOne(
+        uniqueFilter,
+        { $setOnInsert: payload },
+        { upsert: true },
+      ).exec();
+      const doc = await this.model.findOne(uniqueFilter).exec();
+      if (!doc) throw new NotFoundException('KhÃ´ng thá»ƒ táº£i láº¡i chat message sau upsert');
+      const created = Boolean(writeResult?.upsertedCount || writeResult?.upsertedId);
+      if (created) {
+        await this.upsertConversationForMessage(doc);
+      }
+      return { doc, created };
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        const doc = await this.model.findOne(uniqueFilter).exec();
+        if (doc) return { doc, created: false };
+      }
+      throw error;
+    }
+  }
+
+  async create(dto: CreateChatMessageDto) {
+    const { doc } = await this.persistMessage(dto);
     return doc;
+  }
+
+  async createIfNotExists(dto: CreateChatMessageDto): Promise<{ doc: ChatMessageDocument; created: boolean }> {
+    return this.persistMessage(dto);
   }
 
   // Individual message CRUD methods removed
@@ -56,7 +231,7 @@ export class ChatMessageService {
     if (msg.awaitingHuman) inc.awaitingCount = 1;
     const createdAt: Date = (msg as any).createdAt || (msg as any).receivedAt || new Date();
     const set: any = { lastMessageSnippet: (msg.content||'').slice(0,120), lastDirection: msg.direction, lastMessageAt: createdAt };
-    // Nếu message có adGroupId, cập nhật luôn vào conversation để UI thấy ngay
+    // NÃƒÂ¡Ã‚ÂºÃ‚Â¿u message cÃƒÆ’Ã‚Â³ adGroupId, cÃƒÂ¡Ã‚ÂºÃ‚Â­p nhÃƒÂ¡Ã‚ÂºÃ‚Â­t luÃƒÆ’Ã‚Â´n vÃƒÆ’Ã‚Â o conversation Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ UI thÃƒÂ¡Ã‚ÂºÃ‚Â¥y ngay
     if ((msg as any).adGroupId) set.lastAdGroupId = (msg as any).adGroupId;
     if (msg.awaitingHuman) set.hasAwaitingHuman = true, set.needsHuman = true, set.firstAwaitingAt = set.firstAwaitingAt || new Date();
     await this.convModel.updateOne(base, { $setOnInsert: { ...base, autoAiEnabled: true }, $inc: inc, $set: set }, { upsert: true }).exec();
@@ -72,11 +247,11 @@ export class ChatMessageService {
       return;
     }
     let inbound = 0, outbound = 0, awaiting = 0; let firstAwait: Date | undefined; let lastMsg = msgs[msgs.length-1];
-    let lastAdGroupId: string | undefined; // lấy adGroupId MỚI NHẤT
+    let lastAdGroupId: string | undefined; // lÃƒÂ¡Ã‚ÂºÃ‚Â¥y adGroupId MÃƒÂ¡Ã‚Â»Ã…Â¡I NHÃƒÂ¡Ã‚ÂºÃ‚Â¤T
     for (const m of msgs) {
       if (m.direction === 'in') inbound++; else outbound++;
       if (m.awaitingHuman) { awaiting++; if (!firstAwait) firstAwait = (m as any).createdAt || (m as any).receivedAt; }
-      if (m.adGroupId) lastAdGroupId = m.adGroupId; // ghi đè để giữ giá trị cuối cùng
+      if (m.adGroupId) lastAdGroupId = m.adGroupId; // ghi Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â¨ Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ giÃƒÂ¡Ã‚Â»Ã‚Â¯ giÃƒÆ’Ã‚Â¡ trÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ cuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœi cÃƒÆ’Ã‚Â¹ng
     }
     const lastCreatedAt: Date = (lastMsg as any).createdAt || (lastMsg as any).receivedAt || new Date();
     await this.convModel.updateOne(
@@ -151,7 +326,7 @@ export class ChatMessageService {
       .limit(500)
       .lean();
     
-    // Nếu chưa có conversation nhưng có messages, tạo conversation từ messages
+    // NÃƒÂ¡Ã‚ÂºÃ‚Â¿u chÃƒâ€ Ã‚Â°a cÃƒÆ’Ã‚Â³ conversation nhÃƒâ€ Ã‚Â°ng cÃƒÆ’Ã‚Â³ messages, tÃƒÂ¡Ã‚ÂºÃ‚Â¡o conversation tÃƒÂ¡Ã‚Â»Ã‚Â« messages
     if (!conv && messages.length > 0) {
       await this.recomputeConversation(fanpageId, senderPsid);
       conv = await this.convModel.findOne({ fanpageId, senderPsid }).lean();
@@ -162,7 +337,7 @@ export class ChatMessageService {
       conv = await this.convModel.findOne({ fanpageId, senderPsid }).lean();
     }
     
-    // Nếu vẫn không có conversation (không có messages), tạo conversation trống
+    // NÃƒÂ¡Ã‚ÂºÃ‚Â¿u vÃƒÂ¡Ã‚ÂºÃ‚Â«n khÃƒÆ’Ã‚Â´ng cÃƒÆ’Ã‚Â³ conversation (khÃƒÆ’Ã‚Â´ng cÃƒÆ’Ã‚Â³ messages), tÃƒÂ¡Ã‚ÂºÃ‚Â¡o conversation trÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœng
     if (!conv) {
       const newConv = {
         fanpageId,
@@ -192,39 +367,39 @@ export class ChatMessageService {
 
   async toggleAutoAI(fanpageId: string, senderPsid: string, enabled: boolean) {
     const res = await this.convModel.findOneAndUpdate({ fanpageId, senderPsid }, { $set: { autoAiEnabled: enabled } }, { new: true });
-    if(!res) throw new NotFoundException('Conversation không tồn tại');
+    if(!res) throw new NotFoundException('Conversation khÃƒÆ’Ã‚Â´ng tÃƒÂ¡Ã‚Â»Ã¢â‚¬Å“n tÃƒÂ¡Ã‚ÂºÃ‚Â¡i');
     return { fanpageId, senderPsid, autoAiEnabled: res.autoAiEnabled };
   }
 
   async extractOrderDraft(fanpageId: string, senderPsid: string) {
-    // Lấy theo thời gian tăng dần để có thể lấy adGroupId cuối cùng (mới nhất)
+    // LÃƒÂ¡Ã‚ÂºÃ‚Â¥y theo thÃƒÂ¡Ã‚Â»Ã‚Âi gian tÃƒâ€žÃ†â€™ng dÃƒÂ¡Ã‚ÂºÃ‚Â§n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ cÃƒÆ’Ã‚Â³ thÃƒÂ¡Ã‚Â»Ã†â€™ lÃƒÂ¡Ã‚ÂºÃ‚Â¥y adGroupId cuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœi cÃƒÆ’Ã‚Â¹ng (mÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi nhÃƒÂ¡Ã‚ÂºÃ‚Â¥t)
     const messages = await this.model
       .find({ fanpageId, senderPsid, ...this.hiddenRecoveryNoteFilter() })
       .sort({ createdAt: 1 })
       .lean();
-    if(!messages.length) throw new NotFoundException('Không có tin nhắn để trích xuất');
+    if(!messages.length) throw new NotFoundException('KhÃƒÆ’Ã‚Â´ng cÃƒÆ’Ã‚Â³ tin nhÃƒÂ¡Ã‚ÂºÃ‚Â¯n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ trÃƒÆ’Ã‚Â­ch xuÃƒÂ¡Ã‚ÂºÃ‚Â¥t');
     const textAll = messages.map(m=> m.content).join('\n');
     // Simple regex heuristics
     const phoneRegex = /(0|\+84)(3|5|7|8|9)\d{8}/g;
     const phones = Array.from(new Set((textAll.match(phoneRegex)||[])));
-    const qtyRegex = /(số lượng|sl|lấy|mua|x)\s*(\d{1,4})/gi;
+    const qtyRegex = /(sÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœ lÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£ng|sl|lÃƒÂ¡Ã‚ÂºÃ‚Â¥y|mua|x)\s*(\d{1,4})/gi;
     let quantity: number | undefined; let m;
     while((m = qtyRegex.exec(textAll))){ const v = parseInt(m[2]); if(!quantity || v>quantity) quantity=v; }
-    const addressRegex = /(địa chỉ|add(?:ress)?)[^\n:]*[:\-]?\s*([^\n]{10,120})/i;
+    const addressRegex = /(Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹a chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â°|add(?:ress)?)[^\n:]*[:\-]?\s*([^\n]{10,120})/i;
     const addrMatch = textAll.match(addressRegex);
     const address = addrMatch? addrMatch[2].trim(): undefined;
-  // adGroupId: chọn GIÁ TRỊ MỚI NHẤT có trong luồng tin nhắn
+  // adGroupId: chÃƒÂ¡Ã‚Â»Ã‚Ân GIÃƒÆ’Ã‚Â TRÃƒÂ¡Ã‚Â»Ã…Â  MÃƒÂ¡Ã‚Â»Ã…Â¡I NHÃƒÂ¡Ã‚ÂºÃ‚Â¤T cÃƒÆ’Ã‚Â³ trong luÃƒÂ¡Ã‚Â»Ã¢â‚¬Å“ng tin nhÃƒÂ¡Ã‚ÂºÃ‚Â¯n
   let adGroupId: string | undefined;
   for(const m of messages){ if(m.adGroupId) adGroupId = m.adGroupId; }
-    // naive customer name: if first inbound contains tên ...
+    // naive customer name: if first inbound contains tÃƒÆ’Ã‚Âªn ...
     let customerName: string | undefined;
     const firstInbound = messages.find(m=> m.direction==='in');
     if(firstInbound){
-      const nameRegex = /(em tên|mình tên|tôi tên|anh tên|chị tên)\s+([A-Za-zÀ-ỹĐđ\s]{2,40})/i;
+      const nameRegex = /(em tÃƒÆ’Ã‚Âªn|mÃƒÆ’Ã‚Â¬nh tÃƒÆ’Ã‚Âªn|tÃƒÆ’Ã‚Â´i tÃƒÆ’Ã‚Âªn|anh tÃƒÆ’Ã‚Âªn|chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ tÃƒÆ’Ã‚Âªn)\s+([A-Za-zÃƒÆ’Ã¢â€šÂ¬-ÃƒÂ¡Ã‚Â»Ã‚Â¹Ãƒâ€žÃ‚ÂÃƒâ€žÃ¢â‚¬Ëœ\s]{2,40})/i;
       const nm = firstInbound.content.match(nameRegex);
       if(nm) customerName = nm[2].trim();
     }
-    if(!customerName) customerName = 'Khách FB ' + senderPsid.slice(-4);
+    if(!customerName) customerName = 'KhÃƒÆ’Ã‚Â¡ch FB ' + senderPsid.slice(-4);
     return {
       suggestions: {
         customerName,
@@ -246,20 +421,27 @@ export class ChatMessageService {
 
   // --- Outbound send helper (fanpage access token lookup inject later via controller) ---
   async recordOutboundMessage(params: { fanpageId: string; senderPsid: string; text: string; rawResponse?: any; }) {
-    const doc = await new this.model({
+    const platformMessageId = this.extractPlatformMessageId(params.rawResponse);
+    const platformEventKey = platformMessageId
+      ? undefined
+      : this.makeOutboundPlatformEventKey(params.fanpageId, params.senderPsid, params.text);
+    const { doc, created } = await this.createIfNotExists({
       fanpageId: params.fanpageId,
       senderPsid: params.senderPsid,
       content: params.text,
       direction: 'out',
       awaitingHuman: false,
+      sourcePlatform: 'facebook',
+      platformMessageId,
+      platformEventKey,
+      deliveryStatus: this.inferDeliveryStatus(params.rawResponse),
       raw: params.rawResponse,
       receivedAt: new Date(),
-    }).save();
-    await this.upsertConversationForMessage(doc);
+    } as any);
     // Clear awaiting flags on previous inbound messages for this conversation (simple heuristic v1)
     await this.model.updateMany({ fanpageId: params.fanpageId, senderPsid: params.senderPsid, awaitingHuman: true }, { $set: { awaitingHuman: false } }).exec();
     await this.recomputeConversation(params.fanpageId as any, params.senderPsid);
-    return doc;
+    return { doc, created };
   }
 
   /**
@@ -277,19 +459,26 @@ export class ChatMessageService {
    * Record an outbound image message (uploaded by agent in conversation UI)
    */
   async recordOutboundImage(params: { fanpageId: string; senderPsid: string; imageUrl: string; rawResponse?: any; }) {
-    const doc = await new this.model({
+    const platformMessageId = this.extractPlatformMessageId(params.rawResponse);
+    const platformEventKey = platformMessageId
+      ? undefined
+      : this.makeOutboundPlatformEventKey(params.fanpageId, params.senderPsid, params.imageUrl);
+    const { doc, created } = await this.createIfNotExists({
       fanpageId: params.fanpageId,
       senderPsid: params.senderPsid,
       content: params.imageUrl,
       messageType: 'image',
       direction: 'out',
       awaitingHuman: false,
+      sourcePlatform: 'facebook',
+      platformMessageId,
+      platformEventKey,
+      deliveryStatus: this.inferDeliveryStatus(params.rawResponse),
       raw: params.rawResponse,
       receivedAt: new Date(),
-    }).save();
-    await this.upsertConversationForMessage(doc);
+    } as any);
     await this.model.updateMany({ fanpageId: params.fanpageId, senderPsid: params.senderPsid, awaitingHuman: true }, { $set: { awaitingHuman: false } }).exec();
     await this.recomputeConversation(params.fanpageId as any, params.senderPsid);
-    return doc;
+    return { doc, created };
   }
 }

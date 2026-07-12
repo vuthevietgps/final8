@@ -1,0 +1,7 @@
+$ErrorActionPreference = 'Stop'
+Set-Location 'C:\Users\PC\Documents\code\htxbachgia.shop\final8-version16\backend'
+$env:PORT = '62405'
+$env:MONGODB_URI = 'mongodb://127.0.0.1:27017/htxbachgia_load03_fix_20260424205926'
+$env:MEDIA_DIR = 'C:\Users\PC\Documents\code\htxbachgia.shop\final8-version16\tests\backend\artifacts\results\tmp-load03-fix-media-20260424205926'
+$env:JWT_SECRET = 'load03-fix-secret'
+& node 'dist/main.js'

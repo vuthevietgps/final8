@@ -1,0 +1,354 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-5E",
+    "status": "completed_final_ba_closeout",
+    "code_changed": false,
+    "docs_changed": true,
+    "final_ba_closeout_completed": true,
+    "manual_json_export_loop_accepted": true,
+    "erp_side_export_download_accepted": true,
+    "manual_chatgpt_web_workflow_accepted": true,
+    "xlsx_required_for_closeout": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "tokenized_download_added": false,
+    "phase_3_started": false
+  },
+  "inputs_reviewed": {
+    "mandatory_missing": [],
+    "optional_missing": [
+      {
+        "file": "docs/ai-ads-v2/00-index.md",
+        "impact": "Workspace AGENTS references this AI Ads V2 index, but Prompt 27 is scoped to AI Data Pack final BA closeout.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/ba-master-addendum-prompt26-review-prompt27-final-ba-closeout-20260614.md",
+        "impact": "Optional addendum unavailable; Prompt 27 and Prompt 26 result docs defined the closeout.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v25.md",
+        "impact": "Optional ledger unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/lo-trinh-ai-data-pack-roadmap-v25.md",
+        "impact": "Optional roadmap unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v22.md",
+        "impact": "Optional guardrail unavailable; Prompt 23-27 constraints were used.",
+        "can_continue": true
+      },
+      {
+        "file": "promt26.md",
+        "impact": "Repo-local copy unavailable; Prompt 26 result docs were available.",
+        "can_continue": true
+      },
+      {
+        "file": "promtchatgptweb26.md",
+        "impact": "Optional file unavailable; no scope expansion performed.",
+        "can_continue": true
+      }
+    ]
+  },
+  "completed_capabilities": [
+    {
+      "capability": "export job creation",
+      "status": "completed",
+      "evidence_source": "Prompt 15-26 result chain; Prompt 26 acceptance packet",
+      "acceptance": "accepted",
+      "notes": "Official and partial lifecycle are available for JSON acceptance."
+    },
+    {
+      "capability": "status/detail/sync-summary",
+      "status": "completed",
+      "evidence_source": "Prompt 18/23/24/26 packets",
+      "acceptance": "accepted",
+      "notes": "Status/detail/sync-summary remain bounded and redacted."
+    },
+    {
+      "capability": "redacted rendered JSON artifact",
+      "status": "completed",
+      "evidence_source": "Prompt 25 implementation packet; Prompt 26 evidence",
+      "acceptance": "accepted",
+      "notes": "downloadable_redacted_artifact, pre_rendered, rendered, downloadReady=true."
+    },
+    {
+      "capability": "direct authenticated download",
+      "status": "completed",
+      "evidence_source": "Prompt 24 endpoint packet; Prompt 26 evidence",
+      "acceptance": "accepted",
+      "notes": "GET /ai-data-pack/exports/:jobId/artifacts/:artifactId/download."
+    },
+    {
+      "capability": "RBAC/redaction/download gates",
+      "status": "completed",
+      "evidence_source": "Prompt 23 spec; Prompt 24 implementation; Prompt 26 negative tests",
+      "acceptance": "accepted",
+      "notes": "Manager/system/unassigned/checksum/manifest-only boundaries documented and tested."
+    },
+    {
+      "capability": "manual ChatGPT Web guide",
+      "status": "completed",
+      "evidence_source": "Prompt 26 manual acceptance docs",
+      "acceptance": "accepted_with_condition",
+      "notes": "External ChatGPT Web upload remains a human step."
+    },
+    {
+      "capability": "ChatGPT Web analysis prompt",
+      "status": "completed",
+      "evidence_source": "Prompt 26 chatgpt-web-analysis-prompt.md",
+      "acceptance": "accepted",
+      "notes": "Produces non-executable advisory sections only."
+    },
+    {
+      "capability": "negative safety boundaries",
+      "status": "completed",
+      "evidence_source": "Prompt 24/25/26 tests and static checks",
+      "acceptance": "accepted",
+      "notes": "No OpenAI upload, action import, dry-run/live, provider mutation, token route."
+    },
+    {
+      "capability": "tests/build/static checks",
+      "status": "completed",
+      "evidence_source": "Prompt 25 and Prompt 26 packets",
+      "acceptance": "accepted",
+      "notes": "Prompt 26 recorded 20 service tests, 41 endpoint tests, build, JSON/static checks."
+    }
+  ],
+  "safety_boundaries": [
+    {
+      "boundary": "no OpenAI upload",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 safety flags and static checks",
+      "future_phase_if_needed": "separate OpenAI integration spec only after explicit approval"
+    },
+    {
+      "boundary": "no action import",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 safety flags",
+      "future_phase_if_needed": "action draft schema spec can come first without import"
+    },
+    {
+      "boundary": "no approval workflow",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 out-of-scope lists",
+      "future_phase_if_needed": "approval workflow spec after action schema/import decisions"
+    },
+    {
+      "boundary": "no dry-run/live",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 safety flags",
+      "future_phase_if_needed": "dry-run spec before live execution"
+    },
+    {
+      "boundary": "no provider mutation",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 static checks",
+      "future_phase_if_needed": "much later provider execution branch only"
+    },
+    {
+      "boundary": "no provider validateOnly",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 static checks",
+      "future_phase_if_needed": "later dry-run/provider validation spec only"
+    },
+    {
+      "boundary": "no tokenized download",
+      "status": "preserved",
+      "evidence_source": "Prompt 23 recommendation; Prompt 24-26 static checks",
+      "future_phase_if_needed": "only if browser/storage constraints require it"
+    },
+    {
+      "boundary": "no public URL/storage path exposure",
+      "status": "preserved",
+      "evidence_source": "Prompt 24/26 endpoint evidence",
+      "future_phase_if_needed": "no current future need"
+    },
+    {
+      "boundary": "no raw/internal artifact download",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 artifact eligibility",
+      "future_phase_if_needed": "separate raw evidence policy if ever needed"
+    },
+    {
+      "boundary": "no manifest-only artifact download",
+      "status": "preserved",
+      "evidence_source": "Prompt 24/26 409 evidence",
+      "future_phase_if_needed": "no current future need"
+    },
+    {
+      "boundary": "no Phase 3",
+      "status": "preserved",
+      "evidence_source": "Prompt 23-26 safety flags",
+      "future_phase_if_needed": "separate business decision required"
+    }
+  ],
+  "acceptance_evidence": [
+    {
+      "claim": "download endpoint is specified safely",
+      "evidence": "Prompt 23 download spec",
+      "classification": "derived_from_review_packet"
+    },
+    {
+      "claim": "download endpoint is implemented",
+      "evidence": "Prompt 24 endpoint packet",
+      "classification": "direct_evidence"
+    },
+    {
+      "claim": "rendered JSON artifact is implemented",
+      "evidence": "Prompt 25 rendering packet",
+      "classification": "direct_evidence"
+    },
+    {
+      "claim": "official JSON export/download is accepted",
+      "evidence": "Prompt 26 acceptance packet",
+      "classification": "direct_evidence"
+    },
+    {
+      "claim": "manual ChatGPT Web workflow is documented",
+      "evidence": "Prompt 26 manual docs",
+      "classification": "direct_evidence"
+    },
+    {
+      "claim": "human ChatGPT Web output transcript exists",
+      "evidence": "none attached",
+      "classification": "missing_evidence"
+    },
+    {
+      "claim": "real browser upload to ChatGPT Web was performed by Codex",
+      "evidence": "not performed",
+      "classification": "external_manual_step"
+    }
+  ],
+  "remaining_gaps": [
+    {
+      "gap": "XLSX official/partial rendering unsupported",
+      "classification": "future_phase",
+      "notes": "Not required for JSON BA closeout."
+    },
+    {
+      "gap": "human ChatGPT Web transcript not attached",
+      "classification": "acceptable_for_current_ba",
+      "notes": "Manual workflow is accepted; transcript can be attached later."
+    },
+    {
+      "gap": "no configured backend/test/jest-e2e.json harness",
+      "classification": "future_phase",
+      "notes": "Dedicated E2E harness can be added later."
+    },
+    {
+      "gap": "artifact expiration/revocation/quarantine not modeled",
+      "classification": "future_phase",
+      "notes": "Needed before broader artifact lifecycle governance."
+    },
+    {
+      "gap": "rate-limit/audit not high-volume multi-pod public ready",
+      "classification": "future_phase",
+      "notes": "Current posture is controlled/internal acceptance grade."
+    },
+    {
+      "gap": "no OpenAI upload",
+      "classification": "not_in_scope",
+      "notes": "Intentional design boundary for this branch."
+    },
+    {
+      "gap": "no action import/dry-run/live",
+      "classification": "not_in_scope",
+      "notes": "Intentional design boundary for this branch."
+    }
+  ],
+  "definition_of_done": {
+    "status": "met_for_manual_json_chatgpt_web_export_loop",
+    "conditions": [
+      "JSON Data Pack can be produced/downloaded by authorized human",
+      "manual ChatGPT Web workflow is documented",
+      "analysis prompt exists",
+      "ERP does not automatically execute anything",
+      "safety boundaries preserved",
+      "known gaps documented"
+    ]
+  },
+  "next_branch_options": [
+    {
+      "option": "A",
+      "name": "stop current BA branch and use manually",
+      "recommended_default": true
+    },
+    {
+      "option": "B",
+      "name": "XLSX rendering support",
+      "suggested_prompt": "PR-2.3B-5F - XLSX Rendering Support, No OpenAI, No Action Import"
+    },
+    {
+      "option": "C",
+      "name": "attach human ChatGPT Web output evidence",
+      "suggested_prompt": "PR-2.3B-5E-HUMAN-EVIDENCE - Attach Real ChatGPT Web Output Transcript, No OpenAI, No Action Import"
+    },
+    {
+      "option": "D",
+      "name": "action draft schema spec, no import/execution",
+      "suggested_prompt": "PR-2.4A - Action Draft Schema Spec, No Import, No Execution"
+    },
+    {
+      "option": "E",
+      "name": "ERP action import spec, no execution"
+    },
+    {
+      "option": "F",
+      "name": "dry-run spec"
+    },
+    {
+      "option": "G",
+      "name": "approval workflow spec"
+    },
+    {
+      "option": "H",
+      "name": "live execution/provider mutation much later",
+      "warning": "Do not jump from current BA closeout directly to live execution."
+    }
+  ],
+  "files_changed": [
+    "docs/ai-data-pack/final-ba-closeout/00_final_ba_closeout_memo.md",
+    "docs/ai-data-pack/final-ba-closeout/01_completed_capability_matrix.md",
+    "docs/ai-data-pack/final-ba-closeout/02_operator_sop_manual_chatgpt_web_loop.md",
+    "docs/ai-data-pack/final-ba-closeout/03_safety_boundary_matrix.md",
+    "docs/ai-data-pack/final-ba-closeout/04_acceptance_evidence_matrix.md",
+    "docs/ai-data-pack/final-ba-closeout/05_remaining_gaps_and_backlog.md",
+    "docs/ai-data-pack/final-ba-closeout/06_definition_of_done.md",
+    "docs/ai-data-pack/final-ba-closeout/07_next_branch_options.md",
+    "docs/ai-data-pack/ketquapromt27.md",
+    "docs/ai-data-pack/ketquapromt27.json",
+    "docs/ai-data-pack/review-packets/promt27/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt27/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt27/02_final_ba_closeout.md",
+    "docs/ai-data-pack/review-packets/promt27/03_completed_capability_matrix.md",
+    "docs/ai-data-pack/review-packets/promt27/04_operator_sop.md",
+    "docs/ai-data-pack/review-packets/promt27/05_safety_boundary_matrix.md",
+    "docs/ai-data-pack/review-packets/promt27/06_acceptance_evidence_matrix.md",
+    "docs/ai-data-pack/review-packets/promt27/07_remaining_gaps_backlog.md",
+    "docs/ai-data-pack/review-packets/promt27/08_definition_of_done.md",
+    "docs/ai-data-pack/review-packets/promt27/09_next_branch_options.md",
+    "docs/ai-data-pack/review-packets/promt27/10_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt27/11_next_recommendation.md"
+  ],
+  "next_recommendation": {
+    "stop_after_prompt27": true,
+    "closeout": "Manual JSON ChatGPT Web Export Loop = BA closed",
+    "next_phase_requires_explicit_business_decision": true,
+    "possible_next_prompts": [
+      "PR-2.4A - Action Draft Schema Spec, No Import, No Execution",
+      "PR-2.3B-5F - XLSX Rendering Support, No OpenAI, No Action Import",
+      "PR-2.3B-5E-HUMAN-EVIDENCE - Attach Real ChatGPT Web Output Transcript, No OpenAI, No Action Import"
+    ]
+  }
+}
+

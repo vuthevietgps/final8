@@ -1,4 +1,33 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, IsDateString, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsDateString,
+  Min,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+} from 'class-validator';
+
+@ValidatorConstraint({ name: 'marketingAdGroupRequired', async: false })
+class MarketingAdGroupRequiredConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    const dto = args.object as CreateTestOrder2Dto;
+    const productSource = String(dto.productSource || '').trim().toLowerCase();
+
+    if (productSource !== 'marketing') {
+      return value === undefined || value === null || typeof value === 'string';
+    }
+
+    return typeof value === 'string' && value.trim().length > 0 && value.trim() !== '0';
+  }
+
+  defaultMessage(): string {
+    return 'adGroupId is required when productSource is marketing';
+  }
+}
 
 export class CreateTestOrder2Dto {
   @IsOptional()
@@ -21,8 +50,7 @@ export class CreateTestOrder2Dto {
   @IsString()
   agentId?: string;
 
-  @IsOptional()
-  @IsString()
+  @Validate(MarketingAdGroupRequiredConstraint)
   adGroupId?: string;
 
   @IsOptional()

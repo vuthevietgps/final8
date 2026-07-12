@@ -1,6 +1,8 @@
 /**
  * Logging utilities for consistent logging format across services
  */
+import { redactSecrets } from './secret-redaction.util';
+
 export class LoggerUtil {
   /**
    * Format log message with service name and method
@@ -20,7 +22,7 @@ export class LoggerUtil {
     metadata?: any
   ): string {
     const durationStr = duration ? ` (${duration}ms)` : '';
-    const metadataStr = metadata ? ` - ${JSON.stringify(metadata)}` : '';
+    const metadataStr = metadata ? ` - ${JSON.stringify(redactSecrets(metadata))}` : '';
     return this.formatMessage(serviceName, methodName, `${operation}${durationStr}${metadataStr}`);
   }
 
@@ -36,9 +38,9 @@ export class LoggerUtil {
     return {
       service: serviceName,
       method: methodName,
-      error: error.message,
-      stack: error.stack,
-      context,
+      error: redactSecrets(error.message),
+      stack: redactSecrets(error.stack),
+      context: redactSecrets(context),
       timestamp: new Date().toISOString()
     };
   }
@@ -76,7 +78,7 @@ export class LoggerUtil {
    * Log validation error
    */
   static logValidationError(serviceName: string, methodName: string, field: string, value: any): string {
-    return this.formatMessage(serviceName, methodName, `Invalid ${field} provided: ${value}`);
+    return this.formatMessage(serviceName, methodName, `Invalid ${field} provided: ${redactSecrets(value)}`);
   }
 
   /**

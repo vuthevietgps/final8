@@ -10,10 +10,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiToken, ApiTokenDocument } from './schemas/api-token.schema';
 import { ApiTokenService } from './api-token.service';
+import { redactSecretString } from '../common/utils/secret-redaction.util';
 
 @Injectable()
 export class ApiTokenScheduler {
   private readonly logger = new Logger(ApiTokenScheduler.name);
+  private lastSystemSyncAt = 0;
   constructor(
     @InjectModel(ApiToken.name) private model: Model<ApiTokenDocument>,
     private tokenService: ApiTokenService
@@ -24,6 +26,8 @@ export class ApiTokenScheduler {
   async periodicValidate(){
     // Ensure ApiTokens are created from Fanpage accessToken (idempotent)
     try { await this.tokenService.syncFromFanpages(); } catch {}
+    // Auto-sync fanpages + page tokens from a single system user token.
+    await this.trySystemUserFanpageSync();
     const now = new Date();
     const cutoff = new Date(Date.now() - 30*60*1000); // 30'
     const candidates = await this.model.find({
@@ -42,7 +46,33 @@ export class ApiTokenScheduler {
       ]
     }).limit(30);
     for(const c of candidates){
-      try { await this.tokenService.validate(c._id.toString(), { force: true }); } catch(e){ this.logger.warn(`Validate fail ${c._id}: ${(e as any).message}`); }
+      try { await this.tokenService.validate(c._id.toString(), { force: true }); } catch(e){ this.logger.warn(`Validate fail ${c._id}: ${redactSecretString((e as any)?.message || String(e))}`); }
+    }
+  }
+
+  private async trySystemUserFanpageSync(): Promise<void> {
+    const everyMinutes = Math.max(5, Number(process.env.FB_SYSTEM_USER_SYNC_INTERVAL_MINUTES || 30));
+    const intervalMs = everyMinutes * 60 * 1000;
+    if (Date.now() - this.lastSystemSyncAt < intervalMs) return;
+    this.lastSystemSyncAt = Date.now();
+    try {
+      const result = await this.tokenService.syncFanpagesFromSystemUserToken({ allowNoToken: true, upsertApiTokens: true });
+      if (
+        result?.ok &&
+        (
+          result.created > 0 ||
+          result.updated > 0 ||
+          result.tokensUpserted > 0 ||
+          result.adAccountsCreated > 0 ||
+          result.adAccountsUpdated > 0
+        )
+      ) {
+        this.logger.log(
+          `System token sync completed: pages(total=${result.totalPages}, created=${result.created}, updated=${result.updated}, tokens=${result.tokensUpserted}) adAccounts(total=${result.adAccountsTotal || 0}, created=${result.adAccountsCreated || 0}, updated=${result.adAccountsUpdated || 0})`,
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(`System token sync failed: ${redactSecretString(e?.message || String(e))}`);
     }
   }
 

@@ -1,0 +1,40 @@
+# QA summary - 2026-04-24 LOAD-03 product fix and ripple regression
+
+- Timestamp: `2026-04-24 22:13:08 +07`
+- Scope:
+  - close the valid-contract `LOAD-03` perf failure reproduced earlier on `2026-04-24`
+  - rerun the canonical full backend module regression after the fix
+- Product fixes verified:
+  - `backend/src/test-order2/services/order-calculation.service.ts`
+  - `backend/src/finance/events/finance-event-listener.service.ts`
+- Root cause:
+  - same-day `other-cost` writes were repeatedly triggering full-date order recalculation on the same date under concurrent `LOAD-03` traffic
+  - finance event listeners were faning out repeated snapshot refreshes for `ops`, `agent`, and `supplier` domains during the same contention window
+- Fixes:
+  - `OrderCalculationService.recalculateOrdersForDate()` now runs as a same-day single-flight loop with pending rerun drain instead of launching duplicated recalculations for the same business day
+  - `FinanceEventListenerService` now coalesces `ops`, `agent`, and `supplier` snapshot refresh bursts into per-domain single-flight refresh loops instead of running overlapping refresh storms
+- Audit trail kept:
+  - `tests/backend/artifacts/results/perf.write-contention-summary-20260424-215242.json`
+    - status: `FAILED_PRODUCT`
+    - result: valid-contract local bootstrap control failed thresholds with `owner_withdrawal_approve_commit_duration p95=2225.10ms`, `return_resolve_commit_duration p95=3447.36ms`, `other_cost_confirm p95=1310.48ms`
+  - `tests/backend/artifacts/results/run-backend-perf-write-contention-local-bootstrap-20260424-220531.log`
+    - status: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+    - result: dedicated local bootstrap backend `http://localhost:50512/api`
+  - `tests/backend/artifacts/results/perf.write-contention-summary-20260424-220622.json`
+    - status: `FAILED_PRODUCT -> FIXED_PRODUCT -> PASSED`
+    - result: `120` iterations, `293` HTTP requests, `0.00% http_req_failed`, global `http_req_duration p95=1070.93ms`, `supplier_payment_batch p95=441.82ms`, `agent_payment_batch p95=521.25ms`, `owner_withdrawal_approve_commit_duration p95=1503.89ms`, `return_resolve_commit_duration p95=1433.85ms`, `other_cost_confirm p95=861.64ms`
+  - `tests/backend/artifacts/results/load03-runtime-contract-check-20260424-220622.json`
+    - status: `PASSED`
+    - result: runtime manifest DB contract matched backend `/api/health/db`
+  - `tests/backend/artifacts/results/module-regression-rerun-20260424-load03fix-20260424-220658.log`
+    - status: `PASSED`
+    - result: canonical local-bootstrap module regression stayed green after the fix
+  - `tests/backend/artifacts/results/module-regression-20260424-220747.json`
+    - status: `PASSED`
+    - result: `1163 PASS / 0 FAIL / 0 BLOCKED`, `25/25` suites
+- Related regression reruns:
+  - `tests/backend/runners/run-backend-perf-write-contention.ps1`
+  - `test-all-modules.ps1`
+- Open risks after closure:
+  - explicit external-manifest `LOAD-03` path should still be rerun again if the operator wants a fresh cross-shell/container confirmation after this product fix
+  - stale backend `http://localhost:62922/api` remains outside this round's ownership and was not stopped

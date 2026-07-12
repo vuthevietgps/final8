@@ -1,0 +1,88 @@
+{
+  "phase": "PR-DEMO-1M",
+  "status": "implemented_read_only_slice",
+  "output_root": "docs/ai-data-pack/runs/promt43-pr-demo-1m-slow-supplier-good-cost-readonly-slice",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target_finding": "slow_supplier_good_cost",
+  "prompt42_carry_forward_check": {
+    "review_packet_present": "yes",
+    "evidence_mirror_present": "yes",
+    "prompt42_code_behavior_changed": false
+  },
+  "implementation": {
+    "code_changed": true,
+    "docs_changed": true,
+    "director_json_evidence_surface_changed": true,
+    "evidence_row_present": true,
+    "data_quality_gate_present": true,
+    "director_json_section": "16_operation_capacity",
+    "read_only_sources": [
+      "supplierquotes",
+      "purchaseorders",
+      "products",
+      "inventorysummaries",
+      "users"
+    ],
+    "tests_run": [
+      {
+        "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+        "working_directory": "backend",
+        "result": "passed",
+        "test_suites": "1 passed, 1 total",
+        "tests": "37 passed, 37 total"
+      },
+      {
+        "command": "npm run build",
+        "working_directory": "backend",
+        "result": "passed"
+      },
+      {
+        "command": "rg static safety scans on changed code/test files",
+        "working_directory": ".",
+        "result": "passed",
+        "notes": "Matches were existing safety assertions, Prompt43 no-action-payload assertion, pre-existing secret redaction tests, or not_allowed_actions safety text."
+      }
+    ]
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": "",
+    "missing_fields_or_models": []
+  },
+  "non_blocking_weak_fields": [
+    "configured_supplier_cost_advantage_threshold_missing",
+    "supplier_reliability_score_missing",
+    "delivery_quality_notes_missing",
+    "variant_level_supplier_mapping_incomplete",
+    "accepted_quote_status_not_required_by_schema",
+    "reserved_quantity_not_canonical_for_this_finding",
+    "sales_usage_mapping_missing",
+    "margin_or_cogs_impact_not_safely_attributed"
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "db_migration_added": false,
+    "purchase_order_mutation_added": false,
+    "supplier_order_mutation_added": false,
+    "inventory_mutation_added": false,
+    "stock_mutation_added": false,
+    "supplier_cost_mutation_added": false,
+    "price_mutation_added": false,
+    "cogs_mutation_added": false,
+    "order_revenue_mutation_added": false,
+    "cashflow_mutation_added": false
+  },
+  "next_recommendation": "Review and approve Prompt43 as a partial read-only slow_supplier_good_cost evidence slice; keep Action Draft Schema, action import, OpenAI upload, provider execution/mutation, procurement action, inventory/stock mutation, supplier cost/price/COGS mutation, order/revenue mutation, and cashflow mutation parked."
+}
+

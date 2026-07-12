@@ -108,6 +108,13 @@ export class TestOrder2Controller {
     return this.service.getProductProfitReport({ date, from, to });
   }
 
+  @Post('cron/recalculate-costs')
+  @RequirePermissions('orders')
+  async recalculateCosts(@Query('date') date?: string) {
+    const targetDate = date || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return this.service.recalculateOrdersForDate(targetDate);
+  }
+
   // Routes with :id params MUST be placed AFTER specific routes
   @Get(':id')
   async findById(@CurrentUser() currentUser: any, @Param('id') id: string) {
@@ -117,6 +124,12 @@ export class TestOrder2Controller {
   @Patch(':id')
   async update(@CurrentUser() currentUser: any, @Param('id') id: string, @Body() dto: UpdateTestOrder2Dto) {
     return this.service.update(id, dto as any, currentUser);
+  }
+
+  @Post(':id/business-confirmation')
+  @RequirePermissions('orders.confirm-business')
+  async confirmBusiness(@CurrentUser() currentUser: any, @Param('id') id: string) {
+    return this.service.confirmBusiness(id, currentUser);
   }
 
   // Patch only delivery/order status (to mirror docker v10.0 DTO)

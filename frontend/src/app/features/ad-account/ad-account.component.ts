@@ -1,18 +1,23 @@
 /**
  * File: features/ad-account/ad-account.component.ts
- * Mục đích: Giao diện quản lý Tài Khoản Quảng Cáo - inline editing như Nhóm Quảng Cáo.
+ * Muc dich: Giao dien quan ly Tai Khoan Quang Cao voi boi canh BM / MCC / BC.
  */
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { AdAccountService } from './ad-account.service';
-import { 
-  AdAccount, 
-  CreateAdAccountRequest, 
+import {
+  AdAccount,
   AdAccountSearchFilter,
-  AccountTypeStats
+  AdManagementMode,
+  AdTokenSource,
+  AdsOperatorRef,
+  CreateAdAccountRequest,
+  AccountTypeStats,
 } from './models/ad-account.model';
+import { UserService } from '../user/user.service';
+import { User } from '../user/user.model';
 
 @Component({
   selector: 'app-ad-account',
@@ -22,209 +27,294 @@ import {
   styleUrls: ['./ad-account.component.css']
 })
 export class AdAccountComponent implements OnInit {
-  private adAccountService = inject(AdAccountService);
+  private readonly adAccountService = inject(AdAccountService);
+  private readonly userService = inject(UserService);
 
-  // State signals
   adAccounts = signal<AdAccount[]>([]);
+  adsOperators = signal<User[]>([]);
   isLoading = signal(false);
   error = signal<string | null>(null);
   searchFilter = signal<AdAccountSearchFilter>({});
   stats = signal<AccountTypeStats[]>([]);
 
-  // Editing state
   editingAccountId = signal<string | null>(null);
   isAdding = signal(false);
 
-  // Account type options
-  accountTypeOptions = [
-    { value: 'facebook', label: 'Facebook', icon: '📘' },
-    { value: 'google', label: 'Google', icon: '🔍' },
-    { value: 'tiktok', label: 'TikTok', icon: '🎵' },
-    { value: 'zalo', label: 'Zalo', icon: '💬' },
-    { value: 'shopee', label: 'Shopee', icon: '🛒' },
-    { value: 'lazada', label: 'Lazada', icon: '🛍️' }
+  readonly accountTypeOptions = [
+    { value: 'facebook', label: 'Facebook', icon: 'FB' },
+    { value: 'google', label: 'Google', icon: 'GG' },
+    { value: 'tiktok', label: 'TikTok', icon: 'TT' },
+    { value: 'zalo', label: 'Zalo', icon: 'ZA' },
+    { value: 'shopee', label: 'Shopee', icon: 'SP' },
+    { value: 'lazada', label: 'Lazada', icon: 'LZ' },
+  ] as const;
+
+  readonly managementModeOptions: Array<{ value: AdManagementMode; label: string }> = [
+    { value: 'direct', label: 'Direct' },
+    { value: 'bm', label: 'BM' },
+    { value: 'mcc', label: 'MCC' },
+    { value: 'bc', label: 'BC' },
+  ];
+
+  readonly tokenSourceOptions: Array<{ value: AdTokenSource; label: string }> = [
+    { value: 'system', label: 'System' },
+    { value: 'account', label: 'Account' },
+    { value: 'manual', label: 'Manual' },
   ];
 
   ngOnInit() {
-    this.loadAdAccounts();
-    this.loadStats();
+    this.loadInitialData();
   }
 
-  async loadAdAccounts() {
+  async loadInitialData() {
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const filter = this.searchFilter();
-      const accounts = await firstValueFrom(this.adAccountService.searchAdAccounts(filter));
-      this.adAccounts.set(accounts || []);
+      await Promise.all([
+        this.loadAdAccounts(),
+        this.loadStats(),
+        this.loadAdsOperators(),
+      ]);
     } catch (error: any) {
-      this.error.set('Có lỗi xảy ra khi tải dữ liệu');
-      console.error('Error loading ad accounts:', error);
+      this.error.set(error?.error?.message || 'Co loi xay ra khi tai du lieu');
     } finally {
       this.isLoading.set(false);
     }
   }
 
-  async loadStats() {
-    try {
-      const stats = await firstValueFrom(this.adAccountService.getStatsByType());
-      this.stats.set(stats || []);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
+  async loadAdAccounts() {
+    const accounts = await firstValueFrom(this.adAccountService.searchAdAccounts(this.searchFilter()));
+    this.adAccounts.set(accounts || []);
   }
 
-  // Search and filter methods
+  async loadStats() {
+    const stats = await firstValueFrom(this.adAccountService.getStatsByType());
+    this.stats.set(stats || []);
+  }
+
+  async loadAdsOperators() {
+    const users = await firstValueFrom(this.userService.getAdsOperators());
+    this.adsOperators.set(users || []);
+  }
+
   onSearchKeyword(keyword: string) {
-    this.searchFilter.update(filter => ({ ...filter, keyword }));
+    this.searchFilter.update((filter) => ({ ...filter, keyword }));
     this.loadAdAccounts();
   }
 
   onFilterAccountType(accountType: string) {
-    this.searchFilter.update(filter => ({ ...filter, accountType }));
+    this.searchFilter.update((filter) => ({ ...filter, accountType }));
+    this.loadAdAccounts();
+  }
+
+  onFilterManagementMode(managementMode: string) {
+    this.searchFilter.update((filter) => ({ ...filter, managementMode }));
+    this.loadAdAccounts();
+  }
+
+  onFilterAdsManager(adsManagerUserId: string) {
+    this.searchFilter.update((filter) => ({ ...filter, adsManagerUserId }));
     this.loadAdAccounts();
   }
 
   onFilterStatus(status: string) {
-    this.searchFilter.update(filter => ({ ...filter, status }));
+    this.searchFilter.update((filter) => ({ ...filter, status }));
     this.loadAdAccounts();
   }
 
-  // Add new account
   addNew() {
-    // Create new account object with temporary ID
-    const tempId = 'temp_' + Date.now();
+    const tempId = `temp_${Date.now()}`;
+    const accountType: AdAccount['accountType'] = 'tiktok';
     const newAccount: AdAccount = {
       _id: tempId,
       name: '',
       accountId: '',
-      accountType: 'facebook',
+      accountType,
+      managementMode: this.defaultManagementMode(accountType),
       isActive: true,
       notes: '',
       description: '',
       loginCustomerId: '',
+      businessCenterId: '',
+      businessCenterName: '',
+      tokenSource: 'system',
+      adsManagerUserId: '',
+      lastOperatorActivityAt: '',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
-    // Add to beginning of list
-    this.adAccounts.update(accounts => [newAccount, ...accounts]);
+    this.adAccounts.update((accounts) => [newAccount, ...accounts]);
     this.editingAccountId.set(tempId);
     this.isAdding.set(true);
   }
 
-  // Save new account (called when finishing editing a new account)
   async saveNewAccount(account: AdAccount) {
     if (!account.name.trim() || !account.accountId.trim()) {
-      alert('Vui lòng nhập tên và ID tài khoản');
+      alert('Vui long nhap ten va ID tai khoan');
       return;
     }
 
     try {
-      const createData: CreateAdAccountRequest = {
-        name: account.name,
-        accountId: account.accountId,
-        accountType: account.accountType,
-        isActive: account.isActive,
-        notes: account.notes || '',
-        description: account.description || '',
-        loginCustomerId: account.loginCustomerId || ''
-      };
-
-      const savedAccount = await firstValueFrom(this.adAccountService.createAdAccount(createData));
-      
-      // Replace temp account with saved account
-      this.adAccounts.update(accounts => 
-        accounts.map(acc => 
-          acc._id === account._id ? savedAccount! : acc
-        )
-      );
-
+      const payload = this.toPayload(account);
+      await firstValueFrom(this.adAccountService.createAdAccount(payload));
+      await this.loadAdAccounts();
+      await this.loadStats();
       this.editingAccountId.set(null);
       this.isAdding.set(false);
-      this.loadStats();
     } catch (error: any) {
-      alert(error?.error?.message || 'Có lỗi xảy ra khi tạo tài khoản');
+      alert(error?.error?.message || 'Co loi xay ra khi tao tai khoan');
     }
   }
 
-  // Cancel adding new account
   cancelAdd(accountId: string) {
-    this.adAccounts.update(accounts => 
-      accounts.filter(acc => acc._id !== accountId)
-    );
+    this.adAccounts.update((accounts) => accounts.filter((item) => item._id !== accountId));
     this.editingAccountId.set(null);
     this.isAdding.set(false);
   }
 
-  // Inline editing
   async updateField(account: AdAccount, field: keyof AdAccount, value: any) {
-    // If this is a new account being added, just update locally
     if (account._id.startsWith('temp_')) {
-      this.adAccounts.update(accounts => 
-        accounts.map(acc => 
-          acc._id === account._id ? { ...acc, [field]: value } : acc
-        )
+      this.adAccounts.update((accounts) =>
+        accounts.map((item) => {
+          if (item._id !== account._id) return item;
+          const next = { ...item, [field]: value };
+          if (field === 'accountType') {
+            next.managementMode = this.defaultManagementMode(value);
+          }
+          return next;
+        })
       );
       return;
     }
 
-    const oldValue = account[field];
-    if (oldValue === value) return;
+    const currentValue = this.getComparableValue(account[field]);
+    const nextValue = this.getComparableValue(value);
+    if (currentValue === nextValue) return;
 
     try {
-      const updateData = { [field]: value };
-      await firstValueFrom(this.adAccountService.updateAdAccount(account._id, updateData));
-      
-      // Update local state
-      this.adAccounts.update(accounts => 
-        accounts.map(acc => 
-          acc._id === account._id ? { ...acc, [field]: value } : acc
-        )
+      const patch: Record<string, any> = {
+        [field]: this.normalizeFieldValue(field, value),
+      };
+      if (field === 'accountType') {
+        patch['managementMode'] = this.defaultManagementMode(value);
+      }
+
+      const updated = await firstValueFrom(this.adAccountService.updateAdAccount(account._id, patch));
+      this.adAccounts.update((accounts) =>
+        accounts.map((item) => item._id === account._id ? updated! : item)
       );
     } catch (error: any) {
-      alert(error?.error?.message || 'Có lỗi xảy ra khi cập nhật');
-      // Revert UI change by triggering reload
+      alert(error?.error?.message || 'Co loi xay ra khi cap nhat');
       this.loadAdAccounts();
     }
   }
 
-  // Delete account
   async deleteAccount(account: AdAccount) {
-    if (!confirm(`Bạn có chắc muốn xóa tài khoản "${account.name}"?`)) {
-      return;
-    }
+    if (!confirm(`Ban co chac muon xoa tai khoan "${account.name}"?`)) return;
 
     try {
       await firstValueFrom(this.adAccountService.deleteAdAccount(account._id));
-      this.loadAdAccounts();
-      this.loadStats();
+      await this.loadAdAccounts();
+      await this.loadStats();
     } catch (error: any) {
-      alert(error?.error?.message || 'Có lỗi xảy ra khi xóa tài khoản');
+      alert(error?.error?.message || 'Co loi xay ra khi xoa tai khoan');
     }
   }
 
-  // Utility methods
   trackById(index: number, item: AdAccount): string {
     return item._id;
   }
 
   refresh() {
-    this.loadAdAccounts();
-    this.loadStats();
+    this.loadInitialData();
   }
 
-  getAccountTypeIcon(type: string): string {
-    const option = this.accountTypeOptions.find(opt => opt.value === type);
-    return option?.icon || '📊';
+  defaultManagementMode(accountType: string): AdManagementMode {
+    if (accountType === 'facebook') return 'bm';
+    if (accountType === 'google') return 'mcc';
+    if (accountType === 'tiktok') return 'bc';
+    return 'direct';
   }
 
   getAccountTypeLabel(type: string): string {
-    const option = this.accountTypeOptions.find(opt => opt.value === type);
-    return option?.label || type;
+    return this.accountTypeOptions.find((item) => item.value === type)?.label || type;
   }
 
-  updateNewAccountField(field: keyof CreateAdAccountRequest, value: any) {
-    // This method is no longer needed with inline editing
+  getAccountTypeIcon(type: string): string {
+    return this.accountTypeOptions.find((item) => item.value === type)?.icon || 'AD';
+  }
+
+  getManagementModeLabel(mode?: string): string {
+    return this.managementModeOptions.find((item) => item.value === mode)?.label || mode || '-';
+  }
+
+  getTokenSourceLabel(source?: string): string {
+    return this.tokenSourceOptions.find((item) => item.value === source)?.label || source || '-';
+  }
+
+  getAdsManagerId(value?: string | AdsOperatorRef): string {
+    if (!value) return '';
+    return typeof value === 'string' ? value : value._id;
+  }
+
+  getAdsManagerLabel(value?: string | AdsOperatorRef): string {
+    const id = this.getAdsManagerId(value);
+    if (!id) return 'Chua gan';
+
+    if (typeof value === 'object' && (value.fullName || value.email)) {
+      return value.fullName || value.email || id;
+    }
+
+    const user = this.adsOperators().find((item) => item._id === id);
+    return user?.fullName || user?.email || id;
+  }
+
+  formatLastOperatorActivity(value?: string): string {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return `${date.toLocaleDateString('vi-VN')} ${date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  showBusinessCenterFields(account: AdAccount): boolean {
+    return account.accountType === 'tiktok';
+  }
+
+  showLoginCustomerId(account: AdAccount): boolean {
+    return account.accountType === 'google';
+  }
+
+  private normalizeFieldValue(field: keyof AdAccount, value: any) {
+    if (field === 'adsManagerUserId') {
+      return value || undefined;
+    }
+    if (typeof value === 'string') {
+      return value.trim() || undefined;
+    }
+    return value;
+  }
+
+  private getComparableValue(value: any): string {
+    if (value == null) return '';
+    if (typeof value === 'object') return value._id || '';
+    return String(value);
+  }
+
+  private toPayload(account: AdAccount): CreateAdAccountRequest {
+    return {
+      name: account.name.trim(),
+      accountId: account.accountId.trim(),
+      accountType: account.accountType,
+      managementMode: account.managementMode || this.defaultManagementMode(account.accountType),
+      isActive: account.isActive,
+      notes: account.notes?.trim() || undefined,
+      description: account.description?.trim() || undefined,
+      loginCustomerId: account.loginCustomerId?.trim() || undefined,
+      businessCenterId: account.businessCenterId?.trim() || undefined,
+      businessCenterName: account.businessCenterName?.trim() || undefined,
+      tokenSource: account.tokenSource || 'system',
+      adsManagerUserId: this.getAdsManagerId(account.adsManagerUserId) || undefined,
+    };
   }
 }

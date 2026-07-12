@@ -6,10 +6,18 @@ export interface Product {
   _id: string;
   name: string;
   categoryId: ProductCategoryRef;
-  status: 'Hoạt động' | 'Tạm dừng';
+  status: 'Hoạt động' | 'Tạm dừng' | 'Ngừng bán';
   color: string;
   usageDurationMonths?: number;
   assumedReturnRatePercent?: number;
+  importPrice?: number;
+  shippingCost?: number;
+  packagingCost?: number;
+  totalCost?: number;
+  minStock?: number;
+  maxStock?: number;
+  notes?: string;
+  resourceLink?: string;
   sku?: string;
   suppliers?: Array<{ supplierId?: string }>;
   createdAt?: string;
@@ -27,10 +35,17 @@ export interface ProductCategoryRef {
 export interface CreateProductDto {
   name: string;
   categoryId: string;
-  status?: 'Hoạt động' | 'Tạm dừng';
+  status?: 'Hoạt động' | 'Tạm dừng' | 'Ngừng bán';
   color?: string;
   usageDurationMonths?: number;
   assumedReturnRatePercent?: number;
+  importPrice?: number;
+  shippingCost?: number;
+  packagingCost?: number;
+  minStock?: number;
+  maxStock?: number;
+  notes?: string;
+  resourceLink?: string;
   supplierIds?: string[];
 }
 

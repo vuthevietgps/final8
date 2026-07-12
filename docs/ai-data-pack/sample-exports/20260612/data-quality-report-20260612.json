@@ -1,0 +1,204 @@
+{
+  "decision_gate": {
+    "blocking_reasons": [
+      "lead_source_mapping_rate: threshold not met",
+      "lead_campaign_mapping_rate: threshold not met",
+      "order_lead_mapping_rate: threshold not met",
+      "order_service_mapping_rate: threshold not met",
+      "order_customer_mapping_rate: Order has no durable customerId field.",
+      "order_profit_completion_rate: threshold not met",
+      "campaign_service_mapping_rate: threshold not met",
+      "ads_sync_success_rate: threshold not met",
+      "ads_data_freshness_hours: No ads freshness timestamp.",
+      "attribution_confidence: Durable order-customer and full attribution links are missing.",
+      "estimated_vs_realized_profit_rate: threshold not met"
+    ],
+    "can_conclude_profit": false,
+    "can_dry_run": false,
+    "can_execute_live": false,
+    "can_generate_action_draft": true,
+    "can_import_action_file": false,
+    "can_recommend_ads_scale": false,
+    "can_use_ltv_strongly": false,
+    "warnings": []
+  },
+  "metadata": {
+    "company_id": null,
+    "company_name": null,
+    "currency": "VND",
+    "data_pack_id": "data_quality-2026-06-12",
+    "data_pack_type": "data_quality",
+    "data_sources": [],
+    "export_format": "json",
+    "exported_at": "2026-06-12T10:20:45.317Z",
+    "generated_by": {
+      "buffer": {
+        "0": 105,
+        "1": 204,
+        "2": 97,
+        "3": 195,
+        "4": 211,
+        "5": 42,
+        "6": 40,
+        "7": 80,
+        "8": 238,
+        "9": 59,
+        "10": 183,
+        "11": 166
+      }
+    },
+    "report_date": "2026-06-12",
+    "schema_version": "1.0",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "warnings": [
+      "company_id and company_name are not configured in a canonical source."
+    ]
+  },
+  "metrics": [
+    {
+      "denominator": 0,
+      "metric": "lead_source_mapping_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 90,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": 0,
+      "metric": "lead_campaign_mapping_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 80,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": 0,
+      "metric": "order_lead_mapping_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 80,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": 0,
+      "metric": "order_service_mapping_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 90,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": 0,
+      "metric": "order_customer_mapping_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 90,
+      "unit": "percent",
+      "value": null,
+      "warning": "Order has no durable customerId field."
+    },
+    {
+      "denominator": 0,
+      "metric": "order_profit_completion_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 80,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": 0,
+      "metric": "campaign_service_mapping_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 80,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": 0,
+      "metric": "ads_sync_success_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 95,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    },
+    {
+      "denominator": null,
+      "metric": "ads_data_freshness_hours",
+      "numerator": null,
+      "status": "missing",
+      "threshold": 24,
+      "unit": "hours",
+      "value": null,
+      "warning": "No ads freshness timestamp."
+    },
+    {
+      "denominator": null,
+      "metric": "attribution_confidence",
+      "numerator": null,
+      "status": "blocked",
+      "threshold": 0.8,
+      "unit": "score",
+      "value": 0,
+      "warning": "Durable order-customer and full attribution links are missing."
+    },
+    {
+      "denominator": 0,
+      "metric": "estimated_vs_realized_profit_rate",
+      "numerator": 0,
+      "status": "missing",
+      "threshold": 80,
+      "unit": "percent",
+      "value": null,
+      "warning": null
+    }
+  ],
+  "quality": {
+    "calculation_method": "Deterministic V1 mapping/completeness/freshness formulas.",
+    "can_use_for_decision": "cautious",
+    "confidence": "low",
+    "data_quality_status": "weak",
+    "freshness_at": null,
+    "missing_fields": [
+      "lead_source_mapping_rate",
+      "lead_campaign_mapping_rate",
+      "order_lead_mapping_rate",
+      "order_service_mapping_rate",
+      "order_customer_mapping_rate",
+      "order_profit_completion_rate",
+      "campaign_service_mapping_rate",
+      "ads_sync_success_rate",
+      "ads_data_freshness_hours",
+      "estimated_vs_realized_profit_rate"
+    ],
+    "period": "custom",
+    "source": "AI Data Pack quality calculator",
+    "source_table_or_service": "ordertest2, marketing_leads, adgroups, google_ads_sync_runs",
+    "warning": [
+      "lead_source_mapping_rate: threshold not met",
+      "lead_campaign_mapping_rate: threshold not met",
+      "order_lead_mapping_rate: threshold not met",
+      "order_service_mapping_rate: threshold not met",
+      "order_customer_mapping_rate: Order has no durable customerId field.",
+      "order_profit_completion_rate: threshold not met",
+      "campaign_service_mapping_rate: threshold not met",
+      "ads_sync_success_rate: threshold not met",
+      "ads_data_freshness_hours: No ads freshness timestamp.",
+      "attribution_confidence: Durable order-customer and full attribution links are missing.",
+      "estimated_vs_realized_profit_rate: threshold not met"
+    ]
+  }
+}

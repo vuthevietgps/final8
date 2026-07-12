@@ -13,6 +13,7 @@ import { LoanService, PaymentOptions, CreatePaymentRequest, PaymentResult } from
 })
 export class LoanPaymentComponent implements OnInit {
   loanId = '';
+  private requestedRepaymentId = '';
   options = signal<PaymentOptions | null>(null);
   loading = signal(false);
   submitting = signal(false);
@@ -93,6 +94,7 @@ export class LoanPaymentComponent implements OnInit {
 
   ngOnInit() {
     this.loanId = this.route.snapshot.paramMap.get('id') || '';
+    this.requestedRepaymentId = this.route.snapshot.queryParamMap.get('repaymentId') || '';
     if (this.loanId) {
       this.loadOptions();
     }
@@ -111,6 +113,14 @@ export class LoanPaymentComponent implements OnInit {
         this.amount.set(data.options.principalPayment.suggestedAmount);
         if (data.sources.ownerFund.accounts.length > 0) {
           this.sourceAccountId.set(data.sources.ownerFund.accounts[0].id);
+        }
+        const requestedRepayment = data.options.scheduledPayments.find(
+          payment => payment.repaymentId === this.requestedRepaymentId,
+        );
+        if (requestedRepayment) {
+          this.paymentType.set('scheduled');
+          this.selectedRepaymentId.set(requestedRepayment.repaymentId);
+          this.amount.set(requestedRepayment.total);
         }
       },
       error: (err) => {

@@ -7,6 +7,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ApiToken, ApiTokenSchema } from './schemas/api-token.schema';
 import { ApiTokenAudit, ApiTokenAuditSchema } from './schemas/api-token-audit.schema';
 import { Fanpage, FanpageSchema } from '../fanpage/schemas/fanpage.schema';
+import { AdAccount, AdAccountSchema } from '../ad-account/schemas/ad-account.schema';
 import { ApiTokenService } from './api-token.service';
 import { ApiTokenScheduler } from './api-token.scheduler';
 import { ApiTokenController } from './api-token.controller';
@@ -15,6 +16,7 @@ import { ApiTokenController } from './api-token.controller';
   imports: [MongooseModule.forFeature([
     { name: ApiToken.name, schema: ApiTokenSchema },
     { name: Fanpage.name, schema: FanpageSchema },
+    { name: AdAccount.name, schema: AdAccountSchema },
     { name: ApiTokenAudit.name, schema: ApiTokenAuditSchema }
   ])],
   providers: [ApiTokenService, ApiTokenScheduler],

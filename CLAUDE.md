@@ -32,7 +32,7 @@ cd backend && npm test              # Run backend tests
 cd backend && npm run test:watch    # Watch mode
 cd frontend && npm test             # Run frontend tests
 
-# API Integration Tests (PowerShell, 202 PASS / 0 FAIL)
+# Backend QA regression catalog: tests/backend/README.md
 powershell -ExecutionPolicy Bypass -File test-all-modules.ps1
 ```
 

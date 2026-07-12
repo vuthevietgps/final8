@@ -84,6 +84,9 @@ export class TestOrder2 {
   @Prop({ type: Number, default: 0 })
   agentQuote?: number;
 
+  @Prop({ type: Number })
+  agentCommissionAmount?: number; // Hoa hồng thuần phát sinh (Accrual basis)
+
   // Loại hàng / Phân loại sản phẩm
   @Prop({ type: String })
   productType?: string;
@@ -165,6 +168,17 @@ export class TestOrder2 {
 
   @Prop({ type: Date })
   orderDate?: Date;
+
+  // Immutable canonical timestamp for the explicit business confirmation
+  // transition. It is server-timed and never inferred from payment/delivery.
+  @Prop({ type: Date, index: true })
+  businessConfirmedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  businessConfirmedBy?: Types.ObjectId;
+
+  @Prop({ type: String, enum: ['erp_manual_confirmation', 'pending_order_approval'] })
+  businessConfirmationSource?: 'erp_manual_confirmation' | 'pending_order_approval';
 
   // ============ ORDER-LEVEL PAYMENT TRACKING ============
   // Trạng thái thanh toán nhà cung cấp

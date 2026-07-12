@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Role map</title>
+  <desc id="desc">Minh họa role map giữa sale, ops, finance và teacher cùng các quyền trọng yếu.</desc>
+  <rect width="1200" height="720" rx="32" fill="#f6efe5"/>
+  <rect x="80" y="80" width="1040" height="560" rx="32" fill="#123b39"/>
+  <rect x="130" y="128" width="210" height="196" rx="26" fill="#fffaf2"/>
+  <rect x="370" y="128" width="210" height="196" rx="26" fill="#fffaf2"/>
+  <rect x="610" y="128" width="210" height="196" rx="26" fill="#fffaf2"/>
+  <rect x="850" y="128" width="220" height="196" rx="26" fill="#fffaf2"/>
+  <text x="170" y="178" fill="#b5522d" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">SALE</text>
+  <text x="420" y="178" fill="#2f7767" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">OPS</text>
+  <text x="645" y="178" fill="#7d5312" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">FINANCE</text>
+  <text x="900" y="178" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">TEACHER</text>
+  <text x="154" y="224" fill="#123b39" font-size="26" font-family="Georgia, serif" font-weight="700">Tran Anh</text>
+  <text x="394" y="224" fill="#123b39" font-size="26" font-family="Georgia, serif" font-weight="700">Hai Yen</text>
+  <text x="634" y="224" fill="#123b39" font-size="26" font-family="Georgia, serif" font-weight="700">Minh Phuc</text>
+  <text x="884" y="224" fill="#123b39" font-size="26" font-family="Georgia, serif" font-weight="700">Thu Ha</text>
+  <text x="146" y="266" fill="#5a6c6b" font-size="22" font-family="Trebuchet MS, sans-serif">parent • student</text>
+  <text x="386" y="266" fill="#5a6c6b" font-size="22" font-family="Trebuchet MS, sans-serif">classes • sessions</text>
+  <text x="626" y="266" fill="#5a6c6b" font-size="22" font-family="Trebuchet MS, sans-serif">wallet • ledger</text>
+  <text x="876" y="266" fill="#5a6c6b" font-size="22" font-family="Trebuchet MS, sans-serif">attendance • report</text>
+  <text x="168" y="438" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Nhap nhu cau va tao parent / student</text>
+  <text x="168" y="476" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Tao invoice / order</text>
+  <text x="168" y="514" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Khong duoc xep lop</text>
+  <text x="612" y="438" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Duyet top-up va invoice</text>
+  <text x="612" y="476" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Kiem tra ledger</text>
+  <text x="612" y="514" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Duyet payroll preview</text>
+  <text x="612" y="552" fill="#fffaf2" font-size="24" font-family="Trebuchet MS, sans-serif">Doi soat tai chinh</text>
+  <path d="M238 334 V388" stroke="#e4a547" stroke-width="8" stroke-linecap="round"/>
+  <path d="M478 334 V388" stroke="#e4a547" stroke-width="8" stroke-linecap="round"/>
+  <path d="M718 334 V388" stroke="#e4a547" stroke-width="8" stroke-linecap="round"/>
+  <path d="M958 334 V388" stroke="#e4a547" stroke-width="8" stroke-linecap="round"/>
+  <path d="M340 226 H370" stroke="#c97d67" stroke-width="6" stroke-linecap="round"/>
+  <path d="M580 226 H610" stroke="#c97d67" stroke-width="6" stroke-linecap="round"/>
+  <path d="M820 226 H850" stroke="#c97d67" stroke-width="6" stroke-linecap="round"/>
+  <text x="166" y="602" fill="#e4a547" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">Role cung: giao viec theo nguoi, khong theo tinh huong.</text>
+</svg>

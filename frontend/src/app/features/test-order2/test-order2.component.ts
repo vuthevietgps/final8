@@ -7,13 +7,12 @@ import { DeliveryStatusService } from '../delivery-status/delivery-status.servic
 import { ProductService } from '../product/product.service';
 import { ProductionStatusService } from '../production-status/production-status.service';
 import { UserService } from '../user/user.service';
-import { SupplierService, Supplier } from '../supplier/supplier.service';
+import { Supplier } from '../supplier/supplier.service';
 import { SupplierQuoteApi } from '../supplier-quote/supplier-quote.service';
 import { CreateTestOrder2, NamedItem, ProductWithSuppliers, TestOrder2 } from './models';
 import { TestOrder2Service } from './test-order2.service';
 import { buildProductStyle, buildStatusStyle, getContrastTextColor, normalizeHex } from './style-utils';
 import { buildCsvFromObjects, downloadCsv } from './csv-utils';
-import { attachScrollSync } from './scroll-utils';
 
 /** Fields that suppliers are allowed to edit */
 const SUPPLIER_EDITABLE_FIELDS = new Set([
@@ -30,6 +29,8 @@ const SUPPLIER_EDITABLE_FIELDS = new Set([
   styleUrls: ['./test-order2.component.css']
 })
 export class TestOrder2Component implements OnInit, AfterViewInit {
+  private static readonly EMPTY_STYLE: Record<string, string> = {};
+  private static readonly EMPTY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [];
   // P2 FIX: Math for template
   Math = Math;
   orders = signal<TestOrder2[]>([]);
@@ -45,6 +46,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   isLoading = signal(false);
   error = signal<string | null>(null);
+  confirmingOrderIds = signal<ReadonlySet<string>>(new Set());
 
   // Upload/Delivery features removed per requirements
 
@@ -97,8 +99,13 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   /** Check if current user can edit a specific field */
   canEditField(field: string): boolean {
+    if (this.currentUserRole() === 'internal_agent' || this.currentUserRole() === 'external_agent') return false;
     if (!this.isSupplier()) return true;
     return SUPPLIER_EDITABLE_FIELDS.has(field);
+  }
+
+  canConfirmBusiness(): boolean {
+    return this.authService.hasPermission('orders.confirm-business');
   }
 
   constructor(
@@ -109,7 +116,6 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     private adGroupService: AdGroupService,
     private productionStatusService: ProductionStatusService,
     private deliveryStatusService: DeliveryStatusService,
-    private supplierService: SupplierService,
     private supplierQuoteApi: SupplierQuoteApi,
   ) { }
 
@@ -120,14 +126,23 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   ngAfterViewInit(): void {
     // Adjust sticky offsets after initial view render
     setTimeout(() => this.updateStickyOffsets(), 0);
-    // Attach scroll sync if elements are present later
-    setTimeout(() => this.attachScrollSync(), 50);
   }
 
-  private attachScrollSync() { attachScrollSync(this.fixedPane?.nativeElement, this.scrollPane?.nativeElement); }
+  onFixedScroll(evt: Event) {
+    const scroll = this.scrollPane?.nativeElement;
+    const source = evt.target as HTMLElement;
+    if (scroll && scroll.scrollTop !== source.scrollTop) {
+      scroll.scrollTop = source.scrollTop;
+    }
+  }
 
-  onFixedScroll(evt: Event) { const scroll = this.scrollPane?.nativeElement; if (scroll) scroll.scrollTop = (evt.target as HTMLElement).scrollTop; }
-  onScrollPane(evt: Event) { const fixed = this.fixedPane?.nativeElement; if (fixed) fixed.scrollTop = (evt.target as HTMLElement).scrollTop; }
+  onScrollPane(evt: Event) {
+    const fixed = this.fixedPane?.nativeElement;
+    const source = evt.target as HTMLElement;
+    if (fixed && fixed.scrollTop !== source.scrollTop) {
+      fixed.scrollTop = source.scrollTop;
+    }
+  }
 
   @HostListener('window:resize')
   onResize() { this.updateStickyOffsets(); }
@@ -216,7 +231,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     });
     this.adGroupService.getAll().subscribe({
       next: (items) => this.adGroups.set([
-        { _id: '0', name: '0' },
+        { _id: '', name: 'Không có nhóm quảng cáo' },
         ...items.map((g: any) => ({ _id: g.adGroupId, name: g.adGroupId }))
       ]),
       error: (e) => console.error(e)
@@ -256,6 +271,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       next: (items) => {
         // Keep suppliers info for source selection
         this.products.set(items as any);
+        this.rebuildSourceOptionsCache();
         this.precomputeStyles();
       },
       error: (orderProductsErr) => {
@@ -264,6 +280,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
         this.productService.getAll().subscribe({
           next: (items) => {
             this.products.set(items as any);
+            this.rebuildSourceOptionsCache();
             this.precomputeStyles();
           },
           error: (legacyErr) => {
@@ -288,16 +305,24 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       } else {
         this.suppliers.set([]);
       }
+      this.rebuildSourceOptionsCache();
       return;
     }
 
-    this.supplierService.list({ active: true, minimal: true }).subscribe({
-      next: (items) => this.suppliers.set(items),
+    this.userService.getSuppliersForOrders().subscribe({
+      next: (items: any[]) => {
+        this.suppliers.set(items as Supplier[]);
+        this.rebuildSourceOptionsCache();
+      },
       error: (e) => console.error(e)
     });
   }
 
   addNew(): void {
+    if (this.currentUserRole() === 'internal_agent' || this.currentUserRole() === 'external_agent') {
+      this.error.set('Đại lý chỉ có quyền xem đơn hàng của mình');
+      return;
+    }
     const data: CreateTestOrder2 = {
       productId: typeof this.products()[0]?._id === 'string' ? this.products()[0]._id : '',
       productSource: 'supplier',
@@ -305,7 +330,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       customerName: 'Khách hàng mới',
       quantity: 1,
       agentId: typeof this.agents()[0]?._id === 'string' ? this.agents()[0]._id : '',
-      adGroupId: '0',
+      adGroupId: '',
       isActive: true,
       serviceDetails: '',
       productionStatus: 'Chưa làm',
@@ -350,7 +375,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
           return String(v).trim();
         case 'adGroupId': {
           const s = String(v ?? '').trim();
-          return s || '0';
+          return s === '0' ? '' : s;
         }
         default:
           return typeof v === 'string' ? v.trim() : v;
@@ -377,7 +402,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     const target = event.target as HTMLSelectElement;
     let value = (target.value ?? '').toString().trim();
     
-    if (field === 'adGroupId' && !value) value = '0';
+    if (field === 'adGroupId' && value === '0') value = '';
 
     // Early handle source/supplier fields to avoid narrowing conflicts
     if (field === 'productSource') {
@@ -459,26 +484,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   sourceOptionsFor(order: TestOrder2): Array<{ value: string; label: string }> {
     const productId = this.getId(order.productId);
-    const options: Array<{ value: string; label: string }> = [
-      { value: '', label: 'Chọn nhà cung cấp' }
-    ];
-
-    const product = this.products().find(p => p._id === productId) as ProductWithSuppliers | undefined;
-    const ids = new Set<string>();
-    if (product?.suppliers?.length) {
-      for (const s of product.suppliers) {
-        if (s?.supplierId) ids.add(s.supplierId);
-      }
-    }
-    // Nếu sản phẩm chưa có mapping, fallback dùng toàn bộ danh sách nhà cung cấp
-    if (ids.size === 0) {
-      this.suppliers().forEach(s => ids.add(s._id));
-    }
-    for (const id of ids) {
-      options.push({ value: id, label: this.getSupplierName(id) });
-    }
-
-    return options;
+    if (!productId) return TestOrder2Component.EMPTY_OPTIONS as Array<{ value: string; label: string }>;
+    return (this.sourceOptionsCache.get(productId) || TestOrder2Component.EMPTY_OPTIONS) as Array<{ value: string; label: string }>;
   }
 
   getSourceSelection(order: TestOrder2): string {
@@ -508,11 +515,49 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   onAdGroupIdBlur(order: TestOrder2, event: Event): void {
     const target = event.target as HTMLInputElement;
     let value = (target.value || '').trim();
-    if (!value) value = '0';
+    if (value === '0') value = '';
     // Optimistic UI update so value sticks immediately
     const newVal = value;
     this.orders.update(rows => rows.map(r => r._id === order._id ? { ...r, adGroupId: newVal } : r));
     this.onBlurUpdate(order, 'adGroupId', newVal);
+  }
+
+  businessConfirmationAuditTitle(order: TestOrder2): string {
+    const lines = ['Mốc xác nhận nghiệp vụ do máy chủ ghi một lần; không suy diễn từ thanh toán hoặc giao hàng.'];
+    if (order.businessConfirmedBy) lines.push(`Xác nhận bởi: ${order.businessConfirmedBy}`);
+    if (order.businessConfirmationSource) lines.push(`Nguồn: ${order.businessConfirmationSource}`);
+    return lines.join('\n');
+  }
+
+  formatBusinessConfirmation(value?: string | null): string {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('vi-VN');
+  }
+
+  confirmBusiness(order: TestOrder2): void {
+    if (!this.canConfirmBusiness() || order.businessConfirmedAt || this.confirmingOrderIds().has(order._id)) return;
+    if (!window.confirm('Xác nhận nghiệp vụ cho đơn này? Mốc thời gian do máy chủ ghi và không thể sửa hoặc xóa.')) return;
+
+    this.setBusinessConfirmationLoading(order._id, true);
+    this.service.confirmBusiness(order._id).subscribe({
+      next: (confirmed) => {
+        this.orders.update((rows) => rows.map((row) => row._id === order._id ? confirmed : row));
+        this.setBusinessConfirmationLoading(order._id, false);
+      },
+      error: (error) => {
+        this.error.set(error?.error?.message || 'Không thể xác nhận nghiệp vụ cho đơn');
+        this.setBusinessConfirmationLoading(order._id, false);
+      },
+    });
+  }
+
+  private setBusinessConfirmationLoading(orderId: string, loading: boolean): void {
+    this.confirmingOrderIds.update((ids) => {
+      const next = new Set(ids);
+      if (loading) next.add(orderId); else next.delete(orderId);
+      return next;
+    });
   }
 
   onInputUpdate(order: TestOrder2, field: keyof TestOrder2, event: Event): void {
@@ -530,6 +575,10 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   delete(order: TestOrder2): void {
+    if (this.currentUserRole() === 'internal_agent' || this.currentUserRole() === 'external_agent') {
+      this.error.set('Đại lý không có quyền xóa đơn hàng');
+      return;
+    }
     if (!confirm('Xóa đơn này?')) return;
     this.service.delete(order._id).subscribe({
       next: () => this.orders.update(rows => rows.filter(r => r._id !== order._id)),
@@ -752,7 +801,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   statusCellStyle(kind: 'prod' | 'del', name?: string): Record<string, string> {
     // Remove background color from cell to allow dropdown border to be visible
-    return {};
+    return TestOrder2Component.EMPTY_STYLE;
   }
 
   // Cache for style calculations to improve performance
@@ -760,6 +809,10 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   private productStyles = new Map<string, Record<string, string>>();
   private productionStyles = new Map<string, Record<string, string>>();
   private deliveryStyles = new Map<string, Record<string, string>>();
+  private sourceOptionsCache = new Map<string, ReadonlyArray<{ value: string; label: string }>>();
+  private productOptionStyles = new Map<string, Record<string, string>>();
+  private productionOptionStyles = new Map<string, Record<string, string>>();
+  private deliveryOptionStyles = new Map<string, Record<string, string>>();
 
   // Pre-compute all styles when data loads
   private precomputeStyles(): void {
@@ -767,24 +820,67 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     this.productStyles.clear();
     this.productionStyles.clear();
     this.deliveryStyles.clear();
+    this.productOptionStyles.clear();
+    this.productionOptionStyles.clear();
+    this.deliveryOptionStyles.clear();
     
     // Pre-compute product styles
     this.products().forEach(product => {
       const style = this.calculateProductStyle(product._id);
       this.productStyles.set(product._id, style);
+      this.productOptionStyles.set(product._id, this.toOptionStyle(style));
     });
     
     // Pre-compute production status styles
     this.productionStatuses().forEach(statusName => {
       const style = this.calculateStatusStyle('prod', statusName);
       this.productionStyles.set(statusName, style);
+      this.productionOptionStyles.set(statusName, this.toOptionStyle(style));
     });
     
     // Pre-compute delivery status styles - using keys from deliveryStatusColors
     Object.keys(this.deliveryStatusColors()).forEach(statusName => {
       const style = this.calculateStatusStyle('del', statusName);
       this.deliveryStyles.set(statusName, style);
+      this.deliveryOptionStyles.set(statusName, this.toOptionStyle(style));
     });
+  }
+
+  private rebuildSourceOptionsCache(): void {
+    this.sourceOptionsCache.clear();
+
+    for (const product of this.products()) {
+      const options: Array<{ value: string; label: string }> = [
+        { value: '', label: 'Chọn nhà cung cấp' }
+      ];
+      const ids = new Set<string>();
+
+      if (product?.suppliers?.length) {
+        for (const supplier of product.suppliers) {
+          if (supplier?.supplierId) ids.add(supplier.supplierId);
+        }
+      }
+
+      if (ids.size === 0) {
+        this.suppliers().forEach(supplier => ids.add(supplier._id));
+      }
+
+      for (const id of ids) {
+        options.push({ value: id, label: this.getSupplierName(id) });
+      }
+
+      this.sourceOptionsCache.set(product._id, options);
+    }
+  }
+
+  private toOptionStyle(style: Record<string, string>): Record<string, string> {
+    if (!style['background-color'] || !style['color']) {
+      return TestOrder2Component.EMPTY_STYLE;
+    }
+    return {
+      'background-color': style['background-color'],
+      color: style['color'],
+    };
   }
 
   private calculateProductStyle(productId: string): Record<string, string> {
@@ -799,7 +895,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   statusSelectStyle(kind: 'prod' | 'del', name?: string): Record<string, string> {
-    if (!name) return {};
+    if (!name) return TestOrder2Component.EMPTY_STYLE;
     
     // Use pre-computed styles for instant response
     const styleMap = kind === 'prod' ? this.productionStyles : this.deliveryStyles;
@@ -819,7 +915,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   productSelectStyle(productId?: string | { _id: string }): Record<string, string> {
     const id = typeof productId === 'string' ? productId : productId?._id;
-    if (!id) return {};
+    if (!id) return TestOrder2Component.EMPTY_STYLE;
     
     // Use pre-computed styles for instant response
     const cachedStyle = this.productStyles.get(id);
@@ -837,30 +933,13 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   }
 
   getProductOptionStyle(productId: string): Record<string, string> {
-    // Use the same pre-computed styles for options for maximum performance
-    const cachedStyle = this.productStyles.get(productId);
-    if (cachedStyle) {
-      // Return simplified style for options (just background and color)
-      return {
-        'background-color': cachedStyle['background-color'],
-        'color': cachedStyle['color']
-      };
-    }
-    
-    // Fallback calculation
-    const product = this.products().find(p => p._id === productId);
-    const bg = this.normalizeHex(product?.color || '#3B82F6');
-    if (!bg) return {};
-    const fg = this.getContrastTextColor(bg);
-    return { 'background-color': bg, color: fg };
+    return this.productOptionStyles.get(productId) || TestOrder2Component.EMPTY_STYLE;
   }
   
   getStatusOptionStyle(kind: 'prod' | 'del', name?: string): Record<string, string> {
-    const color = kind === 'prod' ? this.getProductionColor(name) : this.getDeliveryColor(name);
-    const bg = this.normalizeHex(color);
-    if (!bg) return {};
-    const fg = this.getContrastTextColor(bg);
-    return { 'background-color': bg, color: fg };
+    if (!name) return TestOrder2Component.EMPTY_STYLE;
+    const styleMap = kind === 'prod' ? this.productionOptionStyles : this.deliveryOptionStyles;
+    return styleMap.get(name) || TestOrder2Component.EMPTY_STYLE;
   }
 
   // Pagination Methods

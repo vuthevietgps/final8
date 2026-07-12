@@ -1,11 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AutoScaleDecisionService, ScaleDecision } from './auto-scale-decision.service';
 import { CapitalAllocationService } from './capital-allocation.service';
+import { CashflowSafetyService } from './cashflow-safety.service';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { BudgetApplyService } from '../advertising-optimization/ai-optimization/budget-apply.service';
+import { canonicalAdsExecutionRequiredPayload } from '../common/ads-safety-config';
 
 interface AutoScaleLog {
   date: Date;
@@ -30,20 +32,29 @@ export class AutoScaleExecutionService {
     private readonly adGroupModel: Model<AdGroupDocument>,
     private readonly autoScaleDecisionService: AutoScaleDecisionService,
     private readonly capitalAllocationService: CapitalAllocationService,
+    private readonly cashflowSafetyService: CashflowSafetyService,
     private readonly budgetApplyService: BudgetApplyService,
   ) {}
 
   /**
-   * 🤖 Cronjob chạy mỗi ngày 02:00 AM
-   * Tự động scale/kill ad groups dựa trên performance
+   * 🤖 Cronjob chạy mỗi ngày 08:30 AM (Asia/Ho_Chi_Minh)
+   * Tự động scale/kill ad groups dựa trên performance ĐÃ CHỐT CHI PHÍ của ngày hôm qua.
+   * Phải chạy sau CapitalAllocation snapshot (08:00) để có reinvestmentFund chính xác.
+   *
+   * ĐÃ TẠM TẮT: Theo yêu cầu hiện tại, hệ thống chỉ giữ ở mức đưa ra đề xuất (Suggestions),
+   * không tự động gọi API thay đổi ngân sách trên các nền tảng quảng cáo.
+   * @Cron('30 8 * * *', {
+   *   name: 'auto-scale-ads',
+   *   timeZone: 'Asia/Ho_Chi_Minh'
+   * })
    */
-  @Cron('0 2 * * *', { 
-    name: 'auto-scale-ads',
-    timeZone: 'Asia/Ho_Chi_Minh' 
-  })
   async runDailyAutoScale() {
+    // Legacy cron/manual auto-scale must never mutate local/provider state. Use
+    // the canonical V2 execution plan so all production guardrails are applied.
+    throw new ForbiddenException(canonicalAdsExecutionRequiredPayload());
+
     this.logger.log('🚀 ========== STARTING DAILY AUTO SCALE/KILL PROCESS ==========');
-    
+
     const startTime = Date.now();
     const logs: AutoScaleLog[] = [];
 
@@ -51,16 +62,16 @@ export class AutoScaleExecutionService {
       // 1. Lấy reinvestment fund từ Capital Allocation
       const capitalAllocation = await this.capitalAllocationService.computeAllocation();
       const reinvestmentFund = capitalAllocation.reinvestmentAmount || 0;
-      
+
       this.logger.log(`💰 Reinvestment fund available: ${reinvestmentFund.toLocaleString()} VND (45% từ lợi nhuận thuần)`);
-      
+
       // 2. Lấy tất cả active ad groups
-      const adGroups = await this.adGroupModel.find({ 
+      const adGroups = await this.adGroupModel.find({
         isActive: { $ne: false }
       });
-      
+
       this.logger.log(`📊 Processing ${adGroups.length} active ad groups`);
-      
+
       if (adGroups.length === 0) {
         this.logger.warn('⚠️  No active ad groups found');
         return;
@@ -71,7 +82,7 @@ export class AutoScaleExecutionService {
       let killedCount = 0;
       let maintainedCount = 0;
       let errorCount = 0;
-      
+
       // 3. Process từng ad group
       for (const adGroup of adGroups) {
         try {
@@ -85,10 +96,10 @@ export class AutoScaleExecutionService {
             adGroupId,
             currentBudget
           );
-          
+
           this.logger.log(`   Decision: ${decision.action} | New Budget: ${decision.newBudget.toLocaleString()} | Confidence: ${decision.confidence}%`);
           this.logger.log(`   Reason: ${decision.reason}`);
-          
+
           // Execute decision
           let success = false;
           let error: string | undefined;
@@ -98,18 +109,18 @@ export class AutoScaleExecutionService {
               success = await this.killAdGroup(adGroup, decision);
               if (success) killedCount++;
               break;
-            
+
             case 'SCALE_DOWN':
               success = await this.scaleDownAdGroup(adGroup, decision);
               if (success) scaleDownCount++;
               break;
-            
+
             case 'SCALE_UP_MODERATE':
             case 'SCALE_UP_AGGRESSIVE':
               success = await this.scaleUpAdGroup(adGroup, decision);
               if (success) scaleUpCount++;
               break;
-            
+
             case 'MAINTAIN':
               success = true;
               maintainedCount++;
@@ -136,11 +147,11 @@ export class AutoScaleExecutionService {
             success,
             error
           });
-          
+
         } catch (error) {
           errorCount++;
           this.logger.error(`❌ Failed to process ${adGroup.adGroupId}:`, error);
-          
+
           logs.push({
             date: new Date(),
             adGroupId: adGroup.adGroupId,
@@ -155,9 +166,9 @@ export class AutoScaleExecutionService {
           });
         }
       }
-      
+
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      
+
       this.logger.log(`\n✅ ========== AUTO SCALE COMPLETED in ${duration}s ==========`);
       this.logger.log(`📊 Summary:`);
       this.logger.log(`   🟢 Scaled Up: ${scaleUpCount}`);
@@ -165,16 +176,16 @@ export class AutoScaleExecutionService {
       this.logger.log(`   🔴 Killed: ${killedCount}`);
       this.logger.log(`   🟡 Maintained: ${maintainedCount}`);
       this.logger.log(`   ❌ Errors: ${errorCount}`);
-      
+
       // Save logs to database (optional)
       await this.saveLogsToDatabase(logs);
-      
+
       // Send daily report (optional)
-      // await this.sendDailyReport({ 
-      //   scaleUpCount, scaleDownCount, killedCount, maintainedCount, errorCount, 
-      //   logs, duration 
+      // await this.sendDailyReport({
+      //   scaleUpCount, scaleDownCount, killedCount, maintainedCount, errorCount,
+      //   logs, duration
       // });
-      
+
     } catch (error) {
       this.logger.error('❌ Auto scale process failed:', error);
     }
@@ -184,12 +195,12 @@ export class AutoScaleExecutionService {
    * 🔴 Kill ad group (pause completely)
    */
   private async killAdGroup(
-    adGroup: AdGroupDocument, 
+    adGroup: AdGroupDocument,
     decision: ScaleDecision
   ): Promise<boolean> {
     try {
       const adGroupId = adGroup.adGroupId;
-      
+
       // 1. Update database
       await this.adGroupModel.updateOne(
         { _id: adGroup._id },
@@ -205,7 +216,7 @@ export class AutoScaleExecutionService {
           }
         }
       );
-      
+
       // 2. Pause on platform (Facebook/Google/TikTok) by setting budget to 0
       try {
         const context = await this.budgetApplyService.resolveContext(adGroupId);
@@ -218,9 +229,9 @@ export class AutoScaleExecutionService {
         this.logger.warn(`   ⚠️  Failed to pause on platform: ${(error as any)?.message}`);
         // Continue anyway - database is updated
       }
-      
+
       this.logger.log(`   🔴 KILLED: ${adGroupId} - Reason: ${decision.reason}`);
-      
+
       return true;
     } catch (error) {
       this.logger.error(`   ❌ Failed to kill ${adGroup.adGroupId}:`, error);
@@ -254,7 +265,7 @@ export class AutoScaleExecutionService {
           }
         }
       );
-      
+
       // 2. Apply to platform
       try {
         const context = await this.budgetApplyService.resolveContext(adGroupId);
@@ -267,9 +278,9 @@ export class AutoScaleExecutionService {
         this.logger.warn(`   ⚠️  Failed to update budget on platform: ${(error as any)?.message}`);
         // Continue anyway - database is updated
       }
-      
+
       this.logger.log(`   🟢 SCALED UP: ${oldBudget.toLocaleString()} → ${newBudget.toLocaleString()} (+${increasePercent}%)`);
-      
+
       return true;
     } catch (error) {
       this.logger.error(`   ❌ Failed to scale up ${adGroup.adGroupId}:`, error);
@@ -303,7 +314,7 @@ export class AutoScaleExecutionService {
           }
         }
       );
-      
+
       // 2. Apply to platform
       try {
         const context = await this.budgetApplyService.resolveContext(adGroupId);
@@ -315,9 +326,9 @@ export class AutoScaleExecutionService {
       } catch (error) {
         this.logger.warn(`   ⚠️  Failed to update budget on platform: ${(error as any)?.message}`);
       }
-      
+
       this.logger.log(`   🟠 SCALED DOWN: ${oldBudget.toLocaleString()} → ${newBudget.toLocaleString()} (-${decreasePercent}%)`);
-      
+
       return true;
     } catch (error) {
       this.logger.error(`   ❌ Failed to scale down ${adGroup.adGroupId}:`, error);
@@ -338,11 +349,21 @@ export class AutoScaleExecutionService {
    */
   async runManualAutoScale(adGroupId?: string) {
     this.logger.log('🧪 Manual auto scale trigger');
-    
+
     if (adGroupId) {
+      const lockStatus = await this.cashflowSafetyService.getSystemLockStatus();
+      if (lockStatus.locked) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          message: lockStatus.message,
+          error: 'EMERGENCY_SYSTEM_LOCK',
+          currentReturnRate: lockStatus.returnRate,
+        });
+      }
+
       // Run for specific ad group
       const adGroup = await this.adGroupModel.findOne({ adGroupId });
-      
+
       if (!adGroup) {
         throw new Error(`Ad group ${adGroupId} not found`);
       }
@@ -355,7 +376,7 @@ export class AutoScaleExecutionService {
 
       this.logger.log(`Decision for ${adGroupId}: ${decision.action}`);
       this.logger.log(`Reason: ${decision.reason}`);
-      
+
       // Execute (for testing, just log don't actually execute)
       return {
         adGroupId,

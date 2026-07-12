@@ -24,6 +24,31 @@ export class OpenAIConfigComponent implements OnInit {
   error = signal<string | null>(null);
   testResult = signal<string | null>(null);
   testingKey = signal(false);
+
+  modelOptions = [
+    { value: 'gpt-5.5', label: 'GPT-5.5 - chất lượng cao cho trợ lý quản trị' },
+    { value: 'gpt-5.5-pro', label: 'GPT-5.5 Pro - mạnh hơn, chậm và tốn hơn' },
+    { value: 'gpt-5.4', label: 'GPT-5.4 - cân bằng chất lượng/chi phí' },
+    { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini - nhanh hơn, tiết kiệm hơn' },
+    { value: 'gpt-5.4-nano', label: 'GPT-5.4 nano - rẻ/nhanh cho tác vụ nhẹ' },
+    { value: 'gpt-5.1', label: 'GPT-5.1 - reasoning/coding thế hệ trước' },
+    { value: 'gpt-5', label: 'GPT-5 - reasoning thế hệ trước' },
+    { value: 'gpt-4.1', label: 'GPT-4.1 - model không reasoning' },
+    { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini - tiết kiệm' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o mini - cũ, rẻ' },
+  ];
+
+  purposeOptions = [
+    { value: 'admin-assistant', label: 'Trợ lý quản trị' },
+    { value: 'customer-chatbot', label: 'Chatbot khách hàng' },
+    { value: 'general', label: 'Khác / dùng chung kỹ thuật' },
+  ];
+
+  private readonly defaultPrompts: Record<string, string> = {
+    'admin-assistant': 'Bạn là trợ lý quản trị ERP của công ty. Luôn trả lời bằng tiếng Việt có dấu, ưu tiên dữ liệu nội bộ, nêu rõ phần còn thiếu và không tự ghi dữ liệu khi chưa có phê duyệt.',
+    'customer-chatbot': 'Bạn là trợ lý AI thông minh và thân thiện cho fanpage bán hàng. Hãy trả lời khách hàng bằng tiếng Việt có dấu một cách chuyên nghiệp, ngắn gọn và hữu ích.',
+    general: 'Bạn là trợ lý AI cho các tác vụ nội bộ. Luôn trả lời bằng tiếng Việt có dấu, bám sát dữ liệu được cung cấp và nêu rõ khi thiếu thông tin.',
+  };
   
   // Modal state
   showModal = signal(false);
@@ -34,11 +59,13 @@ export class OpenAIConfigComponent implements OnInit {
   formData = signal<Partial<CreateOpenAIConfigRequest>>({
     name: '',
     description: '',
-    model: 'gpt-4o-mini',
+    purpose: 'admin-assistant',
+    model: 'gpt-5.5',
     apiKey: '',
-    systemPrompt: '',
-    maxTokens: 150,
+    systemPrompt: 'Bạn là trợ lý quản trị ERP của công ty. Luôn trả lời bằng tiếng Việt có dấu, ưu tiên dữ liệu nội bộ, nêu rõ phần còn thiếu và không tự ghi dữ liệu khi chưa có phê duyệt.',
+    maxTokens: 1200,
     temperature: 0.7,
+    reasoningEffort: 'medium',
     scopeType: 'global',
     status: 'active',
     isDefault: false
@@ -74,11 +101,13 @@ export class OpenAIConfigComponent implements OnInit {
     this.formData.set({
       name: '',
       description: '',
-      model: 'gpt-4o-mini',
+      purpose: 'admin-assistant',
+      model: 'gpt-5.5',
       apiKey: '',
-      systemPrompt: 'Bạn là trợ lý AI thông minh và thân thiện cho fanpage bán hàng. Hãy trả lời khách hàng một cách chuyên nghiệp, ngắn gọn và hữu ích.',
-      maxTokens: 150,
+      systemPrompt: this.defaultSystemPrompt('admin-assistant'),
+      maxTokens: 1200,
       temperature: 0.7,
+      reasoningEffort: 'medium',
       scopeType: 'global',
       status: 'active',
       isDefault: false
@@ -95,11 +124,13 @@ export class OpenAIConfigComponent implements OnInit {
     this.formData.set({
       name: config.name,
       description: config.description,
+      purpose: config.purpose || 'customer-chatbot',
       model: config.model,
       apiKey: '', // Không hiển thị API key cũ vì lý do bảo mật
       systemPrompt: config.systemPrompt,
       maxTokens: config.maxTokens,
       temperature: config.temperature,
+      reasoningEffort: config.reasoningEffort || 'medium',
       scopeType: config.scopeType,
       scopeRef: config.scopeRef,
       status: config.status,
@@ -143,8 +174,8 @@ export class OpenAIConfigComponent implements OnInit {
       this.error.set('Temperature phải trong khoảng 0 - 2');
       return;
     }
-    if (data.maxTokens != null && (data.maxTokens < 1 || data.maxTokens > 4000)) {
-      this.error.set('Max Tokens phải trong khoảng 1 - 4000');
+    if (data.maxTokens != null && (data.maxTokens < 1 || data.maxTokens > 32000)) {
+      this.error.set('Max Tokens phải trong khoảng 1 - 32000');
       return;
     }
 
@@ -263,6 +294,16 @@ export class OpenAIConfigComponent implements OnInit {
    */
   onInputChange(event: Event, field: keyof CreateOpenAIConfigRequest) {
     const target = event.target as HTMLInputElement;
+    if (field === 'purpose') {
+      const currentPrompt = this.formData().systemPrompt || '';
+      const isDefaultPrompt = Object.values(this.defaultPrompts).includes(currentPrompt);
+      this.formData.update(data => ({
+        ...data,
+        purpose: target.value as any,
+        systemPrompt: !currentPrompt.trim() || isDefaultPrompt ? this.defaultSystemPrompt(target.value) : currentPrompt,
+      }));
+      return;
+    }
     this.updateFormField(field, target.value);
   }
 
@@ -298,5 +339,13 @@ export class OpenAIConfigComponent implements OnInit {
   maskApiKey(key?: string): string {
     if (!key) return '';
     return key.length > 8 ? key.substring(0, 8) + '•••••••••••' : key;
+  }
+
+  purposeLabel(purpose?: string): string {
+    return this.purposeOptions.find(option => option.value === purpose)?.label || 'Chatbot khách hàng';
+  }
+
+  private defaultSystemPrompt(purpose?: string): string {
+    return this.defaultPrompts[purpose || 'admin-assistant'] || this.defaultPrompts['admin-assistant'];
   }
 }

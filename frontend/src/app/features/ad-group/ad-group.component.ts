@@ -6,9 +6,8 @@ import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { AdGroupService } from './ad-group.service';
-import { AdGroup, CreateAdGroup, AdPlatform, AdGroupRecommendation } from './models/ad-group.model';
+import { AdGroup, AdGroupRecommendation } from './models/ad-group.model';
 import { FanpageService } from '../fanpage/fanpage.service';
-import { ProductCategoryService } from '../product-category/product-category.service';
 import { UserService } from '../user/user.service';
 import { AdAccountService } from '../ad-account/ad-account.service';
 import { Product } from '../product/models/product.interface';
@@ -24,14 +23,6 @@ interface Fanpage {
   isActive: boolean;
 }
 
-interface ProductCategory {
-  _id: string;
-  name: string;
-  description?: string;
-  color?: string;
-  icon?: string;
-}
-
 
 @Component({
   selector: 'app-ad-group',
@@ -45,16 +36,14 @@ export class AdGroupComponent implements OnInit {
   private userService = inject(UserService);
   private adAccountService = inject(AdAccountService);
   private fanpageService = inject(FanpageService);
-  private productCategoryService = inject(ProductCategoryService);
   private fb = inject(FormBuilder);
 
   // Data signals
   adGroups = signal<AdGroup[]>([]);
-  products = signal<Product[]>([]);
   users = signal<User[]>([]);
+  adsOperators = signal<User[]>([]);
   adAccounts = signal<AdAccount[]>([]);
   fanpages = signal<Fanpage[]>([]);
-  productCategories = signal<ProductCategory[]>([]);
   availableProducts = signal<Product[]>([]);
 
   // UI state signals
@@ -88,18 +77,11 @@ export class AdGroupComponent implements OnInit {
       name: ['', Validators.required],
       adGroupId: ['', Validators.required],
       fanpageId: ['', Validators.required],
-      productCategoryId: ['', Validators.required],
+      selectedProductId: [''],
       agentId: ['', Validators.required],
+      assignedEmployeeId: [''],
       adAccountId: ['', Validators.required],
-      platform: ['facebook', Validators.required],
-      selectedProducts: [[], Validators.required],
-      enableWebhook: [false],
-      autoControlEnabled: [false],
-      spendThresholdDaily: [0],
-      cprThresholdDaily: [0],
-      minConversations: [3],
-      isActive: [true],
-      notes: ['']
+      platform: ['facebook', Validators.required]
     });
   }
 
@@ -111,8 +93,9 @@ export class AdGroupComponent implements OnInit {
     Promise.all([
       this.loadAdGroups(),
       this.loadFanpages(),
-      this.loadProductCategories(),
+      this.loadProducts(),
       this.loadAgents(),
+      this.loadAdsOperators(),
       this.loadAdAccounts(),
     ]).then(() => {
       this.isLoading.set(false);
@@ -216,10 +199,10 @@ export class AdGroupComponent implements OnInit {
     });
   }
 
-  private async loadProductCategories(): Promise<void> {
+  private async loadProducts(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.productCategoryService.getActiveCategories().subscribe({
-        next: (cats) => { this.productCategories.set(cats as any); resolve(); },
+      this.adGroupService.getProducts().subscribe({
+        next: (products) => { this.availableProducts.set(products as any); resolve(); },
         error: reject
       });
     });
@@ -229,6 +212,15 @@ export class AdGroupComponent implements OnInit {
     return new Promise((resolve, reject) => {
       this.userService.getAgentsForAds().subscribe({
         next: (agents) => { this.users.set(agents as any); resolve(); },
+        error: reject
+      });
+    });
+  }
+
+  private async loadAdsOperators(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.userService.getAdsOperators().subscribe({
+        next: (operators) => { this.adsOperators.set(operators as any); resolve(); },
         error: reject
       });
     });
@@ -251,9 +243,7 @@ export class AdGroupComponent implements OnInit {
     this.editingId = null;
     this.adGroupForm.reset();
     this.adGroupForm.patchValue({
-      isActive: true,
-      enableWebhook: false,
-      selectedProducts: []
+      selectedProductId: ''
     });
     this.showModal.set(true);
   }
@@ -261,30 +251,18 @@ export class AdGroupComponent implements OnInit {
   editItem(group: AdGroup): void {
     this.isEditing.set(true);
     this.editingId = group._id!;
-    const selectedCategoryId = this.extractId(group.productCategoryId);
+    const selectedProductId = this.extractFirstSelectedProductId(group);
     
     this.adGroupForm.patchValue({
       name: group.name,
       adGroupId: group.adGroupId,
       fanpageId: this.extractId(group.fanpageId) || '',
-      productCategoryId: selectedCategoryId || '',
+      selectedProductId: selectedProductId || '',
       agentId: this.extractId((group as any).agentId) || '',
+      assignedEmployeeId: this.extractId((group as any).assignedEmployeeId) || '',
       adAccountId: this.extractId((group as any).adAccountId) || '',
-      platform: (group as any).platform || 'facebook',
-      selectedProducts: (group.selectedProducts || []).map(p => this.extractId(p)).filter(Boolean).slice(0, 1),
-      enableWebhook: group.enableWebhook || false,
-      autoControlEnabled: group.autoControlEnabled || false,
-      spendThresholdDaily: group.spendThresholdDaily || 0,
-      cprThresholdDaily: group.cprThresholdDaily || 0,
-      minConversations: group.minConversations || 3,
-      isActive: group.isActive,
-      notes: group.notes || ''
+      platform: (group as any).platform || 'facebook'
     });
-
-    // Load products for selected category
-    if (selectedCategoryId) {
-      this.loadProductsByCategory(selectedCategoryId);
-    }
     
     this.showModal.set(true);
   }
@@ -305,26 +283,19 @@ export class AdGroupComponent implements OnInit {
   saveItem(): void {
     if (!this.adGroupForm.valid) {
       this.adGroupForm.markAllAsTouched();
-      if (!this.normalizeSingleProductSelection(this.adGroupForm.get('selectedProducts')?.value)) {
-        this.error.set('Mỗi nhóm quảng cáo phải chọn đúng 1 sản phẩm');
-      }
-      return;
-    }
-
-    const selectedProducts = this.normalizeSingleProductSelection(
-      this.adGroupForm.get('selectedProducts')?.value,
-    );
-    if (!selectedProducts) {
-      this.error.set('Mỗi nhóm quảng cáo phải chọn đúng 1 sản phẩm');
-      this.adGroupForm.get('selectedProducts')?.markAsTouched();
       return;
     }
 
     this.isSaving.set(true);
+    const formValue = { ...this.adGroupForm.value } as any;
+    const selectedProductId = String(formValue.selectedProductId || '').trim();
+    const assignedEmployeeId = String(formValue.assignedEmployeeId || '').trim();
     const formData = {
-      ...this.adGroupForm.value,
-      selectedProducts,
+      ...formValue,
+      selectedProducts: selectedProductId ? [selectedProductId] : [],
+      assignedEmployeeId: assignedEmployeeId || undefined,
     };
+    delete formData.selectedProductId;
 
     if (this.isEditing() && this.editingId) {
       this.adGroupService.update(this.editingId, formData).subscribe({
@@ -336,8 +307,8 @@ export class AdGroupComponent implements OnInit {
           this.isSaving.set(false);
         },
         error: (error) => {
-          const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật';
-          this.error.set('Lỗi cập nhật: ' + msg);
+          const msg = (error && (error.error?.message || error.message)) || 'Loi cap nhat';
+          this.error.set('Loi cap nhat: ' + msg);
           this.isSaving.set(false);
         }
       });
@@ -349,8 +320,8 @@ export class AdGroupComponent implements OnInit {
           this.isSaving.set(false);
         },
         error: (error) => {
-          const msg = (error && (error.error?.message || error.message)) || 'Lỗi tạo mới';
-          this.error.set('Lỗi tạo mới: ' + msg);
+          const msg = (error && (error.error?.message || error.message)) || 'Loi tao moi';
+          this.error.set('Loi tao moi: ' + msg);
           this.isSaving.set(false);
         }
       });
@@ -370,47 +341,63 @@ export class AdGroupComponent implements OnInit {
     });
   }
 
-  // Category change handler
-  onCategoryChange(event: Event): void {
-    const categoryId = (event.target as HTMLSelectElement).value;
-    if (categoryId) {
-      this.loadProductsByCategory(categoryId);
-    } else {
-      this.availableProducts.set([]);
+  getSelectedProductName(group: AdGroup): string {
+    const selected = (group.selectedProducts || [])[0] as any;
+    if (!selected) return 'Khong gan';
+
+    if (typeof selected === 'object' && selected?.name) {
+      return selected.name;
     }
-    // Clear selected products when category changes
-    this.adGroupForm.get('selectedProducts')?.setValue([]);
+
+    const productId = this.extractId(selected);
+    if (!productId) return 'Khong gan';
+
+    const product = this.availableProducts().find(p => this.extractId((p as any)._id) === productId);
+    return product?.name || 'Khong tim thay san pham';
   }
 
-  private loadProductsByCategory(categoryId: string): void {
-    this.adGroupService.getProductsByCategory(categoryId).subscribe({
-      next: (products) => {
-        this.availableProducts.set(products as any);
-      },
-      error: (error) => {
-        const msg = (error && (error.error?.message || error.message)) || 'Lỗi tải sản phẩm theo danh mục';
-        this.error.set(msg);
-        this.availableProducts.set([]);
-      }
-    });
+  getSelectedProductCategory(group: AdGroup): string {
+    const selected = (group.selectedProducts || [])[0] as any;
+    const categoryRef = typeof selected === 'object' ? selected?.categoryId : undefined;
+    if (categoryRef?.name) return categoryRef.name;
+
+    const productId = this.extractId(selected);
+    if (!productId) return 'Khong gan';
+
+    const product = this.availableProducts().find(p => this.extractId((p as any)._id) === productId) as any;
+    return product?.categoryId?.name || 'Khong gan';
   }
 
-  // Product selection methods
-  isProductSelected(productId: string): boolean {
-    const selected = this.adGroupForm.get('selectedProducts')?.value || [];
-    return selected.includes(productId);
+  getAssignedEmployeeName(group: AdGroup): string {
+    const id = this.extractId(group.assignedEmployeeId);
+    if (!id) return 'Chua gan';
+    if (typeof group.assignedEmployeeId === 'object' && (group.assignedEmployeeId.fullName || group.assignedEmployeeId.email)) {
+      return group.assignedEmployeeId.fullName || group.assignedEmployeeId.email || id;
+    }
+    const user = this.adsOperators().find((item) => item._id === id);
+    return user?.fullName || user?.email || id;
   }
 
-  selectSingleProduct(productId: string): void {
-    this.adGroupForm.get('selectedProducts')?.setValue([productId]);
-    this.adGroupForm.get('selectedProducts')?.markAsDirty();
-    this.adGroupForm.get('selectedProducts')?.markAsTouched();
+  getAdAccountSummary(group: AdGroup): string {
+    const account = group.adAccountId as any;
+    if (account?.name && account?.accountId) {
+      const businessCenter = account?.businessCenterId ? ` / BC ${account.businessCenterId}` : '';
+      const managementMode = account?.managementMode ? ` / ${String(account.managementMode).toUpperCase()}` : '';
+      return `${account.name} (${account.accountId})${managementMode}${businessCenter}`;
+    }
+    return 'Chua map tai khoan';
   }
 
-  clearSingleProductSelection(): void {
-    this.adGroupForm.get('selectedProducts')?.setValue([]);
-    this.adGroupForm.get('selectedProducts')?.markAsDirty();
-    this.adGroupForm.get('selectedProducts')?.markAsTouched();
+  formatLastOperatorActivity(group: AdGroup): string {
+    if (!group.lastOperatorActivityAt) return '-';
+    const value = new Date(group.lastOperatorActivityAt);
+    if (Number.isNaN(value.getTime())) return '-';
+    return `${value.toLocaleDateString('vi-VN')} ${value.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  private extractFirstSelectedProductId(group: AdGroup): string {
+    const selected = (group.selectedProducts || [])[0];
+    return this.extractId(selected);
   }
 
   // Utility methods
@@ -419,67 +406,6 @@ export class AdGroupComponent implements OnInit {
     if (!id) return 'Chưa chọn';
     const fanpage = this.fanpages().find(f => f._id === id);
     return fanpage?.name || 'Không tìm thấy';
-  }
-
-  getCategoryName(categoryId?: any): string {
-    const id = this.extractId(categoryId);
-    if (!id) return 'Chưa chọn';
-    const category = this.productCategories().find(c => c._id === id);
-    return category?.name || 'Không tìm thấy';
-  }
-
-  formatPrice(price: number): string {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND'
-    }).format(price);
-  }
-
-  getProductPrice(product: any): string {
-    const price = product.price || 0;
-    return this.formatPrice(price);
-  }
-
-  // Stats methods
-  getActiveCount(): number {
-    return this.adGroups().filter(g => g.isActive).length;
-  }
-
-  // removed chatbot count (no AI)
-
-  getWebhookEnabledCount(): number {
-    return this.adGroups().filter(g => g.enableWebhook).length;
-  }
-
-  // Toggle methods
-  toggleActive(group: AdGroup): void {
-    this.adGroupService.update(group._id!, { isActive: !group.isActive }).subscribe({
-      next: (updated) => {
-        this.adGroups.update(groups => 
-          groups.map(g => g._id === updated._id ? updated : g)
-        );
-      },
-      error: (error) => {
-        const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật trạng thái';
-        this.error.set('Lỗi cập nhật trạng thái: ' + msg);
-      }
-    });
-  }
-
-  toggleWebhook(group: AdGroup, event: Event): void {
-    const checkbox = event.target as HTMLInputElement;
-    this.adGroupService.update(group._id!, { enableWebhook: checkbox.checked }).subscribe({
-      next: (updated) => {
-        this.adGroups.update(groups => 
-          groups.map(g => g._id === updated._id ? updated : g)
-        );
-      },
-      error: (error) => {
-        const msg = (error && (error.error?.message || error.message)) || 'Lỗi cập nhật webhook';
-        this.error.set('Lỗi cập nhật webhook: ' + msg);
-        checkbox.checked = !checkbox.checked; // Revert checkbox
-      }
-    });
   }
 
   // Search and filter
@@ -513,14 +439,6 @@ export class AdGroupComponent implements OnInit {
     // Implement sorting if needed
     console.log('Sort by:', field);
   }
-
-  // Helper to show last auto-paused reason for current editing item
-  getEditingAutoPausedReason(): string | null {
-    if (!this.editingId) return null;
-    const g = this.adGroups().find(x => x._id === this.editingId);
-    return g?.autoPausedReason || null;
-  }
-
   private extractId(value: any): string {
     if (!value) return '';
     if (typeof value === 'string') return value;
@@ -531,17 +449,4 @@ export class AdGroupComponent implements OnInit {
     return '';
   }
 
-  private normalizeSingleProductSelection(value: any): string[] | null {
-    if (!Array.isArray(value)) return null;
-    const normalized = Array.from(
-      new Set(
-        value
-          .map((item: any) => String(item ?? '').trim())
-          .filter((item: string) => !!item),
-      ),
-    );
-    if (normalized.length !== 1) return null;
-    return normalized;
-  }
 }
-

@@ -1,39 +1,60 @@
 /**
- * File: ad-account/dto/create-ad-account.dto.ts
- * Mục đích: DTO cho việc tạo mới tài khoản quảng cáo.
+ * DTO for creating ad accounts.
  */
-import { IsString, IsNotEmpty, IsEnum, IsOptional, IsBoolean, Length } from 'class-validator';
+import { IsBoolean, IsEnum, IsMongoId, IsNotEmpty, IsOptional, IsString, Length } from 'class-validator';
 
 export class CreateAdAccountDto {
   @IsString()
   @IsNotEmpty()
   @Length(1, 200)
-  name: string; // Tên tài khoản quảng cáo
+  name: string;
 
   @IsString()
   @IsNotEmpty()
   @Length(1, 100)
-  accountId: string; // ID tài khoản quảng cáo
+  accountId: string;
 
   @IsEnum(['facebook', 'google', 'tiktok', 'zalo', 'shopee', 'lazada'])
-  accountType: 'facebook' | 'google' | 'tiktok' | 'zalo' | 'shopee' | 'lazada'; // Loại tài khoản quảng cáo
+  accountType: 'facebook' | 'google' | 'tiktok' | 'zalo' | 'shopee' | 'lazada';
+
+  @IsOptional()
+  @IsEnum(['direct', 'bm', 'mcc', 'bc'])
+  managementMode?: 'direct' | 'bm' | 'mcc' | 'bc';
 
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean; // Trạng thái hoạt động
+  isActive?: boolean;
 
   @IsOptional()
   @IsString()
   @Length(0, 500)
-  notes?: string; // Ghi chú
+  notes?: string;
 
   @IsOptional()
   @IsString()
   @Length(0, 500)
-  description?: string; // Mô tả tài khoản
+  description?: string;
 
   @IsOptional()
   @IsString()
   @Length(0, 100)
-  loginCustomerId?: string; // Google Ads manager CID (nếu dùng MCC)
+  loginCustomerId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  businessCenterId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 200)
+  businessCenterName?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  adsManagerUserId?: string;
+
+  @IsOptional()
+  @IsEnum(['system', 'account', 'manual'])
+  tokenSource?: 'system' | 'account' | 'manual';
 }

@@ -5,6 +5,8 @@ import { Model } from 'mongoose';
 import fetch from 'node-fetch';
 import { ChatMessage, ChatMessageDocument } from './schemas/chat-message.schema';
 import { Fanpage, FanpageDocument } from '../fanpage/schemas/fanpage.schema';
+import { ApiTokenService } from '../api-token/api-token.service';
+import { getMetaGraphApiVersion } from '../common/ads-api-version';
 
 type RecoveryStatus = 'sent' | 'failed' | 'skipped';
 
@@ -17,6 +19,7 @@ export class AiDeliveryRecoveryService {
   constructor(
     @InjectModel(ChatMessage.name) private readonly chatModel: Model<ChatMessageDocument>,
     @InjectModel(Fanpage.name) private readonly fanpageModel: Model<FanpageDocument>,
+    private readonly apiTokenService: ApiTokenService,
   ) {}
 
   @Cron('*/10 * * * * *')
@@ -86,7 +89,8 @@ export class AiDeliveryRecoveryService {
     }
 
     const fanpage = await this.fanpageModel.findById(fanpageId).lean();
-    if (!fanpage?.accessToken) {
+    const pageAccessToken = await this.apiTokenService.getRawAccessTokenForFanpage(String(fanpageId), 'facebook');
+    if (!pageAccessToken) {
       await this.markNote(note._id, 'failed', 'missing_fanpage_access_token');
       return;
     }
@@ -112,7 +116,7 @@ export class AiDeliveryRecoveryService {
     };
     let fbRes: any = null;
     try {
-      const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${encodeURIComponent(fanpage.accessToken)}`;
+      const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(pageAccessToken)}`;
       fbRes = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -29,6 +29,9 @@ export class AdAccountService {
     let params = new HttpParams();
     if (query?.accountType) params = params.set('accountType', query.accountType);
     if (query?.isActive !== undefined) params = params.set('isActive', query.isActive);
+    if (query?.managementMode) params = params.set('managementMode', query.managementMode);
+    if (query?.businessCenterId) params = params.set('businessCenterId', query.businessCenterId);
+    if (query?.adsManagerUserId) params = params.set('adsManagerUserId', query.adsManagerUserId);
     
     return this.http.get<AdAccount[]>(this.baseUrl, { params });
   }
@@ -41,6 +44,8 @@ export class AdAccountService {
     if (filter.keyword) params = params.set('keyword', filter.keyword);
     if (filter.accountType && filter.accountType !== 'all') params = params.set('accountType', filter.accountType);
     if (filter.status && filter.status !== 'all') params = params.set('status', filter.status);
+    if (filter.managementMode && filter.managementMode !== 'all') params = params.set('managementMode', filter.managementMode);
+    if (filter.adsManagerUserId && filter.adsManagerUserId !== 'all') params = params.set('adsManagerUserId', filter.adsManagerUserId);
     
     return this.http.get<AdAccount[]>(`${this.baseUrl}/search`, { params });
   }

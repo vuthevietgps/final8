@@ -3,6 +3,7 @@
  * Mục đích: Kiểm thử đơn vị cho logic danh sách người dùng.
  */
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
 
 import { UserList } from './user-list';
 
@@ -12,7 +13,8 @@ describe('UserList', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [UserList]
+      imports: [UserList],
+      providers: [provideZonelessChangeDetection()]
     })
     .compileComponents();
 

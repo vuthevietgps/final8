@@ -12,12 +12,16 @@
  * - Set correct content-type và filename cho download
  */
 
-import { Controller, Get, Query, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Query, Res, HttpStatus, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { ExportUserService } from './export-user.service';
 import { UserRole } from '../user/user.enum';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
 
 @Controller('export-users') // Base route: /export-users
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('users')
 export class ExportUserController {
   constructor(private readonly exportUserService: ExportUserService) {}
 

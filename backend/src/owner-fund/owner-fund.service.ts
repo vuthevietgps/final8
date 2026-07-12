@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { Owner, OwnerDocument } from './schemas/owner.schema';
-import { Withdrawal, WithdrawalDocument, WithdrawalStatus } from './schemas/withdrawal.schema';
+import { Withdrawal, WithdrawalDocument, WithdrawalStatus, WithdrawalType } from './schemas/withdrawal.schema';
 import { FundTransaction, FundTransactionDocument, FundTransactionType, FundTransactionCategory } from './schemas/fund-transaction.schema';
 import { OwnerFundAccount, OwnerFundAccountDocument } from './schemas/owner-fund-account.schema';
 import { CreateOwnerDto } from './dto/create-owner.dto';
@@ -13,6 +14,7 @@ import { CreateFundTransactionDto } from './dto/create-fund-transaction.dto';
 import { TransferToOwnerFundDto, TransferFromOwnerFundDto, OwnerWithdrawFromFundDto } from './dto/transfer.dto';
 import { FinancialControlService } from '../finance/financial-control.service';
 import { FinanceService } from '../finance/finance.service';
+import { FinanceEvents } from '../finance/events/finance-events.constants';
 
 @Injectable()
 export class OwnerFundService {
@@ -27,7 +29,29 @@ export class OwnerFundService {
     private financialControlService: FinancialControlService,
     @Inject(forwardRef(() => FinanceService))
     private financeService: FinanceService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  private normalizeFinancialIdempotencyKey(prefix: string, value: unknown): string {
+    const raw = String(value || '').trim();
+    if (!raw) throw new BadRequestException('idempotencyKey is required for financial transactions');
+    return `${prefix}:${raw}`;
+  }
+
+  private assertAuthenticatedActorId(userId: string): Types.ObjectId {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Authenticated actor id is invalid');
+    }
+    return new Types.ObjectId(userId);
+  }
+
+  private buildFlexibleOwnerIdFilter(ownerId: string): Record<string, unknown> {
+    return {
+      $expr: {
+        $eq: [{ $toString: '$ownerId' }, ownerId],
+      },
+    };
+  }
 
   // ==================== OWNER MANAGEMENT ====================
 
@@ -54,30 +78,44 @@ export class OwnerFundService {
       updateOwnerDto,
       { new: true },
     ).exec();
-    
+
     if (!owner) {
       throw new NotFoundException(`Owner with ID ${id} not found`);
     }
-    
+
     return owner;
   }
 
   async deleteOwner(id: string): Promise<void> {
-    const result = await this.ownerModel.findByIdAndDelete(id).exec();
-    if (!result) {
+    const owner = await this.ownerModel.findById(id).exec();
+    if (!owner) {
       throw new NotFoundException(`Owner with ID ${id} not found`);
     }
+
+    const ownerFilter = this.buildFlexibleOwnerIdFilter(id);
+    const [withdrawalCount, fundTransactionCount] = await Promise.all([
+      this.withdrawalModel.countDocuments(ownerFilter).exec(),
+      this.fundTransactionModel.countDocuments(ownerFilter).exec(),
+    ]);
+
+    if (withdrawalCount > 0 || fundTransactionCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete owner with existing financial history (withdrawals=${withdrawalCount}, fundTransactions=${fundTransactionCount})`,
+      );
+    }
+
+    await owner.deleteOne();
   }
 
   // ==================== WITHDRAWAL MANAGEMENT ====================
 
   async createWithdrawal(createWithdrawalDto: CreateWithdrawalDto): Promise<Withdrawal> {
     const owner = await this.findOwnerById(createWithdrawalDto.ownerId);
-    
-    // Kiểm tra số dư khả dụng
+
+    // Kiá»ƒm tra sá»‘ dÆ° kháº£ dá»¥ng
     if (createWithdrawalDto.amount > owner.availableBalance) {
       throw new BadRequestException(
-        `Insufficient balance. Available: ${owner.availableBalance.toLocaleString('vi-VN')}đ, Requested: ${createWithdrawalDto.amount.toLocaleString('vi-VN')}đ`
+        `Insufficient balance. Available: ${owner.availableBalance.toLocaleString('vi-VN')}Ä‘, Requested: ${createWithdrawalDto.amount.toLocaleString('vi-VN')}Ä‘`
       );
     }
 
@@ -97,15 +135,15 @@ export class OwnerFundService {
     endDate?: Date;
   }): Promise<Withdrawal[]> {
     const query: any = {};
-    
+
     if (filters?.ownerId) {
-      query.ownerId = filters.ownerId;
+      Object.assign(query, this.buildFlexibleOwnerIdFilter(filters.ownerId));
     }
-    
+
     if (filters?.status) {
       query.status = filters.status;
     }
-    
+
     if (filters?.startDate || filters?.endDate) {
       query.requestDate = {};
       if (filters.startDate) query.requestDate.$gte = filters.startDate;
@@ -126,69 +164,99 @@ export class OwnerFundService {
       .populate('ownerId', 'name email phone bankAccount bankName bankAccountName')
       .populate('approvedBy', 'name email')
       .exec();
-      
+
     if (!withdrawal) {
       throw new NotFoundException(`Withdrawal with ID ${id} not found`);
     }
-    
+
     return withdrawal;
   }
 
   async approveWithdrawal(id: string, approveDto: ApproveWithdrawalDto): Promise<Withdrawal> {
-    const withdrawal = await this.findWithdrawalById(id);
-    
-    if (withdrawal.status !== WithdrawalStatus.PENDING) {
-      throw new BadRequestException(`Cannot approve withdrawal with status: ${withdrawal.status}`);
+    const session = await this.withdrawalModel.db.startSession();
+    let approvedAmount = 0;
+    let ownerName = '';
+    let approvedWithdrawal: WithdrawalDocument | null = null;
+
+    try {
+      await session.withTransaction(async () => {
+        const approvedDate = new Date();
+        const withdrawal = await this.withdrawalModel.findOneAndUpdate(
+          { _id: id, status: WithdrawalStatus.PENDING },
+          {
+            $set: {
+              status: WithdrawalStatus.APPROVED,
+              approvedDate,
+              approvedBy: approveDto.approvedBy,
+              approvalNotes: approveDto.approvalNotes,
+              transactionReference: approveDto.transactionReference,
+            },
+          },
+          { new: true, session },
+        ).exec();
+
+        if (!withdrawal) {
+          await this.throwWithdrawalTransitionFailure(id, 'approve', session);
+        }
+
+        approvedAmount = withdrawal.amount;
+        approvedWithdrawal = withdrawal;
+
+        const owner = await this.ownerModel.findOneAndUpdate(
+          {
+            _id: withdrawal.ownerId,
+            availableBalance: { $gte: withdrawal.amount },
+          },
+          {
+            $inc: {
+              availableBalance: -withdrawal.amount,
+              totalWithdrawn: withdrawal.amount,
+            },
+          },
+          { new: true, session },
+        ).exec();
+
+        if (!owner) {
+          throw new BadRequestException('Insufficient balance for approval');
+        }
+
+        const withdrawalFundTransaction = new this.fundTransactionModel({
+          ownerId: withdrawal.ownerId,
+          type: FundTransactionType.OUT,
+          category: this.getWithdrawalFundTransactionCategory(withdrawal.type),
+          amount: withdrawal.amount,
+          date: approvedDate,
+          description: withdrawal.reason || 'Owner withdrawal approved',
+          notes: withdrawal.notes || approveDto.approvalNotes,
+          referenceId: String(withdrawal._id),
+          reference: approveDto.transactionReference || `WITHDRAWAL_${String(withdrawal._id)}`,
+          referenceType: 'withdrawal',
+          createdBy: approveDto.approvedBy,
+          balanceAfter: owner.availableBalance,
+          bankAccount: withdrawal.bankAccount,
+          bankName: withdrawal.bankName,
+        });
+        await withdrawalFundTransaction.save({ session });
+
+        ownerName = owner.name;
+      });
+    } catch (error) {
+      await this.rethrowWithdrawalTransitionConflict(error, id, 'approve');
+    } finally {
+      await session.endSession();
     }
 
-    // Extract ownerId properly - có thể là populated object hoặc ObjectId
-    const ownerIdField = withdrawal.ownerId as any;
-    const ownerId = ownerIdField?._id?.toString() || ownerIdField?.toString();
-    this.logger.debug(`Approving withdrawal ${id}, ownerId extracted: ${ownerId}`);
-    const owner = await this.findOwnerById(ownerId);
-    
-    // Kiểm tra lại số dư
-    if (withdrawal.amount > owner.availableBalance) {
-      throw new BadRequestException(`Insufficient balance for approval`);
+    if (!approvedWithdrawal) {
+      throw new NotFoundException(`Withdrawal with ID ${id} not found`);
     }
 
-    // Cập nhật withdrawal
-    withdrawal.status = WithdrawalStatus.APPROVED;
-    withdrawal.approvedDate = new Date();
-    withdrawal.approvedBy = approveDto.approvedBy as any;
-    withdrawal.approvalNotes = approveDto.approvalNotes;
-    withdrawal.transactionReference = approveDto.transactionReference;
-
-    // Trừ số dư owner
-    await this.ownerModel.findByIdAndUpdate(withdrawal.ownerId, {
-      $inc: {
-        availableBalance: -withdrawal.amount,
-        totalWithdrawn: withdrawal.amount,
-      },
-    });
-
-    // Cập nhật withdrawal
-    await this.withdrawalModel.findByIdAndUpdate(id, {
-      status: WithdrawalStatus.APPROVED,
-      approvedDate: new Date(),
-      approvedBy: approveDto.approvedBy,
-      approvalNotes: approveDto.approvalNotes,
-      transactionReference: approveDto.transactionReference,
-    });
-
-    this.logger.log(`✅ Approved withdrawal ${id}: ${withdrawal.amount.toLocaleString('vi-VN')}đ for owner ${owner.name}`);
-    
-    return withdrawal;
+    this.emitOwnerFundChanged(String(approvedWithdrawal.ownerId), approvedAmount);
+    this.logger.log(`Approved withdrawal ${id}: ${approvedAmount.toLocaleString('vi-VN')} for owner ${ownerName}`);
+    return approvedWithdrawal;
   }
 
   async completeWithdrawal(id: string, transactionReference?: string): Promise<Withdrawal> {
-    const withdrawal = await this.findWithdrawalById(id);
-    
-    if (withdrawal.status !== WithdrawalStatus.APPROVED) {
-      throw new BadRequestException(`Cannot complete withdrawal with status: ${withdrawal.status}`);
-    }
-
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       status: WithdrawalStatus.COMPLETED,
       completedDate: new Date(),
     };
@@ -196,58 +264,159 @@ export class OwnerFundService {
       updateData.transactionReference = transactionReference;
     }
 
-    await this.withdrawalModel.findByIdAndUpdate(id, updateData);
-    
-    this.logger.log(`✅ Completed withdrawal ${id}: ${withdrawal.amount.toLocaleString('vi-VN')}đ`);
-    
+    const withdrawal = await this.transitionWithdrawalStatus(
+      id,
+      'complete',
+      WithdrawalStatus.APPROVED,
+      updateData,
+    );
+
+    if (transactionReference) {
+      await this.syncWithdrawalLedgerReference(id, transactionReference);
+    }
+
+    this.logger.log(`Completed withdrawal ${id}: ${withdrawal.amount.toLocaleString('vi-VN')}`);
     return withdrawal;
   }
 
-  async rejectWithdrawal(id: string, approveDto: ApproveWithdrawalDto): Promise<Withdrawal> {
-    const withdrawal = await this.findWithdrawalById(id);
-    
-    if (withdrawal.status !== WithdrawalStatus.PENDING) {
-      throw new BadRequestException(`Cannot reject withdrawal with status: ${withdrawal.status}`);
-    }
+  private async syncWithdrawalLedgerReference(id: string, transactionReference: string): Promise<void> {
+    const result = await this.fundTransactionModel.updateOne(
+      {
+        referenceId: id,
+        referenceType: 'withdrawal',
+      },
+      {
+        $set: {
+          reference: transactionReference,
+        },
+      },
+    ).exec();
 
-    await this.withdrawalModel.findByIdAndUpdate(id, {
-      status: WithdrawalStatus.REJECTED,
-      approvedDate: new Date(),
-      approvedBy: approveDto.approvedBy,
-      approvalNotes: approveDto.approvalNotes,
+    if (!result.matchedCount) {
+      this.logger.warn(`Missing withdrawal ledger entry while completing withdrawal ${id}`);
+    }
+  }
+
+  private getWithdrawalFundTransactionCategory(type?: WithdrawalType): FundTransactionCategory {
+    switch (type) {
+      case WithdrawalType.EMERGENCY:
+        return FundTransactionCategory.WITHDRAWAL_EMERGENCY;
+      case WithdrawalType.ADVANCE:
+        return FundTransactionCategory.WITHDRAWAL_ADVANCE;
+      case WithdrawalType.PROFIT_SHARE:
+      default:
+        return FundTransactionCategory.WITHDRAWAL_PROFIT;
+    }
+  }
+
+  private emitOwnerFundChanged(accountId: string, amount: number): void {
+    this.eventEmitter.emit(FinanceEvents.OWNER_FUND_CHANGED, {
+      accountId,
+      type: 'withdrawal',
+      amount,
     });
-    
-    this.logger.log(`❌ Rejected withdrawal ${id}: ${withdrawal.amount.toLocaleString('vi-VN')}đ`);
-    
+  }
+
+  async rejectWithdrawal(id: string, approveDto: ApproveWithdrawalDto): Promise<Withdrawal> {
+    const withdrawal = await this.transitionWithdrawalStatus(
+      id,
+      'reject',
+      WithdrawalStatus.PENDING,
+      {
+        status: WithdrawalStatus.REJECTED,
+        approvedDate: new Date(),
+        approvedBy: approveDto.approvedBy,
+        approvalNotes: approveDto.approvalNotes,
+      },
+    );
+
+    this.logger.log(`Rejected withdrawal ${id}: ${withdrawal.amount.toLocaleString('vi-VN')}`);
     return withdrawal;
   }
 
   async cancelWithdrawal(id: string): Promise<Withdrawal> {
-    const withdrawal = await this.findWithdrawalById(id);
-    
-    if (withdrawal.status !== WithdrawalStatus.PENDING) {
-      throw new BadRequestException(`Cannot cancel withdrawal with status: ${withdrawal.status}`);
+    const withdrawal = await this.transitionWithdrawalStatus(
+      id,
+      'cancel',
+      WithdrawalStatus.PENDING,
+      { status: WithdrawalStatus.CANCELLED },
+    );
+
+    return withdrawal;
+  }
+
+  private async transitionWithdrawalStatus(
+    id: string,
+    action: 'complete' | 'reject' | 'cancel',
+    expectedStatus: WithdrawalStatus,
+    setFields: Record<string, unknown>,
+  ): Promise<WithdrawalDocument> {
+    const session = await this.withdrawalModel.db.startSession();
+    let updatedWithdrawal: WithdrawalDocument | null = null;
+
+    try {
+      await session.withTransaction(async () => {
+        updatedWithdrawal = await this.withdrawalModel.findOneAndUpdate(
+          { _id: id, status: expectedStatus },
+          { $set: setFields },
+          { new: true, session },
+        ).exec();
+
+        if (!updatedWithdrawal) {
+          await this.throwWithdrawalTransitionFailure(id, action, session);
+        }
+      });
+    } catch (error) {
+      await this.rethrowWithdrawalTransitionConflict(error, id, action);
+    } finally {
+      await session.endSession();
     }
 
-    await this.withdrawalModel.findByIdAndUpdate(id, {
-      status: WithdrawalStatus.CANCELLED,
-    });
-    
-    return withdrawal;
+    if (!updatedWithdrawal) {
+      throw new NotFoundException(`Withdrawal with ID ${id} not found`);
+    }
+
+    return updatedWithdrawal;
+  }
+
+  private async throwWithdrawalTransitionFailure(
+    id: string,
+    action: 'approve' | 'complete' | 'reject' | 'cancel',
+    session?: ClientSession,
+  ): Promise<never> {
+    const existing = session
+      ? await this.withdrawalModel.findById(id).session(session).exec()
+      : await this.withdrawalModel.findById(id).exec();
+    if (!existing) {
+      throw new NotFoundException(`Withdrawal with ID ${id} not found`);
+    }
+    throw new BadRequestException(`Cannot ${action} withdrawal with status: ${existing.status}`);
+  }
+
+  private async rethrowWithdrawalTransitionConflict(
+    error: unknown,
+    id: string,
+    action: 'approve' | 'complete' | 'reject' | 'cancel',
+  ): Promise<never> {
+    const message = String((error as any)?.message || '');
+    if (message.includes('WriteConflict') || message.includes('TransientTransactionError')) {
+      await this.throwWithdrawalTransitionFailure(id, action);
+    }
+    throw error;
   }
 
   // ==================== STATISTICS ====================
 
   async getOwnerStatistics(ownerId: string): Promise<any> {
     const owner = await this.findOwnerById(ownerId);
-    
-    const withdrawals = await this.withdrawalModel.find({ ownerId }).exec();
-    
+
+    const withdrawals = await this.withdrawalModel.find(this.buildFlexibleOwnerIdFilter(ownerId)).exec();
+
     const pending = withdrawals.filter(w => w.status === WithdrawalStatus.PENDING);
     const approved = withdrawals.filter(w => w.status === WithdrawalStatus.APPROVED);
     const completed = withdrawals.filter(w => w.status === WithdrawalStatus.COMPLETED);
     const rejected = withdrawals.filter(w => w.status === WithdrawalStatus.REJECTED);
-    
+
     return {
       owner: {
         name: owner.name,
@@ -285,10 +454,10 @@ export class OwnerFundService {
   async getSystemStatistics(): Promise<any> {
     const owners = await this.ownerModel.find().exec();
     const withdrawals = await this.withdrawalModel.find().exec();
-    
+
     const pending = withdrawals.filter(w => w.status === WithdrawalStatus.PENDING);
     const urgent = withdrawals.filter(w => w.isUrgent && w.status === WithdrawalStatus.PENDING);
-    
+
     return {
       owners: {
         total: owners.length,
@@ -310,7 +479,7 @@ export class OwnerFundService {
           count: withdrawals.filter(w => {
             const now = new Date();
             const wDate = new Date(w.requestDate);
-            return wDate.getMonth() === now.getMonth() && 
+            return wDate.getMonth() === now.getMonth() &&
                    wDate.getFullYear() === now.getFullYear();
           }).length,
         },
@@ -319,61 +488,61 @@ export class OwnerFundService {
   }
 
   /**
-   * Cập nhật số dư Owner từ lợi nhuận
-   * Được gọi từ Financial Control khi phân bổ lợi nhuận
+   * Cáº­p nháº­t sá»‘ dÆ° Owner tá»« lá»£i nhuáº­n
+   * ÄÆ°á»£c gá»i tá»« Financial Control khi phÃ¢n bá»• lá»£i nhuáº­n
    */
   async updateOwnerBalance(ownerId: string, profitAmount: number): Promise<Owner> {
     const owner = await this.findOwnerById(ownerId);
-    
+
     await this.ownerModel.findByIdAndUpdate(ownerId, {
       $inc: { availableBalance: profitAmount },
     });
-    
-    this.logger.log(`💰 Updated owner ${owner.name} balance: +${profitAmount.toLocaleString('vi-VN')}đ, new balance: ${owner.availableBalance.toLocaleString('vi-VN')}đ`);
-    
+
+    this.logger.log(`ðŸ’° Updated owner ${owner.name} balance: +${profitAmount.toLocaleString('vi-VN')}Ä‘, new balance: ${owner.availableBalance.toLocaleString('vi-VN')}Ä‘`);
+
     return owner;
   }
 
   // ==================== FUND TRANSACTIONS ====================
 
   /**
-   * Tạo giao dịch quỹ mới (tiền vào/ra)
+   * Táº¡o giao dá»‹ch quá»¹ má»›i (tiá»n vÃ o/ra)
    */
   async createFundTransaction(dto: CreateFundTransactionDto): Promise<FundTransaction> {
     const owner = await this.findOwnerById(dto.ownerId);
-    
-    // Kiểm tra nếu là tiền ra (OUT), đảm bảo đủ số dư
+
+    // Kiá»ƒm tra náº¿u lÃ  tiá»n ra (OUT), Ä‘áº£m báº£o Ä‘á»§ sá»‘ dÆ°
     if (dto.type === FundTransactionType.OUT && dto.amount > owner.availableBalance) {
       throw new BadRequestException(
-        `Số dư không đủ. Khả dụng: ${owner.availableBalance.toLocaleString('vi-VN')}đ, Yêu cầu: ${dto.amount.toLocaleString('vi-VN')}đ`
+        `Sá»‘ dÆ° khÃ´ng Ä‘á»§. Kháº£ dá»¥ng: ${owner.availableBalance.toLocaleString('vi-VN')}Ä‘, YÃªu cáº§u: ${dto.amount.toLocaleString('vi-VN')}Ä‘`
       );
     }
 
-    // Cập nhật số dư owner
+    // Cáº­p nháº­t sá»‘ dÆ° owner
     const balanceChange = dto.type === FundTransactionType.IN ? dto.amount : -dto.amount;
     const newBalance = owner.availableBalance + balanceChange;
-    
+
     await this.ownerModel.findByIdAndUpdate(dto.ownerId, {
-      $inc: { 
+      $inc: {
         availableBalance: balanceChange,
         totalWithdrawn: dto.type === FundTransactionType.OUT ? dto.amount : 0,
       },
     });
 
-    // Tạo transaction record
+    // Táº¡o transaction record
     const transaction = new this.fundTransactionModel({
       ...dto,
       date: dto.date ? new Date(dto.date) : new Date(),
       balanceAfter: newBalance,
     });
 
-    this.logger.log(`💸 Fund transaction: ${dto.type === FundTransactionType.IN ? '+' : '-'}${dto.amount.toLocaleString('vi-VN')}đ for owner ${owner.name}`);
-    
+    this.logger.log(`ðŸ’¸ Fund transaction: ${dto.type === FundTransactionType.IN ? '+' : '-'}${dto.amount.toLocaleString('vi-VN')}Ä‘ for owner ${owner.name}`);
+
     return transaction.save();
   }
 
   /**
-   * Lấy danh sách giao dịch quỹ
+   * Láº¥y danh sÃ¡ch giao dá»‹ch quá»¹
    */
   async findAllFundTransactions(filters?: {
     ownerId?: string;
@@ -383,11 +552,11 @@ export class OwnerFundService {
     endDate?: Date;
   }): Promise<FundTransaction[]> {
     const query: any = {};
-    
-    if (filters?.ownerId) query.ownerId = filters.ownerId;
+
+    if (filters?.ownerId) Object.assign(query, this.buildFlexibleOwnerIdFilter(filters.ownerId));
     if (filters?.type) query.type = filters.type;
     if (filters?.category) query.category = filters.category;
-    
+
     if (filters?.startDate || filters?.endDate) {
       query.date = {};
       if (filters.startDate) query.date.$gte = filters.startDate;
@@ -403,28 +572,28 @@ export class OwnerFundService {
   }
 
   /**
-   * Lấy tổng hợp quỹ Owner với owner withdrawable từ Financial Control
+   * Láº¥y tá»•ng há»£p quá»¹ Owner vá»›i owner withdrawable tá»« Financial Control
    */
   async getFundSummary(): Promise<any> {
     const owners = await this.ownerModel.find({ isActive: true }).exec();
-    
-    // Lấy tất cả transactions
+
+    // Láº¥y táº¥t cáº£ transactions
     const allTransactions = await this.fundTransactionModel.find().exec();
-    
-    // Tính tổng tiền vào/ra
+
+    // TÃ­nh tá»•ng tiá»n vÃ o/ra
     const totalIn = allTransactions
       .filter(t => t.type === FundTransactionType.IN)
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const totalOut = allTransactions
       .filter(t => t.type === FundTransactionType.OUT)
       .reduce((sum, t) => sum + t.amount, 0);
 
-    // Tính tổng số dư từ owners
+    // TÃ­nh tá»•ng sá»‘ dÆ° tá»« owners
     const totalBalance = owners.reduce((sum, o) => sum + o.availableBalance, 0);
     const totalWithdrawn = owners.reduce((sum, o) => sum + o.totalWithdrawn, 0);
 
-    // Lấy owner withdrawable từ Financial Control
+    // Láº¥y owner withdrawable tá»« Financial Control
     let ownerWithdrawable = 0;
     let cfoDashboard: any = null;
     try {
@@ -435,31 +604,31 @@ export class OwnerFundService {
     }
 
     // Pending withdrawals
-    const pendingWithdrawals = await this.withdrawalModel.find({ 
-      status: WithdrawalStatus.PENDING 
+    const pendingWithdrawals = await this.withdrawalModel.find({
+      status: WithdrawalStatus.PENDING
     }).exec();
     const pendingAmount = pendingWithdrawals.reduce((sum, w) => sum + w.amount, 0);
 
-    // Transactions gần đây (30 ngày)
+    // Transactions gáº§n Ä‘Ã¢y (30 ngÃ y)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentIn = allTransactions
       .filter(t => t.type === FundTransactionType.IN && new Date(t.date) >= thirtyDaysAgo)
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const recentOut = allTransactions
       .filter(t => t.type === FundTransactionType.OUT && new Date(t.date) >= thirtyDaysAgo)
       .reduce((sum, t) => sum + t.amount, 0);
 
     return {
       summary: {
-        totalIn,           // Tổng tiền đã vào quỹ
-        totalOut,          // Tổng tiền đã ra quỹ
-        totalBalance,      // Số dư hiện tại trong quỹ
-        totalWithdrawn,    // Tổng đã rút (tất cả thời gian)
-        ownerWithdrawable, // Số tiền có thể rút an toàn (từ CFO)
-        pendingAmount,     // Số tiền đang chờ duyệt rút
+        totalIn,           // Tá»•ng tiá»n Ä‘Ã£ vÃ o quá»¹
+        totalOut,          // Tá»•ng tiá»n Ä‘Ã£ ra quá»¹
+        totalBalance,      // Sá»‘ dÆ° hiá»‡n táº¡i trong quá»¹
+        totalWithdrawn,    // Tá»•ng Ä‘Ã£ rÃºt (táº¥t cáº£ thá»i gian)
+        ownerWithdrawable, // Sá»‘ tiá»n cÃ³ thá»ƒ rÃºt an toÃ n (tá»« CFO)
+        pendingAmount,     // Sá»‘ tiá»n Ä‘ang chá» duyá»‡t rÃºt
       },
       recent30Days: {
         in: recentIn,
@@ -483,13 +652,13 @@ export class OwnerFundService {
   }
 
   /**
-   * Lấy lịch sử giao dịch của một owner
+   * Láº¥y lá»‹ch sá»­ giao dá»‹ch cá»§a má»™t owner
    */
   async getOwnerTransactionHistory(ownerId: string): Promise<any> {
     const owner = await this.findOwnerById(ownerId);
-    
+
     const transactions = await this.fundTransactionModel
-      .find({ ownerId })
+      .find(this.buildFlexibleOwnerIdFilter(ownerId))
       .sort({ date: -1 })
       .limit(100)
       .exec();
@@ -497,7 +666,7 @@ export class OwnerFundService {
     const totalIn = transactions
       .filter(t => t.type === FundTransactionType.IN)
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const totalOut = transactions
       .filter(t => t.type === FundTransactionType.OUT)
       .reduce((sum, t) => sum + t.amount, 0);
@@ -518,18 +687,20 @@ export class OwnerFundService {
     };
   }
 
-  // ==================== OWNER FUND ACCOUNT (Quỹ Owner riêng biệt) ====================
+  // ==================== OWNER FUND ACCOUNT (Quá»¹ Owner riÃªng biá»‡t) ====================
 
   /**
-   * Lấy hoặc tạo tài khoản Quỹ Owner
+   * Láº¥y hoáº·c táº¡o tÃ i khoáº£n Quá»¹ Owner
    */
-  async getOrCreateFundAccount(): Promise<OwnerFundAccountDocument> {
-    let account = await this.fundAccountModel.findOne().exec();
-    
+  async getOrCreateFundAccount(session?: ClientSession): Promise<OwnerFundAccountDocument> {
+    const query = this.fundAccountModel.findOne();
+    if (session) query.session(session);
+    let account = await query.exec();
+
     if (!account) {
-      // Tạo tài khoản mặc định nếu chưa có
+      // Táº¡o tÃ i khoáº£n máº·c Ä‘á»‹nh náº¿u chÆ°a cÃ³
       account = new this.fundAccountModel({
-        name: 'Quỹ Owner',
+        name: 'Quá»¹ Owner',
         balance: 0,
         totalDeposited: 0,
         totalWithdrawn: 0,
@@ -538,20 +709,20 @@ export class OwnerFundService {
         bankName: '',
         isActive: true,
       });
-      await account.save();
-      this.logger.log('✅ Created default Owner Fund Account');
+      await account.save(session ? { session } : undefined);
+      this.logger.log('âœ… Created default Owner Fund Account');
     }
-    
+
     return account;
   }
 
   /**
-   * Lấy thông tin tài khoản Quỹ Owner
+   * Láº¥y thÃ´ng tin tÃ i khoáº£n Quá»¹ Owner
    */
   async getFundAccount(): Promise<any> {
     const account = await this.getOrCreateFundAccount();
-    
-    // Lấy owner withdrawable từ CFO
+
+    // Láº¥y owner withdrawable tá»« CFO
     let ownerWithdrawable = 0;
     try {
       const dashboard = await this.financialControlService.getDashboard();
@@ -562,186 +733,350 @@ export class OwnerFundService {
 
     return {
       account,
-      ownerWithdrawable,  // Số tiền có thể chuyển thêm từ Bank Balance
-      canTransferToFund: ownerWithdrawable,  // Alias cho rõ nghĩa hơn
+      ownerWithdrawable,  // Sá»‘ tiá»n cÃ³ thá»ƒ chuyá»ƒn thÃªm tá»« Bank Balance
+      canTransferToFund: ownerWithdrawable,  // Alias cho rÃµ nghÄ©a hÆ¡n
     };
   }
 
   /**
-   * Chuyển tiền TỪ Bank Balance VÀO Quỹ Owner
-   * - Giảm Bank Balance (tạo CashflowEntry type: OUT)
-   * - Tăng số dư Quỹ Owner
-   * - Số tiền chuyển không vượt quá Owner Withdrawable
+   * Chuyá»ƒn tiá»n Tá»ª Bank Balance VÃ€O Quá»¹ Owner
+   * - Giáº£m Bank Balance (táº¡o CashflowEntry type: OUT)
+   * - TÄƒng sá»‘ dÆ° Quá»¹ Owner
+   * - Sá»‘ tiá»n chuyá»ƒn khÃ´ng vÆ°á»£t quÃ¡ Owner Withdrawable
    */
   async transferToOwnerFund(dto: TransferToOwnerFundDto, userId: string): Promise<any> {
-    // Kiểm tra owner withdrawable
-    const dashboard = await this.financialControlService.getDashboard();
-    const ownerWithdrawable = dashboard.ownerWithdrawable || 0;
-
-    if (dto.amount > ownerWithdrawable) {
-      throw new BadRequestException(
-        `Số tiền chuyển (${dto.amount.toLocaleString('vi-VN')}đ) vượt quá số tiền Owner có thể rút (${ownerWithdrawable.toLocaleString('vi-VN')}đ)`
-      );
-    }
-
-    // Lấy tài khoản quỹ Owner
-    const account = await this.getOrCreateFundAccount();
-
-    // 1. Tạo CashflowEntry và giảm Bank Balance
-    const referenceId = `OWNER_FUND_${Date.now()}`;
-    const cashflowEntry = await this.financeService.createCashflowWithBankUpdate({
-      direction: 'out',
-      sourceType: 'other',
-      amount: dto.amount,
-      description: dto.description || 'Chuyển tiền sang Quỹ Owner',
-      date: new Date().toISOString(),
-      category: 'owner_fund_transfer',
-      referenceId,
-    });
-
-    // 2. Cập nhật số dư tài khoản Quỹ Owner
-    await this.fundAccountModel.findByIdAndUpdate(account._id, {
-      $inc: {
-        balance: dto.amount,
-        totalDeposited: dto.amount,
-      },
-    });
-
-    // 3. Ghi lại giao dịch
-    const transaction = new this.fundTransactionModel({
-      type: FundTransactionType.IN,
-      category: FundTransactionCategory.BANK_TRANSFER_IN,
-      amount: dto.amount,
-      description: dto.description || 'Chuyển tiền từ Bank Balance vào Quỹ Owner',
-      date: new Date(),
-      reference: referenceId,
-      balanceAfter: account.balance + dto.amount,
-      createdBy: userId,
-    });
-    await transaction.save();
-
-    this.logger.log(`💰 Transferred ${dto.amount.toLocaleString('vi-VN')}đ from Bank Balance to Owner Fund`);
-
-    return {
-      success: true,
-      message: `Đã chuyển ${dto.amount.toLocaleString('vi-VN')}đ vào Quỹ Owner`,
-      transaction,
-      cashflowEntry,
-      newFundBalance: account.balance + dto.amount,
-    };
+    return this.transferToOwnerFundTransactional(dto, userId);
   }
 
   /**
-   * Chuyển tiền TỪ Quỹ Owner VỀ Bank Balance (trả lại cho công ty)
-   * - Tăng Bank Balance (tạo CashflowEntry type: IN)
-   * - Giảm số dư Quỹ Owner
+   * Chuyá»ƒn tiá»n Tá»ª Quá»¹ Owner Vá»€ Bank Balance (tráº£ láº¡i cho cÃ´ng ty)
+   * - TÄƒng Bank Balance (táº¡o CashflowEntry type: IN)
+   * - Giáº£m sá»‘ dÆ° Quá»¹ Owner
    */
+  private async transferToOwnerFundTransactional(
+    dto: TransferToOwnerFundDto,
+    userId: string,
+  ): Promise<any> {
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+      throw new BadRequestException('Transfer amount must be a positive finite number');
+    }
+    const actorId = this.assertAuthenticatedActorId(userId);
+    const idempotencyKey = this.normalizeFinancialIdempotencyKey('owner-transfer-in', dto.idempotencyKey);
+    if (await this.financeService.hasCashflowIdempotencyKey(idempotencyKey)) {
+      throw new ConflictException('Owner transfer with this idempotencyKey was already processed');
+    }
+
+    const session = await this.fundAccountModel.db.startSession();
+    let cashflowEntry: any;
+    let transaction: FundTransactionDocument | undefined;
+    let newFundBalance = 0;
+    let accountId = '';
+    const referenceId = `OWNER_FUND_${new Date().getTime()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    try {
+      await session.withTransaction(async () => {
+        const account = await this.getOrCreateFundAccount(session);
+        accountId = String(account._id);
+
+        // Database-backed mutex: a concurrent transfer conflicts on this write.
+        // withTransaction retries the entire callback, including the fresh FC check.
+        const lockedAccount = await this.fundAccountModel.findOneAndUpdate(
+          { _id: account._id },
+          { $inc: { transferVersion: 1 } },
+          { new: true, session },
+        ).exec();
+        if (!lockedAccount) {
+          throw new BadRequestException('Owner Fund account is not available');
+        }
+
+        await this.financeService.acquireCashflowSerializationLock(session);
+
+        await this.financeService.invalidateMasterBankBalanceCache('owner-fund-transfer:preflight');
+        this.financialControlService.invalidateCache('owner-fund-transfer:preflight');
+
+        let dashboard;
+        try {
+          dashboard = await this.financialControlService.getDashboard(true);
+        } catch (error) {
+          this.logger.warn('Failed to validate Owner transfer against Financial Control');
+          throw new BadRequestException('Financial Control is unavailable; Owner transfer was not executed');
+        }
+
+        const ownerWithdrawable = Number(dashboard.ownerWithdrawable);
+        if (
+          dashboard.dataQuality?.isDecisionLocked ||
+          !Number.isFinite(ownerWithdrawable) ||
+          ownerWithdrawable < 0
+        ) {
+          throw new BadRequestException('Financial Control did not return a safe Owner withdrawal limit');
+        }
+        if (dto.amount > ownerWithdrawable) {
+          throw new BadRequestException(
+            `Transfer amount (${dto.amount.toLocaleString('vi-VN')}) exceeds the safe Owner withdrawal limit (${ownerWithdrawable.toLocaleString('vi-VN')})`,
+          );
+        }
+
+        // CashflowEntry is the canonical bank ledger for Owner transfers.
+        // FundingSource has no bank_account type, so do not mutate an arbitrary
+        // capital source as a second pseudo-bank ledger.
+        cashflowEntry = await this.financeService.createCashflow(
+          {
+            direction: 'out',
+            idempotencyKey,
+            sourceType: 'other',
+            amount: dto.amount,
+            description: dto.description || 'Transfer to Owner Fund',
+            date: new Date().toISOString(),
+            category: 'owner_fund_transfer',
+            referenceId,
+          },
+          { session, emitEvent: false },
+        );
+
+        const updatedAccount = await this.fundAccountModel.findByIdAndUpdate(
+          account._id,
+          {
+            $inc: {
+              balance: dto.amount,
+              totalDeposited: dto.amount,
+            },
+          },
+          { new: true, session },
+        ).exec();
+        if (!updatedAccount) {
+          throw new BadRequestException('Owner Fund account disappeared during transfer');
+        }
+        newFundBalance = updatedAccount.balance;
+
+        transaction = new this.fundTransactionModel({
+          type: FundTransactionType.IN,
+          idempotencyKey,
+          category: FundTransactionCategory.BANK_TRANSFER_IN,
+          amount: dto.amount,
+          description: dto.description || 'Transfer from Bank Balance to Owner Fund',
+          date: new Date(),
+          reference: referenceId,
+          balanceAfter: newFundBalance,
+          createdBy: actorId,
+        });
+        await transaction.save({ session });
+      });
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        throw new ConflictException('Owner transfer with this idempotencyKey was already processed');
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    if (!transaction || !cashflowEntry) {
+      throw new BadRequestException('Owner transfer did not commit');
+    }
+
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'owner_fund.transfer_in',
+      entityId: String(transaction._id),
+    });
+    this.eventEmitter.emit(FinanceEvents.OWNER_FUND_CHANGED, {
+      accountId,
+      type: 'bank_transfer_in',
+      amount: dto.amount,
+    });
+
+    this.logger.log(`Transferred ${dto.amount.toLocaleString('vi-VN')} from Bank Balance to Owner Fund`);
+    return {
+      success: true,
+      message: `Transferred ${dto.amount.toLocaleString('vi-VN')} to Owner Fund`,
+      transaction,
+      cashflowEntry,
+      newFundBalance,
+    };
+  }
+
   async transferFromOwnerFund(dto: TransferFromOwnerFundDto, userId: string): Promise<any> {
-    const account = await this.getOrCreateFundAccount();
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+      throw new BadRequestException('Transfer amount must be a positive finite number');
+    }
+    const actorId = this.assertAuthenticatedActorId(userId);
+    const idempotencyKey = this.normalizeFinancialIdempotencyKey('owner-transfer-out', dto.idempotencyKey);
+    if (await this.financeService.hasCashflowIdempotencyKey(idempotencyKey)) {
+      throw new ConflictException('Owner transfer with this idempotencyKey was already processed');
+    }
+
+    const session = await this.fundAccountModel.db.startSession();
+    let cashflowEntry: any;
+    let transaction: FundTransactionDocument | undefined;
+    let newFundBalance = 0;
+    let accountId = '';
+    const referenceId = `OWNER_RETURN_${idempotencyKey}`;
+
+    try {
+      await session.withTransaction(async () => {
+        await this.financeService.acquireCashflowSerializationLock(session);
+        const account = await this.getOrCreateFundAccount(session);
+        accountId = String(account._id);
 
     if (dto.amount > account.balance) {
       throw new BadRequestException(
-        `Số dư Quỹ Owner không đủ. Hiện có: ${account.balance.toLocaleString('vi-VN')}đ, Yêu cầu: ${dto.amount.toLocaleString('vi-VN')}đ`
+        `Sá»‘ dÆ° Quá»¹ Owner khÃ´ng Ä‘á»§. Hiá»‡n cÃ³: ${account.balance.toLocaleString('vi-VN')}Ä‘, YÃªu cáº§u: ${dto.amount.toLocaleString('vi-VN')}Ä‘`
       );
     }
 
-    // 1. Tạo CashflowEntry và tăng Bank Balance
-    const referenceId = `OWNER_RETURN_${Date.now()}`;
-    const cashflowEntry = await this.financeService.createCashflowWithBankUpdate({
+    // 1. Táº¡o CashflowEntry vÃ  tÄƒng Bank Balance
+    cashflowEntry = await this.financeService.createCashflow({
+      idempotencyKey,
       direction: 'in',
       sourceType: 'other',
       amount: dto.amount,
-      description: dto.description || 'Owner trả tiền về Quỹ Công Ty',
+      description: dto.description || 'Owner tráº£ tiá»n vá» Quá»¹ CÃ´ng Ty',
       date: new Date().toISOString(),
       category: 'owner_fund_return',
       referenceId,
-    });
+    }, { session, emitEvent: false });
 
-    // 2. Cập nhật số dư tài khoản Quỹ Owner
-    await this.fundAccountModel.findByIdAndUpdate(account._id, {
-      $inc: {
-        balance: -dto.amount,
-        totalReturnedToCompany: dto.amount,
-      },
-    });
+    // 2. Cáº­p nháº­t sá»‘ dÆ° tÃ i khoáº£n Quá»¹ Owner
+    const updatedAccount = await this.fundAccountModel.findOneAndUpdate(
+      { _id: account._id, balance: { $gte: dto.amount } },
+      { $inc: { balance: -dto.amount, totalReturnedToCompany: dto.amount } },
+      { new: true, session },
+    ).exec();
+    if (!updatedAccount) throw new BadRequestException('Owner Fund balance changed; transfer was not executed');
+    newFundBalance = updatedAccount.balance;
 
-    // 3. Ghi lại giao dịch
-    const transaction = new this.fundTransactionModel({
+    // 3. Ghi láº¡i giao dá»‹ch
+    transaction = new this.fundTransactionModel({
+      idempotencyKey,
       type: FundTransactionType.OUT,
       category: FundTransactionCategory.BANK_TRANSFER_OUT,
       amount: dto.amount,
-      description: dto.description || 'Chuyển tiền từ Quỹ Owner về Bank Balance',
+      description: dto.description || 'Chuyá»ƒn tiá»n tá»« Quá»¹ Owner vá» Bank Balance',
       date: new Date(),
       reference: referenceId,
-      balanceAfter: account.balance - dto.amount,
-      createdBy: userId,
+      balanceAfter: newFundBalance,
+      createdBy: actorId,
     });
-    await transaction.save();
+    await transaction.save({ session });
+      });
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        throw new ConflictException('Owner transfer with this idempotencyKey was already processed');
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
 
-    this.logger.log(`💸 Returned ${dto.amount.toLocaleString('vi-VN')}đ from Owner Fund to Bank Balance`);
+    if (!transaction || !cashflowEntry) throw new BadRequestException('Owner transfer did not commit');
+    this.eventEmitter.emit(FinanceEvents.FINANCE_STATE_CHANGED, {
+      source: 'owner_fund.transfer_out',
+      entityId: String(transaction._id),
+    });
+    this.eventEmitter.emit(FinanceEvents.OWNER_FUND_CHANGED, {
+      accountId,
+      type: 'bank_transfer_out',
+      amount: dto.amount,
+    });
+
+    this.logger.log(`ðŸ’¸ Returned ${dto.amount.toLocaleString('vi-VN')}Ä‘ from Owner Fund to Bank Balance`);
 
     return {
       success: true,
-      message: `Đã chuyển ${dto.amount.toLocaleString('vi-VN')}đ về Quỹ Công Ty`,
+      message: `ÄÃ£ chuyá»ƒn ${dto.amount.toLocaleString('vi-VN')}Ä‘ vá» Quá»¹ CÃ´ng Ty`,
       transaction,
       cashflowEntry,
-      newFundBalance: account.balance - dto.amount,
+      newFundBalance,
     };
   }
 
   /**
-   * Owner rút tiền từ Quỹ Owner (ra cá nhân)
-   * - Giảm số dư Quỹ Owner
-   * - Không ảnh hưởng Bank Balance (vì tiền đã nằm trong Quỹ Owner rồi)
+   * Owner rÃºt tiá»n tá»« Quá»¹ Owner (ra cÃ¡ nhÃ¢n)
+   * - Giáº£m sá»‘ dÆ° Quá»¹ Owner
+   * - KhÃ´ng áº£nh hÆ°á»Ÿng Bank Balance (vÃ¬ tiá»n Ä‘Ã£ náº±m trong Quá»¹ Owner rá»“i)
    */
   async ownerWithdrawFromFund(dto: OwnerWithdrawFromFundDto, userId: string): Promise<any> {
-    const account = await this.getOrCreateFundAccount();
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+      throw new BadRequestException('Withdrawal amount must be a positive finite number');
+    }
+    const actorId = this.assertAuthenticatedActorId(userId);
+    const idempotencyKey = this.normalizeFinancialIdempotencyKey('owner-withdraw', dto.idempotencyKey);
+    if (await this.fundTransactionModel.exists({ idempotencyKey })) {
+      throw new ConflictException('Owner withdrawal with this idempotencyKey was already processed');
+    }
+
+    const session = await this.fundAccountModel.db.startSession();
+    let transaction: FundTransactionDocument | undefined;
+    let newFundBalance = 0;
+    let accountId = '';
+
+    try {
+      await session.withTransaction(async () => {
+        const account = await this.getOrCreateFundAccount(session);
+        accountId = String(account._id);
 
     if (dto.amount > account.balance) {
       throw new BadRequestException(
-        `Số dư Quỹ Owner không đủ. Hiện có: ${account.balance.toLocaleString('vi-VN')}đ, Yêu cầu: ${dto.amount.toLocaleString('vi-VN')}đ`
+        `Sá»‘ dÆ° Quá»¹ Owner khÃ´ng Ä‘á»§. Hiá»‡n cÃ³: ${account.balance.toLocaleString('vi-VN')}Ä‘, YÃªu cáº§u: ${dto.amount.toLocaleString('vi-VN')}Ä‘`
       );
     }
 
-    // Cập nhật số dư
-    await this.fundAccountModel.findByIdAndUpdate(account._id, {
-      $inc: {
-        balance: -dto.amount,
-        totalWithdrawn: dto.amount,
-      },
-    });
+    // Cáº­p nháº­t sá»‘ dÆ°
+    const updatedAccount = await this.fundAccountModel.findOneAndUpdate(
+      { _id: account._id, balance: { $gte: dto.amount } },
+      { $inc: { balance: -dto.amount, totalWithdrawn: dto.amount } },
+      { new: true, session },
+    ).exec();
+    if (!updatedAccount) throw new BadRequestException('Owner Fund balance changed; withdrawal was not executed');
+    newFundBalance = updatedAccount.balance;
 
-    // Ghi lại giao dịch
-    const transaction = new this.fundTransactionModel({
+    // Ghi láº¡i giao dá»‹ch
+    transaction = new this.fundTransactionModel({
+      idempotencyKey,
       type: FundTransactionType.OUT,
       category: FundTransactionCategory.PERSONAL_WITHDRAWAL,
       amount: dto.amount,
-      description: dto.description || 'Owner rút tiền về cá nhân',
+      description: dto.description || 'Owner rÃºt tiá»n vá» cÃ¡ nhÃ¢n',
       date: new Date(),
-      reference: `OWNER_WITHDRAW_${Date.now()}`,
-      balanceAfter: account.balance - dto.amount,
-      createdBy: userId,
+      reference: `OWNER_WITHDRAW_${idempotencyKey}`,
+      balanceAfter: newFundBalance,
+      createdBy: actorId,
       bankAccount: dto.bankAccount,
       bankName: dto.bankName,
     });
-    await transaction.save();
+    await transaction.save({ session });
+      });
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        throw new ConflictException('Owner withdrawal with this idempotencyKey was already processed');
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
 
-    this.logger.log(`💳 Owner withdrew ${dto.amount.toLocaleString('vi-VN')}đ from Owner Fund`);
+    if (!transaction) throw new BadRequestException('Owner withdrawal did not commit');
+    this.eventEmitter.emit(FinanceEvents.OWNER_FUND_CHANGED, {
+      accountId,
+      type: 'withdrawal',
+      amount: dto.amount,
+    });
+
+    this.logger.log(`ðŸ’³ Owner withdrew ${dto.amount.toLocaleString('vi-VN')}Ä‘ from Owner Fund`);
 
     return {
       success: true,
-      message: `Đã rút ${dto.amount.toLocaleString('vi-VN')}đ từ Quỹ Owner`,
+      message: `ÄÃ£ rÃºt ${dto.amount.toLocaleString('vi-VN')}Ä‘ tá»« Quá»¹ Owner`,
       transaction,
-      newFundBalance: account.balance - dto.amount,
+      newFundBalance,
     };
   }
 
   /**
-   * Cập nhật thông tin tài khoản Quỹ Owner (bank info)
+   * Cáº­p nháº­t thÃ´ng tin tÃ i khoáº£n Quá»¹ Owner (bank info)
    */
   async updateFundAccount(updateDto: { bankAccount?: string; bankName?: string; name?: string }): Promise<OwnerFundAccount> {
     const account = await this.getOrCreateFundAccount();
-    
+
     await this.fundAccountModel.findByIdAndUpdate(account._id, {
       $set: updateDto,
     });
@@ -752,21 +1087,21 @@ export class OwnerFundService {
   // ==================== LOAN PAYMENT SUPPORT ====================
 
   /**
-   * Lấy danh sách tất cả tài khoản Quỹ Owner
+   * Láº¥y danh sÃ¡ch táº¥t cáº£ tÃ i khoáº£n Quá»¹ Owner
    */
   async listFundAccounts(): Promise<OwnerFundAccountDocument[]> {
     return this.fundAccountModel.find({ isActive: true }).exec();
   }
 
   /**
-   * Lấy tài khoản Quỹ Owner theo ID
+   * Láº¥y tÃ i khoáº£n Quá»¹ Owner theo ID
    */
   async getFundAccountById(accountId: string): Promise<OwnerFundAccountDocument | null> {
     return this.fundAccountModel.findById(accountId).exec();
   }
 
   /**
-   * Lấy tổng hợp tất cả accounts
+   * Láº¥y tá»•ng há»£p táº¥t cáº£ accounts
    */
   async getAccountsSummary(): Promise<{ totalBalance: number; accounts: any[] }> {
     const accounts = await this.listFundAccounts();
@@ -782,14 +1117,17 @@ export class OwnerFundService {
   }
 
   /**
-   * Trừ tiền từ tài khoản Quỹ Owner (cho loan payment)
+   * Trá»« tiá»n tá»« tÃ i khoáº£n Quá»¹ Owner (cho loan payment)
    */
   async deductFromAccount(
     accountId: string,
     amount: number,
     metadata: { category: string; description: string; referenceId: string },
-  ): Promise<void> {
-    const account = await this.fundAccountModel.findById(accountId);
+    session?: ClientSession,
+  ): Promise<number> {
+    const accountQuery = this.fundAccountModel.findById(accountId);
+    if (session) accountQuery.session(session);
+    const account = await accountQuery.exec();
     if (!account) {
       throw new NotFoundException(`Owner Fund account ${accountId} not found`);
     }
@@ -797,18 +1135,21 @@ export class OwnerFundService {
     const currentBalance = account.balance || 0;
     if (amount > currentBalance) {
       throw new BadRequestException(
-        `Số dư Quỹ Owner không đủ. Hiện có: ${currentBalance.toLocaleString('vi-VN')}đ, Yêu cầu: ${amount.toLocaleString('vi-VN')}đ`
+        `Sá»‘ dÆ° Quá»¹ Owner khÃ´ng Ä‘á»§. Hiá»‡n cÃ³: ${currentBalance.toLocaleString('vi-VN')}Ä‘, YÃªu cáº§u: ${amount.toLocaleString('vi-VN')}Ä‘`
       );
     }
 
-    // Cập nhật số dư
-    await this.fundAccountModel.findByIdAndUpdate(accountId, {
-      $inc: {
-        balance: -amount,
-      },
-    });
+    // Cáº­p nháº­t sá»‘ dÆ°
+    const updatedAccount = await this.fundAccountModel.findOneAndUpdate(
+      { _id: accountId, balance: { $gte: amount } },
+      { $inc: { balance: -amount } },
+      { new: true, session },
+    ).exec();
+    if (!updatedAccount) {
+      throw new BadRequestException('Owner Fund balance changed; payment was not executed');
+    }
 
-    // Ghi lại giao dịch
+    // Ghi láº¡i giao dá»‹ch
     const transaction = new this.fundTransactionModel({
       type: FundTransactionType.OUT,
       category: FundTransactionCategory.OTHER_OUT,
@@ -817,10 +1158,11 @@ export class OwnerFundService {
       date: new Date(),
       reference: metadata.referenceId,
       referenceType: metadata.category,
-      balanceAfter: currentBalance - amount,
+      balanceAfter: updatedAccount.balance,
     });
-    await transaction.save();
+    await transaction.save(session ? { session } : undefined);
 
-    this.logger.log(`💸 Deducted ${amount.toLocaleString('vi-VN')}đ from Owner Fund for ${metadata.category}`);
+    this.logger.log(`ðŸ’¸ Deducted ${amount.toLocaleString('vi-VN')}Ä‘ from Owner Fund for ${metadata.category}`);
+    return updatedAccount.balance;
   }
 }

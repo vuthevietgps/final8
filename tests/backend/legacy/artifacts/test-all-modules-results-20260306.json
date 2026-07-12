@@ -1,0 +1,92 @@
+﻿{
+    "modules":  [
+                    {
+                        "Duration":  "00m 02s",
+                        "Status":  "PASS",
+                        "Pass":  18,
+                        "Name":  "Auth \u0026 RBAC",
+                        "Fail":  0
+                    },
+                    {
+                        "Duration":  "00m 01s",
+                        "Status":  "PASS",
+                        "Pass":  8,
+                        "Name":  "Customer Management",
+                        "Fail":  0
+                    },
+                    {
+                        "Duration":  "00m 01s",
+                        "Status":  "FAIL",
+                        "Pass":  20,
+                        "Name":  "Ad Account \u0026 Ad Group",
+                        "Fail":  3
+                    },
+                    {
+                        "Duration":  "00m 01s",
+                        "Status":  "FAIL",
+                        "Pass":  16,
+                        "Name":  "Labor Cost \u0026 Other Cost",
+                        "Fail":  6
+                    },
+                    {
+                        "Duration":  "00m 02s",
+                        "Status":  "FAIL",
+                        "Pass":  41,
+                        "Name":  "Owner Fund \u0026 Loan",
+                        "Fail":  2
+                    },
+                    {
+                        "Duration":  "00m 01s",
+                        "Status":  "FAIL",
+                        "Pass":  21,
+                        "Name":  "Ads Alerts \u0026 KPI",
+                        "Fail":  6
+                    },
+                    {
+                        "Duration":  "00m 01s",
+                        "Status":  "FAIL",
+                        "Pass":  34,
+                        "Name":  "Reports, Products \u0026 Config",
+                        "Fail":  4
+                    },
+                    {
+                        "Duration":  "00m 02s",
+                        "Status":  "PASS",
+                        "Pass":  0,
+                        "Name":  "Supply Chain",
+                        "Fail":  0
+                    },
+                    {
+                        "Duration":  "00m 02s",
+                        "Status":  "FAIL",
+                        "Pass":  4,
+                        "Name":  "Quotes",
+                        "Fail":  14
+                    },
+                    {
+                        "Duration":  "00m 03s",
+                        "Status":  "PASS",
+                        "Pass":  33,
+                        "Name":  "Media, Chat \u0026 Config",
+                        "Fail":  0
+                    },
+                    {
+                        "Duration":  "00m 02s",
+                        "Status":  "PASS",
+                        "Pass":  40,
+                        "Name":  "Financial Deep",
+                        "Fail":  0
+                    },
+                    {
+                        "Duration":  "00m 01s",
+                        "Status":  "FAIL",
+                        "Pass":  6,
+                        "Name":  "Net Profit \u0026 Ad Group",
+                        "Fail":  2
+                    }
+                ],
+    "totalPass":  241,
+    "timestamp":  "20260306-231305",
+    "totalModules":  12,
+    "totalFail":  37
+}

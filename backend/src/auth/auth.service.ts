@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcrypt';
 import { User, UserDocument } from '../user/user.schema';
 import { SessionLogService } from '../session-log/session-log.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -74,7 +74,8 @@ export class AuthService {
 
     // Tùy chọn: Bật kiểm tra IP qua biến môi trường AUTH_ENABLE_IP_RESTRICTION
     // Mặc định: TẮT (không hạn chế IP cho bất kỳ vai trò nào)
-    const ipRestrictionEnabled = String(process.env.AUTH_ENABLE_IP_RESTRICTION || '').toLowerCase() === 'true';
+    const ipRestrictionEnabled =
+      String(process.env.AUTH_ENABLE_IP_RESTRICTION || '').trim().toLowerCase() === 'true';
     // Giữ logic cũ nhưng chỉ chạy khi được bật rõ ràng qua ENV
     if (ipRestrictionEnabled) {
       // Giới hạn IP đăng nhập cho Manager/Employee
@@ -116,7 +117,8 @@ export class AuthService {
       email: user.email, 
       sub: user._id, 
       role: user.role,
-      name: user.fullName 
+      name: user.fullName,
+      tokenVersion: Number(user.tokenVersion || 0),
     };
     
   const tokenPayload = {
@@ -160,6 +162,7 @@ export class AuthService {
       ...registerDto,
       password: hashedPassword,
       isActive: true,
+      tokenVersion: 0,
     });
 
     const savedUser = await newUser.save();
@@ -181,15 +184,21 @@ export class AuthService {
         'ad-accounts', 'ad-groups', 'advertising-costs', 'media',
         'labor-costs', 'other-costs', 'salary-config',
         // Newly explicit permissions
-        'customers', 'purchase-costs',
+        'customers', 'purchase-costs', 'fanpages', 'openai-configs', 'api-tokens',
+        'supplier-quotes.approve', 'orders.confirm-business',
         'quotes', 'reports', 'export', 'import', 'settings',
-        'ads-budget', 'employee-ads-kpi', 'owner-fund', 'finance',
-        'order-update', 'chat-messages'
+        'ads-budget', 'employee-ads-kpi', 'owner-fund', 'finance', 'finance.budget-buckets.manage',
+        'finance.policy.manage', 'finance.loan.manage', 'finance.cashflow.manage',
+        'order-update', 'chat-messages', 'ai-assistant',
+        'google-ads.read', 'google-ads.plan', 'google-ads.approve', 'google-ads.execute',
+        'google-ads.credentials.read', 'google-ads.credentials.write', 'google-ads.emergency-pause'
       ],
       'manager': [
+        'orders-test2', 'pending-orders', 'orders.confirm-business',
         'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Ads + media
-        'fanpages', 'openai-configs', 'api-tokens', 'chat-messages',
-        'ads-budget', 'employee-ads-kpi'
+        'fanpages', 'openai-configs', 'chat-messages', 'ai-assistant',
+        'ads-budget', 'employee-ads-kpi', 'reports',
+        'google-ads.read', 'google-ads.plan'
       ],
       'employee': [
         'orders-test2', 'order-update', 'chat-messages'
@@ -220,6 +229,7 @@ export class AuthService {
    */
   async logout(userId: string) {
     // 1. Cập nhật logoutAt trong session log
+    await this.userModel.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } }).exec();
     const session = await this.sessionLogService.logLogout(userId);
     
     if (!session) {

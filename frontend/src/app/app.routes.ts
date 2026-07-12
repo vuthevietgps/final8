@@ -31,6 +31,7 @@ export const routes: Routes = [
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       { path: 'dashboard', loadComponent: () => import('./features/loan/loan-dashboard.component').then(m => m.LoanDashboardComponent) },
+      { path: 'upcoming', loadComponent: () => import('./features/loan/loan-upcoming.component').then(m => m.LoanUpcomingComponent) },
       { path: 'new', loadComponent: () => import('./features/loan/loan-form.component').then(m => m.LoanFormComponent) },
       { path: ':id/pay', loadComponent: () => import('./features/loan/loan-payment.component').then(m => m.LoanPaymentComponent) },
       { path: ':id', loadComponent: () => import('./features/loan/loan-detail.component').then(m => m.LoanDetailComponent) },
@@ -44,6 +45,12 @@ export const routes: Routes = [
       { path: 'financial-control', loadComponent: () => import('./features/finance/financial-control/financial-control.component').then(m => m.FinancialControlComponent) },
       { path: 'available-funds', loadComponent: () => import('./features/finance/available-funds.component').then(m => m.AvailableFundsComponent) },
       { path: 'budget-allocation', loadComponent: () => import('./features/finance/budget-allocation.component').then(m => m.BudgetAllocationComponent) },
+      {
+        path: 'budget-buckets',
+        loadComponent: () => import('./features/finance/budget-buckets/budget-buckets.component').then(m => m.BudgetBucketsComponent),
+        canActivate: [AuthGuard],
+        data: { permissions: ['finance.budget-buckets.manage'] },
+      },
       { path: 'capital-allocation', loadComponent: () => import('./features/finance/capital-allocation.component').then(m => m.CapitalAllocationComponent) },
       { path: 'capital-flow', loadComponent: () => import('./features/finance/capital-flow.component').then(m => m.CapitalFlowComponent) },
       { path: 'ad-group-daily-report', loadComponent: () => import('./features/finance/ad-group-daily-report.component').then(m => m.AdGroupDailyReportComponent) },
@@ -109,16 +116,52 @@ export const routes: Routes = [
     data: { permissions: ['openai-configs'] }
   },
   {
+    path: 'ai-assistant',
+    loadComponent: () => import('./features/ai-assistant/ai-assistant.component').then(m => m.AiAssistantComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['ai-assistant'], featureModule: 'ai-operator' }
+  },
+  {
+    path: 'ai-marketing',
+    loadComponent: () => import('./features/ai-marketing/ai-marketing.component').then(m => m.AiMarketingComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['google-ads.read'], featureModule: 'ai-marketing' }
+  },
+  {
+    path: 'ai/ads-approval-evidence-reviewer',
+    loadComponent: () => import('./features/ads-approval-evidence-reviewer/ads-approval-evidence-reviewer.component').then(m => m.AdsApprovalEvidenceReviewerComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['ai-data-pack.marketer.read'], featureModule: 'ai-marketing' }
+  },
+  {
+    path: 'ai/ads-foundation-reviewer-docs',
+    loadComponent: () => import('./features/ads-foundation-reviewer-docs/ads-foundation-reviewer-docs.component').then(m => m.AdsFoundationReviewerDocsComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['ai-data-pack.marketer.read'], featureModule: 'ai-marketing' }
+  },
+  {
+    path: 'ai/ads-platform-source-sync-status-reviewer',
+    loadComponent: () => import('./features/ads-platform-source-sync-status-reviewer/ads-platform-source-sync-status-reviewer.component').then(m => m.AdsPlatformSourceSyncStatusReviewerComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['ai-data-pack.marketer.read'], featureModule: 'ai-marketing' }
+  },
+  {
     path: 'api-tokens',
     loadComponent: () => import('./features/api-token/api-token.component').then(m => m.ApiTokenComponent),
     canActivate: [AuthGuard],
-    data: { permissions: ['api-tokens'] }
+    data: { permissions: ['google-ads.credentials.read'] }
   },
   {
     path: 'ads-settings',
     loadComponent: () => import('./features/ads-settings/ads-settings.component').then(m => m.AdsSettingsComponent),
     canActivate: [AuthGuard],
-    data: { permissions: ['api-tokens'] }
+    data: { permissions: ['google-ads.credentials.read'] }
+  },
+  {
+    path: 'ads-business-context',
+    loadComponent: () => import('./features/ads-business-context/ads-business-context.component').then(m => m.AdsBusinessContextComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['google-ads.read'], featureModule: 'ai-marketing' }
   },
   {
     path: 'conversations',
@@ -154,6 +197,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/employee-ads-kpi/employee-ads-kpi.component').then(m => m.EmployeeAdsKpiComponent),
     canActivate: [AuthGuard],
     data: { permissions: ['employee-ads-kpi'] }
+  },
+  {
+    path: 'manager-handbook',
+    loadComponent: () => import('./features/manager-handbook/manager-handbook.component').then(m => m.ManagerHandbookComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['manager-handbook'], featureModule: 'employee-ads-kpi' }
   },
   
   // Dashboard (default after login)
@@ -228,6 +277,21 @@ export const routes: Routes = [
     loadComponent: () => import('./features/product/product.component').then(m => m.ProductComponent),
     canActivate: [AuthGuard],
     data: { permissions: ['products'] }
+  },
+  {
+    path: 'inventory',
+    canActivate: [AuthGuard],
+    data: { permissions: ['purchase-costs'], featureModule: 'inventory' },
+    children: [
+      {
+        path: '',
+        loadComponent: () => import('./features/inventory/inventory-list.component').then(m => m.InventoryListComponent)
+      },
+      {
+        path: ':productId',
+        loadComponent: () => import('./features/inventory/inventory-detail.component').then(m => m.InventoryDetailComponent)
+      }
+    ]
   },
   {
     path: 'media',

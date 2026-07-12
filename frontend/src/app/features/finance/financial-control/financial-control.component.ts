@@ -1,14 +1,16 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterModule, Router } from '@angular/router';
 import { FinancialControlService } from './services/financial-control.service';
-import { FinancialControlData, CFODashboard, Forecast7DResult, CFOFullMetrics, ModuleHealthResult, ActionSuggestionsResult } from './models/financial-control.model';
+import { FinancialControlData, CFODashboard, Forecast7DResult, CFOFullMetrics, ModuleHealthResult, ActionSuggestionsResult, FinancialControlConfig, TaxObligationSnapshot, TaxObligationSource } from './models/financial-control.model';
 import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiTooltipsType } from './financial-control.copy';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-financial-control',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -21,7 +23,7 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
           <!-- Data Status Indicator -->
           <div class="data-status" [class]="dataStatus()">
             <span class="status-time">Cập nhật: {{ data()?.lastUpdated | date:'HH:mm dd/MM' }}</span>
-            <span class="status-pill" [title]="getDataStatusTooltip()">{{ dataStatus().toUpperCase() }}</span>
+            <span class="status-pill" [title]="getDataStatusTooltip()">{{ getDataStatusLabel() }}</span>
           </div>
           <button class="btn-help" (click)="toggleHelp()" title="Cách đọc dashboard">❓</button>
           <button class="btn-refresh" (click)="refresh()" [disabled]="loading()">
@@ -29,6 +31,146 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
           </button>
         </div>
       </header>
+
+      <details class="policy-panel" open>
+        <summary>
+          <span>
+            <strong>Financial Control Policy</strong>
+            <small>Nguồn thật: system_settings / financial_control</small>
+          </span>
+          <span class="policy-owner-badge">{{ canManagePolicy() ? 'Director owner' : 'Chỉ xem' }}</span>
+        </summary>
+
+        <div class="policy-message">
+          Các giá trị dưới đây được dùng trực tiếp cho survival floor, cửa sổ nghĩa vụ gồm trả nợ,
+          chiết khấu inflow và giới hạn đề xuất Ads. Tỷ lệ phân bổ vốn/tái đầu tư vẫn thuộc
+          <a routerLink="/finance/capital-allocation">Capital Allocation Policy</a>; không được sao chép sang cấu hình này.
+        </div>
+        <p class="policy-error" *ngIf="policyError()">{{ policyError() }}</p>
+        <p class="policy-success" *ngIf="policySuccess()">{{ policySuccess() }}</p>
+
+        <form class="policy-grid" (ngSubmit)="savePolicy()">
+          <label>
+            Survival months
+            <input type="number" min="0.5" max="24" step="0.5" name="SurvivalMonths"
+                   [(ngModel)]="policyForm.SurvivalMonths" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>Survival floor = monthly burn × số tháng.</small>
+          </label>
+          <label>
+            Committed / loan window (ngày)
+            <select name="CommittedWindowDays"
+                    [(ngModel)]="policyForm.CommittedWindowDays" [disabled]="!canManagePolicy() || policyLoading()">
+              <option [ngValue]="7">7</option>
+              <option [ngValue]="14">14</option>
+              <option [ngValue]="30">30</option>
+            </select>
+            <small>Khoản phải trả và lịch trả nợ trong cửa sổ này làm giảm free cash.</small>
+          </label>
+          <label>
+            Risk-adjust inflow
+            <input type="number" min="0" max="1" step="0.01" name="RiskAdjustInflow"
+                   [(ngModel)]="policyForm.RiskAdjustInflow" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>{{ policyPercent(policyForm.RiskAdjustInflow) }} inflow dự kiến được công nhận.</small>
+          </label>
+          <label>
+            Ads safety factor
+            <input type="number" min="0" max="1" step="0.01" name="SafetyFactor"
+                   [(ngModel)]="policyForm.SafetyFactor" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>Giảm max daily Ads từ ngân sách 7 ngày đã được cashflow cho phép.</small>
+          </label>
+          <label>
+            Min start budget (VND)
+            <input type="number" min="0" max="1000000000" step="1000" name="MinStartBudget"
+                   [(ngModel)]="policyForm.MinStartBudget" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>Baseline cho Ad Group mới/chưa có spend đáng tin cậy.</small>
+          </label>
+          <label>
+            Upper cap multiplier
+            <input type="number" min="1" max="3" step="0.01" name="UpperCapMultiplier"
+                   [(ngModel)]="policyForm.UpperCapMultiplier" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>1.20 tương ứng mức tăng tối đa 20% từ baseline.</small>
+          </label>
+          <label>
+            Lower cap multiplier
+            <input type="number" min="0.01" max="1" step="0.01" name="LowerCapMultiplier"
+                   [(ngModel)]="policyForm.LowerCapMultiplier" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>0.70 tương ứng mức giảm tối đa 30% từ baseline.</small>
+          </label>
+          <label>
+            Supplier cash cycle (ngày)
+            <input type="number" min="1" max="365" step="1" name="SupplierCashCycleDays"
+                   [(ngModel)]="policyForm.SupplierCashCycleDays" [disabled]="!canManagePolicy() || policyLoading()" />
+            <small>Ngày dự kiến NCC chuyển tiền khi khoản phải thu chưa có due date; due date thực tế luôn được ưu tiên.</small>
+          </label>
+
+          <div class="policy-actions" *ngIf="canManagePolicy()">
+            <button type="submit" class="policy-save" [disabled]="policySaving() || policyLoading()">
+              {{ policySaving() ? 'Đang lưu…' : 'Lưu policy' }}
+            </button>
+            <button type="button" class="policy-reset" (click)="resetPolicyForm()" [disabled]="policySaving()">Hoàn tác</button>
+          </div>
+        </form>
+      </details>
+
+      <details class="policy-panel">
+        <summary>
+          <span>
+            <strong>Nghĩa vụ thuế canonical</strong>
+            <small>Bắt buộc có bằng chứng mới và được cập nhật trong 24 giờ</small>
+          </span>
+          <span class="policy-owner-badge">{{ canManagePolicy() ? 'Director nhập' : 'Chỉ xem' }}</span>
+        </summary>
+        <p class="policy-error" *ngIf="taxError()">{{ taxError() }}</p>
+        <p class="policy-success" *ngIf="taxSuccess()">{{ taxSuccess() }}</p>
+        <form class="policy-grid" (ngSubmit)="saveTaxObligation()">
+          <label>
+            Tổng thuế đang phải trả (VND)
+            <input type="number" min="0" step="1000" name="taxTotal"
+                   [(ngModel)]="taxForm.totalTaxDue" [disabled]="!canManagePolicy() || taxLoading()" />
+          </label>
+          <label>
+            Thời điểm đối soát
+            <input type="datetime-local" name="taxAsOf"
+                   [(ngModel)]="taxForm.asOf" [disabled]="!canManagePolicy() || taxLoading()" />
+          </label>
+          <label>
+            Nguồn xác minh
+            <select name="taxSource" [(ngModel)]="taxForm.source" [disabled]="!canManagePolicy() || taxLoading()">
+              <option value="tax_filing">Tờ khai thuế</option>
+              <option value="tax_authority_notice">Thông báo cơ quan thuế</option>
+              <option value="accountant_confirmation">Kế toán xác nhận</option>
+              <option value="manual_reconciliation">Đối soát thủ công</option>
+            </select>
+          </label>
+          <label>
+            Bằng chứng / tham chiếu
+            <textarea name="taxEvidence" rows="3" maxlength="1000"
+                      [(ngModel)]="taxForm.evidence" [disabled]="!canManagePolicy() || taxLoading()"></textarea>
+          </label>
+
+          <div class="tax-schedule">
+            <strong>Lịch phải trả trong 7 ngày</strong>
+            <div class="tax-due-row" *ngFor="let row of taxForm.dueByDay7d; let i = index">
+              <input type="date" [name]="'taxDueDate' + i" [(ngModel)]="row.date"
+                     [disabled]="!canManagePolicy() || taxLoading()" />
+              <input type="number" min="0" step="1000" [name]="'taxDueAmount' + i" [(ngModel)]="row.amount"
+                     [disabled]="!canManagePolicy() || taxLoading()" />
+              <button type="button" class="policy-reset" (click)="removeTaxDueRow(i)"
+                      [disabled]="!canManagePolicy() || taxLoading()">Xóa</button>
+            </div>
+            <button type="button" class="policy-reset" (click)="addTaxDueRow()"
+                    [disabled]="!canManagePolicy() || taxLoading() || taxForm.dueByDay7d.length >= 7">
+              Thêm ngày phải trả
+            </button>
+          </div>
+
+          <div class="policy-actions" *ngIf="canManagePolicy()">
+            <button type="submit" class="policy-save" [disabled]="taxSaving() || taxLoading()">
+              {{ taxSaving() ? 'Đang lưu…' : 'Lưu nghĩa vụ thuế' }}
+            </button>
+          </div>
+        </form>
+      </details>
 
       <!-- Collapsible Help Panel -->
       <div class="help-panel" *ngIf="showHelp()">
@@ -92,6 +234,32 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
             <span class="mod-name">{{ getModuleName(mod.name) }}</span>
             <span class="mod-status-dot"></span>
           </div>
+        </div>
+      </div>
+
+      <!-- DATA QUALITY PANEL -->
+      <div class="data-quality-panel" *ngIf="isDataQualityLocked()">
+        <div class="dq-header">
+          <span class="dq-icon">!</span>
+          <div>
+            <strong>Dữ liệu tài chính chưa đủ tin cậy</strong>
+            <p>Hệ thống tạm khóa rút tiền chủ sở hữu và tăng ngân sách quảng cáo để tránh báo số đẹp hơn thực tế.</p>
+          </div>
+        </div>
+        <div class="dq-content">
+          <div class="dq-modules" *ngIf="getDataQualityModules()">
+            <span>Phân hệ cần kiểm tra:</span>
+            <strong>{{ getDataQualityModules() }}</strong>
+          </div>
+          <ul class="dq-list" *ngIf="getDataQualityReasons().length > 0">
+            <li *ngFor="let reason of getDataQualityReasons()">{{ reason }}</li>
+          </ul>
+          <details class="dq-details" *ngIf="getDataQualityNotes().length > 0">
+            <summary>Chi tiết dữ liệu đang ước tính</summary>
+            <ul>
+              <li *ngFor="let note of getDataQualityNotes()">{{ note }}</li>
+            </ul>
+          </details>
         </div>
       </div>
 
@@ -247,8 +415,8 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
               <span class="cfo-label">Runway</span>
               <span class="cfo-value">{{ cfoDashboard()!.runwayMonths | number:'1.1-1' }} tháng</span>
               <span class="cfo-status">
-                {{ cfoDashboard()!.runwayMonths >= 6 ? '🟢 An toàn' : 
-                   cfoDashboard()!.runwayMonths >= 3 ? '🟡 Khá ổn' : 
+                {{ cfoDashboard()!.runwayMonths >= 6 ? '🟢 An toàn' :
+                   cfoDashboard()!.runwayMonths >= 3 ? '🟡 Khá ổn' :
                    cfoDashboard()!.runwayMonths >= 1 ? '🟠 Rủi ro' : '🔴 Nguy hiểm' }}
               </span>
               <div class="kpi-tooltip" *ngIf="activeTooltip() === 'runway'" (click)="$event.stopPropagation()">
@@ -266,14 +434,14 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
               <span class="cfo-icon">📈</span>
               <span class="cfo-label">Ads Budget (7D)</span>
               <span class="cfo-value">{{ formatCurrency(cfoDashboard()!.adsBudgetApproved) }}</span>
-              <span class="cfo-hint" *ngIf="cfoDashboard()!.adsBudgetApproved === 0">Chưa đủ Survival</span>
+              <span class="cfo-hint" *ngIf="cfoDashboard()!.adsBudgetApproved === 0">{{ getDecisionLockHint('Chưa đủ quỹ an toàn') }}</span>
             </div>
 
             <div class="cfo-card owner" (click)="navigateTo('/owner-fund')">
               <span class="cfo-icon">👤</span>
               <span class="cfo-label">Owner Withdrawable</span>
               <span class="cfo-value">{{ formatCurrency(cfoDashboard()!.ownerWithdrawable) }}</span>
-              <span class="cfo-hint" *ngIf="cfoDashboard()!.ownerWithdrawable === 0">Runway chưa đủ 3 tháng</span>
+              <span class="cfo-hint" *ngIf="cfoDashboard()!.ownerWithdrawable === 0">{{ getDecisionLockHint('Thời gian chịu đựng chưa đủ 3 tháng') }}</span>
             </div>
 
             <div class="cfo-card forecast" [class.danger]="cfoDashboard()!.forecast7DLowPoint.amount < 0"
@@ -446,7 +614,7 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
           <div class="section-header">
             <h2 class="section-title">📅 DỰ BÁO DÒNG TIỀN 7 NGÀY</h2>
             <span class="section-hint">
-              {{ forecast7D()!.isCashCrunch ? '🚨 CASH CRUNCH - Cần hành động ngay!' : 
+              {{ forecast7D()!.isCashCrunch ? '🚨 CASH CRUNCH - Cần hành động ngay!' :
                  forecast7D()!.isSurvivalRisk ? '⚠️ RỦI RO SỐNG CÒN' : '✅ Dòng tiền ổn định' }}
             </span>
           </div>
@@ -469,7 +637,7 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
                   <td class="balance-cell">{{ formatCurrency(cfoDashboard()!.bankBalance) }}</td>
                   <td>🟢 Số dư hiện tại</td>
                 </tr>
-                <tr *ngFor="let day of forecast7D()!.days" 
+                <tr *ngFor="let day of forecast7D()!.days"
                     [class.low-point]="day.forecastBank === forecast7D()!.lowPoint"
                     [class.danger]="day.forecastBank < 0"
                     [class.warning]="day.forecastBank < cfoDashboard()!.monthlyBurn * 3 && day.forecastBank >= 0">
@@ -514,6 +682,7 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
     .status-time { color: #8b949e; }
     .status-pill { padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; cursor: help; background: rgba(88,166,255,0.15); color: #58a6ff; }
     .data-status.partial .status-pill { background: rgba(210,153,34,0.15); color: #d29922; }
+    .data-status.blocked .status-pill { background: rgba(248,81,73,0.15); color: #f85149; }
     .data-status.error .status-pill { background: rgba(248,81,73,0.15); color: #f85149; }
     .btn-help, .btn-refresh { background: #161b22; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
     .btn-help:hover, .btn-refresh:hover { border-color: #58a6ff; }
@@ -538,6 +707,20 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
     .health-module.ok .mod-status-dot { background: #3fb950; }
     .health-module.partial .mod-status-dot { background: #d29922; }
     .health-module.error .mod-status-dot, .health-module.timeout .mod-status-dot { background: #f85149; }
+
+    .data-quality-panel { background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.65); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+    .dq-header { display: flex; gap: 12px; align-items: flex-start; }
+    .dq-icon { width: 24px; height: 24px; border-radius: 50%; background: #f85149; color: #fff; display: grid; place-items: center; font-weight: 800; flex: 0 0 auto; }
+    .dq-header strong { color: #f85149; display: block; margin-bottom: 4px; }
+    .dq-header p { margin: 0; color: #c9d1d9; font-size: 13px; line-height: 1.4; }
+    .dq-content { margin-top: 10px; padding-left: 36px; color: #c9d1d9; font-size: 12px; }
+    .dq-modules { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .dq-modules span { color: #8b949e; }
+    .dq-list { margin: 0 0 8px 0; padding-left: 18px; }
+    .dq-list li { margin-bottom: 4px; }
+    .dq-details { color: #8b949e; }
+    .dq-details summary { cursor: pointer; color: #d29922; }
+    .dq-details ul { margin: 8px 0 0 0; padding-left: 18px; }
 
     .action-panel { background: linear-gradient(135deg, #1c2128 0%, #161b22 100%); border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
     .action-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -690,11 +873,36 @@ import { KPI_TOOLTIPS, FORECAST_COLUMN_TOOLTIPS, CEO_GUIDE, TooltipContent, KpiT
     .debt-hint { font-size: 11px; color: #8b949e; flex: 1; }
     .debt-link { color: #58a6ff; text-decoration: none; font-size: 12px; font-weight: 500; }
     .debt-link:hover { text-decoration: underline; }
+    .policy-panel { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:14px 16px; margin-bottom:16px; color:#c9d1d9; }
+    .policy-panel summary { cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .policy-panel summary span:first-child { display:flex; flex-direction:column; gap:3px; }
+    .policy-panel summary small { color:#8b949e; font-weight:400; }
+    .policy-owner-badge { padding:3px 8px; border-radius:999px; background:rgba(88,166,255,.15); color:#58a6ff; font-size:11px; font-weight:700; }
+    .policy-message { margin:14px 0; padding:10px 12px; border-left:3px solid #58a6ff; background:rgba(88,166,255,.08); font-size:12px; line-height:1.5; }
+    .policy-message a { color:#58a6ff; }
+    .policy-grid { display:grid; grid-template-columns:repeat(4,minmax(170px,1fr)); gap:12px; }
+    .policy-grid label { display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; }
+    .policy-grid input, .policy-grid select { box-sizing:border-box; width:100%; padding:8px 9px; border-radius:7px; border:1px solid #30363d; background:#0d1117; color:#f0f6fc; }
+    .policy-grid input:disabled, .policy-grid select:disabled { opacity:.65; cursor:not-allowed; }
+    .policy-grid label small { color:#8b949e; font-weight:400; line-height:1.35; }
+    .policy-actions { grid-column:1/-1; display:flex; gap:10px; margin-top:4px; }
+    .policy-save, .policy-reset { padding:8px 14px; border-radius:7px; cursor:pointer; font-weight:700; }
+    .policy-save { border:1px solid #238636; background:#238636; color:#fff; }
+    .policy-reset { border:1px solid #30363d; background:#21262d; color:#c9d1d9; }
+    .policy-save:disabled, .policy-reset:disabled { opacity:.55; cursor:not-allowed; }
+    .tax-schedule { grid-column:1/-1; display:flex; flex-direction:column; gap:8px; }
+    .tax-due-row { display:grid; grid-template-columns:minmax(150px,1fr) minmax(180px,1fr) auto; gap:8px; }
+    .policy-error, .policy-success { margin:10px 0; padding:8px 10px; border-radius:7px; font-size:12px; }
+    .policy-error { color:#ff7b72; background:rgba(248,81,73,.1); }
+    .policy-success { color:#3fb950; background:rgba(63,185,80,.1); }
+    @media (max-width:1100px) { .policy-grid { grid-template-columns:repeat(2,minmax(180px,1fr)); } }
+    @media (max-width:650px) { .policy-grid { grid-template-columns:1fr; } }
   `]
 })
 export class FinancialControlComponent implements OnInit {
   private service = inject(FinancialControlService);
   private router = inject(Router);
+  private authService = inject(AuthService);
 
   loading = signal(false);
   data = signal<FinancialControlData | null>(null);
@@ -706,6 +914,17 @@ export class FinancialControlComponent implements OnInit {
   cfoFullMetrics = signal<CFOFullMetrics | null>(null);
   activeDrilldown = signal<string | null>(null);
   actionError = signal<string | null>(null);
+  policyConfig = signal<FinancialControlConfig | null>(null);
+  policyLoading = signal(false);
+  policySaving = signal(false);
+  policyError = signal<string | null>(null);
+  policySuccess = signal<string | null>(null);
+  policyForm: FinancialControlConfig = this.defaultPolicyConfig();
+  taxLoading = signal(false);
+  taxSaving = signal(false);
+  taxError = signal<string | null>(null);
+  taxSuccess = signal<string | null>(null);
+  taxForm: TaxObligationSnapshot = this.defaultTaxForm();
 
   showHelp = signal(false);
   activeTooltip = signal<string | null>(null);
@@ -724,6 +943,9 @@ export class FinancialControlComponent implements OnInit {
   dataStatus = computed(() => {
     const d = this.data();
     if (!d) return 'error';
+    const dataQuality = this.cfoDashboard()?.dataQuality;
+    if (dataQuality?.isDecisionLocked) return 'blocked';
+    if (dataQuality?.status === 'estimated') return 'partial';
     const hasIssues = d.alerts?.some(a => a.message?.includes('timeout') || a.message?.includes('error'));
     return hasIssues ? 'partial' : 'ok';
   });
@@ -732,6 +954,217 @@ export class FinancialControlComponent implements OnInit {
 
   ngOnInit() {
     this.loadData();
+    this.loadPolicyConfig();
+    this.loadTaxObligation();
+  }
+
+  loadTaxObligation(): void {
+    this.taxLoading.set(true);
+    this.taxError.set(null);
+    this.service.getTaxObligation().subscribe({
+      next: (snapshot) => {
+        this.taxForm = snapshot ? {
+          ...snapshot,
+          asOf: this.toLocalDateTime(snapshot.asOf),
+          dueByDay7d: snapshot.dueByDay7d.map((row) => ({ ...row })),
+        } : this.defaultTaxForm();
+        this.taxLoading.set(false);
+      },
+      error: (error) => {
+        this.taxError.set(this.apiErrorMessage(error, 'Không thể tải nghĩa vụ thuế'));
+        this.taxLoading.set(false);
+      },
+    });
+  }
+
+  addTaxDueRow(): void {
+    if (this.taxForm.dueByDay7d.length >= 7) return;
+    const date = new Date(Date.now() + this.taxForm.dueByDay7d.length * 86400000);
+    this.taxForm.dueByDay7d.push({ date: this.businessDate(date), amount: 0 });
+  }
+
+  removeTaxDueRow(index: number): void {
+    this.taxForm.dueByDay7d.splice(index, 1);
+  }
+
+  saveTaxObligation(): void {
+    if (!this.canManagePolicy() || this.taxSaving()) return;
+    const totalTaxDue = Number(this.taxForm.totalTaxDue);
+    const dueByDay7d = this.taxForm.dueByDay7d.map((row) => ({
+      date: row.date,
+      amount: Number(row.amount),
+    }));
+    if (!Number.isFinite(totalTaxDue) || totalTaxDue < 0
+      || dueByDay7d.some((row) => !/^\d{4}-\d{2}-\d{2}$/.test(row.date)
+        || !Number.isFinite(row.amount) || row.amount < 0)
+      || dueByDay7d.reduce((sum, row) => sum + row.amount, 0) > totalTaxDue
+      || this.taxForm.evidence.trim().length < 3) {
+      this.taxError.set('Dữ liệu thuế không hợp lệ hoặc lịch trả vượt tổng nghĩa vụ.');
+      return;
+    }
+    const asOf = new Date(this.taxForm.asOf);
+    if (!Number.isFinite(asOf.getTime())) {
+      this.taxError.set('Thời điểm đối soát thuế không hợp lệ.');
+      return;
+    }
+    const payload: TaxObligationSnapshot = {
+      totalTaxDue,
+      dueByDay7d,
+      asOf: asOf.toISOString(),
+      source: this.taxForm.source,
+      evidence: this.taxForm.evidence.trim(),
+    };
+    this.taxSaving.set(true);
+    this.taxError.set(null);
+    this.taxSuccess.set(null);
+    this.service.updateTaxObligation(payload).subscribe({
+      next: () => {
+        this.taxSaving.set(false);
+        this.taxSuccess.set('Nghĩa vụ thuế và audit đã được lưu.');
+        this.loadTaxObligation();
+        this.loadData();
+      },
+      error: (error) => {
+        this.taxSaving.set(false);
+        this.taxError.set(this.apiErrorMessage(error, 'Không thể lưu nghĩa vụ thuế'));
+      },
+    });
+  }
+
+  private defaultTaxForm(): TaxObligationSnapshot {
+    return {
+      totalTaxDue: 0,
+      dueByDay7d: [],
+      asOf: this.toLocalDateTime(new Date().toISOString()),
+      source: 'manual_reconciliation' as TaxObligationSource,
+      evidence: '',
+    };
+  }
+
+  private toLocalDateTime(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  private businessDate(date: Date): string {
+    return new Date(date.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
+  canManagePolicy(): boolean {
+    return this.authService.hasPermission('finance.policy.manage');
+  }
+
+  loadPolicyConfig(): void {
+    this.policyLoading.set(true);
+    this.policyError.set(null);
+    this.service.getConfig().subscribe({
+      next: (config) => {
+        this.policyConfig.set({ ...config });
+        this.policyForm = { ...config };
+        this.policyLoading.set(false);
+      },
+      error: (error) => {
+        this.policyError.set(this.apiErrorMessage(error, 'Không thể tải Financial Control Policy'));
+        this.policyLoading.set(false);
+      },
+    });
+  }
+
+  savePolicy(): void {
+    if (!this.canManagePolicy() || this.policySaving()) return;
+    const validationError = this.validatePolicyForm();
+    if (validationError) {
+      this.policyError.set(validationError);
+      return;
+    }
+
+    const payload: Partial<FinancialControlConfig> = {
+      CommittedWindowDays: Number(this.policyForm.CommittedWindowDays),
+      SurvivalMonths: Number(this.policyForm.SurvivalMonths),
+      SupplierCashCycleDays: Number(this.policyForm.SupplierCashCycleDays),
+      RiskAdjustInflow: Number(this.policyForm.RiskAdjustInflow),
+      MinStartBudget: Number(this.policyForm.MinStartBudget),
+      UpperCapMultiplier: Number(this.policyForm.UpperCapMultiplier),
+      LowerCapMultiplier: Number(this.policyForm.LowerCapMultiplier),
+      SafetyFactor: Number(this.policyForm.SafetyFactor),
+    };
+    this.policySaving.set(true);
+    this.policyError.set(null);
+    this.policySuccess.set(null);
+    this.service.updateConfig(payload).subscribe({
+      next: (config) => {
+        this.policyConfig.set({ ...config });
+        this.policyForm = { ...config };
+        this.policySaving.set(false);
+        this.policySuccess.set('Policy đã được lưu và cache tài chính đã được làm mới.');
+        this.loadData();
+      },
+      error: (error) => {
+        this.policyError.set(this.apiErrorMessage(error, 'Không thể lưu Financial Control Policy'));
+        this.policySaving.set(false);
+      },
+    });
+  }
+
+  resetPolicyForm(): void {
+    this.policyForm = { ...(this.policyConfig() || this.defaultPolicyConfig()) };
+    this.policyError.set(null);
+    this.policySuccess.set(null);
+  }
+
+  policyPercent(value: number): string {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? `${Math.round(numeric * 100)}%` : '—';
+  }
+
+  private validatePolicyForm(): string | null {
+    const config = this.policyForm;
+    if (![7, 14, 30].includes(Number(config.CommittedWindowDays))) {
+      return 'Committed window phải là 7, 14 hoặc 30 ngày.';
+    }
+    if (!Number.isFinite(Number(config.SurvivalMonths))
+      || config.SurvivalMonths < 0.5
+      || config.SurvivalMonths > 24) return 'Survival months phải từ 0.5 đến 24.';
+    if (!Number.isInteger(Number(config.SupplierCashCycleDays))
+      || config.SupplierCashCycleDays < 1
+      || config.SupplierCashCycleDays > 365) return 'Supplier cash cycle phải từ 1 đến 365 ngày.';
+    if (!Number.isFinite(Number(config.RiskAdjustInflow))
+      || config.RiskAdjustInflow < 0
+      || config.RiskAdjustInflow > 1) return 'Risk-adjust inflow phải từ 0 đến 1.';
+    if (!Number.isFinite(Number(config.MinStartBudget))
+      || config.MinStartBudget < 0
+      || config.MinStartBudget > 1_000_000_000) return 'Min start budget không hợp lệ.';
+    if (!Number.isFinite(Number(config.UpperCapMultiplier))
+      || config.UpperCapMultiplier < 1
+      || config.UpperCapMultiplier > 3) return 'Upper cap multiplier phải từ 1 đến 3.';
+    if (!Number.isFinite(Number(config.LowerCapMultiplier))
+      || config.LowerCapMultiplier < 0.01
+      || config.LowerCapMultiplier > 1) return 'Lower cap multiplier phải từ 0.01 đến 1.';
+    if (config.LowerCapMultiplier > config.UpperCapMultiplier) return 'Lower cap không thể lớn hơn upper cap.';
+    if (!Number.isFinite(Number(config.SafetyFactor))
+      || config.SafetyFactor < 0
+      || config.SafetyFactor > 1) return 'Ads safety factor phải từ 0 đến 1.';
+    return null;
+  }
+
+  private defaultPolicyConfig(): FinancialControlConfig {
+    return {
+      CommittedWindowDays: 14,
+      SurvivalMonths: 3,
+      SupplierCashCycleDays: 10,
+      RiskAdjustInflow: 0.8,
+      MinStartBudget: 60_000,
+      UpperCapMultiplier: 1.2,
+      LowerCapMultiplier: 0.7,
+      SafetyFactor: 0.8,
+    };
+  }
+
+  private apiErrorMessage(error: any, fallback: string): string {
+    const message = error?.error?.message;
+    return Array.isArray(message) ? message.join('; ') : message || fallback;
   }
 
   toggleHelp() { this.showHelp.update(v => !v); }
@@ -743,7 +1176,19 @@ export class FinancialControlComponent implements OnInit {
     switch (status) {
       case 'ok': return 'Tất cả module hoạt động bình thường.';
       case 'partial': return 'Một số module timeout/error/missing. Số liệu có thể không đầy đủ.';
+      case 'blocked': return 'Dữ liệu thiếu hoặc đang ước tính. Hệ thống tạm khóa rút tiền và tăng ngân sách.';
       case 'error': return 'Không thể lấy dữ liệu từ server.';
+      default: return '';
+    }
+  }
+
+  getDataStatusLabel(): string {
+    const status = this.dataStatus();
+    switch (status) {
+      case 'ok': return 'ĐỦ TIN CẬY';
+      case 'partial': return 'CHƯA ĐẦY ĐỦ';
+      case 'blocked': return 'ĐANG KHÓA';
+      case 'error': return 'LỖI DỮ LIỆU';
       default: return '';
     }
   }
@@ -796,7 +1241,7 @@ export class FinancialControlComponent implements OnInit {
     this.service.getCFOFullMetrics().subscribe({ next: (metrics) => this.cfoFullMetrics.set(metrics), error: (err) => console.error('Failed to load CFO full metrics:', err) });
   }
 
-  refresh() { this.loadData(); }
+  refresh() { this.loadData(); this.loadPolicyConfig(); }
 
   getCommittedPercent(): number {
     const d = this.data();
@@ -861,6 +1306,58 @@ export class FinancialControlComponent implements OnInit {
     return names[name] || name;
   }
 
+  isDataQualityLocked(): boolean {
+    return !!this.cfoDashboard()?.dataQuality?.isDecisionLocked;
+  }
+
+  getDecisionLockHint(defaultHint: string): string {
+    return this.isDataQualityLocked() ? 'Tạm khóa vì thiếu dữ liệu' : defaultHint;
+  }
+
+  getDataQualityReasons(): string[] {
+    return this.cfoDashboard()?.dataQuality?.blockingReasons || [];
+  }
+
+  getDataQualityNotes(): string[] {
+    return (this.cfoDashboard()?.dataQuality?.notes || []).map((note) => this.formatDataQualityNote(note));
+  }
+
+  getDataQualityModules(): string {
+    const modules = this.cfoDashboard()?.dataQuality?.missingModules || [];
+    return modules.map((name) => this.getReadableDataModuleName(name)).join(', ');
+  }
+
+  private getReadableDataModuleName(name: string): string {
+    const normalized: { [key: string]: string } = {
+      ops: 'operations',
+      payroll: 'labor',
+    };
+    return this.getModuleName(normalized[name] || name);
+  }
+
+  private formatDataQualityNote(note: string): string {
+    return note
+      .replace(/^labor:/, 'Nhân công:')
+      .replace(/^payroll:/, 'Nhân công:')
+      .replace(/^ops:/, 'Vận hành:')
+      .replace(/^agent:/, 'Đại lý:')
+      .replace(/^supplier:/, 'Nhà cung cấp:')
+      .replace(/^debt:/, 'Nợ vay:')
+      .replace(/^ads:/, 'Quảng cáo:')
+      .replace(/^quang cao:/, 'Quảng cáo:')
+      .replace(/^no vay:/, 'Nợ vay:')
+      .replace(/thieu snapshot/g, 'thiếu bản chốt dữ liệu')
+      .replace(/dung uoc tinh tu lan tinh truoc/g, 'dùng ước tính từ lần tính trước')
+      .replace(/va chua co so uoc tinh truoc/g, 'và chưa có số ước tính trước')
+      .replace(/loi doc lich tra no/g, 'lỗi đọc lịch trả nợ')
+      .replace(/loi doc du lieu/g, 'lỗi đọc dữ liệu')
+      .replace(/khong lay duoc/g, 'không lấy được')
+      .replace(/goi y ngan sach/g, 'gợi ý ngân sách')
+      .replace(/tong quan khoan vay/g, 'tổng quan khoản vay')
+      .replace(/data unavailable \(snapshot failed\)/g, 'không có dữ liệu từ bản chốt')
+      .replace(/unavailable/g, 'không có dữ liệu');
+  }
+
   getPriorityLabel(priority: string): string {
     const labels: { [key: string]: string } = { critical: 'KHẨN CẤP', high: 'QUAN TRỌNG', medium: 'CẦN LÀM', low: 'GỢI Ý' };
     return labels[priority] || priority.toUpperCase();
@@ -915,19 +1412,19 @@ export class FinancialControlComponent implements OnInit {
     const actions = this.actionSuggestions();
     const cfo = this.cfoDashboard();
     const forecast = this.forecast7D();
-    
+
     // Check from CFO Dashboard first (doesn't depend on actions API)
     if (cfo) {
       if (cfo.runwayMonths < 1) return true;
       if (cfo.forecast7DLowPoint && cfo.forecast7DLowPoint.amount < 0) return true;
     }
-    
+
     // Then check forecast
     if (forecast?.isCashCrunch) return true;
-    
+
     // Finally check actions if available
     if (actions?.actions?.some(a => a.priority === 'critical')) return true;
-    
+
     return false;
   }
 
@@ -937,7 +1434,7 @@ export class FinancialControlComponent implements OnInit {
   getCriticalAlertTitle(): string {
     const forecast = this.forecast7D();
     const cfo = this.cfoDashboard();
-    
+
     if (forecast?.isCashCrunch) {
       return '🚨 CASH CRUNCH - Số dư sẽ âm trong 7 ngày tới!';
     }
@@ -953,7 +1450,7 @@ export class FinancialControlComponent implements OnInit {
   getCriticalAlertMessage(): string {
     const forecast = this.forecast7D();
     const cfo = this.cfoDashboard();
-    
+
     if (forecast?.isCashCrunch) {
       return `Dự báo số dư thấp nhất: ${this.formatCurrency(forecast.lowPoint)} @ T+${forecast.lowPointDay}. Cần cắt giảm chi tiêu hoặc thu hồi công nợ ngay.`;
     }
@@ -969,7 +1466,7 @@ export class FinancialControlComponent implements OnInit {
   getOverallStatusClass(): string {
     const actions = this.actionSuggestions();
     if (!actions) return 'ok';
-    
+
     if (actions.basedOnStatus.isCashCrunch || actions.basedOnStatus.runway === 'danger') {
       return 'danger';
     }
@@ -985,7 +1482,7 @@ export class FinancialControlComponent implements OnInit {
   getOverallStatusLabel(): string {
     const actions = this.actionSuggestions();
     if (!actions) return 'Đang tải...';
-    
+
     if (actions.basedOnStatus.isCashCrunch) return 'CASH CRUNCH';
     if (actions.basedOnStatus.runway === 'danger') return 'NGUY HIỂM';
     if (actions.basedOnStatus.isSurvivalRisk) return 'RỦI RO';
@@ -1000,7 +1497,7 @@ export class FinancialControlComponent implements OnInit {
     const cfo = this.cfoDashboard();
     const fm = this.cfoFullMetrics();
     if (!cfo || !fm) return 0;
-    
+
     // Target: Get runway to at least 3 months
     const targetFreeCash = cfo.monthlyBurn * 3;
     const needed = targetFreeCash - cfo.freeCash;
@@ -1013,7 +1510,7 @@ export class FinancialControlComponent implements OnInit {
   getTargetBurn(): number {
     const cfo = this.cfoDashboard();
     if (!cfo || cfo.freeCash <= 0) return 0;
-    
+
     // Target: 3 months runway with current free cash
     return cfo.freeCash / 3;
   }

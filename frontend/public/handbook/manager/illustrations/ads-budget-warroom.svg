@@ -1,0 +1,31 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="40" fill="#EFF6FF"/>
+  <rect x="40" y="40" width="1120" height="640" rx="32" fill="#F8FBFF" stroke="#D8E5F2" stroke-width="2"/>
+  <text x="88" y="120" fill="#0B4F6C" font-family="Segoe UI, Arial, sans-serif" font-size="46" font-weight="700">Ads budget war room</text>
+  <text x="88" y="160" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22">Muc tieu: moi quyet dinh ngan sach deu co ly do va thoi diem review lai</text>
+  <rect x="84" y="210" width="486" height="390" rx="28" fill="#FFFFFF" stroke="#D8E5F2" stroke-width="2"/>
+  <text x="122" y="264" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Bang quyet dinh nhanh</text>
+  <text x="122" y="332" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="22">Ad group A</text>
+  <rect x="298" y="304" width="210" height="32" rx="16" fill="#10B981"/>
+  <text x="122" y="382" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="22">Ad group B</text>
+  <rect x="298" y="354" width="160" height="32" rx="16" fill="#F59E0B"/>
+  <text x="122" y="432" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="22">Ad group C</text>
+  <rect x="298" y="404" width="120" height="32" rx="16" fill="#EF4444"/>
+  <text x="122" y="482" fill="#14213D" font-family="Segoe UI, Arial, sans-serif" font-size="22">Ad group D</text>
+  <rect x="298" y="454" width="195" height="32" rx="16" fill="#10B981"/>
+  <text x="122" y="548" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22">Mau xanh: tang / Mau vang: giu / Mau do: giam hoac dung</text>
+  <rect x="606" y="210" width="510" height="390" rx="28" fill="#14213D"/>
+  <text x="646" y="264" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Khung hanh dong cua manager</text>
+  <rect x="646" y="308" width="430" height="68" rx="20" fill="#1D3557"/>
+  <circle cx="684" cy="342" r="14" fill="#7DD3FC"/>
+  <text x="716" y="338" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Scale co kiem soat</text>
+  <text x="716" y="364" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Chi khi co du quy, co ket qua va co moc xem lai</text>
+  <rect x="646" y="392" width="430" height="68" rx="20" fill="#1D3557"/>
+  <circle cx="684" cy="426" r="14" fill="#FBBF24"/>
+  <text x="716" y="422" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Freeze co ly do</text>
+  <text x="716" y="448" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Khong tang chi de thu, chi de team thay dang ban</text>
+  <rect x="646" y="476" width="430" height="68" rx="20" fill="#1D3557"/>
+  <circle cx="684" cy="510" r="14" fill="#4ADE80"/>
+  <text x="716" y="506" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Review lai sau 2-4 gio</text>
+  <text x="716" y="532" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Manager ra quyet dinh xong van phai quay lai kiem chung</text>
+</svg>

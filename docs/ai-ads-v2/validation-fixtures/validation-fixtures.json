@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "schema": "../../contracts/action-plan.schema.json",
+  "fixtures": [
+    {
+      "file": "valid/action_plan.valid.json",
+      "expectedValid": true,
+      "expectedErrorCodes": []
+    },
+    {
+      "file": "invalid/action_plan.invalid-provider-currency-approval.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["SCHEMA_VALIDATION_FAILED"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-campaign-not-paused.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["SCHEMA_VALIDATION_FAILED"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-budget-missing-id.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["SCHEMA_VALIDATION_FAILED"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-keyword-match-type.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["SCHEMA_VALIDATION_FAILED"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-rsa-minimum.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["SCHEMA_VALIDATION_FAILED"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-blocked-action.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["SCHEMA_VALIDATION_FAILED"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-duplicate-action-id.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["DUPLICATE_ACTION_ID"]
+    },
+    {
+      "file": "invalid/action_plan.invalid-duplicate-idempotency-key.json",
+      "expectedValid": false,
+      "expectedErrorCodes": ["DUPLICATE_IDEMPOTENCY_KEY"]
+    }
+  ]
+}

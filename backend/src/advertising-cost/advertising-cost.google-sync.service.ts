@@ -4,17 +4,13 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Cron } from '@nestjs/schedule';
 import axios from 'axios';
-import { google } from 'googleapis';
 import { Model } from 'mongoose';
 import { AdvertisingCost, AdvertisingCostDocument } from './schemas/advertising-cost.schema';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
-import { ApiToken, ApiTokenDocument } from '../api-token/schemas/api-token.schema';
 import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
-
-const GOOGLE_ADS_API_VERSION = process.env.GOOGLE_ADS_API_VERSION || 'v19';
+import { ApiTokenService } from '../api-token/api-token.service';
 
 @Injectable()
 export class AdvertisingCostGoogleSyncService {
@@ -24,7 +20,7 @@ export class AdvertisingCostGoogleSyncService {
     @InjectModel(AdvertisingCost.name) private readonly costModel: Model<AdvertisingCostDocument>,
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
     @InjectModel(AdAccount.name) private readonly adAccountModel: Model<AdAccountDocument>,
-    @InjectModel(ApiToken.name) private readonly tokenModel: Model<ApiTokenDocument>,
+    private readonly apiTokenService: ApiTokenService,
     private readonly recalculationQueue: AdvertisingCostRecalculationQueueService,
   ) {}
 
@@ -39,53 +35,10 @@ export class AdvertisingCostGoogleSyncService {
     return clean || undefined;
   }
 
-  /**
-   * Lấy refresh token Google Ads ưu tiên theo tài khoản, fallback env GOOGLE_ADS_REFRESH_TOKEN
-   */
-  private async getRefreshTokenForAccount(account: AdAccountDocument): Promise<string | undefined> {
-    if (process.env.GOOGLE_ADS_REFRESH_TOKEN) return process.env.GOOGLE_ADS_REFRESH_TOKEN.trim();
-
-    const variants = new Set<string>();
-    if (account?.accountId) {
-      const clean = this.sanitizeId(String(account.accountId));
-      if (clean) {
-        variants.add(clean);
-        variants.add(account.accountId);
-      }
-    }
-
-    const tokenDoc = await this.tokenModel
-      .findOne({ provider: 'google', status: 'active', adAccountId: { $in: Array.from(variants) } })
-      .sort({ isPrimary: -1, updatedAt: -1 })
-      .lean();
-    if (!tokenDoc) return undefined;
-
-    try {
-      const { decryptToken } = await import('../api-token/crypto.util');
-      if ((tokenDoc as any).tokenEnc) {
-        const raw = decryptToken((tokenDoc as any).tokenEnc);
-        if (raw) return raw;
-      }
-    } catch {}
-    return (tokenDoc as any).token;
-  }
-
-  private async getAccessToken(refreshToken: string): Promise<string | undefined> {
-    const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
-    if (!clientId || !clientSecret) {
-      this.logger.warn('Thiếu GOOGLE_ADS_CLIENT_ID hoặc GOOGLE_ADS_CLIENT_SECRET');
-      return undefined;
-    }
-    const oauth2Client = new google.auth.OAuth2({ clientId, clientSecret });
-    oauth2Client.setCredentials({ refresh_token: refreshToken });
-    const token = await oauth2Client.getAccessToken();
-    return token?.token || undefined;
-  }
-
-  private async upsertCost(adGroupId: string, day: Date, doc: Partial<AdvertisingCost>) {
+  private async upsertCost(customerId: string, adGroupId: string, day: Date, doc: Partial<AdvertisingCost>) {
     const payload: Partial<AdvertisingCost> = {
       adGroupId,
+      customerId,
       channel: 'google',
       date: day,
       spentAmount: Number(doc.spentAmount || 0),
@@ -93,8 +46,16 @@ export class AdvertisingCostGoogleSyncService {
       cpc: Number(doc.cpc || 0),
       impressions: Number((doc as any).impressions || 0),
       clicks: Number((doc as any).clicks || 0),
+      conversions: Number(doc.conversions || 0),
+      allConversions: Number(doc.allConversions || 0),
+      conversionValue: Number(doc.conversionValue || 0),
+      costPerConversion: Number(doc.costPerConversion || 0),
     };
-    await this.costModel.updateOne({ adGroupId, date: day }, { $set: payload }, { upsert: true });
+    await this.costModel.updateOne(
+      { channel: 'google', customerId, adGroupId, date: day },
+      { $set: payload },
+      { upsert: true },
+    );
   }
 
   private buildGaql(adGroupIds: string[], dayISO: string): string {
@@ -102,7 +63,7 @@ export class AdvertisingCostGoogleSyncService {
       .map(id => this.sanitizeId(String(id)))
       .filter(Boolean) as string[];
     const idList = ids.map(i => i).join(',');
-    return `SELECT segments.date, ad_group.id, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.average_cpc, metrics.average_cpm
+    return `SELECT segments.date, ad_group.id, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.average_cpc, metrics.average_cpm, metrics.conversions, metrics.all_conversions, metrics.conversions_value, metrics.cost_per_conversion
       FROM ad_group
       WHERE segments.date BETWEEN '${dayISO}' AND '${dayISO}'
       ${ids.length ? `AND ad_group.id IN (${idList})` : ''}`;
@@ -115,17 +76,12 @@ export class AdvertisingCostGoogleSyncService {
 
   async getSyncHealth() {
     const now = Date.now();
-    const envRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN?.trim();
-    const tokenDoc = await this.tokenModel
-      .findOne({ provider: 'google', status: 'active' })
-      .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 })
-      .select('name adAccountId lastCheckStatus lastCheckMessage lastCheckedAt updatedAt')
-      .lean();
+    const googleConfig = await this.apiTokenService.getGoogleAdsRuntimeConfig();
 
     const latestRecord: any = await this.costModel
       .findOne({ channel: 'google' })
       .sort({ updatedAt: -1 })
-      .select('date updatedAt adGroupId spentAmount')
+      .select('date updatedAt adGroupId spentAmount customerId')
       .lean();
 
     const lastSyncAt = latestRecord?.updatedAt ? new Date(latestRecord.updatedAt).toISOString() : undefined;
@@ -134,20 +90,19 @@ export class AdvertisingCostGoogleSyncService {
     return {
       platform: 'google',
       token: {
-        source: envRefreshToken ? 'env' : (tokenDoc ? 'database' : 'none'),
-        configured: Boolean(envRefreshToken || tokenDoc),
-        developerTokenConfigured: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN),
-        oauthClientConfigured: Boolean(process.env.GOOGLE_ADS_CLIENT_ID && process.env.GOOGLE_ADS_CLIENT_SECRET),
-        databaseTokenName: tokenDoc?.name || null,
-        boundAdAccountId: tokenDoc?.adAccountId || null,
-        lastCheckStatus: tokenDoc?.lastCheckStatus || null,
-        lastCheckMessage: tokenDoc?.lastCheckMessage || null,
-        lastCheckedAt: tokenDoc?.lastCheckedAt ? new Date(tokenDoc.lastCheckedAt).toISOString() : null,
+        source: googleConfig.configSource,
+        configured: Boolean(googleConfig.refreshToken || googleConfig.clientId || googleConfig.clientSecret || googleConfig.developerToken),
+        developerTokenConfigured: Boolean(googleConfig.developerToken),
+        oauthClientConfigured: Boolean(googleConfig.clientId && googleConfig.clientSecret),
+        refreshTokenSource: googleConfig.refreshTokenSource,
+        loginCustomerId: googleConfig.loginCustomerId || null,
+        apiVersion: googleConfig.apiVersion,
       },
       sync: {
         lastRecordDate: latestRecord?.date ? new Date(latestRecord.date).toISOString().slice(0, 10) : null,
         lastSyncAt,
         freshnessHours: syncFreshnessHours,
+        lastCustomerId: latestRecord?.customerId || null,
       },
     };
   }
@@ -157,33 +112,37 @@ export class AdvertisingCostGoogleSyncService {
     adGroupIds: string[];
     dayISO: string;
   }): Promise<number> {
-    const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-    if (!developerToken) {
-      this.logger.warn('Thiếu GOOGLE_ADS_DEVELOPER_TOKEN - bỏ qua đồng bộ Google Ads');
-      return 0;
-    }
-
-    const refreshToken = await this.getRefreshTokenForAccount(params.account);
-    if (!refreshToken) {
-      this.logger.warn(`Không tìm thấy refresh token cho account ${params.account?.accountId}`);
-      return 0;
-    }
-
-    const accessToken = await this.getAccessToken(refreshToken);
-    if (!accessToken) {
-      this.logger.warn(`Không lấy được access token Google Ads cho account ${params.account?.accountId}`);
-      return 0;
-    }
-
     const customerId = this.sanitizeId(String(params.account.accountId));
-    const loginCid = this.sanitizeId(String(params.account.loginCustomerId || process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || params.account.accountId));
     if (!customerId) {
       this.logger.warn(`accountId không hợp lệ cho Google Ads: ${params.account?.accountId}`);
       return 0;
     }
 
+    const googleConfig = await this.apiTokenService.getGoogleAdsRuntimeConfig({
+      customerId,
+      loginCustomerId: String(params.account.loginCustomerId || ''),
+    });
+
+    const developerToken = googleConfig.developerToken;
+    if (!developerToken) {
+      this.logger.warn('Thiếu GOOGLE_ADS_DEVELOPER_TOKEN - bỏ qua đồng bộ Google Ads');
+      return 0;
+    }
+
+    if (!googleConfig.refreshToken) {
+      this.logger.warn(`Không tìm thấy refresh token cho account ${params.account?.accountId}`);
+      return 0;
+    }
+
+    const accessToken = await this.apiTokenService.getGoogleAdsAccessToken(googleConfig);
+    if (!accessToken) {
+      this.logger.warn(`Không lấy được access token Google Ads cho account ${params.account?.accountId}`);
+      return 0;
+    }
+
+    const loginCid = this.sanitizeId(String(googleConfig.loginCustomerId || customerId));
     const gaql = this.buildGaql(params.adGroupIds, params.dayISO);
-    const url = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`;
+    const url = `https://googleads.googleapis.com/${googleConfig.apiVersion}/customers/${customerId}/googleAds:searchStream`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
       'developer-token': developerToken,
@@ -205,13 +164,26 @@ export class AdvertisingCostGoogleSyncService {
           const costMicros = this.parseNumber(metrics?.costMicros ?? metrics?.cost_micros, 1_000_000);
           const avgCpcMicros = this.parseNumber(metrics?.averageCpc ?? metrics?.average_cpc, 1_000_000);
           const avgCpmMicros = this.parseNumber(metrics?.averageCpm ?? metrics?.average_cpm, 1_000_000);
-          await this.upsertCost(adGroupId, this.normalizeDay(params.dayISO), {
+
+          const conversions = this.parseNumber(metrics?.conversions);
+          const allConversions = this.parseNumber(metrics?.allConversions ?? metrics?.all_conversions);
+          const conversionValue = this.parseNumber(metrics?.conversionsValue ?? metrics?.conversions_value);
+          const costPerConversion = this.parseNumber(
+            metrics?.costPerConversion ?? metrics?.cost_per_conversion,
+            1_000_000,
+          );
+
+          await this.upsertCost(customerId, adGroupId, this.normalizeDay(params.dayISO), {
             spentAmount: costMicros,
             cpc: avgCpcMicros,
             cpm: avgCpmMicros,
             impressions,
             clicks,
-          });
+            conversions,
+            allConversions,
+            conversionValue,
+            costPerConversion,
+          } as any);
           updated++;
         }
       }
@@ -263,8 +235,10 @@ export class AdvertisingCostGoogleSyncService {
     return results;
   }
 
-  /** Cron 06:15 hằng ngày cho Google Ads (hôm qua) và recalculate orders */
-  @Cron('15 6 * * *')
+  /**
+   * Manual fallback only.
+   * The primary 06:00 execution is handled by Finance/DataCollectionService.
+   */
   async cronDailyGoogle() {
     try {
       const yesterday = new Date();

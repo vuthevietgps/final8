@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Overview rollout board</title>
+  <desc id="desc">Minh họa rollout board với package, role matrix, SOP và pilot gates.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#143836"/>
+      <stop offset="100%" stop-color="#265f57"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fffaf2"/>
+      <stop offset="100%" stop-color="#f2e5d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" rx="32" fill="url(#bg)"/>
+  <circle cx="1040" cy="110" r="120" fill="#e4a547" opacity="0.18"/>
+  <circle cx="160" cy="620" r="130" fill="#c97d67" opacity="0.18"/>
+  <rect x="58" y="56" width="1084" height="608" rx="30" fill="#0f2f2d" opacity="0.28"/>
+  <rect x="82" y="76" width="430" height="244" rx="28" fill="url(#panel)"/>
+  <rect x="530" y="76" width="588" height="110" rx="28" fill="url(#panel)"/>
+  <rect x="530" y="206" width="588" height="114" rx="28" fill="url(#panel)"/>
+  <rect x="82" y="344" width="1036" height="292" rx="28" fill="url(#panel)"/>
+  <text x="120" y="132" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">GOI HOC CHUAN</text>
+  <text x="120" y="178" fill="#123b39" font-size="54" font-family="Georgia, serif" font-weight="700">Starter English 12</text>
+  <text x="120" y="220" fill="#5a6c6b" font-size="24" font-family="Trebuchet MS, sans-serif">12 buoi • Offline • 4.800.000 VND</text>
+  <text x="120" y="256" fill="#5a6c6b" font-size="24" font-family="Trebuchet MS, sans-serif">Lop SE12-OFF-T3T5-1900-P01 • Co Thu Ha</text>
+  <rect x="120" y="274" width="166" height="32" rx="16" fill="#e9b24e"/>
+  <text x="151" y="296" fill="#7a4a0f" font-size="18" font-family="Trebuchet MS, sans-serif" font-weight="700">1 GOI DUY NHAT</text>
+  <text x="568" y="124" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">ROLE MATRIX</text>
+  <text x="568" y="164" fill="#123b39" font-size="28" font-family="Georgia, serif" font-weight="700">Sale • OPS • Finance • Teacher</text>
+  <rect x="862" y="108" width="224" height="44" rx="22" fill="#173f3c"/>
+  <text x="905" y="137" fill="#fff8f0" font-size="20" font-family="Trebuchet MS, sans-serif" font-weight="700">role cung theo nguoi</text>
+  <text x="568" y="256" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">GATE</text>
+  <text x="568" y="294" fill="#123b39" font-size="30" font-family="Georgia, serif" font-weight="700">Khong xep lop neu finance chua duyet</text>
+  <path d="M160 436 H380" stroke="#123b39" stroke-width="8" stroke-linecap="round"/>
+  <path d="M420 436 H640" stroke="#123b39" stroke-width="8" stroke-linecap="round"/>
+  <path d="M680 436 H900" stroke="#123b39" stroke-width="8" stroke-linecap="round"/>
+  <path d="M940 436 H1060" stroke="#123b39" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="140" cy="436" r="48" fill="#b5522d"/>
+  <circle cx="400" cy="436" r="48" fill="#e4a547"/>
+  <circle cx="660" cy="436" r="48" fill="#2f7767"/>
+  <circle cx="920" cy="436" r="48" fill="#c97d67"/>
+  <circle cx="1080" cy="436" r="48" fill="#123b39"/>
+  <text x="113" y="444" fill="#fffaf2" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">1</text>
+  <text x="372" y="444" fill="#fffaf2" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">2</text>
+  <text x="632" y="444" fill="#fffaf2" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">3</text>
+  <text x="892" y="444" fill="#fffaf2" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">4</text>
+  <text x="1068" y="444" fill="#fffaf2" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">5</text>
+  <text x="92" y="518" fill="#123b39" font-size="21" font-family="Trebuchet MS, sans-serif" font-weight="700">Parent</text>
+  <text x="349" y="518" fill="#123b39" font-size="21" font-family="Trebuchet MS, sans-serif" font-weight="700">Student</text>
+  <text x="584" y="518" fill="#123b39" font-size="21" font-family="Trebuchet MS, sans-serif" font-weight="700">Invoice / Order</text>
+  <text x="863" y="518" fill="#123b39" font-size="21" font-family="Trebuchet MS, sans-serif" font-weight="700">Finance gate</text>
+  <text x="1048" y="518" fill="#123b39" font-size="21" font-family="Trebuchet MS, sans-serif" font-weight="700">Class</text>
+  <text x="120" y="584" fill="#5a6c6b" font-size="24" font-family="Trebuchet MS, sans-serif">Pilot 2 tuan • 1 lop • attendance + report day du moi duoc close session</text>
+</svg>

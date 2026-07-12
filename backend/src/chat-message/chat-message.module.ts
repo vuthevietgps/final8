@@ -9,6 +9,7 @@ import { Fanpage, FanpageSchema } from '../fanpage/schemas/fanpage.schema';
 import { OpenAIConfigModule } from '../openai-config/openai-config.module';
 import { ProductModule } from '../product/product.module';
 import { MediaModule } from '../media/media.module';
+import { ApiTokenModule } from '../api-token/api-token.module';
 
 import { MessengerWebhookService } from './messenger-webhook.service';
 import { ChatEventsService } from './chat-events.service';
@@ -24,6 +25,7 @@ import { AiDeliveryRecoveryService } from './ai-delivery-recovery.service';
     OpenAIConfigModule,
     ProductModule,
     MediaModule,
+    ApiTokenModule,
   ],
   providers: [ChatMessageService, MessengerWebhookService, ChatEventsService, AiDeliveryRecoveryService],
   controllers: [ChatMessageController, MessengerWebhookController],

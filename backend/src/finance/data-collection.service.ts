@@ -1,72 +1,95 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { AdvertisingCostFacebookSyncService } from '../advertising-cost/advertising-cost.facebook-sync.service';
+import { AdvertisingCostGoogleSyncService } from '../advertising-cost/advertising-cost.google-sync.service';
+import { AdvertisingCostTiktokSyncService } from '../advertising-cost/advertising-cost.tiktok-sync.service';
+import { OrderCalculationService } from '../test-order2/services/order-calculation.service';
+import { AdGroupDailyReportService } from './ad-group-daily-report.service';
 
 /**
  * Data Collection Service
- * 
+ *
  * Responsible for the 24-hour cronjob pipeline:
- * 
+ *
  * 00:00 - Data Collection Phase
  *   - Sync ads data from Facebook/Google/TikTok
  *   - Sync order data from TestOrder2
  *   - Sync receivables from AgentStatement
  *   - Sync payables from SupplierPayable
  *   - Update daily reports
- * 
+ *
  * 01:00 - Metric Calculation Phase
  *   - Calculate CSI (Cashflow Safety Index)
  *   - Calculate DSO (Days Sales Outstanding)
  *   - Calculate DPO (Days Payable Outstanding)
  *   - Calculate Return Rate
  *   - Update ad group testing phases
- * 
+ *
  * 02:00 - Decision & Execution Phase (handled by AutoScaleExecutionService)
  *   - Make scale/kill decisions
  *   - Execute budget changes
  *   - Update ad group status
- * 
+ *
  * 03:00 - Frequency Sync Phase (handled by FrequencySyncService)
  *   - Sync frequency metrics from Facebook
  *   - Update ad group frequency data
- * 
+ *
  * 04:00 - Report Generation Phase (handled by ExecutiveReportService)
  *   - Generate daily executive report
  *   - Send notifications (if enabled)
- * 
+ *
  * This service manages the first two phases: Data Collection and Metric Calculation.
  */
 @Injectable()
 export class DataCollectionService {
   private readonly logger = new Logger(DataCollectionService.name);
 
+  constructor(
+    private readonly facebookSyncService: AdvertisingCostFacebookSyncService,
+    private readonly googleSyncService: AdvertisingCostGoogleSyncService,
+    private readonly tiktokSyncService: AdvertisingCostTiktokSyncService,
+    private readonly orderCalculationService: OrderCalculationService,
+    private readonly adGroupDailyReportService: AdGroupDailyReportService,
+  ) {}
+
   /**
-   * Phase 1: Data Collection - Runs at 00:00 AM
-   * 
+   * Phase 1: Data Collection - Runs at 06:00 AM (Asia/Ho_Chi_Minh)
+   * Chạy sau khi nền tảng quảng cáo (FB/Google/TikTok) đã chốt số liệu qua đêm.
    * Collects all data from external sources and internal systems.
    */
-  @Cron('0 0 * * *', {
+  @Cron('0 6 * * *', {
     name: 'data-collection',
     timeZone: 'Asia/Ho_Chi_Minh',
   })
   async runDataCollection() {
-    this.logger.log('🔄 ========== PHASE 1: DATA COLLECTION (00:00) ==========');
-    
+    this.logger.log('🔄 ========== PHASE 1: DATA COLLECTION (06:00) ==========');
+
     const startTime = Date.now();
+    const yesterdayStr = this.getYesterdayIso();
 
     try {
-      // 1. Sync ads data from platforms
-      await this.syncAdsData();
+      // 1. Chờ toàn bộ nền tảng sync xong trước khi tính phí.
+      await this.syncAdsData(yesterdayStr);
 
-      // 2. Sync order data
-      await this.syncOrderData();
+      // 2. Chỉ phân bổ chi phí sau khi bước sync nền tảng đã hoàn tất.
+      const recalculationResult = await this.orderCalculationService.recalculateOrdersForDate(yesterdayStr);
+      this.logger.log(
+        `✅ Bulk updated ${recalculationResult.updated} orders for ${recalculationResult.date} after ads sync.`,
+      );
 
-      // 3. Sync receivables
+      // 3. Chốt báo cáo ad group daily sau khi order đã có advertisingCost chính xác.
+      const reportResult = await this.adGroupDailyReportService.syncFromOrderTest2(yesterdayStr);
+      this.logger.log(
+        `✅ Ad group daily report synced for ${reportResult.date}: ${reportResult.recordsProcessed} records processed.`,
+      );
+
+      // 4. Sync receivables
       await this.syncReceivables();
 
-      // 4. Sync payables
+      // 5. Sync payables
       await this.syncPayables();
 
-      // 5. Update daily reports
+      // 6. Update any remaining daily reports
       await this.updateDailyReports();
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -76,18 +99,24 @@ export class DataCollectionService {
     }
   }
 
+  private getYesterdayIso(): string {
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() - 1);
+    return targetDate.toISOString().split('T')[0];
+  }
+
   /**
-   * Phase 2: Metric Calculation - Runs at 01:00 AM
-   * 
-   * Calculates all metrics needed for decision making.
+   * Phase 2: Metric Calculation - Runs at 07:30 AM (Asia/Ho_Chi_Minh)
+   * Chạy sau khi Ads Cost đã sync xong (06:30) và RecalculationQueue debounce hoàn tất.
+   * Calculates all metrics (CSI, DSO, DPO) needed for decision making.
    */
-  @Cron('0 1 * * *', {
+  @Cron('30 7 * * *', {
     name: 'metric-calculation',
     timeZone: 'Asia/Ho_Chi_Minh',
   })
   async runMetricCalculation() {
-    this.logger.log('🔄 ========== PHASE 2: METRIC CALCULATION (01:00) ==========');
-    
+    this.logger.log('🔄 ========== PHASE 2: METRIC CALCULATION (07:30) ==========');
+
     const startTime = Date.now();
 
     try {
@@ -123,27 +152,27 @@ export class DataCollectionService {
   /**
    * Sync ads data from Facebook/Google/TikTok APIs.
    */
-  private async syncAdsData() {
+  private async syncAdsData(dateStr: string) {
     this.logger.log('📊 Syncing ads data from platforms...');
 
-    try {
-      // TODO: Implement actual API calls
-      // For now, log placeholder
-      this.logger.log('   ⚠️ Facebook API sync - TODO');
-      this.logger.log('   ⚠️ Google Ads API sync - TODO');
-      this.logger.log('   ⚠️ TikTok Ads API sync - TODO');
+    const results = await Promise.allSettled([
+      this.facebookSyncService.syncForDate(dateStr),
+      this.googleSyncService.syncForDate(dateStr),
+      this.tiktokSyncService.syncForDate(dateStr),
+    ]);
 
-      // Example implementation:
-      // const facebookData = await this.facebookService.syncInsights();
-      // const googleData = await this.googleAdsService.syncReports();
-      // const tiktokData = await this.tiktokService.syncCampaigns();
-      // 
-      // await this.saveAdsData(facebookData, googleData, tiktokData);
-
-      this.logger.log('   ✅ Ads data sync completed (mock)');
-    } catch (error) {
-      this.logger.error(`   ❌ Ads data sync failed: ${error.message}`);
-    }
+    const platforms = ['Facebook', 'Google', 'TikTok'];
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        this.logger.log(
+          `   ✅ ${platforms[idx]} sync: ${result.value.updated} ad groups updated for ${dateStr}`,
+        );
+      } else {
+        this.logger.error(
+          `   ❌ ${platforms[idx]} sync failed: ${result.reason?.message}`,
+        );
+      }
+    });
   }
 
   /**
@@ -155,7 +184,7 @@ export class DataCollectionService {
     try {
       // TODO: Query TestOrder2 for yesterday's orders
       // Calculate success rate, return rate, etc.
-      
+
       this.logger.log('   ⚠️ Order data sync - TODO');
       this.logger.log('   ✅ Order data sync completed (mock)');
     } catch (error) {
@@ -171,7 +200,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Query AgentStatement for open balances
-      
+
       this.logger.log('   ⚠️ Receivables sync - TODO');
       this.logger.log('   ✅ Receivables sync completed (mock)');
     } catch (error) {
@@ -187,7 +216,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Query SupplierPayable for pending payments
-      
+
       this.logger.log('   ⚠️ Payables sync - TODO');
       this.logger.log('   ✅ Payables sync completed (mock)');
     } catch (error) {
@@ -203,7 +232,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Generate AdGroupDailyReport entries for yesterday
-      
+
       this.logger.log('   ⚠️ Daily reports update - TODO');
       this.logger.log('   ✅ Daily reports updated (mock)');
     } catch (error) {
@@ -224,7 +253,7 @@ export class DataCollectionService {
     try {
       // TODO: Calculate CSI using CashflowSafetyService
       // Cache result for decision phase
-      
+
       this.logger.log('   ⚠️ CSI calculation - TODO');
       this.logger.log('   ✅ CSI calculated (mock)');
     } catch (error) {
@@ -240,7 +269,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Calculate DSO using CashflowSafetyService
-      
+
       this.logger.log('   ⚠️ DSO calculation - TODO');
       this.logger.log('   ✅ DSO calculated (mock)');
     } catch (error) {
@@ -256,7 +285,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Calculate DPO using CashflowSafetyService
-      
+
       this.logger.log('   ⚠️ DPO calculation - TODO');
       this.logger.log('   ✅ DPO calculated (mock)');
     } catch (error) {
@@ -272,7 +301,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Calculate return rate using CashflowSafetyService
-      
+
       this.logger.log('   ⚠️ Return rate calculation - TODO');
       this.logger.log('   ✅ Return rate calculated (mock)');
     } catch (error) {
@@ -288,7 +317,7 @@ export class DataCollectionService {
 
     try {
       // TODO: Update testing phases using HorizontalScaleService.updateDaysSinceLaunch()
-      
+
       this.logger.log('   ⚠️ Testing phase update - TODO');
       this.logger.log('   ✅ Testing phases updated (mock)');
     } catch (error) {
@@ -305,7 +334,7 @@ export class DataCollectionService {
     try {
       // TODO: Store metrics in Redis or in-memory cache
       // This allows decision phase to run faster
-      
+
       this.logger.log('   ⚠️ Metric caching - TODO');
       this.logger.log('   ✅ Metrics cached (mock)');
     } catch (error) {

@@ -1,0 +1,40 @@
+{
+  "phase": "PR-DEMO-1H",
+  "status": "inventory_semantics_spec_completed",
+  "output_root": "docs/ai-data-pack/runs/promt38-pr-demo-1h-inventory-reserved-incoming-semantics",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "source_prompt37_status": "implemented_read_only_slice",
+  "target_finding": "low_inventory_best_seller",
+  "semantics": {
+    "reserved_quantity_decision": "reserved_quantity_derivable_with_caution",
+    "incoming_stock_decision": "incoming_stock_derivable_with_caution",
+    "available_quantity_recommended_formula": "available_quantity = max(0, inventorysummaries.onHand - reserved_quantity_candidate)",
+    "days_of_cover_recommended_formula": "days_of_cover = available_quantity / sales_velocity_per_day",
+    "projected_available_quantity_formula": "projected_available_quantity = max(0, inventorysummaries.onHand - reserved_quantity_candidate + incoming_stock_quantity_candidate)",
+    "projected_days_of_cover_formula": "projected_days_of_cover = projected_available_quantity / sales_velocity_per_day",
+    "evidence_upgrade_decision": "ready_for_partial_upgrade_only"
+  },
+  "implementation": {
+    "code_changed": false,
+    "db_migration_added": false,
+    "new_export_download_behavior_added": false
+  },
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "inventory_mutation_added": false,
+    "purchase_action_added": false
+  },
+  "next_recommendation": "Implement a later partial read-only upgrade only: derive reserved_quantity_candidate from active non-final order rows, derive incoming_stock_quantity_candidate from ordered/partially_received PO unreceived quantity, keep evidence partial/medium, and keep all action/provider/mutation paths parked."
+}
+

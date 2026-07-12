@@ -13,11 +13,13 @@ import { Model } from 'mongoose';
 import { FundingSource, FundingSourceDocument } from './schemas/funding-source.schema';
 import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
 import { AdGroupDailyReport, AdGroupDailyReportDocument } from './schemas/ad-group-daily-report.schema';
+import { AdvertisingCost, AdvertisingCostDocument } from '../advertising-cost/schemas/advertising-cost.schema';
 import { AgentStatement, AgentStatementDocument } from '../agent-receivable/schemas/agent-statement.schema';
 import { SupplierPayable, SupplierPayableDocument } from '../supplier-payable/schemas/supplier-payable.schema';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { AgentReceivableService } from '../agent-receivable/agent-receivable.service';
 import { SupplierPayableService } from '../supplier-payable/supplier-payable.service';
+import { FinanceAlertEvent, FinanceAlertEventDocument } from './schemas/finance-alert-event.schema';
 
 export interface CSIResult {
   CSI: number;
@@ -87,36 +89,61 @@ export interface CashflowHealthDashboard {
   DSO: number;
   DPO: number;
   returnRate: number;
-  
+
   // Cash Position
   availableCash: number;
   daysUntilCashout: number;
   dailyCashBurn: number;
-  
+
   // Warnings
   cashflowRiskLevel: 'SAFE' | 'WARNING' | 'DANGER' | 'CRITICAL';
   activeWarnings: string[];
-  
+
   // Projections
   projectedCashIn7Days: number;
   projectedCashOut7Days: number;
   netCashFlow7Days: number;
+
+  // Scenario 4 compatibility aliases
+  csi?: number;
+  dso?: number;
+  dpo?: number;
+  status?: 'safe' | 'warning' | 'danger' | 'critical';
+  runwayDays?: number;
+  alerts?: Array<{
+    code: string;
+    severity: 'WARNING' | 'DANGER' | 'CRITICAL';
+    message: string;
+    value?: number;
+    threshold?: number;
+  }>;
 }
 
 const CASHFLOW_ALERTS = {
   CSI_CRITICAL: 0.7,
   CSI_DANGER: 1.0,
   CSI_WARNING: 1.5,
-  
+
   DSO_WARNING: 10,
   DSO_CRITICAL: 15,
-  
+
   RETURN_RATE_WARNING: 25,
   RETURN_RATE_CRITICAL: 35,
-  
+
   DPO_GAP_WARNING: 3,
   DPO_GAP_CRITICAL: 0
 };
+
+const PERSISTED_FINANCE_ALERT_CODES = [
+  'CSI_BELOW_CRITICAL_THRESHOLD',
+  'CSI_BELOW_DANGER_THRESHOLD',
+  'CSI_BELOW_WARNING_THRESHOLD',
+  'DSO_CRITICAL',
+  'DSO_WARNING',
+  'DPO_LESS_THAN_DSO',
+  'RETURN_RATE_CATASTROPHIC',
+  'RETURN_RATE_WARNING',
+] as const;
 
 @Injectable()
 export class CashflowSafetyService {
@@ -126,9 +153,11 @@ export class CashflowSafetyService {
     @InjectModel(FundingSource.name) private fundingSourceModel: Model<FundingSourceDocument>,
     @InjectModel(LoanContract.name) private loanContractModel: Model<LoanContractDocument>,
     @InjectModel(AdGroupDailyReport.name) private adGroupDailyReportModel: Model<AdGroupDailyReportDocument>,
+    @InjectModel(AdvertisingCost.name) private advertisingCostModel: Model<AdvertisingCostDocument>,
     @InjectModel(AgentStatement.name) private agentStatementModel: Model<AgentStatementDocument>,
     @InjectModel(SupplierPayable.name) private supplierPayableModel: Model<SupplierPayableDocument>,
     @InjectModel(TestOrder2.name) private testOrder2Model: Model<TestOrder2Document>,
+    @InjectModel(FinanceAlertEvent.name) private financeAlertEventModel: Model<FinanceAlertEventDocument>,
     // Fix #9: Inject service APIs for consistent business logic
     @Inject(forwardRef(() => AgentReceivableService))
     private readonly agentService: AgentReceivableService,
@@ -142,58 +171,39 @@ export class CashflowSafetyService {
    */
   async calculateCSI(): Promise<CSIResult> {
     try {
-      // 1. Get available cash (bank accounts + available credit lines)
-      const cashAccounts = await this.fundingSourceModel.find({ 
-        type: 'bank_account',
-        isActive: true
+      // 1. Get available cash from active funding sources.
+      // The schema uses status instead of isActive and does not define bank_account.
+      const cashAccounts = await this.fundingSourceModel.find({
+        status: 'active'
       });
       const totalCash = cashAccounts.reduce((sum, a) => sum + (a.availableBalance || 0), 0);
-      
+
       const creditLines = await this.loanContractModel.find({
         status: 'active',
         type: 'credit_line'
       });
       const availableCredit = creditLines.reduce(
-        (sum, l) => sum + ((l.principal || 0) - ((l.principal || 0) - (l.principalRemaining || 0))), 
+        (sum, l) => sum + ((l.principal || 0) - ((l.principal || 0) - (l.principalRemaining || 0))),
         0
       );
-      
+
       const availableCash = totalCash + availableCredit;
 
-      // 2. Get avg daily ads cost (last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const adsStats = await this.adGroupDailyReportModel.aggregate([
-        {
-          $match: {
-            date: { $gte: thirtyDaysAgo }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalAdsCost: { $sum: '$adsCost' },
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-
-      const avgDailyAdsCost = adsStats.length > 0 && adsStats[0].count > 0
-        ? adsStats[0].totalAdsCost / adsStats[0].count
-        : 1_000_000;  // Default 1M if no data
+      // 2. Get avg daily ads cost (last 30 days), falling back to advertising-cost records.
+      const avgDailyAdsCost = await this.getAverageDailyAdsCost(30);
 
       // 3. Get collection days (DSO)
       const dsoResult = await this.calculateDSO();
       const collectionDays = dsoResult.DSO;
 
-      // 4. Calculate CSI
-      const denominator = avgDailyAdsCost * collectionDays;
+      // 4. Calculate CSI as burn coverage ratio.
+      // Scenario 4 expects CSI to reflect available cash / daily burn directly.
+      const denominator = Math.max(avgDailyAdsCost, 1);
       const CSI = denominator > 0 ? availableCash / denominator : 0;
 
       const status = this.getCSIStatus(CSI);
       const recommendation = this.getCSIRecommendation(CSI);
-      const daysUntilCashout = CSI * collectionDays;
+      const daysUntilCashout = CSI;
 
       return {
         CSI,
@@ -346,7 +356,7 @@ export class CashflowSafetyService {
     try {
       const dsoResult = await this.calculateDSO();
       const dpoResult = await this.calculateDPO();
-      
+
       const DSO = dsoResult.DSO;
       const DPO = dpoResult.DPO;
       const gap = DSO - DPO;  // Positive = Nguy hiểm
@@ -401,7 +411,10 @@ export class CashflowSafetyService {
       const orderStats = await this.testOrder2Model.aggregate([
         {
           $match: {
-            orderDate: { $gte: thirtyDaysAgo }
+            $or: [
+              { orderDate: { $gte: thirtyDaysAgo } },
+              { createdAt: { $gte: thirtyDaysAgo } }
+            ]
           }
         },
         {
@@ -411,7 +424,7 @@ export class CashflowSafetyService {
             returnedOrders: {
               $sum: {
                 $cond: [
-                  { $in: ['$orderStatus', ['Hoàn', 'Từ chối nhận', 'Đổi trả']] },
+                  { $in: ['$orderStatus', ['Hoàn', 'Hoàn hàng', 'Boom', 'Từ chối nhận', 'Đổi trả']] },
                   1,
                   0
                 ]
@@ -486,6 +499,32 @@ export class CashflowSafetyService {
     }
   }
 
+  async getSystemLockStatus(): Promise<{
+    locked: boolean;
+    code?: 'EMERGENCY_RETURN_PROTECTION';
+    message?: string;
+    returnRate: number;
+  }> {
+    const returnRateResult = await this.getSystemReturnRate();
+    const normalizedReturnRate = returnRateResult.returnRate > 1
+      ? returnRateResult.returnRate / 100
+      : returnRateResult.returnRate;
+
+    if (returnRateResult.level === 'CATASTROPHIC' || normalizedReturnRate > (CASHFLOW_ALERTS.RETURN_RATE_CRITICAL / 100)) {
+      return {
+        locked: true,
+        code: 'EMERGENCY_RETURN_PROTECTION',
+        message: 'System is currently locked due to catastrophic return rate (>35%). Manual scaling is strictly prohibited to protect cashflow.',
+        returnRate: normalizedReturnRate,
+      };
+    }
+
+    return {
+      locked: false,
+      returnRate: normalizedReturnRate,
+    };
+  }
+
   /**
    * 📊 Get Cashflow Health Dashboard
    */
@@ -493,6 +532,7 @@ export class CashflowSafetyService {
     const csiResult = await this.calculateCSI();
     const dsoResult = await this.calculateDSO();
     const dpoResult = await this.calculateDPO();
+    const cashflowRisk = await this.checkCashflowRisk();
     const returnRateResult = await this.getSystemReturnRate();
 
     // Projected cash flows (7 days)
@@ -504,32 +544,108 @@ export class CashflowSafetyService {
     // Determine overall risk level
     let cashflowRiskLevel: 'SAFE' | 'WARNING' | 'DANGER' | 'CRITICAL' = 'SAFE';
     const activeWarnings: string[] = [];
+    const alerts: Array<{
+      code: string;
+      severity: 'WARNING' | 'DANGER' | 'CRITICAL';
+      message: string;
+      value?: number;
+      threshold?: number;
+    }> = [];
 
     if (csiResult.CSI < CASHFLOW_ALERTS.CSI_CRITICAL) {
       cashflowRiskLevel = 'CRITICAL';
       activeWarnings.push(`CSI ${csiResult.CSI.toFixed(2)} < ${CASHFLOW_ALERTS.CSI_CRITICAL} - CRITICAL`);
+      alerts.push({
+        code: 'CSI_BELOW_CRITICAL_THRESHOLD',
+        severity: 'CRITICAL',
+        message: 'Cashflow safety index below critical threshold',
+        value: csiResult.CSI,
+        threshold: CASHFLOW_ALERTS.CSI_CRITICAL,
+      });
     } else if (csiResult.CSI < CASHFLOW_ALERTS.CSI_DANGER) {
       cashflowRiskLevel = cashflowRiskLevel === 'SAFE' ? 'DANGER' : cashflowRiskLevel;
       activeWarnings.push(`CSI ${csiResult.CSI.toFixed(2)} < ${CASHFLOW_ALERTS.CSI_DANGER} - DANGER`);
+      alerts.push({
+        code: 'CSI_BELOW_DANGER_THRESHOLD',
+        severity: 'DANGER',
+        message: 'Cashflow safety index below danger threshold',
+        value: csiResult.CSI,
+        threshold: CASHFLOW_ALERTS.CSI_DANGER,
+      });
     } else if (csiResult.CSI < CASHFLOW_ALERTS.CSI_WARNING) {
       cashflowRiskLevel = cashflowRiskLevel === 'SAFE' ? 'WARNING' : cashflowRiskLevel;
       activeWarnings.push(`CSI ${csiResult.CSI.toFixed(2)} < ${CASHFLOW_ALERTS.CSI_WARNING} - WARNING`);
+      alerts.push({
+        code: 'CSI_BELOW_WARNING_THRESHOLD',
+        severity: 'WARNING',
+        message: 'Cashflow safety index below warning threshold',
+        value: csiResult.CSI,
+        threshold: CASHFLOW_ALERTS.CSI_WARNING,
+      });
     }
 
     if (dsoResult.level === 'CRITICAL') {
       cashflowRiskLevel = 'CRITICAL';
       activeWarnings.push(`DSO ${dsoResult.DSO.toFixed(1)} days > ${CASHFLOW_ALERTS.DSO_CRITICAL}`);
+      alerts.push({
+        code: 'DSO_CRITICAL',
+        severity: 'CRITICAL',
+        message: 'Collection cycle is critically slow',
+        value: dsoResult.DSO,
+        threshold: CASHFLOW_ALERTS.DSO_CRITICAL,
+      });
     } else if (dsoResult.level === 'WARNING') {
       cashflowRiskLevel = cashflowRiskLevel === 'SAFE' ? 'WARNING' : cashflowRiskLevel;
       activeWarnings.push(`DSO ${dsoResult.DSO.toFixed(1)} days > ${CASHFLOW_ALERTS.DSO_WARNING}`);
+      alerts.push({
+        code: 'DSO_WARNING',
+        severity: 'WARNING',
+        message: 'Collection cycle is slower than target',
+        value: dsoResult.DSO,
+        threshold: CASHFLOW_ALERTS.DSO_WARNING,
+      });
+    }
+
+    if (cashflowRisk.level === 'CASHFLOW_RISK') {
+      cashflowRiskLevel = cashflowRiskLevel === 'SAFE' ? 'WARNING' : cashflowRiskLevel;
+      activeWarnings.push('Paying suppliers before collecting from agents');
+      alerts.push({
+        code: 'DPO_LESS_THAN_DSO',
+        severity: 'CRITICAL',
+        message: 'Paying suppliers before collecting from agents',
+        value: cashflowRisk.gap,
+        threshold: CASHFLOW_ALERTS.DPO_GAP_CRITICAL,
+      });
     }
 
     if (returnRateResult.level === 'CATASTROPHIC') {
       cashflowRiskLevel = 'CRITICAL';
       activeWarnings.push(`Return rate ${returnRateResult.returnRate.toFixed(1)}% > ${CASHFLOW_ALERTS.RETURN_RATE_CRITICAL}%`);
+      alerts.push({
+        code: 'RETURN_RATE_CATASTROPHIC',
+        severity: 'CRITICAL',
+        message: 'Return rate exceeds catastrophic threshold (35%). System locked to protect cashflow.',
+        value: returnRateResult.returnRate,
+        threshold: CASHFLOW_ALERTS.RETURN_RATE_CRITICAL,
+      });
     } else if (returnRateResult.level === 'WARNING') {
       cashflowRiskLevel = cashflowRiskLevel === 'SAFE' ? 'WARNING' : cashflowRiskLevel;
       activeWarnings.push(`Return rate ${returnRateResult.returnRate.toFixed(1)}% > ${CASHFLOW_ALERTS.RETURN_RATE_WARNING}%`);
+      alerts.push({
+        code: 'RETURN_RATE_WARNING',
+        severity: 'WARNING',
+        message: 'Return rate is above the protection threshold',
+        value: returnRateResult.returnRate,
+        threshold: CASHFLOW_ALERTS.RETURN_RATE_WARNING,
+      });
+    }
+
+    const status = this.mapRiskLevelToStatus(cashflowRiskLevel);
+
+    try {
+      await this.persistDailyAlerts(alerts);
+    } catch (error) {
+      this.logger.warn(`Failed to persist finance alerts: ${error.message}`);
     }
 
     return {
@@ -544,7 +660,13 @@ export class CashflowSafetyService {
       activeWarnings,
       projectedCashIn7Days,
       projectedCashOut7Days,
-      netCashFlow7Days
+      netCashFlow7Days,
+      csi: csiResult.CSI,
+      dso: dsoResult.DSO,
+      dpo: dpoResult.DPO,
+      status,
+      runwayDays: csiResult.daysUntilCashout,
+      alerts,
     };
   }
 
@@ -557,6 +679,75 @@ export class CashflowSafetyService {
     return { level: 'CRITICAL', color: 'red' };
   }
 
+  private async persistDailyAlerts(alerts: Array<{
+    code: string;
+    severity: 'WARNING' | 'DANGER' | 'CRITICAL';
+    message: string;
+    value?: number;
+    threshold?: number;
+  }>): Promise<void> {
+    const now = new Date();
+    const dateString = this.getBusinessDateString(now);
+    const activeCodes = new Set(alerts.map((alert) => alert.code));
+
+    if (alerts.length > 0) {
+      await this.financeAlertEventModel.bulkWrite(
+        alerts.map((alert) => ({
+          updateOne: {
+            filter: {
+              code: alert.code,
+              dateString,
+            },
+            update: {
+              $set: {
+                severity: alert.severity,
+                message: alert.message,
+                value: alert.value,
+                threshold: alert.threshold,
+                isResolved: false,
+                resolvedAt: null,
+                updatedAt: now,
+              },
+              $setOnInsert: {
+                code: alert.code,
+                dateString,
+                createdAt: now,
+              },
+            },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+    }
+
+    const codesToResolve = PERSISTED_FINANCE_ALERT_CODES.filter((code) => !activeCodes.has(code));
+    if (codesToResolve.length > 0) {
+      await this.financeAlertEventModel.updateMany(
+        {
+          code: { $in: codesToResolve },
+          isResolved: false,
+        },
+        {
+          $set: {
+            isResolved: true,
+            resolvedAt: now,
+            updatedAt: now,
+          },
+        },
+      );
+    }
+  }
+
+  private getBusinessDateString(date: Date): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  }
+
   private getCSIRecommendation(CSI: number): CSIAction {
     if (CSI > CASHFLOW_ALERTS.CSI_WARNING) {
       return {
@@ -565,7 +756,7 @@ export class CashflowSafetyService {
         message: 'Cashflow healthy - can scale aggressively'
       };
     }
-    
+
     if (CSI >= CASHFLOW_ALERTS.CSI_DANGER) {
       return {
         action: 'MODERATE_CAUTION',
@@ -574,7 +765,7 @@ export class CashflowSafetyService {
         message: 'CSI cảnh báo - giảm 20% new spend, monitor daily'
       };
     }
-    
+
     if (CSI >= CASHFLOW_ALERTS.CSI_CRITICAL) {
       return {
         action: 'STOP_SCALING',
@@ -583,7 +774,7 @@ export class CashflowSafetyService {
         message: 'CSI nguy hiểm - STOP SCALE, maintain current only'
       };
     }
-    
+
     return {
       action: 'EMERGENCY_REDUCTION',
       budgetReduction: 0.50,
@@ -645,5 +836,80 @@ export class CashflowSafetyService {
     }
 
     return cogsStats[0].totalCOGS / days;
+  }
+
+  private async getAverageDailyAdsCost(days: number): Promise<number> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateString = startDate.toISOString().slice(0, 10);
+
+    const reportStats = await this.adGroupDailyReportModel.aggregate([
+      {
+        $match: {
+          date: { $gte: startDateString }
+        }
+      },
+      {
+        $group: {
+          _id: '$date',
+          totalAdsCost: { $sum: '$adsCost' }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalAdsCost: { $sum: '$totalAdsCost' },
+          dayCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    if (reportStats.length > 0 && reportStats[0].dayCount > 0 && reportStats[0].totalAdsCost > 0) {
+      return reportStats[0].totalAdsCost / reportStats[0].dayCount;
+    }
+
+    const advertisingCostStats = await this.advertisingCostModel.aggregate([
+      {
+        $match: {
+          date: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$date' }
+          },
+          totalSpent: { $sum: { $ifNull: ['$spentAmount', 0] } }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalSpent: { $sum: '$totalSpent' },
+          dayCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    if (advertisingCostStats.length > 0 && advertisingCostStats[0].dayCount > 0 && advertisingCostStats[0].totalSpent > 0) {
+      return advertisingCostStats[0].totalSpent / advertisingCostStats[0].dayCount;
+    }
+
+    return 1_000_000;
+  }
+
+  private mapRiskLevelToStatus(
+    level: 'SAFE' | 'WARNING' | 'DANGER' | 'CRITICAL'
+  ): 'safe' | 'warning' | 'danger' | 'critical' {
+    switch (level) {
+      case 'CRITICAL':
+        return 'critical';
+      case 'DANGER':
+        return 'danger';
+      case 'WARNING':
+        return 'warning';
+      default:
+        return 'safe';
+    }
   }
 }

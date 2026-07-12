@@ -1,0 +1,71 @@
+{
+  "phase": "PR-DEMO-1J",
+  "status": "implemented_read_only_slice",
+  "output_root": "docs/ai-data-pack/runs/promt40-pr-demo-1j-supplier-cost-up-readonly-slice",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target_finding": "supplier_cost_up",
+  "implementation": {
+    "code_changed": true,
+    "docs_changed": true,
+    "director_json_evidence_surface_changed": true,
+    "evidence_row_present": true,
+    "data_quality_gate_present": true,
+    "director_json_section": "16_operation_capacity",
+    "read_only_sources": [
+      "supplierquotes",
+      "products",
+      "quotes"
+    ],
+    "tests_run": [
+      {
+        "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+        "working_directory": "backend",
+        "result": "passed",
+        "test_suites": "1 passed, 1 total",
+        "tests": "25 passed, 25 total"
+      },
+      {
+        "command": "npm run build",
+        "working_directory": "backend",
+        "result": "passed"
+      },
+      {
+        "command": "rg static safety scans on changed files",
+        "working_directory": ".",
+        "result": "passed",
+        "notes": "No callable OpenAI/action/provider/live/destructive DB/secret path added. Matches were existing test assertions or not_allowed_actions safety text."
+      }
+    ]
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": "",
+    "missing_fields_or_models": []
+  },
+  "non_blocking_weak_fields": [
+    "supplier_quote_approval_status_not_canonical",
+    "product_cost_history_not_durable",
+    "dealer_price_history_can_be_missing"
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "db_migration_added": false,
+    "supplier_mutation_added": false,
+    "price_update_action_added": false,
+    "dealer_price_mutation_added": false,
+    "purchase_action_added": false
+  },
+  "next_recommendation": "Review and approve Prompt40 as a partial read-only supplier_cost_up evidence slice; keep Action Draft Schema, provider execution, OpenAI upload, and all mutation branches parked."
+}
+

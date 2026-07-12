@@ -1,0 +1,315 @@
+{
+  "metadata": {
+    "company_id": null,
+    "company_name": null,
+    "currency": "VND",
+    "data_pack_id": "mapping_report-2026-06-12",
+    "data_pack_type": "mapping_report",
+    "data_sources": [],
+    "export_format": "json",
+    "exported_at": "2026-06-12T10:20:45.331Z",
+    "generated_by": {
+      "buffer": {
+        "0": 105,
+        "1": 204,
+        "2": 97,
+        "3": 195,
+        "4": 211,
+        "5": 42,
+        "6": 40,
+        "7": 80,
+        "8": 238,
+        "9": 59,
+        "10": 183,
+        "11": 166
+      }
+    },
+    "report_date": "2026-06-12",
+    "schema_version": "1.0",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "warnings": [
+      "company_id and company_name are not configured in a canonical source."
+    ]
+  },
+  "overall_attribution_confidence": 0,
+  "quality": {
+    "calculation_method": "Segment completeness rates plus capped weighted attribution confidence.",
+    "can_use_for_decision": "no",
+    "confidence": "low",
+    "data_quality_status": "weak",
+    "freshness_at": null,
+    "missing_fields": [
+      "ads_platform_to_ads_account",
+      "ads_account_to_campaign",
+      "platform_account_to_campaign",
+      "campaign_to_ad_group",
+      "ad_group_to_ad_creative",
+      "ad_creative_to_keyword_search_term",
+      "keyword_search_term_to_utm_landing",
+      "utm_landing_to_lead",
+      "ad_group_to_lead",
+      "lead_to_sale",
+      "lead_to_customer",
+      "sale_to_customer",
+      "lead_to_order",
+      "order_to_customer",
+      "customer_to_order",
+      "order_to_product_variant",
+      "ad_group_to_service_group",
+      "order_to_profit",
+      "product_variant_to_revenue",
+      "revenue_to_gross_profit",
+      "gross_profit_to_net_profit"
+    ],
+    "period": "custom",
+    "source": "AI Data Pack mapping calculator",
+    "source_table_or_service": "ads, marketing_leads, ordertest2, products",
+    "warning": [
+      "Attribution confidence is below 0.8; ads scale/live decisions are blocked."
+    ]
+  },
+  "segments": [
+    {
+      "broken_reason": "Ads account platform/type metadata is missing.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "ads_platform_to_ads_account",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "ads_platform",
+      "target_entity": "ads_account"
+    },
+    {
+      "broken_reason": "Campaign account/customer mapping is incomplete.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "ads_account_to_campaign",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "ads_account",
+      "target_entity": "campaign"
+    },
+    {
+      "broken_reason": "Missing verified provider account/customer mapping.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "platform_account_to_campaign",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "ads_account",
+      "target_entity": "campaign"
+    },
+    {
+      "broken_reason": "Campaign metadata is partial outside Google.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "campaign_to_ad_group",
+      "missing_count": 0,
+      "required_fix_priority": "P1",
+      "source_entity": "campaign",
+      "target_entity": "ad_group"
+    },
+    {
+      "broken_reason": "Multi-channel creative mapping is partial.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "ad_group_to_ad_creative",
+      "missing_count": 0,
+      "required_fix_priority": "P1",
+      "source_entity": "ad_group",
+      "target_entity": "ad_or_creative"
+    },
+    {
+      "broken_reason": "Search term to ad/lead mapping is unavailable.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "ad_creative_to_keyword_search_term",
+      "missing_count": 0,
+      "required_fix_priority": "P1",
+      "source_entity": "ad_or_creative",
+      "target_entity": "keyword_or_search_term"
+    },
+    {
+      "broken_reason": "UTM/search-term tracking is unavailable.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "keyword_search_term_to_utm_landing",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "keyword_or_search_term",
+      "target_entity": "utm_or_landing_page"
+    },
+    {
+      "broken_reason": "Lead has no durable UTM/landing-page relation.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "utm_landing_to_lead",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "utm_or_landing_page",
+      "target_entity": "lead"
+    },
+    {
+      "broken_reason": "Lead ad-group mapping is partial/inferred.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "ad_group_to_lead",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "ad_group",
+      "target_entity": "lead"
+    },
+    {
+      "broken_reason": "Assignment history is unavailable.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "lead_to_sale",
+      "missing_count": 0,
+      "required_fix_priority": "P1",
+      "source_entity": "lead",
+      "target_entity": "sale"
+    },
+    {
+      "broken_reason": "Customer mapping is not durable across orders.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "lead_to_customer",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "lead",
+      "target_entity": "customer"
+    },
+    {
+      "broken_reason": "Sale-to-customer relation is only available through partial lead records.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "sale_to_customer",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "sale",
+      "target_entity": "customer"
+    },
+    {
+      "broken_reason": "Many orders do not retain a durable lead relation.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "lead_to_order",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "lead",
+      "target_entity": "order"
+    },
+    {
+      "broken_reason": "TestOrder2 has no durable customerId.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "order_to_customer",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "order",
+      "target_entity": "customer"
+    },
+    {
+      "broken_reason": "TestOrder2 has no durable customerId and Customer only retains latestOrderId.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "customer_to_order",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "customer",
+      "target_entity": "order"
+    },
+    {
+      "broken_reason": "Some orders may not have productId.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "order_to_product_variant",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "order",
+      "target_entity": "product_variant"
+    },
+    {
+      "broken_reason": null,
+      "confidence": "high",
+      "impact": "No material mapping gap detected for this segment.",
+      "mapping_rate": 100,
+      "mapping_segment": "product_variant_to_service_group",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "product_variant",
+      "target_entity": "service_group"
+    },
+    {
+      "broken_reason": "Ad group product/service mapping is optional.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "ad_group_to_service_group",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "ad_group",
+      "target_entity": "service_group"
+    },
+    {
+      "broken_reason": "Cost allocation may still be estimated.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "order_to_profit",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "order",
+      "target_entity": "gross_and_net_profit"
+    },
+    {
+      "broken_reason": "Revenue is order-derived and requires product mapping.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "product_variant_to_revenue",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "product_variant",
+      "target_entity": "revenue"
+    },
+    {
+      "broken_reason": "Some orders may not have complete gross profit.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "revenue_to_gross_profit",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "revenue",
+      "target_entity": "gross_profit"
+    },
+    {
+      "broken_reason": "Net profit may remain estimated until allocations finalize.",
+      "confidence": "low",
+      "impact": "Downstream analysis must lower confidence or block strong decisions.",
+      "mapping_rate": null,
+      "mapping_segment": "gross_profit_to_net_profit",
+      "missing_count": 0,
+      "required_fix_priority": "P0",
+      "source_entity": "gross_profit",
+      "target_entity": "net_profit"
+    }
+  ]
+}

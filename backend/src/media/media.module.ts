@@ -5,11 +5,13 @@ import { MediaService } from './media.service';
 import { MediaController } from './media.controller';
 import { SyncMediaService } from './sync-media.service';
 import { ProductModule } from '../product/product.module';
+import { Product, ProductSchema } from '../product/schemas/product.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: Media.name, schema: MediaSchema }
+      { name: Media.name, schema: MediaSchema },
+      { name: Product.name, schema: ProductSchema },
     ]),
     forwardRef(() => ProductModule)
   ],

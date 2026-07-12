@@ -22,6 +22,7 @@ export class InventoryService {
   ) {
     const txs: any[] = [];
     const batchDocs: any[] = [];
+    const summaryUpdates = new Map<string, { productId: Types.ObjectId; quantity: number; totalCost: number }>();
     const now = new Date();
 
     for (const it of items) {
@@ -192,6 +193,7 @@ export class InventoryService {
   ) {
     const txs: any[] = [];
     const batchDocs: any[] = [];
+    const summaryUpdates = new Map<string, { productId: Types.ObjectId; quantity: number; totalCost: number }>();
     const now = new Date();
 
     for (const it of items) {
@@ -209,18 +211,70 @@ export class InventoryService {
         notes: notes || 'Nhập hàng hoàn',
       });
 
-      const sum = await this.summaryModel.findOne({ productId: pid }).session(session || null);
-      const onHand = sum?.onHand || 0;
-      const avg = sum?.avgCost || 0;
-      const newOnHand = onHand + qty;
-      const newAvg = newOnHand > 0 ? ((onHand * avg) + (qty * price)) / newOnHand : 0;
-      if (sum) {
-        sum.onHand = newOnHand;
-        sum.avgCost = newAvg;
-        await sum.save({ session });
+      const key = pid.toHexString();
+      const current = summaryUpdates.get(key);
+      if (current) {
+        current.quantity += qty;
+        current.totalCost += qty * price;
       } else {
-        await this.summaryModel.create([{ productId: pid, onHand: newOnHand, avgCost: newAvg }], { session });
+        summaryUpdates.set(key, {
+          productId: pid,
+          quantity: qty,
+          totalCost: qty * price,
+        });
       }
+    }
+
+    for (const update of summaryUpdates.values()) {
+      const updateOptions = session ? { upsert: true, session } : { upsert: true };
+      await this.summaryModel.updateOne(
+        { productId: update.productId },
+        [
+          {
+            $set: {
+              productId: update.productId,
+              onHand: {
+                $add: [
+                  { $ifNull: ['$onHand', 0] },
+                  update.quantity,
+                ],
+              },
+              avgCost: {
+                $let: {
+                  vars: {
+                    currentOnHand: { $ifNull: ['$onHand', 0] },
+                    currentAvg: { $ifNull: ['$avgCost', 0] },
+                    newOnHand: {
+                      $add: [
+                        { $ifNull: ['$onHand', 0] },
+                        update.quantity,
+                      ],
+                    },
+                  },
+                  in: {
+                    $cond: [
+                      { $gt: ['$$newOnHand', 0] },
+                      {
+                        $divide: [
+                          {
+                            $add: [
+                              { $multiply: ['$$currentOnHand', '$$currentAvg'] },
+                              update.totalCost,
+                            ],
+                          },
+                          '$$newOnHand',
+                        ],
+                      },
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        ],
+        updateOptions,
+      );
     }
 
     const inserted = batchDocs.length ? await this.batchModel.insertMany(batchDocs, { session, ordered: false }) : [];

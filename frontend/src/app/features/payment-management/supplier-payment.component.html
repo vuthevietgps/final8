@@ -67,7 +67,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let s of showAllSuppliers ? opsSummary.bySupplier : opsSummary.bySupplier.slice(0, 5)" 
+          <tr *ngFor="let s of showAllSuppliers ? opsSummary.bySupplier : opsSummary.bySupplier.slice(0, 5)"
               [class.over-threshold]="s.isOverThreshold">
             <td>
               {{ s.supplierName }}
@@ -82,8 +82,8 @@
           </tr>
         </tbody>
       </table>
-      <button *ngIf="opsSummary.bySupplier.length > 5" 
-              class="btn-small" 
+      <button *ngIf="opsSummary.bySupplier.length > 5"
+              class="btn-small"
               (click)="showAllSuppliers = !showAllSuppliers">
         {{ showAllSuppliers ? '📉 Thu gọn' : '📈 Xem tất cả (' + opsSummary.bySupplier.length + ')' }}
       </button>
@@ -94,7 +94,7 @@
 
   <!-- ============ THRESHOLD WARNING BANNER ============ -->
   <div class="alert-banner warning" *ngIf="isSelectedOverThreshold">
-    ⚠️ <strong>Cảnh báo:</strong> Tổng tiền đang chọn vượt 5.000.000đ 
+    ⚠️ <strong>Cảnh báo:</strong> Tổng tiền đang chọn vượt 5.000.000đ
     ({{ selectedTotal | number:'1.0-0' }} đ). Bạn sẽ cần xác nhận khi tạo phiếu.
   </div>
 
@@ -103,7 +103,7 @@
     <div class="section-header">
       <h3>🔍 Lọc Đơn Hàng</h3>
     </div>
-    
+
     <div class="filters">
       <label>
         Nhà cung cấp
@@ -114,17 +114,17 @@
           </option>
         </select>
       </label>
-      
+
       <label>
         Từ ngày
         <input type="date" [(ngModel)]="fromDate" />
       </label>
-      
+
       <label>
         Đến ngày
         <input type="date" [(ngModel)]="toDate" />
       </label>
-      
+
       <label>
         Trạng thái giao hàng
         <select [(ngModel)]="orderStatus">
@@ -134,7 +134,7 @@
           <option value="Hoàn hàng">Hoàn hàng</option>
         </select>
       </label>
-      
+
       <button (click)="loadPendingOrders()">🔍 Tìm kiếm</button>
     </div>
   </section>
@@ -147,15 +147,15 @@
         <p class="section-sub">
           Tổng: <strong>{{ pendingOrders.length }}</strong> đơn
           <span *ngIf="selectedCount > 0">
-            | Đã chọn: <strong>{{ selectedCount }}</strong> đơn - 
+            | Đã chọn: <strong>{{ selectedCount }}</strong> đơn -
             <strong class="money" [class.over-threshold]="isSelectedOverThreshold">{{ selectedTotal | number:'1.0-0' }}</strong> đ
             <span *ngIf="isSelectedOverThreshold" class="threshold-icon">⚠️</span>
           </span>
         </p>
       </div>
       <div class="section-actions">
-        <button 
-          (click)="openCreateBatchModal()" 
+        <button
+          (click)="openCreateBatchModal()"
           [disabled]="selectedCount === 0"
           class="btn-primary">
           📄 Tạo Phiếu Thanh Toán
@@ -174,8 +174,8 @@
         <thead>
           <tr>
             <th style="width: 40px;">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 (change)="selectAll($event)"
                 [checked]="selectedCount === pendingOrders.length && pendingOrders.length > 0" />
             </th>
@@ -278,7 +278,7 @@
       <h3>📄 Tạo Phiếu Thanh Toán NCC</h3>
       <button class="close-btn" (click)="closeBatchModal()">×</button>
     </div>
-    
+
     <div class="modal-body">
       <p class="modal-description">
         Tạo phiếu thanh toán cho <strong>{{ selectedCount }}</strong> đơn hàng
@@ -287,30 +287,30 @@
 
       <!-- Threshold Warning trong Modal -->
       <div class="alert-box warning" *ngIf="isSelectedOverThreshold">
-        ⚠️ <strong>Cảnh báo:</strong> Tổng tiền vượt 5.000.000đ. 
+        ⚠️ <strong>Cảnh báo:</strong> Tổng tiền vượt 5.000.000đ.
         Vui lòng xác nhận bên dưới để tiếp tục.
       </div>
 
       <div class="form-group">
         <label>Mã phiếu thanh toán *</label>
-        <input 
-          type="text" 
-          [(ngModel)]="batchForm.batchId" 
+        <input
+          type="text"
+          [(ngModel)]="batchForm.batchId"
           placeholder="VD: PTTT-NCC-2026-01-001"
           required />
       </div>
 
       <div class="form-group">
         <label>Ngày thanh toán *</label>
-        <input 
-          type="date" 
+        <input
+          type="date"
           [(ngModel)]="batchForm.paidDate"
           required />
       </div>
 
       <div class="form-group">
         <label>Ghi chú</label>
-        <textarea 
+        <textarea
           [(ngModel)]="batchForm.note"
           rows="3"
           placeholder="VD: Thanh toán chu kỳ 01-10/01/2026"></textarea>
@@ -318,8 +318,8 @@
 
       <div class="form-group">
         <label>🔗 Link chứng từ</label>
-        <input 
-          type="text" 
+        <input
+          type="text"
           [(ngModel)]="batchForm.attachments"
           placeholder="VD: https://drive.google.com/... (nhiều link cách nhau bởi dấu phẩy)" />
         <small class="form-hint">Nhập link hình ảnh hoặc file chứng từ thanh toán (bank transfer, receipt, ...)</small>
@@ -347,7 +347,7 @@
 
     <div class="modal-footer">
       <button (click)="closeBatchModal()" class="btn-secondary">Hủy</button>
-      <button (click)="createBatch()" 
+      <button (click)="createBatch()"
               class="btn-primary"
               [disabled]="isSelectedOverThreshold && !batchForm.confirmOverThreshold">
         ✅ Xác Nhận Thanh Toán
@@ -363,7 +363,7 @@
       <h3>👁️ Chi Tiết Phiếu Thanh Toán</h3>
       <button class="close-btn" (click)="closeViewBatchModal()">×</button>
     </div>
-    
+
     <div class="modal-body">
       <div class="batch-info" *ngIf="selectedBatch">
         <div class="info-row">
@@ -405,7 +405,7 @@
               <td>{{ i + 1 }}</td>
               <td>{{ order._id }}</td>
               <td>{{ order.customerName || '-' }}</td>
-              <td class="num money">{{ order.supplierPaidAmount | number:'1.0-0' }}</td>
+              <td class="num money">{{ calculateSupplierAmount(order) | number:'1.0-0' }}</td>
               <td>{{ order.orderDate | date:'dd/MM/yyyy' }}</td>
             </tr>
           </tbody>

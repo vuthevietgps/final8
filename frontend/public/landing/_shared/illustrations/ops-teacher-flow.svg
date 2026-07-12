@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Operations and teacher flow</title>
+  <desc id="desc">Minh họa flow vận hành lớp với classes, sessions, attendance, teaching report và payroll block.</desc>
+  <rect width="1200" height="720" rx="32" fill="#f4ede2"/>
+  <rect x="70" y="70" width="1060" height="580" rx="32" fill="#123b39"/>
+  <rect x="110" y="110" width="980" height="112" rx="28" fill="#fffaf2"/>
+  <rect x="110" y="252" width="300" height="308" rx="26" fill="#f2e5d4"/>
+  <rect x="450" y="252" width="300" height="308" rx="26" fill="#dce9e3"/>
+  <rect x="790" y="252" width="300" height="308" rx="26" fill="#ead5ab"/>
+  <text x="146" y="164" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">VAN HANH LOP HANG NGAY</text>
+  <text x="146" y="206" fill="#123b39" font-size="38" font-family="Georgia, serif" font-weight="700">Classes sua roster. Sessions tao lich. Attendance dung ngay. Close khi report da du.</text>
+  <text x="140" y="302" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">OPS</text>
+  <text x="140" y="348" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">1. Them hoc vien vao Classes</text>
+  <text x="140" y="390" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">2. Tao lich hoc trong Sessions</text>
+  <text x="140" y="432" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">3. Kiem tra attendance trong ngay</text>
+  <text x="140" y="474" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">4. Chi close session khi ho so da du</text>
+  <text x="480" y="302" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">TEACHER</text>
+  <text x="480" y="348" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">1. Tao link diem danh truoc buoi hoc</text>
+  <text x="480" y="390" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">2. Hoan thanh buoi va xac nhan hoc vien</text>
+  <text x="480" y="432" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">3. Nop teaching report cung ngay</text>
+  <text x="480" y="474" fill="#123b39" font-size="22" font-family="Trebuchet MS, sans-serif">4. Ban giao minh chung cho OPS</text>
+  <text x="820" y="302" fill="#7d5312" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">PAYROLL GATE</text>
+  <text x="820" y="348" fill="#7d5312" font-size="22" font-family="Trebuchet MS, sans-serif">Attendance thieu → khong close session</text>
+  <text x="820" y="390" fill="#7d5312" font-size="22" font-family="Trebuchet MS, sans-serif">Teaching report thieu → chan payroll</text>
+  <text x="820" y="432" fill="#7d5312" font-size="22" font-family="Trebuchet MS, sans-serif">Finance chi xem payroll preview da du ho so</text>
+  <rect x="806" y="474" width="240" height="50" rx="24" fill="#b5522d"/>
+  <text x="846" y="506" fill="#fffaf2" font-size="22" font-family="Trebuchet MS, sans-serif" font-weight="700">NO REPORT, NO PAYROLL</text>
+</svg>

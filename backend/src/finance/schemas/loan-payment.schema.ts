@@ -27,6 +27,9 @@ export enum PaymentSource {
  */
 @Schema({ timestamps: true, collection: 'loan_payments' })
 export class LoanPayment {
+  @Prop({ trim: true })
+  idempotencyKey?: string;
+
   @Prop({ type: Types.ObjectId, ref: 'LoanContract', required: true })
   loanId: Types.ObjectId;
 
@@ -79,3 +82,11 @@ LoanPaymentSchema.index({ loanId: 1, paymentDate: -1 });
 LoanPaymentSchema.index({ source: 1, paymentDate: -1 });
 LoanPaymentSchema.index({ paymentType: 1 });
 LoanPaymentSchema.index({ paymentDate: -1 });
+LoanPaymentSchema.index(
+  { idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
+);
+LoanPaymentSchema.index(
+  { repaymentId: 1 },
+  { unique: true, partialFilterExpression: { repaymentId: { $type: 'objectId' } } },
+);

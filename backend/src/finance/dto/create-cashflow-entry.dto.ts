@@ -1,12 +1,17 @@
 import { IsDateString, IsIn, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateCashflowEntryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  idempotencyKey?: string;
+
   @IsIn(['in', 'out'])
   direction: 'in' | 'out';
 
   @IsString()
-  @IsIn(['cod', 'deposit', 'loan', 'equity', 'other'])
-  sourceType: 'cod' | 'deposit' | 'loan' | 'equity' | 'other';
+  @IsIn(['cod', 'deposit', 'loan', 'equity', 'other', 'owner_fund'])
+  sourceType: 'cod' | 'deposit' | 'loan' | 'equity' | 'other' | 'owner_fund';
 
   @IsNumber()
   amount: number;

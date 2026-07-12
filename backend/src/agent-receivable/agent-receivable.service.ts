@@ -2,15 +2,18 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as dayjs from 'dayjs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AgentStatement, AgentStatementDocument } from './schemas/agent-statement.schema';
 import { TestOrder2 } from '../test-order2/schemas/test-order2.schema';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { FinanceEvents } from '../finance/events/finance-events.constants';
 
 // Import constants from test-order2
-import { 
-  PaymentStatus, 
+import {
+  PaymentStatus,
   AgentRole,
-  COMPLETED_ORDER_STATUSES 
+  COMPLETED_ORDER_STATUSES,
+  RETURN_ORDER_STATUSES,
 } from '../test-order2/constants/test-order2.constants';
 
 @Injectable()
@@ -20,6 +23,7 @@ export class AgentReceivableService {
   constructor(
     @InjectModel(AgentStatement.name) private readonly statementModel: Model<AgentStatementDocument>,
     @InjectModel(TestOrder2.name) private readonly orderModel: Model<TestOrder2>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -443,6 +447,12 @@ export class AgentReceivableService {
 
     this.logger.log(`Agent Statement ${statementId}: Payment added and synced ${syncResult.updated} orders`);
 
+    this.eventEmitter.emit(FinanceEvents.AGENT_RECEIVABLE_UPDATED, {
+      recordId: statementId,
+      agentId: statement.agentId.toString(),
+      amountChanged: true,
+    });
+
     return statement;
   }
 
@@ -580,7 +590,7 @@ export class AgentReceivableService {
    * Tổng hợp hoa hồng đại lý (Agent Commission Payables)
    * - Mình phải trả hoa hồng cho đại lý sau khi đơn giao thành công
    * - Đây là Cash Outflow (AP), không phải Cash Inflow
-   * 
+   *
    * CFO Sign-off v3.1:
    * 1. Endpoint nên là /api/agent-payables/ (từ góc nhìn công ty)
    * 2. Tách totalAgentAdjustments riêng (Hoàn/Boom)
@@ -593,13 +603,13 @@ export class AgentReceivableService {
     totalAgentCommissionIncurred: number; // Tổng commission đã phát sinh (gross)
     totalAgentAdjustments: number;        // Điều chỉnh từ Hoàn/Boom chưa trả (âm)
     totalAgentClawback: number;           // Hoàn sau khi đã trả → agent nợ lại (dương = agent nợ mình)
-    
+
     // === TỔNG HỢP NET ===
     totalAgentNetPayable: number;         // = incurred + adjustments - clawback
     totalAgentPaid: number;               // Đã trả đại lý
     totalAgentUnpaid: number;             // Còn nợ = netPayable - paid
     totalAgentDue14d: number;             // Đến hạn trong 14 ngày (Committed)
-    
+
     // === CHI TIẾT THEO ĐẠI LÝ ===
     byAgent: {
       agentId: string;
@@ -610,12 +620,12 @@ export class AgentReceivableService {
       nextDueDate?: string;               // Ngày thanh toán tiếp theo
       lastPaymentDate?: string;           // Lần trả gần nhất
     }[];
-    
+
     // === SCHEDULE ===
     paymentPolicy: 'weekly' | 'biweekly' | 'monthly' | 'on_demand';
     defaultPayDaysOfMonth?: number[];     // [1, 15] hoặc [5]
     defaultPayWeekdays?: number[];        // [1, 5] = Mon, Fri
-    
+
     // === METADATA ===
     asOfDate: string;
     timezone: string;
@@ -623,7 +633,7 @@ export class AgentReceivableService {
     generatedAt: string;
     totalStatements: number;
     openStatements: number;
-    
+
     // === WARNINGS (v1 partial implementation) ===
     clawbackByAgentIncomplete: boolean; // true nếu có clawback nhưng byAgent chưa chính xác 100%
     alerts: string[];                   // Cảnh báo cho FC dashboard
@@ -642,8 +652,8 @@ export class AgentReceivableService {
     const incurredAgg = await this.orderModel.aggregate([
       {
         $match: {
-          orderStatus: 'Giao thành công',
-          agentQuote: { $gt: 0 },
+          orderStatus: { $in: COMPLETED_ORDER_STATUSES },
+          agentPaidAmount: { $gt: 0 },
           agentId: { $exists: true, $ne: null },
           isActive: { $ne: false },
         },
@@ -651,7 +661,7 @@ export class AgentReceivableService {
       {
         $group: {
           _id: null,
-          totalIncurred: { $sum: { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] } },
+          totalIncurred: { $sum: '$agentPaidAmount' },
         },
       },
     ]);
@@ -662,18 +672,18 @@ export class AgentReceivableService {
     const adjustmentAgg = await this.orderModel.aggregate([
       {
         $match: {
-          orderStatus: { $in: ['Hoàn', 'Boom'] },
-          agentQuote: { $gt: 0 },
+          orderStatus: { $in: [...RETURN_ORDER_STATUSES, 'Boom'] },
+          agentPaidAmount: { $lt: 0 },
           agentId: { $exists: true, $ne: null },
           // Chỉ tính đơn chưa trả agent
-          agentPaymentStatus: { $ne: 'paid' },
+          agentPaymentStatus: { $ne: PaymentStatus.PAID },
           isActive: { $ne: false },
         },
       },
       {
         $group: {
           _id: null,
-          totalAdjustments: { $sum: { $multiply: [-1, { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] }] } },
+          totalAdjustments: { $sum: '$agentPaidAmount' },
         },
       },
     ]);
@@ -684,18 +694,18 @@ export class AgentReceivableService {
     const clawbackAgg = await this.orderModel.aggregate([
       {
         $match: {
-          orderStatus: { $in: ['Hoàn', 'Boom'] },
-          agentQuote: { $gt: 0 },
+          orderStatus: { $in: [...RETURN_ORDER_STATUSES, 'Boom'] },
+          agentPaidAmount: { $lt: 0 },
           agentId: { $exists: true, $ne: null },
           // Chỉ tính đơn đã trả agent rồi mới hoàn
-          agentPaymentStatus: 'paid',
+          agentPaymentStatus: PaymentStatus.PAID,
           isActive: { $ne: false },
         },
       },
       {
         $group: {
           _id: null,
-          totalClawback: { $sum: { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] } }, // Dương = agent nợ mình
+          totalClawback: { $sum: { $multiply: [-1, '$agentPaidAmount'] } }, // Dương = agent nợ mình
         },
       },
     ]);
@@ -739,7 +749,7 @@ export class AgentReceivableService {
       const currentDay = d.getDate();
       const currentMonth = d.getMonth();
       const currentYear = d.getFullYear();
-      
+
       // Tìm ngày thanh toán gần nhất >= orderDate
       for (const payDay of defaultPayDaysOfMonth) {
         if (payDay >= currentDay) {
@@ -753,9 +763,9 @@ export class AgentReceivableService {
     const dueAgg = await this.orderModel.aggregate([
       {
         $match: {
-          orderStatus: 'Giao thành công',
-          agentPaymentStatus: { $ne: 'paid' },
-          agentQuote: { $gt: 0 },
+          orderStatus: { $in: COMPLETED_ORDER_STATUSES },
+          agentPaymentStatus: { $ne: PaymentStatus.PAID },
+          agentPaidAmount: { $gt: 0 },
           agentId: { $exists: true, $ne: null },
           isActive: { $ne: false },
         },
@@ -769,7 +779,7 @@ export class AgentReceivableService {
               { $add: ['$orderDate', 14 * 24 * 60 * 60 * 1000] } // +14 days
             ]
           },
-          calculatedCommission: { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] }
+          calculatedCommission: { $ifNull: ['$agentPaidAmount', 0] }
         }
       },
       {
@@ -784,16 +794,15 @@ export class AgentReceivableService {
         },
       },
     ]);
-
     const totalAgentDue14d = dueAgg[0]?.totalDue || 0;
 
     // === 5. CHI TIẾT THEO ĐẠI LÝ ===
     const byAgentAgg = await this.orderModel.aggregate([
       {
         $match: {
-          orderStatus: 'Giao thành công',
-          agentPaymentStatus: { $ne: 'paid' },
-          agentQuote: { $gt: 0 },
+          orderStatus: { $in: COMPLETED_ORDER_STATUSES },
+          agentPaymentStatus: { $ne: PaymentStatus.PAID },
+          agentPaidAmount: { $gt: 0 },
           agentId: { $exists: true, $ne: null },
           isActive: { $ne: false },
         },
@@ -806,7 +815,7 @@ export class AgentReceivableService {
               { $add: ['$orderDate', 14 * 24 * 60 * 60 * 1000] }
             ]
           },
-          calculatedCommission: { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] }
+          calculatedCommission: { $ifNull: ['$agentPaidAmount', 0] }
         }
       },
       {
@@ -877,25 +886,25 @@ export class AgentReceivableService {
     const clawbackByAgentAgg = await this.orderModel.aggregate([
       {
         $match: {
-          orderStatus: { $in: ['Hoàn', 'Boom'] },
-          agentQuote: { $gt: 0 },
+          orderStatus: { $in: [...RETURN_ORDER_STATUSES, 'Boom'] },
+          agentPaidAmount: { $lt: 0 },
           agentId: { $exists: true, $ne: null },
-          agentPaymentStatus: 'paid',
+          agentPaymentStatus: PaymentStatus.PAID,
           isActive: { $ne: false },
         },
       },
       {
         $group: {
           _id: '$agentId',
-          clawback: { $sum: { $multiply: ['$agentQuote', { $ifNull: ['$quantity', 1] }] } },
+          clawback: { $sum: { $multiply: [-1, '$agentPaidAmount'] } },
         },
       },
     ]);
-    
+
     const clawbackMap = new Map(
       clawbackByAgentAgg.map(c => [c._id?.toString(), c.clawback])
     );
-    
+
     // Merge clawback vào byAgent
     const byAgentWithClawback = byAgentAgg.map(agent => ({
       ...agent,
@@ -906,14 +915,14 @@ export class AgentReceivableService {
     // Flag incomplete khi có clawback nhưng aggregate byAgent chưa match 100% với total
     const sumClawbackByAgent = byAgentWithClawback.reduce((sum, a) => sum + a.clawback, 0);
     const clawbackByAgentIncomplete = totalAgentClawback > 0 && Math.abs(sumClawbackByAgent - totalAgentClawback) > 1;
-    
+
     // Log warning nếu có clawback phát sinh
     const alerts: string[] = [];
     if (totalAgentClawback > 0) {
       const warningMsg = `[Agent Payables] Có clawback phát sinh: ${totalAgentClawback.toLocaleString('vi-VN')} VNĐ`;
       this.logger.warn(warningMsg);
       alerts.push(warningMsg);
-      
+
       if (clawbackByAgentIncomplete) {
         const incompleteMsg = `[Agent Payables] Clawback chưa phân bổ chính xác theo agent (diff: ${Math.abs(sumClawbackByAgent - totalAgentClawback).toLocaleString('vi-VN')} VNĐ)`;
         this.logger.warn(incompleteMsg);

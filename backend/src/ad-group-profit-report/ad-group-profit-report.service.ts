@@ -7,13 +7,45 @@ import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { OptimalSpendSnapshot, OptimalSpendSnapshotDocument } from './schemas/optimal-spend-snapshot.schema';
 import {
   AdGroupPerformance,
+  AdGroupProfitClassificationReport,
+  AdGroupProfitClassificationStatus,
   OptimalSpendSuggestion,
-  AdGroupProfitSummary
+  AdGroupProfitSummary,
 } from './interfaces/ad-group-performance.interface';
 
 @Injectable()
 export class AdGroupProfitReportService {
   private readonly logger = new Logger(AdGroupProfitReportService.name);
+  private readonly finalizedStatuses = [
+    'Giao th\u00e0nh c\u00f4ng',
+    'H\u00e0ng ho\u00e0n',
+    '\u0110\u00e3 \u0111\u1ed1i so\u00e1t',
+    'Ho\u00e0n th\u00e0nh',
+    'Giao thanh cong',
+    'Hang hoan',
+    'Da doi soat',
+    'Hoan thanh',
+  ];
+  private readonly successStatuses = [
+    'Giao th\u00e0nh c\u00f4ng',
+    '\u0110\u00e3 \u0111\u1ed1i so\u00e1t',
+    'Ho\u00e0n th\u00e0nh',
+    'Giao thanh cong',
+    'Da doi soat',
+    'Hoan thanh',
+  ];
+  private readonly returnStatuses = [
+    'H\u00e0ng ho\u00e0n',
+    'Ho\u00e0n h\u00e0ng',
+    'Hang hoan',
+    'Hoan hang',
+  ];
+  private readonly pendingStatuses = [
+    '\u0110ang giao',
+    'Ch\u1edd l\u1ea5y',
+    'Dang giao',
+    'Cho lay',
+  ];
 
   constructor(
     @InjectModel(TestOrder2.name)
@@ -25,8 +57,8 @@ export class AdGroupProfitReportService {
   ) {}
 
   /**
-   * Ưu tiên lọc theo orderDate để đồng bộ với các báo cáo lợi nhuận theo ngày đơn.
-   * Fallback createdAt cho dữ liệu legacy chưa có orderDate.
+   * Prefer orderDate so report windows stay aligned with other profit reports.
+   * Fallback createdAt for legacy rows that do not have orderDate yet.
    */
   private buildDateRangeMatch(startDate: Date, endDate: Date): any {
     return {
@@ -42,23 +74,18 @@ export class AdGroupProfitReportService {
     return { $ifNull: ['$orderDate', '$createdAt'] };
   }
 
-  /**
-   * Lấy performance report cho từng ad group
-   * @param params - Tham số lọc (từ ngày, đến ngày, adGroupIds)
-   */
   async getAdGroupPerformanceReport(params?: {
     startDate?: Date;
     endDate?: Date;
     adGroupIds?: string[];
     minOrders?: number;
-    onlyFinalized?: boolean; // Chỉ tính đơn đã kết thúc (thành công + hoàn)
+    onlyFinalized?: boolean;
   }): Promise<AdGroupPerformance[]> {
-    const startDate = params?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+    const startDate = params?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = params?.endDate || new Date();
     const minOrders = params?.minOrders || 1;
-    const onlyFinalized = params?.onlyFinalized ?? true; // Mặc định chỉ tính đơn đã kết thúc
+    const onlyFinalized = params?.onlyFinalized ?? true;
 
-    // Build match conditions
     const matchConditions: any = {
       isActive: { $ne: false },
       adGroupId: { $exists: true, $ne: null },
@@ -66,192 +93,182 @@ export class AdGroupProfitReportService {
       ...this.buildDateRangeMatch(startDate, endDate),
     };
 
-    // Chỉ tính đơn đã kết thúc (Giao thành công hoặc Hàng hoàn)
-    // Đơn hoàn sẽ có netProfit âm → giảm ROI thực tế
     if (onlyFinalized) {
-      matchConditions.orderStatus = { 
-        $in: ['Giao thành công', 'Hàng hoàn', 'Đã đối soát', 'Hoàn thành'] 
+      matchConditions.orderStatus = {
+        $in: this.finalizedStatuses,
       };
     }
 
-    if (params?.adGroupIds && params.adGroupIds.length > 0) {
+    if (params?.adGroupIds?.length) {
       matchConditions.adGroupId = { $in: params.adGroupIds };
     }
 
-    // Aggregate orders by adGroupId
     const results = await this.orderModel.aggregate([
       { $match: matchConditions },
       {
+        $addFields: {
+          normalizedOrderStatus: {
+            $ifNull: ['$orderStatus', 'Unknown'],
+          },
+        },
+      },
+      {
         $group: {
-          _id: '$adGroupId',
+          _id: {
+            adGroupId: '$adGroupId',
+            status: '$normalizedOrderStatus',
+          },
           totalOrders: { $sum: 1 },
-          // Đơn hoàn: codCollectedBySupplier = 0, nên tự động không tính vào revenue
           totalRevenue: { $sum: '$codCollectedBySupplier' },
-          // Đơn hoàn: netProfit thường âm (mất phí ship) → giảm tổng profit
           totalNetProfit: { $sum: '$netProfit' },
           totalAdsSpent: { $sum: '$advertisingCost' },
           totalProductCost: { $sum: '$productCost' },
           totalShippingFee: { $sum: '$shippingFee' },
-          
-          // Đếm riêng đơn thành công và hoàn
           successOrders: {
             $sum: {
               $cond: [
-                { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /giao thành công|đã đối soát|hoàn thành/i } },
+                { $in: ['$normalizedOrderStatus', this.successStatuses] },
                 1,
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
           returnOrders: {
             $sum: {
               $cond: [
-                { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /hàng hoàn|hoàn hàng/i } },
+                { $in: ['$normalizedOrderStatus', this.returnStatuses] },
                 1,
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
-          // Profit từ đơn thành công
           successProfit: {
             $sum: {
               $cond: [
-                { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /giao thành công|đã đối soát|hoàn thành/i } },
+                { $in: ['$normalizedOrderStatus', this.successStatuses] },
                 '$netProfit',
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
-          // Loss từ đơn hoàn (thường âm)
           returnLoss: {
             $sum: {
               $cond: [
-                { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /hàng hoàn|hoàn hàng/i } },
+                { $in: ['$normalizedOrderStatus', this.returnStatuses] },
                 '$netProfit',
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
-          
-          // Phân loại theo orderStatus
           realizedProfit: {
             $sum: {
               $cond: [
-                {
-                  $or: [
-                    { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /giao thành công/i } },
-                    { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /đã đối soát/i } },
-                    { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /hoàn thành/i } }
-                  ]
-                },
+                { $in: ['$normalizedOrderStatus', this.successStatuses] },
                 '$netProfit',
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
           pendingProfit: {
             $sum: {
               $cond: [
-                {
-                  $or: [
-                    { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /đang giao/i } },
-                    { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /chờ lấy/i } }
-                  ]
-                },
+                { $in: ['$normalizedOrderStatus', this.pendingStatuses] },
                 '$netProfit',
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
           riskyProfit: {
             $sum: {
               $cond: [
                 {
                   $and: [
-                    { $not: { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /giao thành công/i } } },
-                    { $not: { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /đang giao/i } } },
-                    { $not: { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /chờ lấy/i } } }
-                  ]
+                    { $not: { $in: ['$normalizedOrderStatus', this.successStatuses] } },
+                    { $not: { $in: ['$normalizedOrderStatus', this.pendingStatuses] } },
+                  ],
                 },
                 '$netProfit',
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
-          
-          // Chi tiết theo status
-          orderStatuses: { $push: '$orderStatus' },
-          orderProfits: { $push: { status: '$orderStatus', profit: '$netProfit', revenue: '$codCollectedBySupplier' } }
-        }
+        },
+      },
+      {
+        $group: {
+          _id: '$_id.adGroupId',
+          totalOrders: { $sum: '$totalOrders' },
+          totalRevenue: { $sum: '$totalRevenue' },
+          totalNetProfit: { $sum: '$totalNetProfit' },
+          totalAdsSpent: { $sum: '$totalAdsSpent' },
+          totalProductCost: { $sum: '$totalProductCost' },
+          totalShippingFee: { $sum: '$totalShippingFee' },
+          successOrders: { $sum: '$successOrders' },
+          returnOrders: { $sum: '$returnOrders' },
+          successProfit: { $sum: '$successProfit' },
+          returnLoss: { $sum: '$returnLoss' },
+          realizedProfit: { $sum: '$realizedProfit' },
+          pendingProfit: { $sum: '$pendingProfit' },
+          riskyProfit: { $sum: '$riskyProfit' },
+          ordersByStatus: {
+            $push: {
+              status: '$_id.status',
+              count: '$totalOrders',
+              revenue: '$totalRevenue',
+              profit: '$totalNetProfit',
+            },
+          },
+        },
       },
       {
         $match: {
-          totalOrders: { $gte: minOrders }
-        }
-      }
+          totalOrders: { $gte: minOrders },
+        },
+      },
+      {
+        $sort: {
+          totalNetProfit: -1,
+        },
+      },
     ]);
 
-    // Filter và enrich với thông tin ad group
-    const performances: AdGroupPerformance[] = [];
-    
-    for (const result of results) {
-      const adGroupId = result._id;
-      
-      // Lấy thông tin ad group
-      const adGroup = await this.adGroupModel.findOne({ adGroupId }).lean();
-      const adGroupName = adGroup?.name || adGroupId;
+    const adGroupIds = results.map((result) => result._id).filter(Boolean);
+    const adGroups = await this.adGroupModel
+      .find({ adGroupId: { $in: adGroupIds } }, { adGroupId: 1, name: 1 })
+      .lean();
+    const adGroupNameMap = new Map(
+      adGroups.map((adGroup) => [adGroup.adGroupId, adGroup.name || adGroup.adGroupId]),
+    );
 
+    const daysInPeriod =
+      Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) || 1;
+
+    return results.map((result) => {
+      const adGroupId = result._id;
       const totalRevenue = result.totalRevenue || 0;
       const totalAdsSpent = result.totalAdsSpent || 0;
       const totalNetProfit = result.totalNetProfit || 0;
       const totalOrders = result.totalOrders || 0;
-
+      const successOrders = result.successOrders || 0;
+      const returnOrders = result.returnOrders || 0;
+      const successProfit = result.successProfit || 0;
+      const returnLoss = result.returnLoss || 0;
       const roi = totalAdsSpent > 0 ? (totalNetProfit / totalAdsSpent) * 100 : 0;
       const profitMargin = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0;
       const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-      const daysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) || 1;
-      const avgDailyOrders = totalOrders / daysInPeriod;
-      const avgDailyRevenue = totalRevenue / daysInPeriod;
-      const avgDailyProfit = totalNetProfit / daysInPeriod;
-      const avgDailySpent = totalAdsSpent / daysInPeriod;
-
-      // Group orders by status
-      const statusMap = new Map<string, { count: number; revenue: number; profit: number }>();
-      for (const item of result.orderProfits) {
-        const status = item.status || 'Unknown';
-        const existing = statusMap.get(status) || { count: 0, revenue: 0, profit: 0 };
-        existing.count += 1;
-        existing.revenue += item.revenue || 0;
-        existing.profit += item.profit || 0;
-        statusMap.set(status, existing);
-      }
-
-      const ordersByStatus = Array.from(statusMap.entries()).map(([status, data]) => ({
-        status,
-        count: data.count,
-        revenue: data.revenue,
-        profit: data.profit
-      }));
-
-      // Tính tỷ lệ hoàn hàng
-      const successOrders = result.successOrders || 0;
-      const returnOrders = result.returnOrders || 0;
       const returnRate = totalOrders > 0 ? (returnOrders / totalOrders) * 100 : 0;
-      const successProfit = result.successProfit || 0;
-      const returnLoss = result.returnLoss || 0; // Thường là số âm
 
-      performances.push({
+      return {
         adGroupId,
-        adGroupName,
+        adGroupName: adGroupNameMap.get(adGroupId) || adGroupId,
         totalOrders,
         successOrders,
         returnOrders,
         returnRate,
         totalRevenue,
-        totalCost: result.totalProductCost + result.totalShippingFee + totalAdsSpent,
+        totalCost: (result.totalProductCost || 0) + (result.totalShippingFee || 0) + totalAdsSpent,
         totalAdsSpent,
-        totalNetProfit, // = successProfit + returnLoss (đã bao gồm loss từ hoàn)
+        totalNetProfit,
         successProfit,
         returnLoss,
         roi,
@@ -260,27 +277,30 @@ export class AdGroupProfitReportService {
         realizedProfit: result.realizedProfit || 0,
         pendingProfit: result.pendingProfit || 0,
         riskyProfit: result.riskyProfit || 0,
-        ordersByStatus,
+        ordersByStatus: (result.ordersByStatus || []).map((item: any) => ({
+          status: item.status || 'Unknown',
+          count: item.count || 0,
+          revenue: item.revenue || 0,
+          profit: item.profit || 0,
+        })),
         startDate,
         endDate,
         daysInPeriod,
-        avgDailyOrders,
-        avgDailyRevenue,
-        avgDailyProfit,
-        avgDailySpent
-      });
-    }
-
-    return performances.sort((a, b) => b.totalNetProfit - a.totalNetProfit);
+        avgDailyOrders: totalOrders / daysInPeriod,
+        avgDailyRevenue: totalRevenue / daysInPeriod,
+        avgDailyProfit: totalNetProfit / daysInPeriod,
+        avgDailySpent: totalAdsSpent / daysInPeriod,
+      };
+    });
   }
 
   /**
-   * Lấy dữ liệu chi phí/lợi nhuận theo ngày của một ad group
-   * Dùng để phân tích marginal efficiency
+   * Láº¥y dá»¯ liá»‡u chi phÃ­/lá»£i nhuáº­n theo ngÃ y cá»§a má»™t ad group
+   * DÃ¹ng Ä‘á»ƒ phÃ¢n tÃ­ch marginal efficiency
    */
   private async getDailySpendProfitHistory(
     adGroupId: string,
-    lookbackDays: number = 30
+    lookbackDays: number = 30,
   ): Promise<{ date: Date; spend: number; profit: number; orders: number; returnOrders: number }[]> {
     const endDate = new Date();
     const startDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
@@ -290,13 +310,13 @@ export class AdGroupProfitReportService {
         $match: {
           adGroupId,
           ...this.buildDateRangeMatch(startDate, endDate),
-          orderStatus: { $in: ['Giao thành công', 'Hàng hoàn', 'Đã đối soát', 'Hoàn thành'] }
-        }
+          orderStatus: { $in: this.finalizedStatuses },
+        },
       },
       {
         $group: {
           _id: {
-            $dateToString: { format: '%Y-%m-%d', date: this.getEffectiveOrderDateExpression() }
+            $dateToString: { format: '%Y-%m-%d', date: this.getEffectiveOrderDateExpression() },
           },
           spend: { $sum: '$advertisingCost' },
           profit: { $sum: '$netProfit' },
@@ -304,132 +324,108 @@ export class AdGroupProfitReportService {
           returnOrders: {
             $sum: {
               $cond: [
-                { $regexMatch: { input: { $ifNull: ['$orderStatus', ''] }, regex: /hàng hoàn|hoàn hàng/i } },
+                {
+                  $in: [{ $ifNull: ['$orderStatus', ''] }, this.returnStatuses],
+                },
                 1,
-                0
-              ]
-            }
-          }
-        }
+                0,
+              ],
+            },
+          },
+        },
       },
-      { $sort: { _id: 1 } }
+      { $sort: { _id: 1 } },
     ]);
 
-    return results.map(r => ({
+    return results.map((r) => ({
       date: new Date(r._id),
       spend: r.spend || 0,
       profit: r.profit || 0,
       orders: r.orders || 0,
-      returnOrders: r.returnOrders || 0
+      returnOrders: r.returnOrders || 0,
     }));
   }
 
   /**
-   * Tính Optimal Spend dựa trên Marginal Efficiency Analysis
-   * 
-   * Thuật toán:
-   * 1. Lấy dữ liệu chi phí/lợi nhuận theo ngày (30 ngày)
-   * 2. Tính marginal efficiency tại mỗi mức chi phí
-   * 3. Tìm điểm mà marginal efficiency bắt đầu giảm (diminishing returns)
-   * 4. Đó là optimal spend
-   * 
-   * Marginal Efficiency = Δ Profit / Δ Spend
-   * - > 1: Mỗi đồng chi thêm mang về > 1 đồng lợi nhuận → SCALE
-   * - = 1: Break-even → MAINTAIN
-   * - < 1: Diminishing returns → gần optimal
-   * - < 0: Lỗ → DECREASE
+   * TÃ­nh Optimal Spend dá»±a trÃªn Marginal Efficiency Analysis
    */
   async getOptimalSpendSuggestions(params?: {
     lookbackDays?: number;
     minROI?: number;
     minProfit?: number;
   }): Promise<OptimalSpendSuggestion[]> {
-    const lookbackDays = params?.lookbackDays || 30; // Tăng lên 30 ngày để có đủ data
-    const minROI = params?.minROI || 0; // Bỏ filter minROI, hiển thị tất cả
+    const lookbackDays = params?.lookbackDays || 30;
+    const minROI = params?.minROI || 0;
     const minProfit = params?.minProfit || 0;
 
     const endDate = new Date();
     const startDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
 
-    // Lấy performance report tổng quan
     const performances = await this.getAdGroupPerformanceReport({
       startDate,
       endDate,
       minOrders: 1,
-      onlyFinalized: true
+      onlyFinalized: true,
     });
 
     const suggestions: OptimalSpendSuggestion[] = [];
 
     for (const perf of performances) {
-      // Lấy dữ liệu chi phí/lợi nhuận theo ngày
       const dailyHistory = await this.getDailySpendProfitHistory(perf.adGroupId, lookbackDays);
-      
+
       if (dailyHistory.length < 3) {
-        // Không đủ dữ liệu để phân tích
         continue;
       }
 
-      // Sắp xếp theo mức chi phí để phân tích marginal efficiency
       const sortedBySpend = [...dailyHistory].sort((a, b) => a.spend - b.spend);
-      
-      // Tính marginal efficiency tại mỗi mức
       const marginalData: { spend: number; profit: number; marginalEfficiency: number }[] = [];
       for (let i = 1; i < sortedBySpend.length; i++) {
         const prev = sortedBySpend[i - 1];
         const curr = sortedBySpend[i];
         const deltaSpend = curr.spend - prev.spend;
         const deltaProfit = curr.profit - prev.profit;
-        
+
         if (deltaSpend > 0) {
           marginalData.push({
             spend: curr.spend,
             profit: curr.profit,
-            marginalEfficiency: deltaProfit / deltaSpend
+            marginalEfficiency: deltaProfit / deltaSpend,
           });
         }
       }
 
-      // Tìm optimal spend: điểm mà marginal efficiency gần 1 nhất (hoặc bắt đầu < 1)
-      let optimalSpend = perf.avgDailySpent; // Default = chi phí hiện tại
+      let optimalSpend = perf.avgDailySpent;
       let optimalEfficiency = 1;
-      
+
       if (marginalData.length > 0) {
-        // Tìm điểm có marginal efficiency cao nhất nhưng vẫn > 0
-        const goodPoints = marginalData.filter(d => d.marginalEfficiency > 0);
+        const goodPoints = marginalData.filter((d) => d.marginalEfficiency > 0);
         if (goodPoints.length > 0) {
-          // Tìm điểm có marginal efficiency gần 1 nhất (điểm optimal thực sự)
-          const sorted = goodPoints.sort((a, b) => 
-            Math.abs(a.marginalEfficiency - 1) - Math.abs(b.marginalEfficiency - 1)
+          const sorted = goodPoints.sort(
+            (a, b) =>
+              Math.abs(a.marginalEfficiency - 1) - Math.abs(b.marginalEfficiency - 1),
           );
           optimalSpend = sorted[0].spend;
           optimalEfficiency = sorted[0].marginalEfficiency;
         }
 
-        // Nếu tất cả marginal efficiency > 1, có thể tăng thêm
-        const allPositive = marginalData.every(d => d.marginalEfficiency > 1);
+        const allPositive = marginalData.every((d) => d.marginalEfficiency > 1);
         if (allPositive && marginalData.length > 0) {
-          // Chưa đạt điểm optimal, có thể tăng thêm 20%
-          optimalSpend = Math.max(...marginalData.map(d => d.spend)) * 1.2;
+          optimalSpend = Math.max(...marginalData.map((d) => d.spend)) * 1.2;
         }
 
-        // Nếu marginal efficiency cuối cùng < 0, cần giảm
         const lastMarginal = marginalData[marginalData.length - 1];
         if (lastMarginal && lastMarginal.marginalEfficiency < 0) {
-          // Tìm điểm cuối cùng có marginal > 0
-          const positivePoints = marginalData.filter(d => d.marginalEfficiency > 0);
+          const positivePoints = marginalData.filter((d) => d.marginalEfficiency > 0);
           if (positivePoints.length > 0) {
             optimalSpend = positivePoints[positivePoints.length - 1].spend;
           }
         }
       }
 
-      // Tính các metrics
       const currentSpend = perf.avgDailySpent;
       const currentROI = perf.roi;
       const returnRate = perf.returnRate || 0;
 
-      // Xác định action và reason
       let scaleAction: 'increase' | 'decrease' | 'maintain' | 'kill';
       let reason: string;
       let confidence: number;
@@ -441,76 +437,75 @@ export class AdGroupProfitReportService {
         scaleAction = 'kill';
         optimalSpend = 0;
         confidence = 95;
-        reason = `ROI âm (${currentROI.toFixed(0)}%) hoặc hoàn quá cao (${returnRate.toFixed(0)}%) - TẠM DỪNG`;
+        reason = `ROI Ã¢m (${currentROI.toFixed(0)}%) hoáº·c hoÃ n quÃ¡ cao (${returnRate.toFixed(0)}%) - Táº M Dá»ªNG`;
       } else if (spendDiffPercent > 10) {
         scaleAction = 'increase';
-        confidence = Math.min(90, 60 + marginalData.filter(d => d.marginalEfficiency > 1).length * 5);
-        reason = `Optimal cao hơn ${spendDiffPercent.toFixed(0)}% - có thể TĂNG DẦN (tối đa +20%/lần)`;
+        confidence = Math.min(
+          90,
+          60 + marginalData.filter((d) => d.marginalEfficiency > 1).length * 5,
+        );
+        reason = `Optimal cao hÆ¡n ${spendDiffPercent.toFixed(0)}% - cÃ³ thá»ƒ TÄ‚NG Dáº¦N (tá»‘i Ä‘a +20%/láº§n)`;
       } else if (spendDiffPercent < -10) {
         scaleAction = 'decrease';
-        confidence = Math.min(90, 60 + marginalData.filter(d => d.marginalEfficiency < 1).length * 5);
-        reason = `Đang chi quá optimal ${Math.abs(spendDiffPercent).toFixed(0)}% - nên GIẢM`;
+        confidence = Math.min(
+          90,
+          60 + marginalData.filter((d) => d.marginalEfficiency < 1).length * 5,
+        );
+        reason = `Äang chi quÃ¡ optimal ${Math.abs(spendDiffPercent).toFixed(0)}% - nÃªn GIáº¢M`;
       } else {
         scaleAction = 'maintain';
         confidence = 80;
-        reason = `Chi phí hiện tại GẦN OPTIMAL (±10%)`;
+        reason = `Chi phÃ­ hiá»‡n táº¡i Gáº¦N OPTIMAL (Â±10%)`;
       }
 
-      // Thêm cảnh báo tỷ lệ hoàn
       if (returnRate > 20) {
-        reason += ` ⚠️ Hoàn ${returnRate.toFixed(0)}%`;
+        reason += ` âš ï¸ HoÃ n ${returnRate.toFixed(0)}%`;
       }
 
-      // Format last 7 days
-      const last7Days = dailyHistory.slice(-7).map(d => ({
+      const last7Days = dailyHistory.slice(-7).map((d) => ({
         date: d.date.toISOString().split('T')[0],
         spent: d.spend,
         profit: d.profit,
         roi: d.spend > 0 ? (d.profit / d.spend) * 100 : 0,
-        orders: d.orders
+        orders: d.orders,
       }));
 
-      // Expected values (dựa trên marginal analysis)
-      const expectedROI = optimalEfficiency > 0 ? currentROI * (1 + (optimalEfficiency - 1) * 0.1) : currentROI * 0.9;
+      const expectedROI =
+        optimalEfficiency > 0
+          ? currentROI * (1 + (optimalEfficiency - 1) * 0.1)
+          : currentROI * 0.9;
       const expectedProfit = optimalSpend * (expectedROI / 100);
+
+      if (perf.roi < minROI || perf.avgDailyProfit < minProfit) {
+        continue;
+      }
 
       suggestions.push({
         adGroupId: perf.adGroupId,
         adGroupName: perf.adGroupName,
-        
-        // Hiện tại
         lastSpend: currentSpend,
         lastProfit: perf.avgDailyProfit,
         currentROI,
-        
-        // Thống kê đơn
         returnRate,
         totalOrders: perf.totalOrders,
         successOrders: perf.successOrders,
         returnOrders: perf.returnOrders,
-        
-        // GỢI Ý TỐI ƯU (dựa trên marginal efficiency)
         suggestedSpend: optimalSpend,
-        appliedSpend: optimalSpend, // Không áp dụng constraint, chỉ là gợi ý
+        appliedSpend: optimalSpend,
         expectedProfit,
         expectedROI,
-        
-        // Thông tin
         scaleAction,
         reason,
         confidence,
         minBudget: 50_000,
         maxBudget: 10_000_000,
-        last7Days
+        last7Days,
       });
     }
 
     return suggestions.sort((a, b) => b.currentROI - a.currentROI);
   }
 
-  /**
-   * Lấy tổng quan profit của tất cả ad groups
-   */
   async getProfitSummary(params?: {
     startDate?: Date;
     endDate?: Date;
@@ -523,20 +518,14 @@ export class AdGroupProfitReportService {
     const totalAdsSpent = performances.reduce((sum, p) => sum + p.totalAdsSpent, 0);
     const averageROI = totalAdsSpent > 0 ? (totalProfit / totalAdsSpent) * 100 : 0;
 
-    // Top 5 by profit
     const topByProfit = performances.slice(0, 5);
-
-    // Top 5 by ROI
     const topByROI = [...performances].sort((a, b) => b.roi - a.roi).slice(0, 5);
+    const lowPerformers = performances.filter((p) => p.roi < 50);
 
-    // Low performers (ROI < 50%)
-    const lowPerformers = performances.filter(p => p.roi < 50);
-
-    // Profit by status
     const profitByStatus = {
       realized: performances.reduce((sum, p) => sum + p.realizedProfit, 0),
       pending: performances.reduce((sum, p) => sum + p.pendingProfit, 0),
-      risky: performances.reduce((sum, p) => sum + p.riskyProfit, 0)
+      risky: performances.reduce((sum, p) => sum + p.riskyProfit, 0),
     };
 
     return {
@@ -548,18 +537,213 @@ export class AdGroupProfitReportService {
       topByProfit,
       topByROI,
       lowPerformers,
-      profitByStatus
+      profitByStatus,
     };
   }
 
-  /**
-   * CRON JOB: Cập nhật Optimal Spend hàng ngày lúc 06:00
-   * Lưu snapshot vào database để nhân viên xem và điều chỉnh
-   */
-  @Cron('0 0 6 * * *') // 06:00 mỗi ngày
+  async getAdGroupProfitClassification(params?: {
+    days?: number;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<AdGroupProfitClassificationReport> {
+    const periodDays = Math.min(90, Math.max(1, Math.round(Number(params?.days) || 7)));
+    const endDate = params?.endDate || new Date();
+    const startDate = params?.startDate || new Date(endDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
+
+    const [
+      adGroups,
+      performanceRows,
+      spendRows,
+      leadRows,
+      tokenIssueRows,
+    ] = await Promise.all([
+      this.adGroupModel
+        .find(
+          {},
+          {
+            name: 1,
+            adGroupId: 1,
+            platform: 1,
+            isActive: 1,
+            adAccountId: 1,
+            lastSyncStatus: 1,
+            lastSyncError: 1,
+          },
+        )
+        .sort({ isActive: -1, updatedAt: -1, createdAt: -1 })
+        .lean(),
+      this.getAdGroupPerformanceReport({
+        startDate,
+        endDate,
+        minOrders: 1,
+        onlyFinalized: true,
+      }),
+      this.orderModel.db.collection('advertisingcosts').aggregate([
+        { $match: { date: { $gte: startDate, $lte: endDate } } },
+        {
+          $group: {
+            _id: '$adGroupId',
+            spend: { $sum: '$spentAmount' },
+            impressions: { $sum: '$impressions' },
+            clicks: { $sum: '$clicks' },
+            adMetricConversations: { $sum: '$messagingConversationStarted7d' },
+            latestDate: { $max: '$date' },
+          },
+        },
+      ]).toArray(),
+      this.orderModel.db.collection('chatmessages').aggregate([
+        {
+          $match: {
+            direction: 'in',
+            adGroupId: { $exists: true, $nin: [null, ''] },
+            $or: [
+              { receivedAt: { $gte: startDate, $lte: endDate } },
+              { receivedAt: { $exists: false }, createdAt: { $gte: startDate, $lte: endDate } },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: '$adGroupId',
+            inbox: { $sum: 1 },
+            uniqueSenders: { $addToSet: '$senderPsid' },
+          },
+        },
+      ]).toArray(),
+      this.orderModel.db.collection('apitokens').aggregate([
+        {
+          $match: {
+            $or: [
+              { degraded: true },
+              { lastCheckStatus: { $in: ['invalid', 'expired'] } },
+              { expireAt: { $lte: endDate } },
+            ],
+          },
+        },
+        { $count: 'count' },
+      ]).toArray(),
+    ]);
+
+    const accountIds = adGroups.map((group: any) => group.adAccountId).filter(Boolean);
+    const accounts = accountIds.length
+      ? await this.orderModel.db
+          .collection('adaccounts')
+          .find({ _id: { $in: accountIds } }, { projection: { name: 1, accountId: 1 } })
+          .toArray()
+      : [];
+    const accountById = new Map(accounts.map((account: any) => [String(account._id), account]));
+    const performanceByAdGroup = new Map(performanceRows.map((row) => [String(row.adGroupId), row]));
+    const spendByAdGroup = new Map(spendRows.map((row: any) => [String(row._id), row]));
+    const leadByAdGroup = new Map(leadRows.map((row: any) => [String(row._id), row]));
+
+    const groups = adGroups.map((group: any) => {
+      const adGroupId = String(group.adGroupId || '');
+      const performance = performanceByAdGroup.get(adGroupId);
+      const spendRow: any = spendByAdGroup.get(adGroupId) || {};
+      const leadRow: any = leadByAdGroup.get(adGroupId) || {};
+      const account = group.adAccountId ? accountById.get(String(group.adAccountId)) : null;
+      const spend = Number(spendRow.spend || performance?.totalAdsSpent || 0);
+      const orders = Number(performance?.totalOrders || 0);
+      const revenue = Number(performance?.totalRevenue || 0);
+      const netProfit = performance ? Number(performance.totalNetProfit || 0) : (spend > 0 && orders === 0 ? -spend : null);
+      const grossProfit = performance ? Number((performance.totalNetProfit || 0) + (performance.totalAdsSpent || 0)) : 0;
+      const leads = Math.max(
+        Array.isArray(leadRow.uniqueSenders) ? leadRow.uniqueSenders.length : 0,
+        Number(spendRow.adMetricConversations || 0),
+      );
+      const inbox = Number(leadRow.inbox || 0);
+
+      let status: AdGroupProfitClassificationStatus;
+      let reason: string;
+      if (spend <= 0) {
+        status = 'insufficient_data';
+        reason = `Spend ${periodDays} ngày = 0đ nên chưa thể kết luận lãi/lỗ.`;
+      } else if (!performance && orders === 0) {
+        status = 'loss';
+        reason = 'Có spend nhưng chưa có đơn/doanh thu hoàn tất trong kỳ.';
+      } else if (netProfit == null) {
+        status = 'insufficient_data';
+        reason = 'Thiếu dữ liệu lợi nhuận sau ads.';
+      } else if (netProfit > 0) {
+        status = 'profitable';
+        reason = 'Lợi nhuận sau ads dương.';
+      } else if (netProfit < 0) {
+        status = 'loss';
+        reason = 'Lợi nhuận sau ads âm.';
+      } else {
+        status = 'break_even';
+        reason = 'Lợi nhuận sau ads bằng 0.';
+      }
+
+      return {
+        adGroupId,
+        name: group.name || adGroupId,
+        platform: group.platform || null,
+        accountName: account?.name || account?.accountId || null,
+        isActive: group.isActive !== false,
+        spend,
+        leads,
+        inbox,
+        orders,
+        revenue,
+        grossProfit,
+        netProfitAfterAds: netProfit,
+        roi: spend > 0 && netProfit != null ? (netProfit / spend) * 100 : null,
+        status,
+        reason,
+      };
+    });
+
+    const summary = groups.reduce(
+      (acc, group) => {
+        if (group.status === 'profitable') acc.profitable += 1;
+        if (group.status === 'loss') acc.loss += 1;
+        if (group.status === 'break_even') acc.breakEven += 1;
+        if (group.status === 'insufficient_data') acc.insufficientData += 1;
+        return acc;
+      },
+      { profitable: 0, loss: 0, breakEven: 0, insufficientData: 0 },
+    );
+    const syncErrors = adGroups.filter((group: any) => group.lastSyncStatus === 'error');
+    const groupsWithSpend = groups.filter((group) => group.spend > 0).length;
+    const groupsWithAttribution = groups.filter((group) => group.orders > 0 || group.leads > 0).length;
+    const tokenIssues = tokenIssueRows[0]?.count ?? 0;
+    const notes: string[] = [];
+    if (syncErrors.length) notes.push(`${syncErrors.length} nhóm quảng cáo có lỗi đồng bộ gần nhất.`);
+    if (tokenIssues) notes.push(`${tokenIssues} token provider có lỗi/hết hạn.`);
+    if (!groupsWithSpend) notes.push(`Spend ${periodDays} ngày = 0đ cho toàn bộ nhóm đã đọc.`);
+    if (summary.insufficientData) notes.push(`${summary.insufficientData} nhóm chưa đủ dữ liệu để kết luận lãi/lỗ.`);
+
+    return {
+      periodDays,
+      dateRange: {
+        from: startDate.toISOString(),
+        to: endDate.toISOString(),
+      },
+      total: groups.length,
+      summary,
+      groups: groups.sort((a, b) => {
+        const statusOrder: Record<AdGroupProfitClassificationStatus, number> = {
+          profitable: 1,
+          loss: 2,
+          break_even: 3,
+          insufficient_data: 4,
+        };
+        return statusOrder[a.status] - statusOrder[b.status] || b.spend - a.spend;
+      }),
+      dataQuality: {
+        syncOk: syncErrors.length ? false : true,
+        tokenIssues,
+        attributionCoverage: groupsWithSpend > 0 ? groupsWithAttribution / groupsWithSpend : 0,
+        notes,
+      },
+    };
+  }
+
+  @Cron('0 0 6 * * *')
   async updateDailyOptimalSpendSnapshot() {
-    this.logger.log('🔄 [CRON] Đang cập nhật Optimal Spend Suggestions...');
-    
+    this.logger.log('ðŸ”„ [CRON] Äang cáº­p nháº­t Optimal Spend Suggestions...');
+
     try {
       const suggestions = await this.getOptimalSpendSuggestions({ lookbackDays: 30 });
       const today = new Date();
@@ -569,9 +753,8 @@ export class AdGroupProfitReportService {
       let updated = 0;
 
       for (const s of suggestions) {
-        const spendDiffPercent = s.lastSpend > 0 
-          ? ((s.suggestedSpend - s.lastSpend) / s.lastSpend) * 100 
-          : 0;
+        const spendDiffPercent =
+          s.lastSpend > 0 ? ((s.suggestedSpend - s.lastSpend) / s.lastSpend) * 100 : 0;
 
         const data = {
           adGroupId: s.adGroupId,
@@ -589,48 +772,38 @@ export class AdGroupProfitReportService {
           scaleAction: s.scaleAction,
           reason: s.reason,
           confidence: s.confidence,
-          last7Days: s.last7Days
+          last7Days: s.last7Days,
         };
 
-        // Upsert: update nếu đã có, create nếu chưa
         const result = await this.snapshotModel.updateOne(
           { adGroupId: s.adGroupId, date: today },
           { $set: data },
-          { upsert: true }
+          { upsert: true },
         );
 
         if (result.upsertedCount > 0) created++;
         else if (result.modifiedCount > 0) updated++;
       }
 
-      this.logger.log(`✅ [CRON] Optimal Spend updated: ${created} created, ${updated} updated`);
+      this.logger.log(`âœ… [CRON] Optimal Spend updated: ${created} created, ${updated} updated`);
       return { created, updated, total: suggestions.length };
     } catch (error) {
-      this.logger.error('❌ [CRON] Failed to update Optimal Spend', error);
+      this.logger.error('âŒ [CRON] Failed to update Optimal Spend', error);
       throw error;
     }
   }
 
-  /**
-   * Lấy snapshot Optimal Spend mới nhất
-   * Dùng cho frontend hiển thị gợi ý cho nhân viên
-   */
   async getLatestOptimalSpendSnapshots(): Promise<OptimalSpendSnapshot[]> {
-    // Lấy ngày mới nhất có data
     const latestDoc = await this.snapshotModel.findOne().sort({ date: -1 }).lean();
     if (!latestDoc) return [];
 
-    // Lấy tất cả snapshot của ngày đó
-    return this.snapshotModel
-      .find({ date: latestDoc.date })
-      .sort({ currentROI: -1 })
-      .lean();
+    return this.snapshotModel.find({ date: latestDoc.date }).sort({ currentROI: -1 }).lean();
   }
 
-  /**
-   * Lấy lịch sử optimal spend của một ad group
-   */
-  async getOptimalSpendHistory(adGroupId: string, days: number = 30): Promise<OptimalSpendSnapshot[]> {
+  async getOptimalSpendHistory(
+    adGroupId: string,
+    days: number = 30,
+  ): Promise<OptimalSpendSnapshot[]> {
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     return this.snapshotModel
       .find({ adGroupId, date: { $gte: startDate } })
@@ -638,9 +811,6 @@ export class AdGroupProfitReportService {
       .lean();
   }
 
-  /**
-   * Trigger manual update (cho testing hoặc on-demand)
-   */
   async triggerOptimalSpendUpdate() {
     return this.updateDailyOptimalSpendSnapshot();
   }

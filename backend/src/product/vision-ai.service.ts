@@ -1,14 +1,10 @@
-/**
- * File: vision-ai.service.ts
- * Mục đích: Service tích hợp OpenAI Vision API để phân tích ảnh sản phẩm
- * Chức năng: Analyze images, extract keywords, generate descriptions
- */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Product, ProductDocument } from './schemas/product.schema';
-import { OpenAIConfigService } from '../openai-config/openai-config.service';
 import fetch from 'node-fetch';
+import { buildAiAssistantQualityDirectives } from '../common/ai-assistant-quality';
+import { OpenAIConfigService } from '../openai-config/openai-config.service';
+import { Product, ProductDocument } from './schemas/product.schema';
 
 export interface ImageAnalysis {
   objects: string[];
@@ -17,6 +13,11 @@ export interface ImageAnalysis {
   keywords: string[];
   description: string;
   confidence: number;
+  visibleAttributes?: string[];
+  inferredAttributes?: string[];
+  evidence?: string[];
+  warnings?: string[];
+  qualityScore?: number;
 }
 
 export interface ProductRecommendation {
@@ -34,286 +35,282 @@ export class VisionAIService {
     private openaiConfigService: OpenAIConfigService,
   ) {}
 
-  /**
-   * Analyze product image using OpenAI Vision API
-   */
+  private pickVisionModel(configuredModel?: string): string {
+    const model = String(configuredModel || '').trim();
+    const visionCapable = new Set([
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4-vision-preview',
+    ]);
+    return visionCapable.has(model) ? model : 'gpt-4o-mini';
+  }
+
+  private normalizeText(value: unknown): string {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private clampConfidence(value: unknown, fallback = 0.45): number {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(0, Math.min(1, Math.round(num * 100) / 100));
+  }
+
+  private textList(value: unknown, limit = 12): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, limit);
+  }
+
+  private extractJsonObject(content: string): Record<string, any> {
+    const clean = String(content || '').replace(/```json\n?|\n?```/g, '').trim();
+    try {
+      return JSON.parse(clean);
+    } catch {
+      const start = clean.indexOf('{');
+      const end = clean.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        return JSON.parse(clean.slice(start, end + 1));
+      }
+      throw new Error('Vision AI response was not valid JSON');
+    }
+  }
+
+  private normalizeAnalysis(raw: Record<string, any>, warnings: string[] = []): ImageAnalysis {
+    const evidence = this.textList(raw.evidence, 8);
+    const visibleAttributes = this.textList(raw.visibleAttributes || raw.visible_attributes, 10);
+    const inferredAttributes = this.textList(raw.inferredAttributes || raw.inferred_attributes, 8);
+    let confidence = this.clampConfidence(raw.confidence, evidence.length ? 0.65 : 0.45);
+    if (!evidence.length && confidence > 0.55) confidence = 0.55;
+
+    const normalized: ImageAnalysis = {
+      objects: this.textList(raw.objects, 10),
+      colors: this.textList(raw.colors, 8),
+      features: this.textList(raw.features, 12),
+      keywords: this.textList(raw.keywords, 16),
+      description: String(raw.description || '').trim() || 'Can cap nhat mo ta thu cong vi Vision AI khong tao duoc mo ta dang tin cay.',
+      confidence,
+      visibleAttributes,
+      inferredAttributes,
+      evidence,
+      warnings: [...warnings],
+      qualityScore: Math.round(confidence * 100),
+    };
+
+    if (!normalized.objects.length) normalized.warnings?.push('No clear product object was detected.');
+    if (!normalized.evidence?.length) normalized.warnings?.push('No field-level visual evidence returned by model.');
+    return normalized;
+  }
+
+  private fallbackAnalysis(reason: string): ImageAnalysis {
+    return this.normalizeAnalysis(
+      {
+        objects: ['product'],
+        colors: [],
+        features: [],
+        keywords: ['product'],
+        description: 'Can cap nhat mo ta thu cong vi Vision AI chua co ket qua dang tin cay.',
+        confidence: 0.1,
+        evidence: [],
+        visibleAttributes: [],
+        inferredAttributes: [],
+      },
+      [reason],
+    );
+  }
+
   async analyzeProductImage(imageUrl: string, configId?: string): Promise<ImageAnalysis> {
     try {
-      // Get OpenAI configuration
-      const config = configId 
+      const config = configId
         ? await this.openaiConfigService.findOne(configId)
-        : await this.openaiConfigService.pickConfig({});
+        : await this.openaiConfigService.pickConfig({ purpose: 'general' });
 
-      if (!config || !config.apiKey || config.apiKey === 'placeholder-key') {
+      if (!config || config.status !== 'active' || !config.apiKey || config.apiKey === 'placeholder-key') {
         throw new Error('No valid OpenAI configuration found');
       }
 
-      const prompt = `
-      Phân tích sản phẩm trong ảnh này và trả về JSON với format chính xác sau:
-      {
-        "objects": ["tên_đối_tượng_1", "tên_đối_tượng_2"],
-        "colors": ["màu_1", "màu_2"],
-        "features": ["tính_năng_1", "tính_năng_2"],
-        "keywords": ["từ_khóa_1", "từ_khóa_2"],
-        "description": "Mô tả chi tiết sản phẩm bằng tiếng Việt",
-        "confidence": 0.85
-      }
-      
-      Hãy tập trung vào:
-      - Nhận diện chính xác sản phẩm và thương hiệu
-      - Màu sắc chủ đạo
-      - Tính năng đặc biệt có thể nhìn thấy
-      - Từ khóa tìm kiếm phổ biến
-      - Mô tả hấp dẫn cho bán hàng
-      `;
+      const prompt = [
+        'Analyze the product image and return JSON only.',
+        'Required JSON keys: objects, colors, features, keywords, description, confidence, visibleAttributes, inferredAttributes, evidence, warnings.',
+        'Use Vietnamese for user-facing description and keywords when possible.',
+        'Only include brand, material, origin, quality grade, stock, or price if it is visibly supported by the image.',
+        'Put directly visible facts in visibleAttributes and marketing/inference text in inferredAttributes.',
+        'Each evidence item must explain which visible cue supports the field.',
+        'confidence must be 0..1 and must be low when the image is unclear or evidence is weak.',
+        buildAiAssistantQualityDirectives('vision'),
+      ].join('\n');
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
+          Authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4-vision-preview',
+          model: this.pickVisionModel(config.model),
           messages: [{
             role: 'user',
             content: [
               { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageUrl } }
-            ]
+              { type: 'image_url', image_url: { url: imageUrl } },
+            ],
           }],
-          max_tokens: 800,
-          temperature: 0.3
-        })
+          response_format: { type: 'json_object' },
+          max_tokens: Math.min(1200, Math.max(300, Number(config.maxTokens || 800))),
+          temperature: Math.max(0, Math.min(1, Number(config.temperature ?? 0.2))),
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData: any = await response.json().catch(() => ({}));
         throw new Error(`OpenAI Vision API error: ${errorData.error?.message || 'Unknown error'}`);
       }
 
       const data: any = await response.json();
       const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error('No content returned from OpenAI Vision API');
 
-      if (!content) {
-        throw new Error('No content returned from OpenAI Vision API');
-      }
-
-      // Parse JSON response
-      const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
-      const analysis: ImageAnalysis = JSON.parse(cleanContent);
-
-      // Validate and set defaults
-      return {
-        objects: Array.isArray(analysis.objects) ? analysis.objects : [],
-        colors: Array.isArray(analysis.colors) ? analysis.colors : [],
-        features: Array.isArray(analysis.features) ? analysis.features : [],
-        keywords: Array.isArray(analysis.keywords) ? analysis.keywords : [],
-        description: analysis.description || 'Không thể tạo mô tả',
-        confidence: typeof analysis.confidence === 'number' ? analysis.confidence : 0.7
-      };
-
-    } catch (error) {
-      this.logger.error('Vision AI analysis failed', error.message);
-      
-      // Return fallback analysis
-      return {
-        objects: ['sản phẩm'],
-        colors: ['đa màu'],
-        features: ['chất lượng cao'],
-        keywords: ['sản phẩm', 'chất lượng'],
-        description: 'Sản phẩm chất lượng cao - cần cập nhật mô tả thủ công',
-        confidence: 0.1
-      };
+      return this.normalizeAnalysis(this.extractJsonObject(content));
+    } catch (error: any) {
+      this.logger.error('Vision AI analysis failed', error?.message || error);
+      return this.fallbackAnalysis(String(error?.message || 'Vision AI analysis failed').slice(0, 200));
     }
   }
 
-  /**
-   * Find similar products based on text description or keywords
-   */
   async findSimilarProducts(
-    query: string, 
+    query: string,
     fanpageId: string,
-    limit: number = 5
+    limit: number = 5,
   ): Promise<ProductRecommendation[]> {
     try {
-      // Extract keywords from query
-      const queryKeywords = this.extractKeywords(query.toLowerCase());
-      
-      if (queryKeywords.length === 0) {
-        return [];
-      }
+      const queryKeywords = this.extractKeywords(query);
+      if (!queryKeywords.length) return [];
 
-      this.logger.debug('Finding products with keywords:', queryKeywords);
-
-      // Build search query
-      const searchQuery: any = {
+      const products = await this.productModel.find({
         'fanpageVariations.fanpageId': fanpageId,
         'fanpageVariations.isActive': true,
-        status: 'Hoạt động'
-      };
-
-      // Multi-field search with scoring
-      const products = await this.productModel.find(searchQuery)
+      })
         .populate('categoryId', 'name')
         .lean();
 
-      // Score products based on keyword matching
       const scoredProducts: ProductRecommendation[] = [];
-
       for (const product of products) {
         const matchScore = this.calculateMatchScore(product as any, queryKeywords);
-        
         if (matchScore > 0) {
-          const matchReasons = this.getMatchReasons(product as any, queryKeywords);
-          
           scoredProducts.push({
             product: product as unknown as ProductDocument,
             matchScore,
-            matchReasons
+            matchReasons: this.getMatchReasons(product as any, queryKeywords),
           });
         }
       }
 
-      // Sort by score and priority
       return scoredProducts
         .sort((a, b) => {
-          const priorityA = a.product.fanpageVariations
-            .find(v => v.fanpageId.toString() === fanpageId)?.priority || 0;
-          const priorityB = b.product.fanpageVariations
-            .find(v => v.fanpageId.toString() === fanpageId)?.priority || 0;
-            
-          // First by priority, then by match score
+          const aVars = ((a.product as any).fanpageVariations || []) as any[];
+          const bVars = ((b.product as any).fanpageVariations || []) as any[];
+          const priorityA = aVars.find((v) => String(v.fanpageId) === fanpageId)?.priority || 0;
+          const priorityB = bVars.find((v) => String(v.fanpageId) === fanpageId)?.priority || 0;
           if (priorityA !== priorityB) return priorityB - priorityA;
           return b.matchScore - a.matchScore;
         })
-        .slice(0, limit);
-
-    } catch (error) {
-      this.logger.error('Product search failed', error.message);
+        .slice(0, Math.max(1, Math.min(20, Number(limit) || 5)));
+    } catch (error: any) {
+      this.logger.error('Product search failed', error?.message || error);
       return [];
     }
   }
 
-  /**
-   * Generate comprehensive product description from multiple images
-   */
   async generateProductDescription(images: any[]): Promise<string> {
-    if (!images || images.length === 0) {
-      return '';
-    }
+    if (!images?.length) return '';
 
-    // Combine all AI analyses
     const allKeywords = new Set<string>();
     const allFeatures = new Set<string>();
     const allColors = new Set<string>();
 
-    images.forEach(img => {
-      if (img.aiAnalysis) {
-        img.aiAnalysis.keywords?.forEach((k: string) => allKeywords.add(k));
-        img.aiAnalysis.features?.forEach((f: string) => allFeatures.add(f));
-        img.aiAnalysis.colors?.forEach((c: string) => allColors.add(c));
-      }
+    images.forEach((img) => {
+      img.aiAnalysis?.keywords?.forEach((k: string) => allKeywords.add(k));
+      img.aiAnalysis?.features?.forEach((f: string) => allFeatures.add(f));
+      img.aiAnalysis?.colors?.forEach((c: string) => allColors.add(c));
     });
 
-    // Generate description
-    let description = '';
-    
-    if (allFeatures.size > 0) {
-      description += `Tính năng: ${Array.from(allFeatures).join(', ')}. `;
-    }
-    
-    if (allColors.size > 0) {
-      description += `Màu sắc: ${Array.from(allColors).join(', ')}. `;
-    }
-
-    return description.trim();
+    const parts: string[] = [];
+    if (allFeatures.size) parts.push(`Tinh nang nhin thay: ${Array.from(allFeatures).join(', ')}.`);
+    if (allColors.size) parts.push(`Mau sac: ${Array.from(allColors).join(', ')}.`);
+    if (allKeywords.size) parts.push(`Tu khoa: ${Array.from(allKeywords).slice(0, 12).join(', ')}.`);
+    return parts.join(' ').trim();
   }
 
-  /**
-   * Extract keywords from text using simple NLP
-   */
   private extractKeywords(text: string): string[] {
-    // Vietnamese product-related keywords
+    const normalized = this.normalizeText(text);
     const productKeywords = [
-      'điện thoại', 'phone', 'iphone', 'samsung', 'oppo', 'vivo', 'xiaomi',
-      'laptop', 'máy tính', 'computer', 'macbook', 'dell', 'hp', 'asus',
+      'dien thoai', 'phone', 'iphone', 'samsung', 'oppo', 'vivo', 'xiaomi',
+      'laptop', 'may tinh', 'computer', 'macbook', 'dell', 'hp', 'asus',
       'tai nghe', 'headphone', 'airpods', 'speaker', 'loa',
-      'ốp lưng', 'case', 'bao da', 'miếng dán', 'cường lực',
-      'sạc', 'charger', 'cable', 'cáp', 'pin', 'battery',
-      'đồng hồ', 'watch', 'apple watch', 'smart watch',
-      'quần áo', 'áo', 'quần', 'dress', 'shirt', 'pants',
-      'giày', 'dép', 'shoes', 'sneaker', 'sandal',
-      'túi', 'bag', 'backpack', 'wallet', 'ví',
-      'mỹ phẩm', 'cosmetic', 'skincare', 'makeup',
-      'đen', 'trắng', 'đỏ', 'xanh', 'vàng', 'hồng', 'tím', 'nâu',
-      'black', 'white', 'red', 'blue', 'green', 'yellow', 'pink'
+      'op lung', 'case', 'bao da', 'mieng dan', 'cuong luc',
+      'sac', 'charger', 'cable', 'cap', 'pin', 'battery',
+      'dong ho', 'watch', 'smart watch',
+      'quan ao', 'ao', 'quan', 'dress', 'shirt', 'pants',
+      'giay', 'dep', 'shoes', 'sneaker', 'sandal',
+      'tui', 'bag', 'backpack', 'wallet', 'vi',
+      'my pham', 'cosmetic', 'skincare', 'makeup',
+      'den', 'trang', 'do', 'xanh', 'vang', 'hong', 'tim', 'nau',
+      'black', 'white', 'red', 'blue', 'green', 'yellow', 'pink',
     ];
 
-    const words = text.toLowerCase()
-      .replace(/[^\w\sáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]/g, ' ')
+    const words = normalized
+      .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
-      .filter(word => word.length > 2);
+      .filter((word) => word.length > 2);
 
-    return words.filter(word => 
-      productKeywords.some(keyword => 
-        keyword.includes(word) || word.includes(keyword)
-      )
+    const directMatches = words.filter((word) =>
+      productKeywords.some((keyword) => keyword.includes(word) || word.includes(keyword)),
     );
+    return Array.from(new Set([...directMatches, ...words.slice(0, 8)]));
   }
 
-  /**
-   * Calculate match score between product and query keywords
-   */
   private calculateMatchScore(product: any, queryKeywords: string[]): number {
     let score = 0;
+    const name = this.normalizeText(product.name);
     const searchFields = [
-      product.name?.toLowerCase() || '',
-      product.aiDescription?.toLowerCase() || '',
-      ...(product.searchKeywords || []).map((k: string) => k.toLowerCase()),
-      ...(product.images || []).flatMap((img: any) => 
-        img.aiAnalysis?.keywords?.map((k: string) => k.toLowerCase()) || []
-      )
+      name,
+      this.normalizeText(product.aiDescription),
+      ...(product.searchKeywords || []).map((k: string) => this.normalizeText(k)),
+      ...(product.images || []).flatMap((img: any) =>
+        img.aiAnalysis?.keywords?.map((k: string) => this.normalizeText(k)) || [],
+      ),
     ];
-
     const allSearchText = searchFields.join(' ');
 
-    queryKeywords.forEach(keyword => {
-      // Exact match in name (highest score)
-      if (product.name?.toLowerCase().includes(keyword)) {
-        score += 10;
-      }
-      // Match in search keywords
-      else if (product.searchKeywords?.some((k: string) => k.toLowerCase().includes(keyword))) {
-        score += 5;
-      }
-      // Match in AI analysis
-      else if (allSearchText.includes(keyword)) {
-        score += 2;
-      }
-      // Partial match
-      else if (allSearchText.includes(keyword.substring(0, Math.max(3, keyword.length - 1)))) {
-        score += 1;
-      }
+    queryKeywords.forEach((keyword) => {
+      const normalizedKeyword = this.normalizeText(keyword);
+      if (!normalizedKeyword) return;
+      if (name.includes(normalizedKeyword)) score += 10;
+      else if ((product.searchKeywords || []).some((k: string) => this.normalizeText(k).includes(normalizedKeyword))) score += 5;
+      else if (allSearchText.includes(normalizedKeyword)) score += 2;
+      else if (normalizedKeyword.length >= 4 && allSearchText.includes(normalizedKeyword.slice(0, -1))) score += 1;
     });
 
     return score;
   }
 
-  /**
-   * Get human-readable match reasons
-   */
   private getMatchReasons(product: any, queryKeywords: string[]): string[] {
     const reasons: string[] = [];
-
-    queryKeywords.forEach(keyword => {
-      if (product.name?.toLowerCase().includes(keyword)) {
-        reasons.push(`Khớp tên sản phẩm: "${keyword}"`);
-      } else if (product.searchKeywords?.some((k: string) => k.toLowerCase().includes(keyword))) {
-        reasons.push(`Khớp từ khóa: "${keyword}"`);
-      }
+    const name = this.normalizeText(product.name);
+    queryKeywords.forEach((keyword) => {
+      const normalizedKeyword = this.normalizeText(keyword);
+      if (name.includes(normalizedKeyword)) reasons.push(`Name match: "${keyword}"`);
+      else if ((product.searchKeywords || []).some((k: string) => this.normalizeText(k).includes(normalizedKeyword))) reasons.push(`Keyword match: "${keyword}"`);
     });
-
-    return reasons.slice(0, 3); // Limit to 3 reasons
+    return reasons.slice(0, 3);
   }
 }

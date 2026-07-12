@@ -5,7 +5,7 @@
 
 const mongoose = require('mongoose');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://final8:Hoang123$@final8.xo1r9.mongodb.net/final8?retryWrites=true&w=majority&appName=final8';
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 
 const capitalAllocationPolicySchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },

@@ -5,6 +5,17 @@
  */
 
 // ===== SECTION A: Overall Status =====
+export interface FinancialControlConfig {
+  CommittedWindowDays: number;
+  SurvivalMonths: number;
+  SupplierCashCycleDays: number;
+  RiskAdjustInflow: number;
+  MinStartBudget: number;
+  UpperCapMultiplier: number;
+  LowerCapMultiplier: number;
+  SafetyFactor: number;
+}
+
 export interface OverallStatus {
   bankBalance: number;
   committedCash: number;
@@ -117,6 +128,7 @@ export interface CFODashboard {
   };
   totalDebtOutstanding?: number; // Tổng dư nợ vay (tham khảo)
   calculatedAt: Date;
+  dataQuality?: FinancialControlDataQuality;
 }
 
 // ===== CFO Spec v3.0: Full Metrics =====
@@ -152,6 +164,8 @@ export interface CommittedCashBreakdown {
   loanPayment: number;
   total: number;
   windowDays: number;
+  isEstimated?: boolean;
+  estimationNotes?: string[];
 }
 
 export interface MonthlyBurnBreakdown {
@@ -161,6 +175,18 @@ export interface MonthlyBurnBreakdown {
   agentCommission?: number;
   supplierPendingPayment?: number;
   total: number;
+  isEstimated?: boolean;
+  estimationNotes?: string[];
+}
+
+export interface FinancialControlDataQuality {
+  status: 'ok' | 'estimated' | 'blocked';
+  isDecisionLocked: boolean;
+  missingModules: string[];
+  estimatedModules: string[];
+  staleModules: string[];
+  notes: string[];
+  blockingReasons: string[];
 }
 
 // ===== CFO Spec v3.0: Forecast 7D =====
@@ -169,6 +195,8 @@ export interface Forecast7DResult {
   lowPoint: number;
   lowPointDay: number;
   lowPointDate: Date;
+  hardOutLowPoint: number;
+  hardOutLowPointDay: number;
   isCashCrunch: boolean;
   isSurvivalRisk: boolean;
   endBalance: number;
@@ -247,10 +275,10 @@ export interface ModuleHealthResult {
 
 // ===== CFO Spec v3.2: Action Suggestions =====
 export type ActionPriority = 'critical' | 'high' | 'medium' | 'low';
-export type ActionType = 
-  | 'PAUSE_ADS' 
-  | 'STOP_OWNER_WITHDRAW' 
-  | 'PRIORITY_SALARY' 
+export type ActionType =
+  | 'PAUSE_ADS'
+  | 'STOP_OWNER_WITHDRAW'
+  | 'PRIORITY_SALARY'
   | 'REVIEW_OPS_COST'
   | 'COLLECT_RECEIVABLES'
   | 'DELAY_PAYMENT'
@@ -280,4 +308,19 @@ export interface ActionSuggestionsResult {
     isSurvivalRisk: boolean;
     moduleHealth?: ModuleHealthStatus;
   };
+}
+
+export type TaxObligationSource =
+  | 'tax_filing'
+  | 'tax_authority_notice'
+  | 'accountant_confirmation'
+  | 'manual_reconciliation';
+
+export interface TaxObligationSnapshot {
+  totalTaxDue: number;
+  dueByDay7d: Array<{ date: string; amount: number }>;
+  asOf: string;
+  source: TaxObligationSource;
+  evidence: string;
+  updatedBy?: string;
 }

@@ -104,7 +104,7 @@
 **File**: `backend/src/app.module.ts`
 ```typescript
 // KHÔNG AN TOÀN - Credentials trong source code
-'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev...'
+'<MONGODB_URI_FROM_SECRET_MANAGER>'
 ```
 **Khuyến nghị**: Bắt buộc MONGO_URI từ environment variable, không có fallback.
 

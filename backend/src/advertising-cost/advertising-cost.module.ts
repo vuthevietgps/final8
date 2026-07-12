@@ -15,6 +15,7 @@ import { AdvertisingCostGoogleSyncService } from './advertising-cost.google-sync
 import { AdvertisingCostTiktokSyncService } from './advertising-cost.tiktok-sync.service';
 import { AdvertisingCostRecalculationQueueService } from './advertising-cost.recalculation-queue.service';
 import { ApiToken, ApiTokenSchema } from '../api-token/schemas/api-token.schema';
+import { ApiTokenModule } from '../api-token/api-token.module';
 import { AdvertisingCostController } from './advertising-cost.controller';
 import { TestOrder2Module } from '../test-order2/test-order2.module';
 
@@ -30,6 +31,7 @@ import { TestOrder2Module } from '../test-order2/test-order2.module';
     MulterModule.register({
       dest: './uploads/temp',
     }),
+    ApiTokenModule,
     forwardRef(() => TestOrder2Module), // Import to access TestOrder2Service
   ],
   controllers: [AdvertisingCostController],

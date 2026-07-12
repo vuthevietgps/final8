@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { SupplierPaymentService } from './supplier-payment.service';
 import { SupplierService } from '../supplier/supplier.service';
 import { Order, PaymentBatch, SupplierPaymentOpsSummary, SUPPLIER_PAYMENT_ALERT_THRESHOLD } from './models/payment.model';
@@ -13,6 +14,8 @@ import { Order, PaymentBatch, SupplierPaymentOpsSummary, SUPPLIER_PAYMENT_ALERT_
   styleUrls: ['./supplier-payment.component.css']
 })
 export class SupplierPaymentComponent implements OnInit {
+  private readonly cdr = inject(ChangeDetectorRef);
+
   // Filters
   supplierId = '';
   fromDate = '';
@@ -28,7 +31,7 @@ export class SupplierPaymentComponent implements OnInit {
   opsSummary: SupplierPaymentOpsSummary | null = null;
   opsSummaryLoading = false;
   showAllSuppliers = false;
-  
+
   // Threshold constant
   readonly THRESHOLD = SUPPLIER_PAYMENT_ALERT_THRESHOLD;
 
@@ -56,12 +59,16 @@ export class SupplierPaymentComponent implements OnInit {
     private supplierService: SupplierService
   ) {}
 
+  private syncView(): void {
+    this.cdr.detectChanges();
+  }
+
   ngOnInit() {
     this.loadSuppliers();
     this.loadPendingOrders();
     this.loadBatches();
     this.loadOpsSummary();
-    
+
     // Set default date to today
     const today = new Date().toISOString().split('T')[0];
     this.batchForm.paidDate = today;
@@ -69,42 +76,47 @@ export class SupplierPaymentComponent implements OnInit {
 
   async loadOpsSummary() {
     this.opsSummaryLoading = true;
+    this.syncView();
     try {
-      const summary = await this.service.getOpsSummary({
+      const summary = await firstValueFrom(this.service.getOpsSummary({
         supplierId: this.supplierId || undefined,
         fromDate: this.fromDate || undefined,
         toDate: this.toDate || undefined
-      }).toPromise();
-      
+      }));
+
       this.opsSummary = summary || null;
     } catch (err) {
       console.error('Error loading ops summary:', err);
     } finally {
       this.opsSummaryLoading = false;
+      this.syncView();
     }
   }
 
   async loadSuppliers() {
     try {
-      const suppliers = await this.supplierService.list({ active: true }).toPromise();
+      const suppliers = await firstValueFrom(this.supplierService.list({ active: true }));
       this.suppliers = suppliers || [];
     } catch (err) {
       console.error('Error loading suppliers:', err);
+    } finally {
+      this.syncView();
     }
   }
 
   async loadPendingOrders() {
     this.loading = true;
+    this.syncView();
     try {
-      const res = await this.service.getPendingOrders({
+      const res = await firstValueFrom(this.service.getPendingOrders({
         supplierId: this.supplierId || undefined,
         from: this.fromDate || undefined,
         to: this.toDate || undefined,
         orderStatus: this.orderStatus || undefined
-      }).toPromise();
-      
+      }));
+
       this.pendingOrders = (res?.orders || []).map(o => ({ ...o, selected: false }));
-      
+
       // Reload ops summary khi filter thay đổi
       this.loadOpsSummary();
     } catch (err) {
@@ -112,21 +124,24 @@ export class SupplierPaymentComponent implements OnInit {
       alert('Lỗi tải đơn hàng: ' + (err as any)?.error?.message || (err as any)?.message);
     } finally {
       this.loading = false;
+      this.syncView();
     }
   }
 
   async loadBatches() {
     this.batchesLoading = true;
+    this.syncView();
     try {
-      const batches = await this.service.getPaymentBatches({
+      const batches = await firstValueFrom(this.service.getPaymentBatches({
         supplierId: this.supplierId || undefined
-      }).toPromise();
-      
+      }));
+
       this.batches = batches || [];
     } catch (err) {
       console.error('Error loading batches:', err);
     } finally {
       this.batchesLoading = false;
+      this.syncView();
     }
   }
 
@@ -197,48 +212,53 @@ export class SupplierPaymentComponent implements OnInit {
     }
 
     const orderIds = this.selectedOrders.map(o => o._id);
-    
+
     // Parse attachments from comma-separated string
     const attachments = this.batchForm.attachments
       ? this.batchForm.attachments.split(',').map(s => s.trim()).filter(s => s)
       : [];
 
     try {
-      await this.service.createPaymentBatch({
+      await firstValueFrom(this.service.createPaymentBatch({
         orderIds,
         batchId: this.batchForm.batchId,
         paidDate: this.batchForm.paidDate,
         note: this.batchForm.note || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
         confirmOverThreshold: this.batchForm.confirmOverThreshold || undefined
-      }).toPromise();
+      }));
 
       alert(`✅ Đã tạo lượt thanh toán ${this.batchForm.batchId} với ${orderIds.length} đơn`);
-      
+
       this.closeBatchModal();
       this.batchForm.note = '';
       this.batchForm.attachments = '';
       this.batchForm.confirmOverThreshold = false;
-      
+
       // Reload data
       await this.loadPendingOrders();
       await this.loadBatches();
     } catch (err) {
       console.error('Error creating batch:', err);
       alert('Lỗi tạo lượt thanh toán: ' + (err as any)?.error?.message || (err as any)?.message);
+    } finally {
+      this.syncView();
     }
   }
 
   async viewBatch(batch: PaymentBatch) {
     this.selectedBatch = batch;
     this.showViewBatchModal = true;
+    this.syncView();
 
     try {
-      const orders = await this.service.getOrdersInBatch(batch.batchId).toPromise();
+      const orders = await firstValueFrom(this.service.getOrdersInBatch(batch.batchId));
       this.batchOrders = orders || [];
     } catch (err) {
       console.error('Error loading batch orders:', err);
       alert('Lỗi tải đơn hàng: ' + (err as any)?.error?.message || (err as any)?.message);
+    } finally {
+      this.syncView();
     }
   }
 
@@ -246,6 +266,7 @@ export class SupplierPaymentComponent implements OnInit {
     this.showViewBatchModal = false;
     this.selectedBatch = null;
     this.batchOrders = [];
+    this.syncView();
   }
 
   exportBatch(batch: PaymentBatch) {
@@ -261,11 +282,11 @@ export class SupplierPaymentComponent implements OnInit {
         (batch.attachments || []).join('; ')
       ]
     ];
-    
+
     // Add BOM for UTF-8
     const BOM = '\uFEFF';
     const csvContent = BOM + rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

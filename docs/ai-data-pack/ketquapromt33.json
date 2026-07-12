@@ -1,0 +1,199 @@
+{
+  "phase": "PR-DEMO-1C",
+  "status": "complete_transcript_validated",
+  "safe_demo_db_used": true,
+  "safe_demo_db_note": "Prompt 33 reused the Prompt 32 downloaded artifact whose provenance is the safe local Docker demo MongoDB; Prompt 33 did not rerun seed/export/database operations.",
+  "director_json_artifact": {
+    "located_or_reproduced": true,
+    "path": "tmp/ai-data-pack-prompt32-exports/AIDP-20260614045658-a295d333/director_data_pack.json",
+    "job_id": "AIDP-20260614045658-a295d333",
+    "export_mode": "partial_export",
+    "sync_policy": "sync_if_stale",
+    "redaction_profile": "director_redacted",
+    "downloaded": true,
+    "parseable": true,
+    "checksum": "C9DE0CF6AC7664C77642423C905AC9BBE22036E07B894709220A7560B902921F",
+    "data_content_checksum": "3e744a0ef5f2a5eb26d600db5f15c5ddb04861b720ce2228f5461d3633a091f2",
+    "runtime_export_checksum": "2d775c78d54a4e1c66425fffc9d97c07a6ddcc4188c56b5886431b0d466a2c6b",
+    "storage_path_exposed": false,
+    "public_url_exposed": false,
+    "download_token_exposed": false,
+    "raw_provider_payload_exposed": false,
+    "credentials_tokens_exposed": false
+  },
+  "manual_packet": {
+    "chatgptweb_input_created": true,
+    "director_demo_json_manifest_created": true,
+    "manual_upload_steps_created": true,
+    "transcript_required_file_created": true,
+    "files": [
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/prompt33_chatgptweb_input.md",
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/director_demo_json_manifest.md",
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/manual_upload_steps.md",
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/TRANSCRIPT_REQUIRED.md"
+    ]
+  },
+  "control_pack": {
+    "received": true,
+    "source_zip": "C:\\Users\\PC\\Downloads\\prompt33-transcript-capture-control-pack.zip",
+    "sha256": "40AD4FAE6BB9BFD2BA7D36507CA1B0D66D33B092C31DC2D739ABA08408404493",
+    "entries": [
+      "truc-giu-ba-ai-data-pack-v34.md",
+      "chuoi-promt-codex-chatgptweb-ledger-v34.md",
+      "human-step-prompt33-transcript-capture.md"
+    ],
+    "decision": "APPROVE_WITH_CHANGES",
+    "active_work": "Prompt 33 Human Manual Transcript Capture",
+    "status": "awaiting_human_transcript_then_completed_after_transcript_files_provided",
+    "actual_transcript_included": false,
+    "human_operator_note_included": false,
+    "stored_docs": [
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/00_control_pack_manifest.md",
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/01_human_step_prompt33_transcript_capture.md",
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/02_ba_ai_data_pack_axis_v34.md",
+      "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/03_codex_chatgptweb_ledger_v34.md"
+    ]
+  },
+  "transcript": {
+    "present": true,
+    "path": "docs/ai-data-pack/manual-chatgpt-web-transcript/chatgptweb_director_demo_analysis_transcript.md",
+    "sha256": "7D69706DC08953967C5A546B1466BC4AC1DBEC0C75135AC98AEF705AA8BFC43D",
+    "human_operator_note_present": true,
+    "human_operator_note_path": "docs/ai-data-pack/manual-chatgpt-web-transcript/human_operator_note.md",
+    "human_operator_note_sha256": "45AB9EB914C5BCE1F28B0E7C7A7EBBA656E637E242E3B7C23F82FE3E3848170D",
+    "validated": true,
+    "expected_findings_detected_count": 12,
+    "expected_findings_total": 12,
+    "detected_with_evidence_count": 7,
+    "detected_but_weak_evidence_count": 5,
+    "missed_count": 0,
+    "hallucinated_or_unsupported_count": 0,
+    "validation_status": "passed_with_minor_transcript_summary_count_mismatch",
+    "minor_note": "Transcript prose summary says 6 detected_with_evidence and 6 detected_but_weak_evidence, but the actual table rows parse as 7 and 5. Validation uses table rows as source of truth."
+  },
+  "expected_findings_validation": [
+    {
+      "key": "supplier_cost_up",
+      "classification": "detected_but_weak_evidence",
+      "evidence_location": "18_alerts"
+    },
+    {
+      "key": "ad_spend_spike",
+      "classification": "detected_with_evidence",
+      "evidence_location": "18_alerts + 09_marketing_profitability"
+    },
+    {
+      "key": "cash_gap",
+      "classification": "detected_with_evidence",
+      "evidence_location": "18_alerts + 05_financial_context + 07_cashflow_scenarios"
+    },
+    {
+      "key": "overdue_dealer_receivables",
+      "classification": "detected_but_weak_evidence",
+      "evidence_location": "18_alerts + 16_operation_capacity"
+    },
+    {
+      "key": "low_inventory_best_seller",
+      "classification": "detected_but_weak_evidence",
+      "evidence_location": "18_alerts"
+    },
+    {
+      "key": "labor_overtime_high",
+      "classification": "detected_but_weak_evidence",
+      "evidence_location": "18_alerts"
+    },
+    {
+      "key": "negative_margin_product_group",
+      "classification": "detected_with_evidence",
+      "evidence_location": "10_service_group_performance + 11_product_variant_performance + 12_unit_economics + 18_alerts"
+    },
+    {
+      "key": "slow_supplier_good_cost",
+      "classification": "detected_but_weak_evidence",
+      "evidence_location": "18_alerts"
+    },
+    {
+      "key": "high_sales_late_payment_agent",
+      "classification": "detected_with_evidence",
+      "evidence_location": "16_operation_capacity"
+    },
+    {
+      "key": "return_rate_above_policy",
+      "classification": "detected_with_evidence",
+      "evidence_location": "16_operation_capacity"
+    },
+    {
+      "key": "google_ads_mapping_gap",
+      "classification": "detected_with_evidence",
+      "evidence_location": "20_mapping_report + 19_data_quality"
+    },
+    {
+      "key": "inventory_movement_gap",
+      "classification": "detected_with_evidence",
+      "evidence_location": "16_operation_capacity"
+    }
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "chatgpt_web_operated_by_codex": false,
+    "fake_transcript_created": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "transcript_advisory_only": true,
+    "transcript_avoids_action_import": true,
+    "transcript_avoids_openai_api_automation": true,
+    "transcript_avoids_provider_mutation": true,
+    "transcript_avoids_provider_validate_only": true,
+    "transcript_avoids_phase_3": true
+  },
+  "verification": {
+    "artifact_parseable_check": "passed",
+    "artifact_exposure_scan": "passed",
+    "required_manual_packet_files": "passed",
+    "control_pack_ingested_check": "passed",
+    "transcript_file_present_check": "passed",
+    "human_operator_note_present_check": "passed",
+    "transcript_expected_findings_validation": "passed",
+    "transcript_safety_validation": "passed",
+    "result_json_parse_check": "passed",
+    "diff_check": "passed"
+  },
+  "files_changed": [
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/prompt33_chatgptweb_input.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/director_demo_json_manifest.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/manual_upload_steps.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/TRANSCRIPT_REQUIRED.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/chatgptweb_director_demo_analysis_transcript.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/human_operator_note.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/transcript_validation_result.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/00_control_pack_manifest.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/01_human_step_prompt33_transcript_capture.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/02_ba_ai_data_pack_axis_v34.md",
+    "docs/ai-data-pack/manual-chatgpt-web-transcript/control-pack/03_codex_chatgptweb_ledger_v34.md",
+    "docs/ai-data-pack/ketquapromt33.md",
+    "docs/ai-data-pack/ketquapromt33.json",
+    "docs/ai-data-pack/review-packets/promt33/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt33/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt33/02_director_json_manifest.md",
+    "docs/ai-data-pack/review-packets/promt33/03_manual_chatgptweb_input.md",
+    "docs/ai-data-pack/review-packets/promt33/04_transcript_status.md",
+    "docs/ai-data-pack/review-packets/promt33/05_transcript_validation_if_available.md",
+    "docs/ai-data-pack/review-packets/promt33/06_safety_checks.md",
+    "docs/ai-data-pack/review-packets/promt33/07_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt33/08_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt33/09_next_recommendation.md",
+    "docs/ai-data-pack/review-packets/promt33/10_control_pack_received.md"
+  ],
+  "risks_open_questions": [
+    "Transcript validates all 12 expected findings, but five findings are supported only by alert labels or weak evidence rather than full underlying detail tables.",
+    "The transcript prose summary has a minor count mismatch: it says 6/6 while the actual table rows parse as 7 detected_with_evidence and 5 detected_but_weak_evidence.",
+    "The packet still relies on the Prompt 32 artifact stored in tmp; preserve or move it if workspace cleanup may remove temporary files."
+  ],
+  "next_recommendation": "Submit Prompt 33 result for APPROVE. If accepted, continue only to PR-DEMO-1D manual transcript quality gate / evidence hardening; still do not open Action Draft Schema, action import, provider mutation, OpenAI API upload, or Phase 3."
+}

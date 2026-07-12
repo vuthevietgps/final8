@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════
 
 export interface FinancialControlConfig {
-  CommittedWindowDays: number;    // Default: 14
+  CommittedWindowDays: number;    // Supported snapshots: 7, 14, 30; default: 14
   SurvivalMonths: number;         // Default: 3
   SupplierCashCycleDays: number;  // Default: 10
   RiskAdjustInflow: number;       // Default: 0.80
@@ -41,37 +41,38 @@ export const DEFAULT_CONFIG: FinancialControlConfig = {
 export interface FinancialControlDashboard {
   // 1. Bank Balance (Now)
   bankBalance: number;
-  
+
   // 2. Committed (14D)
   committedCash: number;
-  
+
   // 3. Free Cash (Now)
   freeCash: number;
-  
+
   // 4. Monthly Burn
   monthlyBurn: number;
-  
+
   // 5. Runway (months) - CFO v3.1: null khi burn=0 (UI hiển thị "∞")
   runwayMonths: number | null;
-  
+
   // 6. Ads Budget Approved (7D)
   adsBudgetApproved: number;
-  
+
   // 7. Owner Withdrawable (Now)
   ownerWithdrawable: number;
-  
+
   // 8. Forecast 7D Low Point
   forecast7DLowPoint: {
     amount: number;
     day: number;
   };
-  
+
   // 9. Tổng dư nợ vay (Total Debt Outstanding) - toàn bộ, không giới hạn window
   totalDebtOutstanding?: number;
-  
+
   // Metadata
   calculatedAt: Date;
   config: FinancialControlConfig;
+  dataQuality: FinancialControlDataQuality;
 }
 
 /**
@@ -81,28 +82,28 @@ export interface FinancialControlFull extends FinancialControlDashboard {
   // Survival metrics
   survivalFloor: number;
   availableAfterSurvival: number;
-  
+
   // Ads metrics
   optimalAdsSuggestion: number;
   maxDailyAds: number;
-  
+
   // Forecast 7D chi tiết
   forecast7D: Forecast7DResult;
-  
+
   // Alerts (boolean flags - legacy)
   isCashCrunch: boolean;
   isSurvivalRisk: boolean;
-  
+
   // Runway status
   runwayStatus: 'safe' | 'ok' | 'warning' | 'danger';
-  
+
   // Aggregated alerts with source (CFO v3.1)
   alerts: string[];  // Format: "source: ALERT_TYPE" e.g. "fc: SURVIVAL_RISK"
-  
+
   // Breakdown
   committedBreakdown: CommittedCashBreakdown;
   monthlyBurnBreakdown: MonthlyBurnBreakdown;
-  
+
   // Loan Summary (tổng quan vốn vay)
   loanSummary?: {
     totalPrincipal: number;           // Tổng tiền vay theo hợp đồng
@@ -127,6 +128,8 @@ export interface CommittedCashBreakdown {
   loanPayment: number;    // Nợ vay đến hạn
   total: number;
   windowDays: number;
+  isEstimated?: boolean;
+  estimationNotes?: string[];
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -145,6 +148,16 @@ export interface MonthlyBurnBreakdown {
   estimationNotes?: string[]; // Which parts were estimated
 }
 
+export interface FinancialControlDataQuality {
+  status: 'ok' | 'estimated' | 'blocked';
+  isDecisionLocked: boolean;
+  missingModules: string[];
+  estimatedModules: string[];
+  staleModules: string[];
+  notes: string[];
+  blockingReasons: string[];
+}
+
 // ═══════════════════════════════════════════════════════════
 // OPTIMAL ADS SUGGESTION (Rule 20%)
 // ═══════════════════════════════════════════════════════════
@@ -152,18 +165,18 @@ export interface MonthlyBurnBreakdown {
 export interface AdGroupOptimalSpend {
   adGroupId: string;
   adGroupName: string;
-  
+
   // Input
   spendYesterday: number;
   avgSpendLast3Days: number;
   optimalRaw: number;        // Từ thuật toán ROI
-  
+
   // Calculated
   baselineSpend: number;
   upperCap: number;          // +20%
   lowerCap: number;          // -30%
   optimalSuggested: number;  // Clamp trong [lowerCap, upperCap]
-  
+
   // Status
   isNewAdGroup: boolean;
   isCapped: boolean;
@@ -182,7 +195,7 @@ export interface OptimalAdsSuggestionResult {
 // ═══════════════════════════════════════════════════════════
 
 export interface ForecastDay {
-  day: number;              // 1-7
+  day: number;              // 0-6 (T..T+6)
   date: Date;
   expectedIn: number;
   expectedOut: number;
@@ -214,10 +227,12 @@ export interface Forecast7DResult {
   lowPoint: number;
   lowPointDay: number;
   lowPointDate: Date;
-  isCashCrunch: boolean;       // lowPoint < 0
+  hardOutLowPoint: number;     // excludes reducible Ads spend
+  hardOutLowPointDay: number;
+  isCashCrunch: boolean;       // hardOutLowPoint < 0
   isSurvivalRisk: boolean;     // lowPoint < survivalFloor
   endBalance: number;          // Số dư cuối T+7
-  
+
   // Inflows/Outflows theo ngày
   expectedInflows: ExpectedInflowBreakdown[];
   expectedOutflows: ExpectedOutflowBreakdown[];
@@ -309,10 +324,10 @@ export interface MonthlyBurnDrilldown extends MonthlyBurnBreakdown {
 // ═══════════════════════════════════════════════════════════
 
 export type ActionPriority = 'critical' | 'high' | 'medium' | 'low';
-export type ActionType = 
-  | 'PAUSE_ADS' 
-  | 'STOP_OWNER_WITHDRAW' 
-  | 'PRIORITY_SALARY' 
+export type ActionType =
+  | 'PAUSE_ADS'
+  | 'STOP_OWNER_WITHDRAW'
+  | 'PRIORITY_SALARY'
   | 'REVIEW_OPS_COST'
   | 'COLLECT_RECEIVABLES'
   | 'DELAY_PAYMENT'

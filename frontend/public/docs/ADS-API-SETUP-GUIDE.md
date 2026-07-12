@@ -1,279 +1,254 @@
-# Huong Dan Chi Tiet: Cau Hinh API Facebook/Google/TikTok Va Dua Du Lieu Len UI
+# Huong Dan Thiet Lap He Thong Ads API
 
-Tai lieu nay mo ta day du cach cau hinh API cho tung nen tang quang cao va cach du lieu chay vao man hinh UI hien tai.
+Tai lieu nay mo ta cach van hanh 3 mo hinh:
 
-Noi dung duoc viet theo dung code dang co trong he thong `final8-version16`.
+1. Facebook qua `BM`
+2. Google qua `MCC`
+3. TikTok qua `BC`
 
-## 1. Muc tieu
+Muc tieu cua ERP:
 
-Sau khi cau hinh dung:
+1. Quan ly duoc token he thong toi thieu
+2. Quan ly duoc advertiser/account ben duoi tung lop BM/MCC/BC
+3. Quan ly duoc ai la nguoi phu trach ads
+4. Dong bo duoc chi phi ve `advertising_costs`
 
-1. He thong lay du lieu chi phi quang cao tu API nen tang.
-2. Du lieu duoc luu vao collection `advertising_costs` theo cap `(adGroupId, date)` (upsert).
-3. UI hien thi du lieu tai:
-   - `/costs/advertising`
-   - cac dashboard/tong hop co su dung advertising cost.
+## 1. Mapping chung trong ERP
 
-## 2. Dieu kien bat buoc truoc khi cau hinh API
+De du lieu vao dung bao cao, ca 3 nen tang deu theo quy trinh sau:
 
-### 2.1 Quyen truy cap
+1. Tao `AdAccount`
+2. Tao `AdGroup`
+3. Map `AdGroup.adAccountId` vao dung account
+4. Map `AdGroup.adGroupId` dung voi ID that tren nen tang
+5. Gan nguoi phu trach ads va owner lead khi can
 
-Can tai khoan co cac permission:
+Neu thieu `AdGroup` hoac map sai `adGroupId`, sync van chay nhung `updated = 0`.
 
-1. `api-tokens` de vao trang cau hinh API: `/ads-settings` va `/api-tokens`
-2. `advertising-costs` de vao trang du lieu chi phi: `/costs/advertising`
-3. `ad-accounts` va `ad-groups` de tao mapping tai khoan/nhom quang cao (neu can)
+## 2. Facebook BM
 
-### 2.2 Mapping du lieu bat buoc trong he thong
+### Cau truc van hanh
 
-Du lieu se khong vao UI neu thieu mapping:
+1. BM la lop quan ly
+2. Moi ad account Facebook nam duoi BM
+3. ERP co the lay token he thong va sync ad account/page token
 
-1. Phai co `AdAccount` dung loai nen tang (`facebook|google|tiktok`) va `isActive=true`.
-2. Phai co `AdGroup` dung `platform`, `isActive=true`, gan dung `adAccountId`.
-3. `AdGroup.adGroupId` phai trung ID nhom tren nen tang.
-4. Rule hien tai da khoa cung: `1 ad group = 1 product`.
+### Thiet lap toi thieu
 
-Neu khong co `AdGroup` hop le, sync se chay nhung `updated=0`.
+1. Cau hinh `Facebook System User Token`
+2. Neu co `businessId`, co the dong bo them Facebook ad accounts ve ERP
+3. Tai khoan Facebook trong ERP nen de `managementMode = bm`
 
-## 3. Luong du lieu API -> Database -> UI
+### Lich sync
 
-1. Cron (hoac manual API) goi service sync tung nen tang.
-2. Service sync goi API nen tang theo `adGroupId`.
-3. Upsert vao `advertising_costs` theo `(adGroupId, date)`.
-4. UI `/costs/advertising` goi `GET /api/advertising-cost` de hien thi.
-5. UI co bo loc theo kenh, tai khoan, ngay.
+1. Facebook cost sync: `06:00` hang ngay
 
-## 4. Cau hinh theo tung nen tang
+## 3. Google MCC
 
-## 4.1 Facebook Ads
+### Cau truc van hanh
 
-### A. Cach cap token
+1. MCC la lop quan ly
+2. Moi customer account nam duoi MCC
+3. ERP dung 1 bo OAuth + developer token de doc du lieu cho nhieu customer
 
-Co 2 cach:
+### Thiet lap tren ERP
 
-1. Dat env `FB_ADS_ACCESS_TOKEN`
-2. Luu token trong `Api Tokens` (de xai tren UI, de quan ly va rotate de hon)
+Vao `/ads-settings` tab `Google MCC`, nhap:
 
-He thong uu tien env truoc, sau do moi fallback qua token trong DB.
+1. `Developer Token`
+2. `Client ID`
+3. `Client Secret`
+4. `Refresh Token`
+5. `Login Customer ID`
+6. `API Version`
 
-### B. Cach cau hinh de nghi (qua UI)
+Sau do:
 
-1. Vao `/api-tokens`
-2. Tao token moi:
-   - `provider`: `facebook`
-   - `token`: access token co quyen ads
-   - `status`: `active`
-   - `isPrimary`: `true` (khuyen nghi)
-   - `adAccountId`: khuyen nghi gan vao account de map dung
-3. Validate token (`POST /api/api-tokens/:id/validate`)
-4. Test ad account (`POST /api/api-tokens/:id/test-adaccount`)
-5. Vao `/ads-settings` tab Facebook de test sync nhanh.
+1. Test tren 1 customer con
+2. Luu cau hinh
+3. Tao tung customer thanh `AdAccount` type `google`
+4. Dat `managementMode = mcc`
 
-### C. Scope quan trong
+### Lich sync
 
-Khoi dong sync/auto-control can token co `ads_management` (va/hoac `ads_read` tuy luong).
+1. Google cost sync: `06:15` hang ngay
 
-### D. API sync Facebook
+## 4. TikTok Business Center
 
-1. Manual 1 lan:
-   - `POST /api/advertising-cost/fetch/facebook?date=YYYY-MM-DD`
-   - hoac `POST /api/advertising-cost/fetch/facebook?date=YYYY-MM-DD&days=N`
-2. Cron tu dong: `06:00` hang ngay (gio server).
+### Cau truc van hanh de nghi
 
-### E. Du lieu lay tu Facebook
+1. `Business Center` la lop quan ly lon nhat
+2. Moi `advertiser` duoc coi la 1 `AdAccount` trong ERP
+3. Moi `ad group` TikTok duoc tao thanh 1 `AdGroup` trong ERP
+4. Moi `AdGroup` can gan `assignedEmployeeId` de biet ai phu trach ads
 
-API dung `/{adsetId}/insights`, lay cac field:
+### Token va phan quyen toi thieu
 
-1. `spend`, `cpm`, `cpc`, `frequency`
-2. `impressions`, `clicks`, `reach`
-3. messaging metrics (`actions`, `cost_per_action_type`)
+ERP chi can quan ly toi thieu cac thong tin sau:
 
-## 4.2 Google Ads
+1. `App ID`
+2. `App Secret`
+3. `Auth Code`
+4. `Access Token`
+5. `Refresh Token`
+6. `Scope / Quyen`
+7. `Business Center ID`
+8. `Business Center Name`
+9. `Test Advertiser ID`
+10. Danh sach `Advertiser IDs` can sync
 
-### A. Thong tin bat buoc
+### Ghi chu OAuth quan trong
 
-1. `developerToken`
-2. `clientId`
-3. `clientSecret`
-4. `refreshToken`
-5. `loginCustomerId` (khuyen nghi khi dung MCC)
+Theo SDK chinh thuc cua TikTok:
 
-### B. Cau hinh tren UI
+1. `POST /open_api/v1.3/oauth2/access_token/` doi `auth_code` thanh `access_token` va `refresh_token`
+2. `access_token` co han `24 gio`
+3. `refresh_token` co han `1 nam`
+4. Trong vong `1 nam`, can lam moi access token hang ngay bang refresh token
+5. Het `1 nam` thi can authorize lai
 
-1. Vao `/ads-settings` -> tab `Google Ads`
-2. Dien day du cac truong tren
-3. Bam `Test Ket Noi`
-4. Bam `Luu Cau Hinh`
-5. Bam `Test Sync Google`
+ERP da duoc mo rong de luu:
 
-UI goi cac API:
+1. `authCode`
+2. `refreshToken`
+3. `scopes`
+4. `accessTokenExpiresAt`
+5. `refreshTokenExpiresAt`
+6. `grantedAdvertiserIds`
 
-1. `POST /api/api-tokens/test/google`
+### Quy trinh thiet lap TikTok BC
+
+1. Tao 1 `Business Center` tong
+2. Add toan bo advertiser can bao cao vao BC
+3. Vao `https://ads.tiktok.com/marketing_api/apps/` de tao app trong `TikTok API for Business`
+4. Trong app, xin quyen toi thieu de:
+   - doc `advertiser` da authorize cho app
+   - doc `reporting / insights`
+   - uu tien read-only, khong xin quyen tao/sua campaign neu ERP chi dung de doc chi phi
+5. Admin BC authorize app, sau do lay `auth_code` tu callback URL
+6. Vao `/ads-settings` tab `TikTok BC`
+7. Nhap:
+   - `App ID`
+   - `App Secret`
+   - `Auth Code`
+   - `Business Center ID`
+   - `Business Center Name`
+   - `Test Advertiser ID`
+8. Bam `Doi auth code`
+9. ERP se luu:
+   - `Access Token`
+   - `Refresh Token`
+   - `Scopes`
+   - `Advertiser IDs da authorize`
+10. Kiem tra va chinh lai `Danh sach Advertiser IDs` can sync neu can
+11. Vao `/ad-accounts`, tao moi advertiser thanh 1 `AdAccount`
+12. Dat:
+   - `accountType = tiktok`
+   - `managementMode = bc`
+   - `businessCenterId`
+   - `businessCenterName`
+   - `tokenSource`
+   - `adsManagerUserId`
+13. Vao `/ad-groups`, tao moi ad group TikTok
+14. Gan:
+   - `adAccountId`
+   - `assignedEmployeeId`
+   - `agentId`
+15. Test sync TikTok hom qua
+
+### Lich sync
+
+1. TikTok cost sync: `06:30` hang ngay
+
+## 5. Advertising Cost sau khi tai cau truc
+
+Khi sync thanh cong, moi record chi phi co the duoc enrich voi:
+
+1. `channel`
+2. `customerId`
+3. `businessCenterId`
+4. `managementMode`
+5. `adAccountName`
+6. `adAccountAccountId`
+7. `adsManagerUserId`
+8. `assignedEmployeeId`
+
+Dieu nay giup bao cao chi phi TikTok duoc nhin theo:
+
+1. advertiser
+2. business center
+3. nguoi phu trach ads
+
+## 6. Checklist truoc khi chay that
+
+### Facebook
+
+1. BM dung
+2. Token hop le
+3. Page/ad account da map
+
+### Google
+
+1. MCC dung
+2. Refresh token con song
+3. Customer da nam duoi MCC
+
+### TikTok
+
+1. BC dung
+2. App da duoc authorize boi admin BC
+3. Access token doc duoc advertiser trong BC
+4. `Advertiser ID` trong ERP dung
+5. `AdGroup` da map dung advertiser
+6. Da gan nguoi phu trach ads noi bo
+
+## 7. Loi thuong gap
+
+### Sync pass nhung `updated = 0`
+
+1. Sai `adGroupId`
+2. Chua map `AdGroup -> AdAccount`
+3. Account hoac group dang `isActive = false`
+
+### TikTok test pass nhung chi phi khong ve
+
+1. Advertiser co trong BC nhung khong co trong danh sach advertiser duoc sync
+2. `AdAccount.accountId` khong dung advertiser id
+3. Ngay do khong co spend
+
+### Doi auth code thanh cong nhung khong thay advertiser
+
+1. App chua duoc authorize tren advertiser hoac BC
+2. `App ID / App Secret` sai
+3. `auth_code` da het han hoac da duoc dung roi
+
+### TikTok sync dang chay thi dung sau 24 gio
+
+1. Access token da het han
+2. Refresh token chua duoc van hanh / chua duoc lam moi
+3. Refresh token cung co the het han sau 1 nam va can authorize lai
+
+### Nguoi quan ly khong biet ai dang phu trach ads
+
+1. Kiem tra `AdAccount.adsManagerUserId`
+2. Kiem tra `AdGroup.assignedEmployeeId`
+3. Kiem tra moc `lastOperatorActivityAt`
+
+## 8. API can nho
+
+1. `GET /api/api-tokens/settings`
 2. `POST /api/api-tokens/settings/google`
-3. `POST /api/advertising-cost/fetch/google?date=YYYY-MM-DD`
+3. `POST /api/api-tokens/settings/tiktok`
+4. `POST /api/api-tokens/test/google`
+5. `POST /api/api-tokens/test/tiktok`
+6. `POST /api/advertising-cost/fetch/facebook`
+7. `POST /api/advertising-cost/fetch/google`
+8. `POST /api/advertising-cost/fetch/tiktok`
+9. `GET /api/advertising-cost/sync/health`
 
-### C. Luu y mapping account
+## 9. Man hinh ERP can dung
 
-Service sync Google loc theo:
-
-1. `AdAccount.accountType = google`
-2. `AdGroup.platform = google`
-3. `AdGroup.adAccountId` thuoc danh sach account dang active
-
-`accountId` va `loginCustomerId` nen luu dang so, bo ky tu khong phai so.
-
-### D. Cron va du lieu lay duoc
-
-1. Cron tu dong: `06:15` hang ngay.
-2. API query GAQL `ad_group` lay:
-   - `cost_micros` -> `spentAmount`
-   - `impressions`
-   - `clicks`
-   - `average_cpc`
-   - `average_cpm`
-
-## 4.3 TikTok Ads
-
-### A. Thong tin bat buoc
-
-1. `accessToken`
-2. Co `AdAccount` type `tiktok` va `accountId` la advertiser id
-
-### B. Cau hinh tren UI
-
-1. Vao `/ads-settings` -> tab `TikTok`
-2. Dien:
-   - `Access Token` (bat buoc)
-   - `App ID`, `App Secret` (tuy chon)
-   - `Advertiser ID` de test
-3. Bam `Test Ket Noi`
-4. Bam `Luu Cau Hinh`
-5. Bam `Test Sync TikTok`
-
-UI goi cac API:
-
-1. `POST /api/api-tokens/test/tiktok`
-2. `POST /api/api-tokens/settings/tiktok`
-3. `POST /api/advertising-cost/fetch/tiktok?date=YYYY-MM-DD`
-
-### C. Cron va du lieu lay duoc
-
-1. Cron tu dong: `06:30` hang ngay.
-2. API report integrated lay:
-   - `spend`
-   - `impressions`
-   - `clicks`
-   - `cpc`
-   - `cpm`
-   - `reach`
-   - `frequency`
-
-## 5. Huong dan dung UI de dong bo du lieu
-
-## 5.1 Trang cai dat API
-
-Route: `/ads-settings`
-
-1. Tab `Facebook`: test sync nhanh, quan ly token qua `/api-tokens`.
-2. Tab `Google Ads`: test ket noi + luu credentials + test sync.
-3. Tab `TikTok`: test ket noi + luu token + test sync.
-
-## 5.2 Trang quan ly chi phi
-
-Route: `/costs/advertising`
-
-Chuc nang:
-
-1. Dong bo thu cong Facebook/Google/TikTok theo ngay va so ngay.
-2. Loc theo channel va ad account.
-3. Xem bang chi tiet chi phi theo adGroup.
-
-Luu y: tren man nay, ghi chu Facebook da duoc canh chinh theo cron thuc te la `06:00`.
-
-## 6. API checklist de test nhanh (PowerShell)
-
-Gia su domain la `https://htxbachgia.shop` va da co cookie login:
-
-```powershell
-# Sync health tat ca nen tang
-Invoke-RestMethod -Method GET `
-  -Uri "https://htxbachgia.shop/api/advertising-cost/sync/health"
-
-# Sync Facebook 1 ngay
-Invoke-RestMethod -Method POST `
-  -Uri "https://htxbachgia.shop/api/advertising-cost/fetch/facebook?date=2026-03-04"
-
-# Sync Google 1 ngay
-Invoke-RestMethod -Method POST `
-  -Uri "https://htxbachgia.shop/api/advertising-cost/fetch/google?date=2026-03-04"
-
-# Sync TikTok 1 ngay
-Invoke-RestMethod -Method POST `
-  -Uri "https://htxbachgia.shop/api/advertising-cost/fetch/tiktok?date=2026-03-04"
-```
-
-Neu muon test theo nhieu ngay:
-
-```powershell
-Invoke-RestMethod -Method POST `
-  -Uri "https://htxbachgia.shop/api/advertising-cost/fetch/facebook?date=2026-03-04&days=7"
-```
-
-## 7. Cac loi thuong gap va cach xu ly
-
-## 7.1 Sync thanh cong nhung updated = 0
-
-Nguyen nhan thuong gap:
-
-1. Chua co `AdGroup` dung `platform`
-2. `adGroupId` trong ERP khong trung ID tren nen tang
-3. `AdGroup` hoac `AdAccount` dang `isActive=false`
-4. Token khong du quyen
-
-## 7.2 Google bao thieu developer token hoac OAuth
-
-Kiem tra lai:
-
-1. Da luu `developerToken`
-2. Da luu `clientId/clientSecret`
-3. `refreshToken` con dung
-4. `loginCustomerId` dung voi MCC dang cap quyen
-
-## 7.3 TikTok test pass nhung sync khong co du lieu
-
-Kiem tra:
-
-1. `AdAccount.accountId` co phai advertiser id dung hay khong
-2. `AdGroup.platform=tiktok` da map vao account do hay chua
-3. Date co phat sinh spend hay khong
-
-## 7.4 Facebook token hop le nhung pause/sync van loi
-
-Kiem tra token co scope `ads_management` va ad account co quyen truy cap that su.
-
-## 8. Bao mat va van hanh an toan
-
-1. Khong commit token that vao git.
-2. Dung `Api Tokens` de quan ly token va rotate dinh ky.
-3. Dung endpoint health:
-   - `GET /api/advertising-cost/sync/health`
-4. Theo doi stale data:
-   - `freshnessHours` cao -> can test sync thu cong.
-
-## 9. File code chinh de doi chieu
-
-Backend:
-
-1. `backend/src/advertising-cost/advertising-cost.facebook-sync.service.ts`
-2. `backend/src/advertising-cost/advertising-cost.google-sync.service.ts`
-3. `backend/src/advertising-cost/advertising-cost.tiktok-sync.service.ts`
-4. `backend/src/advertising-cost/advertising-cost.controller.ts`
-5. `backend/src/api-token/api-token.controller.ts`
-6. `backend/src/api-token/api-token.service.ts`
-
-Frontend:
-
-1. `frontend/src/app/features/ads-settings/ads-settings.component.ts`
-2. `frontend/src/app/features/advertising-cost/advertising-cost.component.ts`
-3. `frontend/src/app/features/advertising-cost/advertising-cost.service.ts`
-
+1. `/ads-settings`
+2. `/ad-accounts`
+3. `/ad-groups`
+4. `/costs/advertising`

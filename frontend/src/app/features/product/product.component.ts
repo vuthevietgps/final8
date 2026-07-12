@@ -47,8 +47,15 @@ export class ProductComponent implements OnInit {
     categoryId: '',
     status: 'Hoạt động',
     color: '#3B82F6',
-    usageDurationMonths: 1,
+    usageDurationMonths: 12,
     assumedReturnRatePercent: 20,
+    importPrice: 0,
+    shippingCost: 0,
+    packagingCost: 0,
+    minStock: 0,
+    maxStock: 0,
+    notes: '',
+    resourceLink: '',
     supplierIds: [],
   });
 
@@ -76,7 +83,7 @@ export class ProductComponent implements OnInit {
 
     const category = this.selectedCategory();
     if (category !== 'all') {
-      filtered = filtered.filter(product => product.categoryId && product.categoryId._id === category);
+      filtered = filtered.filter(product => this.resolveCategoryId(product.categoryId) === category);
     }
 
     return filtered;
@@ -101,7 +108,7 @@ export class ProductComponent implements OnInit {
     
     this.productService.getAll().subscribe({
       next: (products) => {
-        this.products.set(products);
+        this.products.set(products.map(product => this.normalizeProduct(product)));
         this.isLoading.set(false);
       },
       error: (err) => {
@@ -127,6 +134,7 @@ export class ProductComponent implements OnInit {
     this.categoryService.getAll().subscribe({
       next: (categories) => {
         this.categories.set(categories);
+        this.products.update(products => products.map(product => this.normalizeProduct(product)));
       },
       error: (err) => {
         console.error('Error loading categories:', err);
@@ -147,8 +155,15 @@ export class ProductComponent implements OnInit {
       categoryId: '',
       status: 'Hoạt động',
       color: '#3B82F6',
-      usageDurationMonths: 1,
+      usageDurationMonths: 12,
       assumedReturnRatePercent: 20,
+      importPrice: 0,
+      shippingCost: 0,
+      packagingCost: 0,
+      minStock: 0,
+      maxStock: 0,
+      notes: '',
+      resourceLink: '',
       supplierIds: [],
     });
     this.isAddModalOpen.set(true);
@@ -162,11 +177,18 @@ export class ProductComponent implements OnInit {
     this.selectedProduct.set(product);
     this.formData.set({
       name: product.name,
-      categoryId: product.categoryId?._id || '',
+      categoryId: this.resolveCategoryId(product.categoryId),
       status: product.status,
       color: product.color || '#3B82F6',
-      usageDurationMonths: product.usageDurationMonths || 1,
+      usageDurationMonths: product.usageDurationMonths || 12,
       assumedReturnRatePercent: product.assumedReturnRatePercent ?? 20,
+      importPrice: product.importPrice ?? 0,
+      shippingCost: product.shippingCost ?? 0,
+      packagingCost: product.packagingCost ?? 0,
+      minStock: product.minStock ?? 0,
+      maxStock: product.maxStock ?? 0,
+      notes: product.notes ?? '',
+      resourceLink: product.resourceLink ?? '',
       supplierIds: (product.suppliers || []).map(s => s.supplierId || ''),
     });
     this.isEditModalOpen.set(true);
@@ -195,12 +217,21 @@ export class ProductComponent implements OnInit {
       return;
     }
 
-    const payload = { ...this.formData(), usageDurationMonths, assumedReturnRatePercent } as CreateProductDto;
+    const numericFields = this.validatedNumericFields();
+    if (!numericFields) return;
+
+    const payload = {
+      ...this.formData(),
+      usageDurationMonths,
+      assumedReturnRatePercent,
+      ...numericFields,
+    } as CreateProductDto;
 
     this.isLoading.set(true);
     this.productService.create(payload).subscribe({
       next: (product) => {
-        this.products.update(products => [...products, product]);
+        const normalizedProduct = this.normalizeProduct(product);
+        this.products.update(products => [...products, normalizedProduct]);
         this.loadStats();
         this.closeAddModal();
         this.isLoading.set(false);
@@ -234,12 +265,21 @@ export class ProductComponent implements OnInit {
       return;
     }
 
+    const numericFields = this.validatedNumericFields();
+    if (!numericFields) return;
+
     this.isLoading.set(true);
-    const payload = { ...this.formData(), usageDurationMonths, assumedReturnRatePercent } as UpdateProductDto;
+    const payload = {
+      ...this.formData(),
+      usageDurationMonths,
+      assumedReturnRatePercent,
+      ...numericFields,
+    } as UpdateProductDto;
     this.productService.update(product._id, payload).subscribe({
       next: (updatedProduct) => {
+        const normalizedProduct = this.normalizeProduct(updatedProduct);
         this.products.update(products => 
-          products.map(p => p._id === product._id ? updatedProduct : p)
+          products.map(p => p._id === product._id ? normalizedProduct : p)
         );
         this.loadStats();
         this.closeEditModal();
@@ -290,12 +330,40 @@ export class ProductComponent implements OnInit {
 
   onInputChange(field: keyof CreateProductDto, event: Event): void {
     const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    const nonNegativeNumberFields: Array<keyof CreateProductDto> = [
+      'importPrice',
+      'shippingCost',
+      'packagingCost',
+      'minStock',
+      'maxStock',
+    ];
     const value: any = field === 'usageDurationMonths'
       ? Math.max(0, Math.floor(Number(target.value) || 0))
       : field === 'assumedReturnRatePercent'
         ? Math.max(0, Math.min(95, Number(target.value) || 0))
+      : nonNegativeNumberFields.includes(field)
+        ? Math.max(0, Number(target.value) || 0)
       : target.value;
     this.updateFormField(field, value);
+  }
+
+  private validatedNumericFields(): Pick<CreateProductDto,
+    'importPrice' | 'shippingCost' | 'packagingCost' | 'minStock' | 'maxStock'> | null {
+    const importPrice = Number(this.formData().importPrice ?? 0);
+    const shippingCost = Number(this.formData().shippingCost ?? 0);
+    const packagingCost = Number(this.formData().packagingCost ?? 0);
+    const minStock = Number(this.formData().minStock ?? 0);
+    const maxStock = Number(this.formData().maxStock ?? 0);
+    const values = [importPrice, shippingCost, packagingCost, minStock, maxStock];
+    if (values.some(value => !Number.isFinite(value) || value < 0)) {
+      this.error.set('Gia von va nguong ton kho phai la so khong am.');
+      return null;
+    }
+    if (maxStock > 0 && maxStock < minStock) {
+      this.error.set('Ton kho toi da phai lon hon hoac bang ton kho toi thieu.');
+      return null;
+    }
+    return { importPrice, shippingCost, packagingCost, minStock, maxStock };
   }
 
   onSearchChange(event: Event): void {
@@ -315,6 +383,29 @@ export class ProductComponent implements OnInit {
 
   clearError(): void {
     this.error.set(null);
+  }
+
+  private resolveCategoryId(category: Product['categoryId'] | string | null | undefined): string {
+    if (!category) return '';
+    if (typeof category === 'string') return category;
+    return category._id || '';
+  }
+
+  private normalizeProduct(product: Product): Product {
+    const categoryId = this.resolveCategoryId((product as any).categoryId);
+    if (!categoryId) {
+      return product;
+    }
+
+    const matchedCategory = this.categories().find(category => category._id === categoryId);
+    if (!matchedCategory) {
+      return product;
+    }
+
+    return {
+      ...product,
+      categoryId: matchedCategory,
+    };
   }
 }
 

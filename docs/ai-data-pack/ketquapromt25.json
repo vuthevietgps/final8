@@ -1,0 +1,277 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-5C",
+    "status": "completed_rendered_redacted_json_artifacts",
+    "code_changed": true,
+    "docs_changed": true,
+    "artifact_rendering_implemented": true,
+    "downloadable_redacted_artifact_created": true,
+    "official_artifact_rendering_supported": true,
+    "partial_artifact_rendering_supported": true,
+    "json_artifact_supported": true,
+    "xlsx_artifact_supported": false,
+    "download_endpoint_preserved": true,
+    "download_token_added": false,
+    "public_url_added": false,
+    "storage_path_exposed": false,
+    "raw_internal_artifact_download_allowed": false,
+    "manifest_only_download_allowed": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "phase_3_started": false
+  },
+  "inputs_reviewed": {
+    "mandatory_missing": [],
+    "optional_missing": [
+      {
+        "file": "docs/ai-ads-v2/00-index.md",
+        "impact": "Workspace AGENTS references this AI Ads V2 index, but Prompt 25 is scoped to AI Data Pack artifact rendering.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/ba-master-addendum-prompt24-review-prompt25-rendered-artifacts-20260614.md",
+        "impact": "Optional addendum unavailable; Prompt 25 and Prompt 24 outputs defined the phase.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v23.md",
+        "impact": "Optional ledger unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/lo-trinh-ai-data-pack-roadmap-v23.md",
+        "impact": "Optional roadmap unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v20.md",
+        "impact": "Optional guardrail unavailable; Prompt 23-25 constraints were used.",
+        "can_continue": true
+      },
+      {
+        "file": "promt24.md",
+        "impact": "Repo-local copy unavailable; Prompt 24 result docs were available.",
+        "can_continue": true
+      },
+      {
+        "file": "promtchatgptweb24.md",
+        "impact": "Optional file unavailable; no scope expansion performed.",
+        "can_continue": true
+      }
+    ]
+  },
+  "artifact_rendering": {
+    "implemented": true,
+    "trigger": "official/partial lifecycle after source assessment and snapshotting, during exporting before terminal completion",
+    "source_data": "existing ERP pack builders and job source preparation metadata",
+    "external_provider_fetch": false,
+    "provider_mutation": false,
+    "supported_modes": [
+      "official_export",
+      "partial_export"
+    ],
+    "supported_formats": [
+      "json"
+    ],
+    "unsupported_formats": [
+      "xlsx"
+    ],
+    "unsupported_behavior": "artifact_render_skipped_not_supported:xlsx warning; no fake file is created"
+  },
+  "artifact_type_model": {
+    "classes": [
+      "raw_internal_artifact",
+      "manifest_only_artifact",
+      "downloadable_redacted_artifact"
+    ],
+    "downloadable_class": "downloadable_redacted_artifact",
+    "downloadable_required_fields": [
+      "artifactId",
+      "jobId",
+      "packType",
+      "exportMode",
+      "format",
+      "redactionProfile",
+      "sectionAccessProfile",
+      "artifactRendering=rendered",
+      "redactionRuntime=pre_rendered",
+      "downloadReady=true",
+      "storageKey internal only",
+      "fileSizeBytes",
+      "artifactChecksum",
+      "checksumAlgorithm=sha256",
+      "createdAt"
+    ],
+    "schema_change": "optional fields only; no migration added"
+  },
+  "redaction_boundary": {
+    "client_override_allowed": false,
+    "redaction_runtime": "pre_rendered",
+    "json_exporter_redacts": true,
+    "forbidden_render_inputs_rejected": [
+      "includeRaw",
+      "includePII",
+      "includeSecrets",
+      "includeStoragePath",
+      "roleOverride",
+      "redactionOverride",
+      "sectionOverride",
+      "providerMutation",
+      "validateOnly",
+      "openaiUpload",
+      "actionImport",
+      "dryRun",
+      "liveExecution"
+    ],
+    "forbidden_outputs": [
+      "raw provider payload",
+      "credentials",
+      "tokens",
+      "secrets",
+      "storage path/key in public response",
+      "debug metadata",
+      "stack trace"
+    ]
+  },
+  "file_write_checksum_metadata": {
+    "artifact_root": "configured AI_DATA_PACK_EXPORT_ROOT or default internal export root",
+    "safe_path_resolution": true,
+    "path_traversal_rejected": true,
+    "metadata_after_successful_write": true,
+    "file_size_recorded": true,
+    "sha256_recorded": true,
+    "checksum_algorithm": "sha256",
+    "failed_render_download_ready": false,
+    "failed_render_artifact_rendering": "failed",
+    "storage_path_publicly_exposed": false
+  },
+  "download_endpoint_integration": {
+    "route": "GET /ai-data-pack/exports/:jobId/artifacts/:artifactId/download",
+    "preserved": true,
+    "new_rendered_official_json_streams": true,
+    "artifact_level_gates_added": [
+      "artifactClass=downloadable_redacted_artifact",
+      "downloadReady=true",
+      "redactionRuntime!=manifest_only",
+      "artifactRendering=rendered"
+    ],
+    "manifest_only_download_allowed": false,
+    "raw_internal_download_allowed": false,
+    "tokenized_download_added": false,
+    "public_url_added": false
+  },
+  "audit_observability": {
+    "events": [
+      "artifact_render_requested",
+      "artifact_render_started",
+      "artifact_render_completed",
+      "artifact_render_failed",
+      "artifact_render_skipped_not_supported",
+      "artifact_generated"
+    ],
+    "sanitized": true,
+    "forbidden_audit_fields": [
+      "artifact bytes",
+      "raw file contents",
+      "raw provider payload",
+      "storage path/key",
+      "credentials",
+      "tokens",
+      "raw PII",
+      "stack trace"
+    ]
+  },
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/export-jobs/export-job.service.spec.ts --runInBand",
+      "status": "passed",
+      "summary": "20 passed"
+    },
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts --runInBand",
+      "status": "passed",
+      "summary": "41 passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "static_safety_checks": [
+    {
+      "check": "No OpenAI/action/execution/provider validation/mutation/Google Ads service dependencies in export job/download controller/service.",
+      "status": "passed"
+    },
+    {
+      "check": "No tokenized download route or downloadToken integration in endpoint controller/service.",
+      "status": "passed"
+    },
+    {
+      "check": "Direct artifact download route remains present and no POST download route exists.",
+      "status": "passed"
+    },
+    {
+      "check": "Download response headers do not expose storage/public/token/debug/provider/credential metadata.",
+      "status": "passed"
+    },
+    {
+      "check": "Forbidden input strings appear only in denylist/false-flag contexts.",
+      "status": "passed"
+    }
+  ],
+  "files_changed": [
+    "backend/src/ai-data-pack/export-jobs/export-job.types.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.schema.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-artifact.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-error.util.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-response-redactor.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.service.spec.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts",
+    "backend/src/ai-data-pack/redaction/export-redaction-profile.service.ts",
+    "docs/ai-data-pack/ketquapromt25.md",
+    "docs/ai-data-pack/ketquapromt25.json",
+    "docs/ai-data-pack/review-packets/promt25/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt25/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt25/02_artifact_rendering_implementation.md",
+    "docs/ai-data-pack/review-packets/promt25/03_artifact_type_model.md",
+    "docs/ai-data-pack/review-packets/promt25/04_redaction_boundary.md",
+    "docs/ai-data-pack/review-packets/promt25/05_file_write_checksum_metadata.md",
+    "docs/ai-data-pack/review-packets/promt25/06_download_endpoint_integration.md",
+    "docs/ai-data-pack/review-packets/promt25/07_audit_observability.md",
+    "docs/ai-data-pack/review-packets/promt25/08_tests_run.md",
+    "docs/ai-data-pack/review-packets/promt25/09_static_safety_checks.md",
+    "docs/ai-data-pack/review-packets/promt25/10_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt25/11_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt25/12_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "Official/partial XLSX rendering is explicitly not supported yet.",
+    "Rendered JSON uses existing pack builders and redaction utility; deeper profile-specific row/field shaping can be hardened later.",
+    "Schema extension uses optional fields only; no migration added.",
+    "Existing rate limits and audit posture remain bounded but not high-volume multi-pod public ready.",
+    "Expired/revoked/quarantined artifact lifecycle state still is not modeled."
+  ],
+  "next_recommendation": {
+    "stop_after_prompt25": true,
+    "if_accepted": "PR-2.3B-5D - End-to-End Manual ChatGPT Web Export Acceptance, No OpenAI, No Action Import",
+    "if_hardening_needed": "PR-2.3B-5C-H1 - Rendered Artifact Security Hardening, No OpenAI, No Action Import",
+    "still_forbidden": [
+      "OpenAI upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "provider validateOnly",
+      "new provider adapter",
+      "tokenized download",
+      "Phase 3"
+    ]
+  }
+}

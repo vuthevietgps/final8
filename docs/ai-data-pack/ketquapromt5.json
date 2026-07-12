@@ -1,0 +1,251 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-2",
+    "status": "completed",
+    "build": "passed",
+    "focused_tests": "passed",
+    "provider_calls": false,
+    "live_execution_added": false,
+    "cached_export_freshness_evaluated": false
+  },
+  "scope": {
+    "included": [
+      "Internal allowlisted source registry",
+      "DB-only watermark/freshness assessment",
+      "DB-only report-date/date-range coverage assessment",
+      "Conservative internal decision gates",
+      "Focused tests and Prompt 5 reports"
+    ],
+    "excluded": [
+      "Provider API call or provider adapter",
+      "Official or partial export",
+      "Cached ExportJob freshness integration",
+      "Public endpoint, RBAC, status polling or download",
+      "Action import, generic dry-run or live execution",
+      "Sheet/payment/settlement/recalculation/auto-control mutation",
+      "OpenAI/upload work and Phase 3"
+    ],
+    "blocked_by_scope": false,
+    "scope_notes": [
+      "The PR-2.3B-1 BA addendum was reviewed from Downloads.",
+      "No separate ChatGPT Web Prompt 4 approval artifact was found; Prompt 5 supplied explicit authorization."
+    ]
+  },
+  "files_changed": [
+    "backend/src/ai-data-pack/source-registry/source-registry.types.ts",
+    "backend/src/ai-data-pack/source-registry/source-registry.service.ts",
+    "backend/src/ai-data-pack/source-registry/db-watermark.service.ts",
+    "backend/src/ai-data-pack/source-registry/coverage-gate.service.ts",
+    "backend/src/ai-data-pack/source-registry/freshness-gate.service.ts",
+    "backend/src/ai-data-pack/source-registry/source-registry.service.spec.ts",
+    "backend/src/ai-data-pack/ai-data-pack.module.ts",
+    "docs/ai-data-pack/ketquapromt5.md",
+    "docs/ai-data-pack/ketquapromt5.json",
+    "docs/ai-data-pack/review-packets/promt5/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt5/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt5/02_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt5/03_source_registry_contract.md",
+    "docs/ai-data-pack/review-packets/promt5/04_db_freshness_coverage_gate.md",
+    "docs/ai-data-pack/review-packets/promt5/05_gate_decision_impact.md",
+    "docs/ai-data-pack/review-packets/promt5/06_tests_run.md",
+    "docs/ai-data-pack/review-packets/promt5/07_acceptance_checklist.md",
+    "docs/ai-data-pack/review-packets/promt5/08_security_no_provider_guard.md",
+    "docs/ai-data-pack/review-packets/promt5/09_risks_and_assumptions.md",
+    "docs/ai-data-pack/review-packets/promt5/10_next_recommendation.md"
+  ],
+  "source_registry": [
+    "google_ads",
+    "meta_ads",
+    "tiktok_ads",
+    "zalo_ads",
+    "advertising_costs",
+    "crm_leads",
+    "orders",
+    "payments_or_order_payments",
+    "finance",
+    "loans_debt",
+    "operations",
+    "product_mapping",
+    "decision_history",
+    "external_market",
+    "supplier_settlement",
+    "return_refund",
+    "customer_referral",
+    "employee_activity_payroll",
+    "system_settings"
+  ],
+  "freshness_coverage_gate": {
+    "db_only": true,
+    "provider_sync_attempted": false,
+    "mutation_attempted": false,
+    "freshness_statuses": [
+      "fresh",
+      "stale",
+      "missing",
+      "not_configured",
+      "unsupported",
+      "unknown"
+    ],
+    "coverage_statuses": [
+      "covered",
+      "no_records_for_report_date",
+      "missing",
+      "not_applicable",
+      "unsupported",
+      "unknown"
+    ],
+    "fresh_without_report_date_coverage_is_strong_ready": false
+  },
+  "decision_gate_impact": {
+    "can_recommend_ads_scale_requires": [
+      "google_ads",
+      "advertising_costs",
+      "product_mapping"
+    ],
+    "can_conclude_profit_strongly_requires": [
+      "orders",
+      "payments_or_order_payments",
+      "advertising_costs"
+    ],
+    "can_evaluate_sales_today_requires": [
+      "crm_leads"
+    ],
+    "can_evaluate_finance_strongly_requires": [
+      "finance",
+      "loans_debt"
+    ],
+    "can_use_ltv_strongly_requires": [
+      "customer_referral",
+      "product_mapping"
+    ],
+    "can_generate_action_draft": true,
+    "can_import_action_file": false,
+    "can_dry_run": false,
+    "can_execute_live": false
+  },
+  "security_no_provider_guard": {
+    "provider_services_injected": [],
+    "provider_calls_possible": false,
+    "provider_sync_allowed_in_this_pr": false,
+    "mutation_allowed": false,
+    "public_endpoints_added": [],
+    "raw_error_leakage_tested": true,
+    "cached_export_semantics_preserved": true
+  },
+  "tests_run": [
+    {
+      "command": "cd backend; npm run build",
+      "status": "passed",
+      "summary": "NestJS backend build passed."
+    },
+    {
+      "command": "cd backend; npm test -- --runInBand source-registry",
+      "status": "passed",
+      "summary": "1 suite, 10 tests passed."
+    },
+    {
+      "command": "cd backend; npm test -- --runInBand export-job",
+      "status": "passed",
+      "summary": "1 suite, 10 tests passed; cached ExportJob semantics remain unchanged."
+    },
+    {
+      "command": "cd backend; npm test -- --runInBand ai-data-pack",
+      "status": "passed",
+      "summary": "4 suites, 40 tests passed."
+    },
+    {
+      "command": "cd backend; npx prettier --check \"src/ai-data-pack/source-registry/*.ts\" \"src/ai-data-pack/ai-data-pack.module.ts\"",
+      "status": "passed",
+      "summary": "All touched code matches Prettier style."
+    },
+    {
+      "command": "full repository tests",
+      "status": "not_run",
+      "summary": "Not run for this scoped phase."
+    },
+    {
+      "command": "live/local database assessment",
+      "status": "not_run",
+      "summary": "No database or provider execution was performed."
+    }
+  ],
+  "acceptance_checklist": [
+    {
+      "item": "Minimum source registry exists",
+      "status": "passed",
+      "evidence": "19-source registry test"
+    },
+    {
+      "item": "Unsupported/not-configured source is never fresh",
+      "status": "passed",
+      "evidence": "Focused registry/watermark tests"
+    },
+    {
+      "item": "DB-only fresh/stale/missing works",
+      "status": "passed",
+      "evidence": "Fixture-based watermark test"
+    },
+    {
+      "item": "Report-date coverage distinguishes covered/no records",
+      "status": "passed",
+      "evidence": "Fixture-based coverage test"
+    },
+    {
+      "item": "Fresh without report-date coverage is not strong-ready",
+      "status": "passed",
+      "evidence": "Combined gate returns cautious"
+    },
+    {
+      "item": "Ads/finance/profit gates fail conservatively",
+      "status": "passed",
+      "evidence": "Decision gate test"
+    },
+    {
+      "item": "Import/dry-run/live remain false",
+      "status": "passed",
+      "evidence": "Decision gate test"
+    },
+    {
+      "item": "No provider/action/mutation service injected or called",
+      "status": "passed",
+      "evidence": "Production dependency design and source guard"
+    },
+    {
+      "item": "Cached ExportJob remains freshness_gate_evaluated=false",
+      "status": "passed",
+      "evidence": "Source guard and ExportJob regression"
+    },
+    {
+      "item": "Existing GET controller remains side-effect-free",
+      "status": "passed",
+      "evidence": "Controller source guard and AI Data Pack regression"
+    },
+    {
+      "item": "No raw secret/PII/error leakage",
+      "status": "passed",
+      "evidence": "Failing DB read test"
+    }
+  ],
+  "risks_and_assumptions": [
+    "Default staleness thresholds require final Director/BA approval.",
+    "Some collection names rely on confirmed Mongoose default pluralization.",
+    "Several sources only prove local max(updatedAt), not external/provider synchronization.",
+    "Payments have partial order-level evidence and no canonical ledger.",
+    "Operations has current state but no durable SLA/status history.",
+    "Supplier settlement criticality remains pending approval.",
+    "Fresh sources may still lack report-date coverage or mapping/completeness.",
+    "No public endpoint/RBAC/download, official/partial export, provider adapter or snapshot integration exists.",
+    "Full repository tests and real DB assessment were not run."
+  ],
+  "next_recommendation": {
+    "ready_for_review": true,
+    "recommended_next_pr": "PR-2.3B-3A Google Ads Read-only Adapter Technical Spec / Security Review, no code",
+    "do_not_start_yet": [
+      "Google Ads or any provider adapter code",
+      "Official or partial export",
+      "Public endpoint/full RBAC/download",
+      "Action import, generic dry-run or live execution",
+      "Phase 3"
+    ]
+  }
+}

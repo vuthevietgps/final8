@@ -135,6 +135,39 @@ export class UserService {
    */
   async findActiveAgentsMinimal(
     roles: UserRole[] = [UserRole.INTERNAL_AGENT, UserRole.EXTERNAL_AGENT],
+  ): Promise<Array<{ _id: string; fullName: string; email: string; role: UserRole; isActive: boolean }>> {
+    return this.findAgentsMinimal({ roles, active: true });
+  }
+
+  async findAgentsMinimal(params: {
+    roles?: UserRole[];
+    active?: boolean;
+  } = {}): Promise<Array<{ _id: string; fullName: string; email: string; role: UserRole; isActive: boolean }>> {
+    const {
+      roles = [UserRole.INTERNAL_AGENT, UserRole.EXTERNAL_AGENT],
+      active,
+    } = params;
+    const filter: any = { role: { $in: roles } };
+    if (active !== undefined) {
+      filter.isActive = active;
+    }
+
+    const users = await this.userModel
+      .find(filter)
+      .select('_id fullName email role isActive')
+      .sort({ fullName: 1 })
+      .lean();
+    return users.map((u: any) => ({
+      _id: String(u._id),
+      fullName: u.fullName,
+      email: u.email,
+      role: u.role,
+      isActive: u.isActive !== false,
+    }));
+  }
+
+  async findActiveAdsOperatorsMinimal(
+    roles: UserRole[] = [UserRole.DIRECTOR, UserRole.MANAGER, UserRole.EMPLOYEE],
   ): Promise<Array<{ _id: string; fullName: string; email: string; role: UserRole }>> {
     const users = await this.userModel
       .find({ role: { $in: roles }, isActive: true })
@@ -172,5 +205,34 @@ export class UserService {
     }
     const docs = await query.lean();
     return docs.map((u: any) => ({ ...u, _id: String(u._id) }));
+  }
+
+  async findSuppliersMinimal(params: {
+    roles?: UserRole[];
+    active?: boolean;
+  } = {}): Promise<Array<{ _id: string; fullName: string; email: string; phone?: string; role: UserRole; isActive: boolean }>> {
+    const {
+      roles = [UserRole.INTERNAL_SUPPLIER, UserRole.EXTERNAL_SUPPLIER],
+      active,
+    } = params;
+    const filter: any = { role: { $in: roles } };
+    if (active !== undefined) {
+      filter.isActive = active;
+    }
+
+    const docs = await this.userModel
+      .find(filter)
+      .select('_id fullName email phone role isActive')
+      .sort({ fullName: 1 })
+      .lean();
+
+    return docs.map((u: any) => ({
+      _id: String(u._id),
+      fullName: u.fullName,
+      email: u.email,
+      phone: u.phone,
+      role: u.role,
+      isActive: u.isActive !== false,
+    }));
   }
 }

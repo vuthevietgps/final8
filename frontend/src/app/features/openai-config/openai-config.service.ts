@@ -12,11 +12,13 @@ export interface OpenAIConfig {
   _id: string;
   name: string;
   description?: string;
+  purpose?: 'admin-assistant' | 'customer-chatbot' | 'general';
   model: string;
   apiKey?: string;
   systemPrompt: string;
   maxTokens?: number;
   temperature?: number;
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   scopeType: 'global' | 'fanpage' | 'adgroup' | 'messageScope';
   scopeRef?: string;
   status?: 'active' | 'inactive';
@@ -28,11 +30,13 @@ export interface OpenAIConfig {
 export interface CreateOpenAIConfigRequest {
   name: string;
   description?: string;
+  purpose?: 'admin-assistant' | 'customer-chatbot' | 'general';
   model: string;
   apiKey: string;
   systemPrompt: string;
   maxTokens?: number;
   temperature?: number;
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   scopeType: 'global' | 'fanpage' | 'adgroup' | 'messageScope';
   scopeRef?: string;
   status?: 'active' | 'inactive';

@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { AuthService } from '../../core/services/auth.service';
 import { SupplierPayableService, SupplierPayable, SupplierStatement } from './supplier-payable.service';
 import { SupplierService, Supplier } from '../supplier/supplier.service';
 
@@ -34,9 +35,6 @@ export class SupplierPayableComponent implements OnInit {
 
   suppliers: Supplier[] = [];
   
-  // User info for role check
-  currentUserRole = '';
-
   // Modal states
   paymentModal = false;
   confirmModal = false;
@@ -51,27 +49,20 @@ export class SupplierPayableComponent implements OnInit {
     documentLinks: ''
   };
 
-  constructor(private service: SupplierPayableService, private supplierService: SupplierService) {}
+  constructor(
+    private service: SupplierPayableService,
+    private supplierService: SupplierService,
+    private authService: AuthService,
+  ) {}
 
   ngOnInit(): void {
-    // Get user role from localStorage
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        this.currentUserRole = user.role || '';
-      } catch (e) {
-        this.currentUserRole = '';
-      }
-    }
-    
     this.loadSuppliers();
     this.load();
     this.refreshStatements();
   }
 
   get isDirector(): boolean {
-    return this.currentUserRole === 'director';
+    return this.authService.user()?.role === 'director';
   }
 
   loadSuppliers() {

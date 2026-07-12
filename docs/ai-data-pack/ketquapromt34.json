@@ -1,0 +1,119 @@
+{
+  "phase": "PR-DEMO-1D",
+  "status": "quality_gate_completed",
+  "prompt33_source_status": "complete_transcript_validated",
+  "evidence_preservation": {
+    "transcript_present": true,
+    "human_operator_note_present": true,
+    "validation_result_present": true,
+    "prompt33_result_markdown_present": true,
+    "prompt33_result_json_present": true,
+    "director_json_preserved_or_referenced": true,
+    "stable_artifact_path": "docs/ai-data-pack/manual-transcript-quality-gate/artifacts/director_data_pack.prompt32.redacted.json",
+    "checksum": "C9DE0CF6AC7664C77642423C905AC9BBE22036E07B894709220A7560B902921F",
+    "copied_evidence_files": [
+      "docs/ai-data-pack/manual-transcript-quality-gate/evidence/chatgptweb_director_demo_analysis_transcript.md",
+      "docs/ai-data-pack/manual-transcript-quality-gate/evidence/human_operator_note.md",
+      "docs/ai-data-pack/manual-transcript-quality-gate/evidence/transcript_validation_result.md",
+      "docs/ai-data-pack/manual-transcript-quality-gate/evidence/ketquapromt33.md",
+      "docs/ai-data-pack/manual-transcript-quality-gate/evidence/ketquapromt33.json"
+    ]
+  },
+  "expected_findings": {
+    "total": 12,
+    "detected_with_evidence": 7,
+    "detected_but_weak_evidence": 5,
+    "missed": 0,
+    "hallucinated_or_unsupported": 0,
+    "matrix_created": true
+  },
+  "weak_evidence_backlog": {
+    "created": true,
+    "finding_count": 5,
+    "findings": [
+      "supplier_cost_up",
+      "overdue_dealer_receivables",
+      "low_inventory_best_seller",
+      "labor_overtime_high",
+      "slow_supplier_good_cost"
+    ]
+  },
+  "transcript_mismatch": {
+    "documented": true,
+    "blocking": false,
+    "authoritative_count_source": "validation_table_rows",
+    "transcript_prose_count": {
+      "detected_with_evidence": 6,
+      "detected_but_weak_evidence": 6
+    },
+    "validation_table_count": {
+      "detected_with_evidence": 7,
+      "detected_but_weak_evidence": 5
+    },
+    "original_transcript_rewritten": false
+  },
+  "manual_loop_quality_rubric_created": true,
+  "ledger_axis": {
+    "axis_created": true,
+    "ledger_created": true,
+    "axis_path": "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v36.md",
+    "ledger_path": "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v36.md"
+  },
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "detailed_brainstorming_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "fake_transcript_created": false
+  },
+  "verification": {
+    "prompt33_json_parse_check": "passed",
+    "stable_artifact_hash_check": "passed",
+    "artifact_exposure_scan": "passed",
+    "required_quality_gate_files_check": "passed",
+    "result_json_parse_check": "passed",
+    "diff_check": "passed"
+  },
+  "files_changed": [
+    "docs/ai-data-pack/manual-transcript-quality-gate/artifacts/director_data_pack.prompt32.redacted.json",
+    "docs/ai-data-pack/manual-transcript-quality-gate/evidence/chatgptweb_director_demo_analysis_transcript.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/evidence/human_operator_note.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/evidence/transcript_validation_result.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/evidence/ketquapromt33.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/evidence/ketquapromt33.json",
+    "docs/ai-data-pack/manual-transcript-quality-gate/00_quality_gate_summary.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/01_expected_finding_evidence_matrix.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/02_weak_evidence_hardening_backlog.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/03_transcript_arithmetic_mismatch_note.md",
+    "docs/ai-data-pack/manual-transcript-quality-gate/04_manual_loop_quality_rubric.md",
+    "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v36.md",
+    "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v36.md",
+    "docs/ai-data-pack/ketquapromt34.md",
+    "docs/ai-data-pack/ketquapromt34.json",
+    "docs/ai-data-pack/review-packets/promt34/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt34/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt34/02_evidence_preservation.md",
+    "docs/ai-data-pack/review-packets/promt34/03_expected_finding_matrix.md",
+    "docs/ai-data-pack/review-packets/promt34/04_weak_evidence_backlog.md",
+    "docs/ai-data-pack/review-packets/promt34/05_arithmetic_mismatch_note.md",
+    "docs/ai-data-pack/review-packets/promt34/06_manual_loop_quality_rubric.md",
+    "docs/ai-data-pack/review-packets/promt34/07_safety_checks.md",
+    "docs/ai-data-pack/review-packets/promt34/08_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt34/09_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt34/10_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "Five expected findings remain weak evidence and need future ERP data hardening before production-grade director analysis.",
+    "The original Prompt 33 transcript still contains the minor 6/6 prose count mismatch; Prompt 34 documents but does not rewrite it.",
+    "The stable artifact copy is redacted and checksumed, but future cleanup should preserve docs/ai-data-pack/manual-transcript-quality-gate/."
+  ],
+  "next_recommendation": "Submit Prompt 34 for review. If accepted, continue only to PR-DEMO-1E reviewer acceptance packet or evidence handoff; still do not open Action Draft Schema, action import, OpenAI API upload, provider mutation, or Phase 3."
+}

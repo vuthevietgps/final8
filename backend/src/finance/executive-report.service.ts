@@ -8,19 +8,19 @@ import { AdGroupDailyReport } from './schemas/ad-group-daily-report.schema';
 
 /**
  * Executive Report Service
- * 
+ *
  * Generates daily executive reports with:
  * 1. Cashflow health summary (CSI, DSO, DPO, Return Rate)
  * 2. Ads performance summary (ROI, profit, cost)
  * 3. Scale decisions summary (killed, scaled up, scaled down)
  * 4. Warnings and alerts
  * 5. Projections and recommendations
- * 
+ *
  * Report Schedule:
  * - Daily at 04:00 AM (after auto-scale at 02:00 AM and frequency sync at 03:00 AM)
  * - Weekly summary on Monday at 06:00 AM
  * - Monthly summary on 1st of month at 08:00 AM
- * 
+ *
  * Output Formats:
  * - Console log (always)
  * - Database storage (for history)
@@ -40,16 +40,17 @@ export class ExecutiveReportService {
   ) {}
 
   /**
-   * Daily executive report - runs at 04:00 AM.
+   * Daily executive report - runs at 09:30 AM (Asia/Ho_Chi_Minh).
+   * Chạy sau FrequencySync (09:00) - tổng hợp đầy đủ dữ liệu ngày hôm qua cho CEO/CFO.
    */
-  @Cron('0 4 * * *')
+  @Cron('30 9 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async runDailyReport() {
     this.logger.log('📊 Generating daily executive report...');
 
     try {
       const report = await this.generateDailyReport();
       await this.logReport(report, 'DAILY');
-      
+
       this.logger.log('✅ Daily executive report completed');
     } catch (error) {
       this.logger.error(`❌ Daily report failed: ${error.message}`, error.stack);
@@ -66,7 +67,7 @@ export class ExecutiveReportService {
     try {
       const report = await this.generateWeeklyReport();
       await this.logReport(report, 'WEEKLY');
-      
+
       this.logger.log('✅ Weekly executive report completed');
     } catch (error) {
       this.logger.error(`❌ Weekly report failed: ${error.message}`, error.stack);
@@ -83,7 +84,7 @@ export class ExecutiveReportService {
     try {
       const report = await this.generateMonthlyReport();
       await this.logReport(report, 'MONTHLY');
-      
+
       this.logger.log('✅ Monthly executive report completed');
     } catch (error) {
       this.logger.error(`❌ Monthly report failed: ${error.message}`, error.stack);
@@ -470,11 +471,11 @@ export class ExecutiveReportService {
    */
   private async logReport(report: any, type: string) {
     const separator = '='.repeat(80);
-    
+
     this.logger.log(`\n${separator}`);
     this.logger.log(`📊 ${type} EXECUTIVE REPORT - ${report.date || report.period?.to}`);
     this.logger.log(separator);
-    
+
     if (type === 'DAILY') {
       this.logger.log(`\n💰 CASHFLOW HEALTH:`);
       this.logger.log(`   CSI: ${report.cashflowHealth.csi.toFixed(2)} (${report.cashflowHealth.csiStatus})`);
@@ -482,19 +483,19 @@ export class ExecutiveReportService {
       this.logger.log(`   DPO: ${report.cashflowHealth.dpo.toFixed(1)} days`);
       this.logger.log(`   Return Rate: ${report.cashflowHealth.returnRate.toFixed(1)}%`);
       this.logger.log(`   Total Cash: ${(report.cashflowHealth.totalCash / 1000000).toFixed(1)}M VND`);
-      
+
       this.logger.log(`\n📈 ADS PERFORMANCE:`);
       this.logger.log(`   Ads Cost: ${(report.adsPerformance.totalAdsCost / 1000000).toFixed(1)}M VND`);
       this.logger.log(`   Revenue: ${(report.adsPerformance.totalRevenue / 1000000).toFixed(1)}M VND`);
       this.logger.log(`   Profit: ${(report.adsPerformance.totalProfit / 1000000).toFixed(1)}M VND`);
       this.logger.log(`   ROI: ${report.adsPerformance.avgROI.toFixed(1)}%`);
       this.logger.log(`   Active Ad Groups: ${report.adsPerformance.activeAdGroups}`);
-      
+
       this.logger.log(`\n⚠️ ALERTS:`);
       this.logger.log(`   Critical: ${report.alerts.critical}`);
       this.logger.log(`   Danger: ${report.alerts.danger}`);
       this.logger.log(`   Warning: ${report.alerts.warning}`);
-      
+
       if (report.recommendations && report.recommendations.length > 0) {
         this.logger.log(`\n💡 RECOMMENDATIONS:`);
         report.recommendations.forEach((rec: string) => {
@@ -502,7 +503,7 @@ export class ExecutiveReportService {
         });
       }
     }
-    
+
     this.logger.log(`\n${separator}\n`);
 
     // TODO: Save to database for history

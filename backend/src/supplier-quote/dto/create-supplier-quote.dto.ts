@@ -1,20 +1,34 @@
-import { IsBoolean, IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsDateString,
+  IsMongoId,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateSupplierQuoteDto {
   @IsNotEmpty()
-  @IsString()
+  @IsMongoId()
   productId!: string;
 
   @IsNotEmpty()
-  @IsString()
+  @IsMongoId()
   supplierId!: string;
 
   @IsNotEmpty()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   price!: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   currency?: string;
 
   @IsOptional()
@@ -23,6 +37,7 @@ export class CreateSupplierQuoteDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   note?: string;
 
   @IsOptional()
@@ -30,10 +45,14 @@ export class CreateSupplierQuoteDto {
   isReturnableOverride?: boolean;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   shippingFee?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   returnFee?: number;
 }

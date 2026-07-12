@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Sale and finance flow</title>
+  <desc id="desc">Minh họa flow sale và finance với gate wallet và approved invoice trước khi vào class.</desc>
+  <rect width="1200" height="720" rx="32" fill="#143836"/>
+  <rect x="84" y="86" width="1032" height="548" rx="32" fill="#fffaf2"/>
+  <text x="120" y="150" fill="#123b39" font-size="24" font-family="Trebuchet MS, sans-serif" font-weight="700">SOP SALE + KE TOAN</text>
+  <text x="120" y="198" fill="#123b39" font-size="52" font-family="Georgia, serif" font-weight="700">Parent → Student → Invoice / Order → Finance gate → Class</text>
+  <path d="M160 300 H1020" stroke="#123b39" stroke-width="10" stroke-linecap="round"/>
+  <g fill="#fffaf2" font-family="Trebuchet MS, sans-serif" font-weight="700">
+    <circle cx="170" cy="300" r="48" fill="#b5522d"/>
+    <circle cx="390" cy="300" r="48" fill="#e4a547"/>
+    <circle cx="610" cy="300" r="48" fill="#2f7767"/>
+    <circle cx="830" cy="300" r="48" fill="#c97d67"/>
+    <circle cx="1030" cy="300" r="48" fill="#123b39"/>
+    <text x="145" y="308" font-size="22">1</text>
+    <text x="365" y="308" font-size="22">2</text>
+    <text x="585" y="308" font-size="22">3</text>
+    <text x="805" y="308" font-size="22">4</text>
+    <text x="1005" y="308" font-size="22">5</text>
+  </g>
+  <g fill="#123b39" font-family="Trebuchet MS, sans-serif">
+    <text x="120" y="390" font-size="24" font-weight="700">Parent</text>
+    <text x="325" y="390" font-size="24" font-weight="700">Student</text>
+    <text x="495" y="390" font-size="24" font-weight="700">Invoice / Order</text>
+    <text x="750" y="390" font-size="24" font-weight="700">Finance gate</text>
+    <text x="995" y="390" font-size="24" font-weight="700">Class</text>
+    <text x="118" y="432" font-size="22">Sale mo thong tin phu huynh</text>
+    <text x="315" y="432" font-size="22">Tao ho so hoc vien</text>
+    <text x="467" y="432" font-size="22">Phat hanh invoice / order hop le</text>
+    <text x="730" y="432" font-size="22">Wallet du tien hoac top-up da duyet</text>
+    <text x="972" y="432" font-size="22">OPS moi duoc xep lop</text>
+  </g>
+  <rect x="140" y="500" width="920" height="84" rx="22" fill="#b5522d"/>
+  <text x="186" y="552" fill="#fffaf2" font-size="28" font-family="Trebuchet MS, sans-serif" font-weight="700">Gate cung: KHONG xep lop khi hoa don chua duyet hoac vi phu huynh chua du so du.</text>
+</svg>

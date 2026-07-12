@@ -19,16 +19,21 @@ import * as path from 'path';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MulterModule } from '@nestjs/platform-express';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CacheModule } from '@nestjs/cache-manager';
+import { createKeyv } from '@keyv/redis';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AdAccountModule } from './ad-account/ad-account.module';
 import { AdGroupModule } from './ad-group/ad-group.module';
 import { AdvertisingCostModule } from './advertising-cost/advertising-cost.module';
 import { AdvertisingCostPublicModule } from './advertising-cost-public/advertising-cost-public.module';
 import { AdvertisingOptimizationModule } from './advertising-optimization/advertising-optimization.module';
+import { AdsManagerAccountModule } from './ads-manager-account/ads-manager-account.module';
 import { AuthModule } from './auth/auth.module';
 import { CustomerModule } from './customer/customer.module';
 import { DeliveryStatusModule } from './delivery-status/delivery-status.module';
 import { ExportUserModule } from './export-user/export-user.module';
 import { GoogleSyncModule } from './google-sync/google-sync.module';
+import { GoogleAdsModule } from './google-ads/google-ads.module';
 import { HealthModule } from './health/health.module';
 import { ImportUserModule } from './import-user/import-user.module';
 import { LaborCost1Module } from './labor-cost1/labor-cost1.module';
@@ -59,6 +64,7 @@ import { SupplierPayableModule } from './supplier-payable/supplier-payable.modul
 import { FinanceModule } from './finance/finance.module';
 import { ReturnRequestModule } from './return-request/return-request.module';
 import { SupplierQuoteModule } from './supplier-quote/supplier-quote.module';
+import { PurchaseOrderModule } from './purchase/purchase-order.module';
 import { AgentReceivableModule } from './agent-receivable/agent-receivable.module';
 import { AdGroupProfitReportModule } from './ad-group-profit-report/ad-group-profit-report.module';
 import { OrderSheetSyncModule } from './order-sheet-sync/order-sheet-sync.module';
@@ -68,8 +74,15 @@ import { CashflowControlModule } from './cashflow-control/cashflow-control.modul
 import { OwnerFundModule } from './owner-fund/owner-fund.module';
 import { EmergencyActionModule } from './emergency-action/emergency-action.module';
 import { OpsActionModule } from './ops-action/ops-action.module';
+import { AiOperatorModule } from './ai-operator/ai-operator.module';
+import { AiMarketingModule } from './ai-marketing/ai-marketing.module';
+import { AiDataPackModule } from './ai-data-pack/ai-data-pack.module';
+import { AdsAutomationEvidenceModule } from './ads-automation-evidence/ads-automation-evidence.module';
+import { AdsBusinessContextModule } from './ads-business-context/ads-business-context.module';
 import { PlanModule } from './plan/plan.module';
 import { FeatureGateGuard } from './plan/feature-gate.guard';
+import { redactSecretString } from './common/utils/secret-redaction.util';
+
 
 @Module({
   imports: [
@@ -89,6 +102,29 @@ import { FeatureGateGuard } from './plan/feature-gate.guard';
     // Bật scheduler để dùng cron job
     ScheduleModule.forRoot(),
 
+    // Phase 3: Event-driven architecture — các domain module emit finance events
+    // thay vì gọi trực tiếp FinancialControlService (loại bỏ forwardRef circular deps)
+    EventEmitterModule.forRoot({ wildcard: false, delimiter: '.', global: true }),
+
+    // Global Cache (Redis nếu REDIS_URL được cấu hình, ngược lại in-memory)
+    // Giải quyết Issue 3: multi-pod cache inconsistency.
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService): any => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        if (redisUrl) {
+          return {
+            stores: [createKeyv(redisUrl)],
+            ttl: 30_000, // milliseconds -- default TTL, overridable per-call
+          };
+        }
+        // Fallback: in-process memory cache (dev / single-pod environments)
+        return { ttl: 30_000 };
+      },
+      inject: [ConfigService],
+    }),
+
     // Cấu hình multer cho upload file
     MulterModule.register({
       dest: './uploads',
@@ -97,13 +133,22 @@ import { FeatureGateGuard } from './plan/feature-gate.guard';
       },
     }),
 
-    // Kết nối MongoDB (ưu tiên MONGODB_URI từ môi trường; fallback atlas smarterp-dev)
+    // Kết nối MongoDB (ưu tiên MONGODB_URI từ môi trường; fallback local MongoDB)
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const uri = configService.get<string>('MONGODB_URI') ||
-          'mongodb+srv://dinhvigps07:zn0dOrNeZH2yx2yO@smarterp-dev.khsfdta.mongodb.net/management-system';
-        console.log('MongoDB connecting to:', uri.replace(/\/\/[^:]+:[^@]+@/, '//<credentials>@'));
+        const directUri = configService.get<string>('MONGODB_URI')?.trim();
+        const host = configService.get<string>('DATABASE_HOST');
+        const port = configService.get<string>('DATABASE_PORT');
+        const name = configService.get<string>('DATABASE_NAME');
+
+        const uri = directUri || (host && port && name ? `mongodb://${host}:${port}/${name}` : undefined);
+
+        if (!uri) {
+          throw new Error('Missing database configuration. Set MONGODB_URI or DATABASE_HOST, DATABASE_PORT, DATABASE_NAME.');
+        }
+
+        console.log('MongoDB connecting to:', redactSecretString(uri));
         return {
           uri,
           connectionFactory: (connection) => {
@@ -157,6 +202,7 @@ import { FeatureGateGuard } from './plan/feature-gate.guard';
     // Import OtherCostModule để quản lý Chi Phí Khác
     OtherCostModule,
     AdvertisingCostModule,
+    AdsManagerAccountModule,
     // Module Public API cho Advertising Cost (không cần authentication)
     AdvertisingCostPublicModule,
     AdvertisingOptimizationModule,
@@ -164,6 +210,8 @@ import { FeatureGateGuard } from './plan/feature-gate.guard';
     LaborCost1Module,
     // Module đồng bộ Google Sheets định kỳ
     GoogleSyncModule,
+    // Google Ads V2 provider-scoped metadata collections. Does not replace legacy adgroups.
+    GoogleAdsModule,
     // Health check endpoint
     HealthModule,
     SessionLogModule,
@@ -185,6 +233,7 @@ import { FeatureGateGuard } from './plan/feature-gate.guard';
     // Module công nợ đại lý
     AgentReceivableModule,
     SupplierQuoteModule,
+    PurchaseOrderModule,
     // Module báo cáo hiệu quả quảng cáo (chi phí / đơn theo ad group)
     AdReportModule,
     // Module báo cáo hàng hoàn (ad group / sản phẩm)
@@ -207,6 +256,11 @@ import { FeatureGateGuard } from './plan/feature-gate.guard';
     EmergencyActionModule,
     // Module Ops Action (hành động khẩn cấp vận hành: NCC, đại lý, đơn hàng)
     OpsActionModule,
+    AiOperatorModule,
+    AiMarketingModule,
+    AiDataPackModule,
+    AdsAutomationEvidenceModule,
+    AdsBusinessContextModule,
     // Module Plan - Quản lý gói dịch vụ (Starter/Professional/Enterprise)
     PlanModule,
   ],

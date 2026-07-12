@@ -30,6 +30,21 @@ export class AdvertisingCost {
   @Prop({ type: String, required: true, index: true, trim: true })
   adGroupId: string;
 
+  // Provider customer/account ID (Google customerId khi sync từ MCC)
+  @Prop({ type: String, required: false, index: true, trim: true })
+  customerId?: string;
+
+  @Prop({ type: String, required: false, index: true, trim: true })
+  businessCenterId?: string;
+
+  @Prop({
+    type: String,
+    enum: ['direct', 'bm', 'mcc', 'bc'],
+    required: false,
+    index: true,
+  })
+  managementMode?: 'direct' | 'bm' | 'mcc' | 'bc';
+
   // Số tiền đã chi tiêu (mặc định 0)
   @Prop({ type: Number, required: false, default: 0 })
   spentAmount?: number;
@@ -50,6 +65,19 @@ export class AdvertisingCost {
   // Số lượt click
   @Prop({ type: Number, required: false, default: 0 })
   clicks?: number;
+
+  // Google Ads conversion metrics. These are separate from messaging metrics.
+  @Prop({ type: Number, required: false, default: 0 })
+  conversions?: number;
+
+  @Prop({ type: Number, required: false, default: 0 })
+  allConversions?: number;
+
+  @Prop({ type: Number, required: false, default: 0 })
+  conversionValue?: number;
+
+  @Prop({ type: Number, required: false, default: 0 })
+  costPerConversion?: number;
 
   // Độ phủ sóng (số người tiếp cận)
   @Prop({ type: Number, required: false, default: 0 })
@@ -72,7 +100,10 @@ export const AdvertisingCostSchema = SchemaFactory.createForClass(AdvertisingCos
 
 AdvertisingCostSchema.index({ date: -1 });
 AdvertisingCostSchema.index({ createdAt: -1 });
-// Đảm bảo một bản ghi duy nhất cho mỗi cặp (adGroupId, date)
+// Đảm bảo một bản ghi duy nhất cho mỗi cặp (channel, customerId, adGroupId, date)
 // Lưu ý: date nên được chuẩn hoá về 00:00:00 UTC trước khi lưu để tránh trùng lặp theo múi giờ
-AdvertisingCostSchema.index({ adGroupId: 1, date: 1 }, { unique: true, name: 'uniq_adGroupId_date' });
+AdvertisingCostSchema.index(
+  { channel: 1, customerId: 1, adGroupId: 1, date: 1 },
+  { unique: true, name: 'uniq_channel_customer_adGroup_date' },
+);
 AdvertisingCostSchema.index({ channel: 1, date: -1 });

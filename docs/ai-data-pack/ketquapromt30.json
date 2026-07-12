@@ -1,0 +1,250 @@
+{
+  "summary": {
+    "phase": "PR-DEMO-1B",
+    "status": "blocked_missing_safe_throwaway_mongodb_uri",
+    "code_changed": false,
+    "docs_changed": true,
+    "safe_mongodb_uri_provided": false,
+    "seed_dry_run_passed": true,
+    "seed_apply_executed": false,
+    "seed_apply_profile": "",
+    "seed_idempotency_checked": false,
+    "reset_demo_executed": false,
+    "director_export_executed": false,
+    "director_json_downloaded": false,
+    "downloaded_json_parseable": false,
+    "expected_ai_findings_checked": false,
+    "expected_ai_findings_present_count": 0,
+    "expected_ai_findings_total": 12,
+    "storage_path_exposed": false,
+    "public_url_exposed": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "phase_3_started": false
+  },
+  "environment_safety_check": {
+    "mongodb_uri_exists": false,
+    "mongodb_uri_db_name": "",
+    "mongodb_uri_contains_unsafe_keyword": false,
+    "node_env_for_dry_run": "test",
+    "allow_demo_seed_for_dry_run": "1",
+    "decision": "do_not_apply_without_safe_throwaway_mongodb_uri"
+  },
+  "missing_inputs": [
+    {
+      "input": "MONGODB_URI",
+      "impact": "Blocks seed apply, reset, idempotency, Director export, JSON download, and expected AI finding verification.",
+      "can_continue": false
+    },
+    {
+      "input": "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v29.md",
+      "impact": "Optional guard file missing; Prompt 28 and Prompt 30 source docs define scope.",
+      "can_continue": true
+    },
+    {
+      "input": "docs/ai-data-pack/lo-trinh-ai-data-pack-roadmap-v29.md",
+      "impact": "Optional roadmap missing; no scope expansion performed.",
+      "can_continue": true
+    },
+    {
+      "input": "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v26.md",
+      "impact": "Optional guard file missing; Prompt 23-29 safety boundaries preserved.",
+      "can_continue": true
+    },
+    {
+      "input": "docs/ai-data-pack/ba-master-addendum-prompt28-review-prompt30-demo-apply-export-20260614.md",
+      "impact": "Optional addendum missing; Prompt 30 and Prompt 28 result docs were sufficient.",
+      "can_continue": true
+    }
+  ],
+  "seed_apply": {
+    "dry_run": {
+      "executed": true,
+      "profile": "small",
+      "status": "passed",
+      "counts": {
+        "suppliers_created": 6,
+        "dealers_created": 14,
+        "products_created": 30,
+        "quotes_created": 180,
+        "orders_created": 180,
+        "customers_docs": 160,
+        "loans_created": 3,
+        "labor_entries_created": 160,
+        "ad_rows_created": 440,
+        "google_ads_daily_metrics_docs": 220,
+        "marketing_leads_docs": 220,
+        "inventorytransactions_docs": 180,
+        "anomalies_created": 12
+      }
+    },
+    "apply": {
+      "executed": false,
+      "profile": "",
+      "blocked_reason": "missing_safe_throwaway_mongodb_uri"
+    }
+  },
+  "idempotency": {
+    "executed": false,
+    "blocked_reason": "apply_not_executed_missing_safe_throwaway_mongodb_uri",
+    "design_unit_test_passed": true
+  },
+  "director_export": {
+    "executed": false,
+    "blocked_reason": "seed_apply_not_executed_missing_safe_throwaway_mongodb_uri",
+    "target": {
+      "report_date": "2026-06-14",
+      "pack_type": "director",
+      "format": "json",
+      "source": "demo seed"
+    },
+    "blocked_missing_export_harness": false,
+    "harness_assessed": false
+  },
+  "download_validation": {
+    "executed": false,
+    "director_json_downloaded": false,
+    "downloaded_json_parseable": false,
+    "storage_path_exposed": false,
+    "public_url_exposed": false,
+    "download_token_exposed": false,
+    "blocked_reason": "director_export_not_executed"
+  },
+  "expected_ai_findings": [
+    {
+      "key": "supplier_cost_up",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "ad_spend_spike",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "cash_gap",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "overdue_dealer_receivables",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "low_inventory_best_seller",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "labor_overtime_high",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "negative_margin_product_group",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "slow_supplier_good_cost",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "high_sales_late_payment_agent",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "return_rate_above_policy",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "google_ads_mapping_gap",
+      "status": "not_checked_upstream_blocked"
+    },
+    {
+      "key": "inventory_movement_gap",
+      "status": "not_checked_upstream_blocked"
+    }
+  ],
+  "tests_run": [
+    {
+      "command": "$env:NODE_ENV='test'; $env:ALLOW_DEMO_SEED='1'; npm run seed:ai-data-pack:director:demo -- --dry-run --profile small",
+      "status": "passed",
+      "result": "dry-run completed without DB write"
+    },
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/demo-seed/director-demo-seed.spec.ts --runInBand",
+      "status": "passed",
+      "result": "5 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "result": "Nest backend build completed"
+    }
+  ],
+  "static_safety_checks": [
+    {
+      "command": "rg -n \"fetch\\(|axios|node-fetch|OpenAI|ActionImport|ExecutionService|ProviderValidationService|GoogleAds.*Mutat|upload_to_openai|import_action|execute_live\" backend/src/ai-data-pack/demo-seed",
+      "status": "passed",
+      "result": "no matches"
+    },
+    {
+      "command": "rg -n \"deleteMany\\(\\{\\}\\)|dropDatabase|\\.drop\\(\" backend/src/ai-data-pack/demo-seed",
+      "status": "passed",
+      "result": "no matches"
+    },
+    {
+      "command": "rg -n \"download-token|downloadToken\" backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.ts backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+      "status": "passed",
+      "result": "no matches"
+    },
+    {
+      "command": "rg -n \"MONGODB_URI|NODE_ENV|ALLOW_DEMO_SEED|deleteMany|insertMany\" backend/src/ai-data-pack/demo-seed/director-demo-seed.ts",
+      "status": "passed",
+      "result": "guard and write/delete points present"
+    }
+  ],
+  "files_changed": [
+    "docs/ai-data-pack/ketquapromt30.md",
+    "docs/ai-data-pack/ketquapromt30.json",
+    "docs/ai-data-pack/demo-data-export-evidence/00_apply_export_overview.md",
+    "docs/ai-data-pack/demo-data-export-evidence/01_seed_apply_result.md",
+    "docs/ai-data-pack/demo-data-export-evidence/02_idempotency_result.md",
+    "docs/ai-data-pack/demo-data-export-evidence/03_director_export_result.md",
+    "docs/ai-data-pack/demo-data-export-evidence/04_download_json_validation.md",
+    "docs/ai-data-pack/demo-data-export-evidence/05_expected_ai_findings_check.md",
+    "docs/ai-data-pack/demo-data-export-evidence/06_safety_checks.md",
+    "docs/ai-data-pack/demo-data-export-evidence/07_next_steps.md",
+    "docs/ai-data-pack/review-packets/promt30/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt30/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt30/02_seed_apply_result.md",
+    "docs/ai-data-pack/review-packets/promt30/03_idempotency_result.md",
+    "docs/ai-data-pack/review-packets/promt30/04_director_export_result.md",
+    "docs/ai-data-pack/review-packets/promt30/05_download_json_validation.md",
+    "docs/ai-data-pack/review-packets/promt30/06_expected_ai_findings_check.md",
+    "docs/ai-data-pack/review-packets/promt30/07_tests_and_static_checks.md",
+    "docs/ai-data-pack/review-packets/promt30/08_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt30/09_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt30/10_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "No safe throwaway MongoDB URI is available, so apply/export evidence remains blocked.",
+    "Runtime idempotency against MongoDB is not checked.",
+    "Director JSON export from demo data is not checked.",
+    "JSON download/parse validation from demo export is not checked.",
+    "Expected AI findings are not verified against an actual exported Director JSON.",
+    "Export harness availability was not exercised because DB apply was blocked upstream."
+  ],
+  "next_recommendation": {
+    "if_safe_db_missing": "Provide safe throwaway MONGODB_URI and rerun PR-DEMO-1B.",
+    "if_apply_export_succeeds_later": "PR-DEMO-1C - Upload Demo Director JSON to ChatGPT Web Manually and Attach Analysis Transcript, No OpenAI API, No Action Import",
+    "do_not_open": [
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "OpenAI upload",
+      "Phase 3"
+    ]
+  }
+}

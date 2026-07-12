@@ -4,6 +4,11 @@ import { LoanContract } from './loan-contract.schema';
 
 export type LoanRepaymentDocument = LoanRepayment & Document;
 
+export enum LoanRepaymentFundingSource {
+  BANK = 'bank',
+  OWNER_FUND = 'owner_fund',
+}
+
 @Schema({ timestamps: true })
 export class LoanRepayment {
   @Prop({ type: Types.ObjectId, ref: LoanContract.name, required: true })
@@ -23,6 +28,9 @@ export class LoanRepayment {
 
   @Prop()
   paidDate?: Date;
+
+  @Prop({ enum: ['bank', 'owner_fund'], default: 'bank' })
+  fundingSource?: 'bank' | 'owner_fund';
 
   @Prop()
   referenceId?: string;

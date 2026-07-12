@@ -1,0 +1,75 @@
+{
+  "phase": "PR-DEMO-1R",
+  "status": "no_code_ba_qa_handoff_packet",
+  "output_root": "docs/ai-data-pack/runs/promt48-pr-demo-1r-readonly-evidence-ba-qa-handoff",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target": "readonly_evidence_ba_qa_handoff_closeout",
+  "findings_accounted_for": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "director_section_path": "sections[\"16_operation_capacity\"].data.operation_capacity.operational_risk_findings",
+  "section_shape_change_recorded": true,
+  "section_shape": "section.data.operation_capacity",
+  "prompt45_guard_accounted_for": true,
+  "prompt46_guard_accounted_for": true,
+  "prompt47_guard_accounted_for": true,
+  "production_readiness_disclaimer_recorded": true,
+  "autonomous_execution_readiness_disclaimer_recorded": true,
+  "code_changed": false,
+  "production_db_used": false,
+  "verification_inherited_from_prompts": [
+    {
+      "phase": "PR-DEMO-1O",
+      "prompt": "Prompt45",
+      "focused_jest": "38 passed, 38 total",
+      "backend_build": "passed",
+      "static_scans_classified": true,
+      "single_folder_mode": true,
+      "legacy_paths_created": false
+    },
+    {
+      "phase": "PR-DEMO-1P",
+      "prompt": "Prompt46",
+      "focused_jest": "38 passed, 38 total",
+      "backend_build": "passed",
+      "static_scans_classified": true,
+      "single_folder_mode": true,
+      "legacy_paths_created": false
+    },
+    {
+      "phase": "PR-DEMO-1Q",
+      "prompt": "Prompt47",
+      "focused_jest": "38 passed, 38 total",
+      "backend_build": "passed",
+      "static_scans_classified": true,
+      "single_folder_mode": true,
+      "legacy_paths_created": false
+    }
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "chatgpt_web_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "server_mongodb_used": false,
+    "db_migration_added": false,
+    "business_mutation_added": false,
+    "new_export_download_endpoint_added": false
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": ""
+  },
+  "next_recommendation": "Pause for human BA/QA review, then choose a separate future phase such as PR-DEMO-1S reader compatibility guard or PR-DEMO-2A no-code BA threshold-source spec."
+}

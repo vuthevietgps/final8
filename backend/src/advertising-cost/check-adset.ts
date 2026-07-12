@@ -5,6 +5,7 @@
  *   $env:FB_ADS_ACCESS_TOKEN="<token>"; npx ts-node -r tsconfig-paths/register src/advertising-cost/check-adset.ts --id 120234808394010255
  */
 import axios from 'axios';
+import { getMetaGraphApiVersion } from '../common/ads-api-version';
 
 function parseArgs(){
   const argv = process.argv.slice(2);
@@ -23,7 +24,8 @@ async function main(){
   const token = process.env.FB_ADS_ACCESS_TOKEN;
   if(!id) throw new Error('Missing --id');
   if(!token) throw new Error('Missing FB_ADS_ACCESS_TOKEN');
-  const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(id)}`;
+  const apiVersion = getMetaGraphApiVersion();
+  const url = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(id)}`;
   const params: any = {
     fields: 'id,name,account_id,campaign_id,status,configured_status,created_time',
     access_token: token,
@@ -37,7 +39,7 @@ async function main(){
   }
 
   if(date){
-    const insightsUrl = `https://graph.facebook.com/v19.0/${encodeURIComponent(id)}/insights`;
+    const insightsUrl = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(id)}/insights`;
     const insightsParams: any = {
       fields: 'spend,cpm,cpc,frequency,date_start,date_stop',
       time_range: JSON.stringify({ since: date, until: date }),

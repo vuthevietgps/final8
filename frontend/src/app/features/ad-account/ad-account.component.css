@@ -32,6 +32,16 @@
   font-size: 14px;
 }
 
+.note-strip {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  line-height: 1.5;
+}
+
 .header-actions {
   display: flex;
   gap: 12px;
@@ -91,7 +101,7 @@
 
 .search-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 2fr repeat(4, minmax(160px, 1fr));
   gap: 16px;
   align-items: end;
 }
@@ -378,14 +388,17 @@
 }
 
 /* Column Sizing */
-.col-icon { width: 60px; }
-.col-name { width: 200px; }
+.col-icon { width: 70px; }
+.col-name { width: 220px; }
 .col-account-id { width: 150px; }
-.col-description { width: 200px; }
+.col-hierarchy { width: 260px; }
+.col-manager { width: 180px; }
+.col-token { width: 120px; }
 .col-status { width: 120px; }
-.col-notes { width: 200px; }
+.col-notes { width: 220px; }
+.col-activity { width: 150px; }
 .col-dates { width: 120px; }
-.col-actions { width: 80px; }
+.col-actions { width: 90px; }
 
 /* Inline Editing */
 .inline-input {
@@ -396,6 +409,7 @@
   font-size: 14px;
   background: transparent;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
 .inline-input:hover {
@@ -427,6 +441,39 @@
 .code-text {
   font-family: 'Courier New', monospace;
   font-size: 13px;
+}
+
+.inline-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.inline-select:hover {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+.inline-select:focus {
+  outline: none;
+  background: white;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.stack-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stack-inputs small {
+  color: #64748b;
+  font-size: 12px;
 }
 
 /* Type Select for new accounts */
@@ -491,9 +538,15 @@
 
 /* Account Type Icon */
 .account-type-icon {
-  font-size: 24px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
   display: block;
   text-align: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 0;
+  background: #f8fafc;
 }
 
 /* Status Toggle */
@@ -544,7 +597,7 @@
 
 .btn-action {
   background: none;
-  border: none;
+  border: 1px solid #dbe4f0;
   padding: 6px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -553,11 +606,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 44px;
 }
 
 .btn-action:hover {
   background: #f3f4f6;
-  transform: scale(1.1);
 }
 
 .btn-action.btn-danger:hover {
@@ -577,6 +630,22 @@
 .empty-content {
   max-width: 400px;
   margin: 0 auto;
+}
+
+@media (max-width: 1200px) {
+  .search-row {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ad-account-manager {
+    padding: 16px;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .empty-icon {

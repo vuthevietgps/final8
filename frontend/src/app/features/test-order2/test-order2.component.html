@@ -1,7 +1,7 @@
 <div class="test-order2-page">
   <div class="toolbar">
     <div class="left">
-      <button *ngIf="canAddNew()" class="btn btn-primary" (click)="addNew()" aria-label="Thêm đơn mới">➕ Thêm mới</button>
+  <button *ngIf="canAddNew() && currentUserRole() !== 'internal_agent' && currentUserRole() !== 'external_agent'" class="btn btn-primary" (click)="addNew()" aria-label="Thêm đơn mới">➕ Thêm mới</button>
       <button class="btn" (click)="refresh()" aria-label="Làm mới dữ liệu">🔄 Làm mới</button>
       <button class="btn btn-success" (click)="downloadCSV()" aria-label="Tải Excel">📥 Tải Excel</button>
       <button *ngIf="!isSupplier()" class="btn btn-info" (click)="downloadSupplierExcel()" aria-label="Tải Excel NCC">📊 Excel NCC</button>
@@ -110,6 +110,7 @@
             <th class="col-wide col-service">Chi tiết DV</th>
             <th class="col-wide col-prod-status">TT Sản xuất</th>
             <th class="w-order-status col-order-status">TT Vận đơn</th>
+            <th class="col-wide">Xác nhận KD</th>
             <th class="col-wide col-submit-link">Link nộp</th>
             <th class="col-tracking">Mã vận đơn</th>
             <th class="col-wide">Đặt cọc</th>
@@ -117,7 +118,7 @@
             <th class="col-wider">Người nhận</th>
             <th class="col-wide">SĐT</th>
             <th class="col-wider">Địa chỉ</th>
-            <th class="center col-delete" *ngIf="canDelete()">Xóa</th>
+      <th class="center col-delete" *ngIf="canDelete() && currentUserRole() !== 'internal_agent' && currentUserRole() !== 'external_agent'">Xóa</th>
           </tr>
         </thead>
         <tbody>
@@ -129,7 +130,7 @@
               </ng-container>
               <!-- Non-suppliers: editable supplier source -->
               <ng-container *ngIf="!isSupplier()">
-                <select class="source-select" [ngModel]="getSourceSelection(o)" (change)="onSourceSelect(o, $event)" [disabled]="!canEditSupplier()">
+                  <select class="source-select" [ngModel]="getSourceSelection(o)" (change)="onSourceSelect(o, $event)" [disabled]="!canEditSupplier() || currentUserRole() === 'internal_agent' || currentUserRole() === 'external_agent'">
                   <option *ngFor="let opt of sourceOptionsFor(o)" [value]="opt.value">{{ opt.label }}</option>
                 </select>
               </ng-container>
@@ -174,6 +175,19 @@
                 <option *ngFor="let s of orderStatuses()" [value]="s" [ngStyle]="getStatusOptionStyle('del', s)">{{ s }}</option>
               </select>
             </td>
+            <td class="col-wide">
+              <span *ngIf="o.businessConfirmedAt" class="cell-text" [title]="businessConfirmationAuditTitle(o)">
+                {{ formatBusinessConfirmation(o.businessConfirmedAt) }}
+              </span>
+              <button *ngIf="!o.businessConfirmedAt && canConfirmBusiness()"
+                type="button" class="btn btn-sm btn-success"
+                [disabled]="confirmingOrderIds().has(o._id)"
+                (click)="confirmBusiness(o)"
+                title="Ghi mốc xác nhận nghiệp vụ một lần theo giờ máy chủ">
+                {{ confirmingOrderIds().has(o._id) ? 'Đang xác nhận…' : 'Xác nhận' }}
+              </button>
+              <span *ngIf="!o.businessConfirmedAt && !canConfirmBusiness()" class="cell-text muted">Chưa xác nhận</span>
+            </td>
             <!-- Link nộp: editable for all -->
             <td class="col-wide col-submit-link"><input type="text" [ngModel]="o.submitLink" (blur)="onInputUpdate(o, 'submitLink', $event)" /></td>
             <!-- Mã vận đơn: editable for all -->
@@ -190,10 +204,10 @@
             <td class="col-wide"><input type="text" [ngModel]="o.receiverPhone" (blur)="onInputUpdate(o, 'receiverPhone', $event)" /></td>
             <!-- Địa chỉ: editable for all -->
             <td class="col-wider"><input type="text" [ngModel]="o.receiverAddress" (blur)="onInputUpdate(o, 'receiverAddress', $event)" /></td>
-            <td class="center col-delete" *ngIf="canDelete()"><button class="btn btn-sm btn-danger" (click)="delete(o)">Xóa</button></td>
+          <td class="center col-delete" *ngIf="canDelete() && currentUserRole() !== 'internal_agent' && currentUserRole() !== 'external_agent'"><button class="btn btn-sm btn-danger" (click)="delete(o)">Xóa</button></td>
           </tr>
           <tr *ngIf="orders().length===0">
-            <td class="center muted" [attr.colspan]="isSupplier() ? 13 : 16">Chưa có đơn</td>
+            <td class="center muted" [attr.colspan]="isSupplier() ? 13 : 17">Chưa có đơn</td>
           </tr>
         </tbody>
       </table>

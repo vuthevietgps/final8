@@ -1,0 +1,83 @@
+{
+  "phase": "PR-DEMO-2A",
+  "status": "no_code_ba_threshold_spec",
+  "output_root": "docs/ai-data-pack/runs/promt50-pr-demo-2a-threshold-source-canonical-weak-fields-spec",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target": "configured_threshold_sources_and_canonical_weak_fields_spec",
+  "findings_in_scope": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "code_changed": false,
+  "threshold_source_contract_defined": true,
+  "canonical_weak_field_dictionary_defined": true,
+  "dq_confidence_upgrade_rules_defined": true,
+  "director_json_path_preserved": true,
+  "director_json_path": "sections[\"16_operation_capacity\"].data.operation_capacity.operational_risk_findings",
+  "source_grounded": true,
+  "prior_packets_inspected": [
+    "promt49-pr-demo-1s-xlsx-json-reader-compatibility-guard",
+    "promt48-pr-demo-1r-readonly-evidence-ba-qa-handoff",
+    "promt47-pr-demo-1q-director-operational-risk-section-regression",
+    "promt46-pr-demo-1p-operational-risk-evidence-schema-regression",
+    "promt45-pr-demo-1o-readonly-action-payload-regression",
+    "promt44-pr-demo-1n-weak-evidence-closeout-regression",
+    "promt43-pr-demo-1m-slow-supplier-good-cost-readonly-slice",
+    "promt42-pr-demo-1l-labor-overtime-readonly-slice",
+    "promt41-pr-demo-1k-overdue-dealer-receivables-readonly-slice",
+    "promt40-pr-demo-1j-supplier-cost-up-readonly-slice",
+    "promt39-pr-demo-1i-low-inventory-reserved-incoming-upgrade",
+    "promt37-pr-demo-1g-low-inventory-readonly-slice",
+    "promt36-pr-demo-1f-weak-evidence-hardening-spec"
+  ],
+  "repo_sources_inspected": [
+    "backend/src/ai-data-pack/queries/operations-capacity.query.ts",
+    "backend/src/ai-data-pack/ai-data-pack.service.spec.ts",
+    "backend/src/ai-data-pack/contracts/metadata.contract.ts",
+    "backend/src/ai-data-pack/contracts/director-data-pack.contract.ts",
+    "backend/src/ai-data-pack/export/xlsx-exporter.service.ts",
+    "backend/src/product/schemas/product.schema.ts",
+    "backend/src/supplier-quote/schemas/supplier-quote.schema.ts",
+    "backend/src/purchase/schemas/purchase-order.schema.ts",
+    "backend/src/agent-receivable/schemas/agent-statement.schema.ts",
+    "backend/src/labor-cost1/schemas/labor-cost1.schema.ts",
+    "backend/src/salary-config/schemas/salary-config.schema.ts",
+    "backend/src/inventory/schemas/inventory-summary.schema.ts",
+    "backend/src/test-order2/schemas/test-order2.schema.ts",
+    "backend/src/delivery-status/schemas/delivery-status.schema.ts"
+  ],
+  "tests_run": [],
+  "read_only_searches_run": true,
+  "packaging_validation": {
+    "top_level_required_files_created": true,
+    "review_packet_created": true,
+    "json_parse_ok": true,
+    "legacy_paths_absent": true
+  },
+  "safety": {
+    "openai_api_used": false,
+    "chatgpt_web_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "dry_run_live_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "server_mongodb_used": false,
+    "db_migration_added": false,
+    "business_mutation_added": false,
+    "new_export_download_endpoint_added": false
+  },
+  "blocker": {
+    "blocked": false,
+    "reason": ""
+  },
+  "next_recommendation": "PR-DEMO-2B - no-code technical design for a read-only threshold source registry. Do not open Action Draft Schema, provider execution, approval workflow, or business mutation."
+}
+

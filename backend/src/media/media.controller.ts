@@ -198,6 +198,13 @@ export class MediaController {
   // Note: removed duplicate DELETE(':id') route; use deleteMedia above
 
   @Public()
+  @Get('serve/:year/:month/:filename')
+  async serveYMFViaServe(@Param('year') year: string, @Param('month') month: string, @Param('filename') filename: string, @Res() res: any) {
+    const pathParam = `${year}/${month}/${filename}`;
+    return this.serveFile(pathParam, res);
+  }
+
+  @Public()
   @Get('serve/*path')
   async serveFile(@Param('path') wildcard: string, @Res() res: any) {
     try {

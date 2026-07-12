@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Media, MediaDocument } from './schemas/media.schema';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -14,12 +15,18 @@ const PUBLIC_BASE = process.env.MEDIA_PUBLIC_BASE || '/media';
 // Resolve the actual media directory robustly across dev/prod layouts
 function resolveMediaDir(): string {
   const envDir = process.env.MEDIA_DIR;
+  if (envDir) {
+    const resolvedEnvDir = path.resolve(envDir);
+    try {
+      fs.mkdirSync(resolvedEnvDir, { recursive: true });
+      return resolvedEnvDir;
+    } catch {}
+  }
   const candidates = [
-    envDir,
     path.join(process.cwd(), '..', 'media'),                     // <repo>/media (repo root)
     path.join(process.cwd(), '..', 'uploads', 'media'),          // <repo>/uploads/media
     path.join(process.cwd(), 'uploads', 'media'),                // backend/uploads/media
-  ].filter(Boolean) as string[];
+  ];
   for (const dir of candidates) {
     try { if (fs.existsSync(dir)) return dir; } catch {}
   }
@@ -33,7 +40,10 @@ const MEDIA_DIR = resolveMediaDir();
 
 @Injectable()
 export class MediaService {
-  constructor(@InjectModel(Media.name) private model: Model<MediaDocument>) {}
+  constructor(
+    @InjectModel(Media.name) private model: Model<MediaDocument>,
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+  ) {}
 
   ensureDir(dir: string) {
     fs.mkdirSync(dir, { recursive: true });
@@ -134,11 +144,7 @@ export class MediaService {
     };
 
     try {
-      // Import Product model dynamically to avoid circular dependency
-      const mongoose = require('mongoose');
-      const Product = mongoose.model('Product');
-      
-      const products = await Product.find({});
+      const products = await this.productModel.find({});
       results.totalProducts = products.length;
 
       for (const product of products) {
@@ -147,9 +153,12 @@ export class MediaService {
         // Check main images
         if (product.images && product.images.length > 0) {
           const validImages = [];
-          for (const imageUrl of product.images) {
-            if (await this.validateImageUrl(imageUrl)) {
-              validImages.push(imageUrl);
+          for (const imageEntry of product.images) {
+            const imageUrl =
+              typeof imageEntry === 'string' ? imageEntry : imageEntry?.url;
+
+            if (imageUrl && await this.validateImageUrl(imageUrl)) {
+              validImages.push(imageEntry);
             } else {
               results.invalidImages++;
               hasChanges = true;
@@ -259,8 +268,16 @@ export class MediaService {
 
   async list(query: any = {}) {
     const filter: any = {};
-    if (query.productId) filter.productId = query.productId;
-    if (query.fanpageId) filter.fanpageId = query.fanpageId;
+    if (query.productId) {
+      filter.productId = Types.ObjectId.isValid(query.productId)
+        ? new Types.ObjectId(query.productId)
+        : query.productId;
+    }
+    if (query.fanpageId) {
+      filter.fanpageId = Types.ObjectId.isValid(query.fanpageId)
+        ? new Types.ObjectId(query.fanpageId)
+        : query.fanpageId;
+    }
     if (query.tag) filter.tags = query.tag;
     const page = Math.max(1, parseInt(query.page) || 1);
     const limit = Math.min(100, parseInt(query.limit) || 30);

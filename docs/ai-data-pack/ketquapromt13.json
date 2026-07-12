@@ -1,0 +1,202 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-4C",
+    "status": "completed_internal_lifecycle_manifest_only",
+    "code_changed": true,
+    "docs_changed": true,
+    "provider_calls": false,
+    "provider_mutation": false,
+    "provider_validate_only": false,
+    "public_endpoint_added": false,
+    "download_endpoint_added": false,
+    "official_partial_lifecycle_implemented": true,
+    "cached_export_semantics_changed": false,
+    "existing_get_exports_changed": false,
+    "redaction_runtime": "manifest_only",
+    "artifact_rendering": "deferred",
+    "ready_for_public_endpoint": false,
+    "ready_for_download_endpoint": false,
+    "ready_for_openai_upload": false
+  },
+  "implemented": {
+    "internal_service_method": "AiDataPackExportJobService.createOfficialPartialExportInternal",
+    "export_modes": ["official_export", "partial_export"],
+    "sync_policy_by_mode": {
+      "official_export": "sync_required",
+      "partial_export": "sync_if_stale"
+    },
+    "statuses": [
+      "requested",
+      "pre_assessing",
+      "syncing_sources",
+      "post_assessing",
+      "snapshotting",
+      "exporting",
+      "completed",
+      "completed_with_warnings",
+      "blocked",
+      "failed",
+      "expired"
+    ],
+    "audit_events": [
+      "export_requested",
+      "pre_assessment_started",
+      "source_sync_started",
+      "source_sync_completed",
+      "post_assessment_completed",
+      "export_blocked",
+      "export_downgraded",
+      "artifact_generated",
+      "rbac_denied"
+    ],
+    "rbac": {
+      "fail_closed": true,
+      "role_binding_added": false,
+      "permissions_checked": [
+        "ai-data-pack.export.official.create",
+        "ai-data-pack.export.partial.create",
+        "ai-data-pack.profile.*"
+      ],
+      "system_internal_worker_download_allowed": false
+    },
+    "redaction_profiles": [
+      "director_full",
+      "director_redacted",
+      "manager_marketer",
+      "finance_operator",
+      "reviewer_partial",
+      "investor_redacted",
+      "external_consultant_redacted",
+      "system_internal_worker"
+    ],
+    "downgrade_policy": {
+      "silent_downgrade_allowed": false,
+      "requires_allowDowngradeToPartial": true,
+      "audit_event": "export_downgraded"
+    },
+    "artifact_policy": {
+      "full_rendering": false,
+      "manifest_only": true,
+      "artifact_rendering": "deferred",
+      "redaction_runtime": "manifest_only",
+      "storage_location": "internal_key_only",
+      "public_url_allowed": false,
+      "artifact_bytes_written_for_official_partial": false
+    }
+  },
+  "forbidden_scope_results": {
+    "new_public_endpoint": false,
+    "new_status_endpoint": false,
+    "new_download_endpoint": false,
+    "new_download_token_endpoint": false,
+    "openai_upload": false,
+    "action_import": false,
+    "approval_workflow": false,
+    "dry_run_or_live_execution": false,
+    "provider_mutation": false,
+    "performance_max": false,
+    "shopping": false,
+    "display": false,
+    "youtube": false,
+    "delete_campaign_or_ad_group_actions": false,
+    "cached_export_auto_sync": false
+  },
+  "manifest_required_fields": [
+    "artifactId",
+    "exportJobId",
+    "exportMode",
+    "syncPolicy",
+    "policyVersion",
+    "redactionProfile",
+    "sectionAccessProfile",
+    "packTypes",
+    "formats",
+    "rowCounts",
+    "sourceFreshnessMetadata",
+    "sourceCoverageMetadata",
+    "decisionGates",
+    "warnings",
+    "blockingReasons",
+    "containsPii",
+    "containsFinancialSensitive",
+    "containsEmployeeSensitive",
+    "containsSupplierSensitive",
+    "dataContentChecksum",
+    "runtimeExportChecksum",
+    "artifactChecksum",
+    "createdAt",
+    "expiresAt",
+    "retentionUntil",
+    "storageLocation",
+    "downloadPolicy"
+  ],
+  "files_changed": [
+    "backend/src/ai-data-pack/export-jobs/export-job.types.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.schema.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.service.spec.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-artifact.service.ts",
+    "backend/src/ai-data-pack/rbac/export-rbac-policy.service.ts",
+    "backend/src/ai-data-pack/rbac/export-rbac-policy.service.spec.ts",
+    "backend/src/ai-data-pack/redaction/export-redaction-profile.service.ts",
+    "backend/src/ai-data-pack/redaction/export-redaction-profile.service.spec.ts",
+    "backend/src/ai-data-pack/ai-data-pack.module.ts",
+    "docs/ai-data-pack/ketquapromt13.md",
+    "docs/ai-data-pack/ketquapromt13.json",
+    "docs/ai-data-pack/review-packets/promt13/*"
+  ],
+  "verification": [
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand export-job",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand source-sync",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand google-ads-readonly",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand source-registry",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand rbac",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- --runInBand redaction",
+      "result": "passed"
+    }
+  ],
+  "risks": [
+    "Row-level redaction is not implemented.",
+    "Official/partial export artifact rendering is deferred.",
+    "No public endpoint is ready.",
+    "No download endpoint is ready.",
+    "OpenAI upload is not ready."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "recommended_next_if_accepted": "PR-2.3B-4D - Public create/status endpoint specification or implementation, no download",
+    "do_not_jump_to": [
+      "download endpoint",
+      "OpenAI/upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "Phase 3"
+    ]
+  }
+}

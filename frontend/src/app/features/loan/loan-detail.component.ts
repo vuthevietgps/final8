@@ -1,6 +1,6 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService, LoanContract, LoanRepayment } from './loan.service';
 
@@ -28,7 +28,11 @@ export class LoanDetailComponent implements OnInit {
   paymentForm = { paidDate: '', referenceId: '', notes: '' };
   paymentLoading = false;
 
-  constructor(private route: ActivatedRoute, private loanService: LoanService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private loanService: LoanService,
+  ) {}
 
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -95,8 +99,11 @@ export class LoanDetailComponent implements OnInit {
   // ═══════════════════════════════════════════════════════════
 
   openPaymentModal(rep: LoanRepayment) {
-    this.selectedRepayment = rep;
-    this.showPaymentModal = true;
+    const loanId = this.loan()?._id;
+    if (!loanId || !rep._id) return;
+    void this.router.navigate(['/loans', loanId, 'pay'], {
+      queryParams: { repaymentId: rep._id },
+    });
   }
 
   closePaymentModal() {

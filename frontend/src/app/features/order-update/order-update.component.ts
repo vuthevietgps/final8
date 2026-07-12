@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderUpdateService, OrderUpdateResult } from './order-update.service';
@@ -44,33 +44,85 @@ import { OrderUpdateService, OrderUpdateResult } from './order-update.service';
               <div class="file-name">{{ selectedFile.name }}</div>
               <div class="file-size">{{ getFileSize(selectedFile.size) }}</div>
             </div>
-            <div class="button-group">
-              <button class="btn btn-secondary" 
+          <div class="button-group">
+            <button class="btn btn-secondary"
                       (click)="previewFile()" 
-                      [disabled]="isUploading">
+                      [disabled]="isUploading || isPreviewing">
                 <span *ngIf="isPreviewing" class="loading-spinner"></span>
                 {{ isPreviewing ? 'Đang xem trước...' : 'Xem trước dữ liệu' }}
               </button>
               <button class="btn btn-primary" 
                       (click)="uploadFile()" 
-                      [disabled]="isUploading">
+                      [disabled]="isUploading || isPreviewing">
                 <span *ngIf="isUploading" class="loading-spinner"></span>
                 {{ isUploading ? 'Đang xử lý...' : 'Cập nhật đơn hàng' }}
               </button>
-            </div>
           </div>
+        </div>
 
-          <!-- Progress Bar -->
-          <div *ngIf="isUploading" class="progress-section">
-            <div class="progress-header">
-              <div class="progress-title">
-                <span class="loading-spinner"></span>
+      <!-- Progress Bar -->
+      <div *ngIf="isUploading" class="progress-section">
+        <div class="progress-header">
+          <div class="progress-title">
+            <span class="loading-spinner"></span>
                 {{ progressMessage }}
               </div>
               <div class="progress-percentage">{{ uploadProgress }}%</div>
             </div>
             <div class="progress-bar">
               <div class="progress-fill" [style.width.%]="uploadProgress"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview Section -->
+      <div *ngIf="previewData" class="preview-section">
+        <div class="preview-card">
+          <h3>👀 Dữ liệu xem trước</h3>
+
+          <div class="preview-summary">
+            <div class="preview-stat">
+              <span class="stat-label">Tổng dòng</span>
+              <span class="stat-value">{{ previewData.totalRows || 0 }}</span>
+            </div>
+          </div>
+
+          <div class="details-section" *ngIf="previewData.mappingInfo">
+            <h4>📌 Mapping cột</h4>
+            <div class="mapping-grid">
+              <div class="mapping-item" *ngFor="let item of previewData.mappingInfo | keyvalue">
+                <span class="mapping-key">{{ item.key }}</span>
+                <span class="mapping-value">{{ item.value }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="details-section" *ngIf="previewData.sampleData?.length">
+            <h4>🧪 Mẫu dữ liệu</h4>
+            <div class="preview-table-wrapper">
+              <table class="preview-table">
+                <thead>
+                  <tr>
+                    <th>Tracking</th>
+                    <th>Người nhận</th>
+                    <th>SĐT</th>
+                    <th>Địa chỉ</th>
+                    <th>COD</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of previewData.sampleData">
+                    <td>{{ row.trackingNumber }}</td>
+                    <td>{{ row.receiverName || '-' }}</td>
+                    <td>{{ row.receiverPhone || '-' }}</td>
+                    <td>{{ row.receiverAddress || '-' }}</td>
+                    <td>{{ row.codAmount | number }}</td>
+                    <td>{{ row.orderStatus || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -297,8 +349,13 @@ import { OrderUpdateService, OrderUpdateResult } from './order-update.service';
       margin-bottom: 30px;
     }
 
+    .preview-section {
+      margin-bottom: 30px;
+    }
+
     .results-card,
-    .instructions-card {
+    .instructions-card,
+    .preview-card {
       background: var(--surface-color);
       border-radius: 12px;
       padding: 30px;
@@ -306,7 +363,8 @@ import { OrderUpdateService, OrderUpdateResult } from './order-update.service';
     }
 
     .results-card h3,
-    .instructions-card h3 {
+    .instructions-card h3,
+    .preview-card h3 {
       margin: 0 0 20px 0;
       color: var(--primary-color);
     }
@@ -379,6 +437,91 @@ import { OrderUpdateService, OrderUpdateResult } from './order-update.service';
     .details-section h4 {
       margin: 0 0 15px 0;
       color: var(--text-primary);
+    }
+
+    .preview-summary {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .preview-stat {
+      padding: 16px 18px;
+      background: rgba(33, 150, 243, 0.08);
+      border: 1px solid rgba(33, 150, 243, 0.18);
+      border-radius: 8px;
+      min-width: 160px;
+    }
+
+    .preview-stat .stat-label {
+      display: block;
+      font-size: 0.85em;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .preview-stat .stat-value {
+      font-size: 1.6em;
+      font-weight: 700;
+      color: var(--primary-color);
+    }
+
+    .mapping-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+
+    .mapping-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--background-color);
+    }
+
+    .mapping-key {
+      font-weight: 600;
+      color: var(--primary-color);
+    }
+
+    .mapping-value {
+      color: var(--text-secondary);
+      font-size: 0.92em;
+    }
+
+    .preview-table-wrapper {
+      overflow-x: auto;
+    }
+
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--background-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .preview-table th,
+    .preview-table td {
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border-color);
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.92em;
+    }
+
+    .preview-table th {
+      background: rgba(33, 150, 243, 0.08);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .preview-table tr:last-child td {
+      border-bottom: none;
     }
 
     .result-item {
@@ -726,6 +869,7 @@ import { OrderUpdateService, OrderUpdateResult } from './order-update.service';
 })
 export class OrderUpdateComponent {
   private orderUpdateService = inject(OrderUpdateService);
+  private cdr = inject(ChangeDetectorRef);
 
   selectedFile: File | null = null;
   isUploading = false;
@@ -785,6 +929,8 @@ export class OrderUpdateComponent {
 
     this.selectedFile = file;
     this.uploadResult = null;
+    this.previewData = null;
+    this.cdr.detectChanges();
   }
 
   uploadFile() {
@@ -811,6 +957,7 @@ export class OrderUpdateComponent {
         this.uploadProgress = step.progress;
         this.progressMessage = step.message;
         stepIndex++;
+        this.cdr.detectChanges();
       }
     }, 800);
 
@@ -820,6 +967,7 @@ export class OrderUpdateComponent {
         clearInterval(progressInterval);
         this.uploadProgress = 100;
         this.progressMessage = 'Hoàn thành!';
+        this.cdr.detectChanges();
         
         // Generate success message
         this.successMessage = `Đã xử lý ${result.totalProcessed} vận đơn: ${result.successCount} thành công, ${result.skippedCount} bỏ qua, ${result.errorCount} lỗi`;
@@ -836,14 +984,17 @@ export class OrderUpdateComponent {
             // Auto hide after 5 seconds
             setTimeout(() => {
               this.showSuccessNotification = false;
+              this.cdr.detectChanges();
             }, 5000);
           }
+          this.cdr.detectChanges();
         }, 800);
       },
       error: (error: any) => {
         clearInterval(progressInterval);
         this.isUploading = false;
         this.uploadProgress = 0;
+        this.cdr.detectChanges();
         
         // Show error alert
         alert('❌ Có lỗi xảy ra: ' + (error.error?.message || error.message));
@@ -851,6 +1002,7 @@ export class OrderUpdateComponent {
       complete: () => {
         clearInterval(progressInterval);
         this.isUploading = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -865,14 +1017,16 @@ export class OrderUpdateComponent {
     this.isPreviewing = true;
     this.previewData = null;
 
-  this.orderUpdateService.previewExcelData(this.selectedFile!).subscribe({
+    this.orderUpdateService.previewExcelData(this.selectedFile!).subscribe({
       next: (result: any) => {
         this.isPreviewing = false;
         this.previewData = result;
         console.log('📋 Preview data:', result);
+        this.cdr.detectChanges();
       },
       error: (error: any) => {
         this.isPreviewing = false;
+        this.cdr.detectChanges();
         alert('Có lỗi xảy ra khi xem trước: ' + (error.error?.message || error.message));
       }
     });

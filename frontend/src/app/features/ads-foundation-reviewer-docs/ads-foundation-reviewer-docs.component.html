@@ -1,0 +1,419 @@
+<div class="reviewer-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Ads Automation</p>
+      <h1>Tài liệu nền rà soát Ads</h1>
+    </div>
+
+    <form class="review-form" (ngSubmit)="load()">
+      <label>
+        Ngày snapshot
+        <input name="snapshotDate" [(ngModel)]="snapshotDate" autocomplete="off" />
+      </label>
+
+      <label>
+        Cửa sổ từ
+        <input name="evidenceWindowFrom" [(ngModel)]="evidenceWindowFrom" autocomplete="off" />
+      </label>
+
+      <label>
+        Cửa sổ đến
+        <input name="evidenceWindowTo" [(ngModel)]="evidenceWindowTo" autocomplete="off" />
+      </label>
+
+      <label>
+        Số ngày
+        <input name="evidenceWindowDays" [(ngModel)]="evidenceWindowDays" inputmode="numeric" />
+      </label>
+
+      <label>
+        Customer ID
+        <input name="customerIds" [(ngModel)]="customerIds" autocomplete="off" />
+      </label>
+
+      <label>
+        Product ID
+        <input name="productIds" [(ngModel)]="productIds" autocomplete="off" />
+      </label>
+
+      <label>
+        Now
+        <input name="now" [(ngModel)]="now" autocomplete="off" />
+      </label>
+
+      <div class="button-row">
+        <button type="submit" class="primary" [disabled]="loading()">
+          {{ loading() ? 'Đang tải' : 'Tải' }}
+        </button>
+        <button type="button" (click)="loadDemoPayload()" [disabled]="loading()">Payload demo</button>
+        <button type="button" (click)="reset()" [disabled]="loading()">Đặt lại</button>
+      </div>
+    </form>
+  </header>
+
+  <div *ngIf="error()" class="error-banner">{{ error() }}</div>
+
+  <section *ngIf="!docs() && !loading()" class="empty-panel">
+    <h2>Chưa tải tài liệu nền rà soát</h2>
+    <p>{{ snapshotDate }} / {{ customerIds }} / {{ productIds }}</p>
+  </section>
+
+  <section class="panel compare-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">So sánh cục bộ</p>
+        <h2>Chênh lệch snapshot</h2>
+      </div>
+      <span class="status-pill passed">cục bộ trình duyệt</span>
+    </div>
+
+    <div class="compare-input-grid">
+      <label>
+        JSON snapshot A
+        <textarea
+          name="leftSnapshotText"
+          [(ngModel)]="leftSnapshotText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+
+      <label>
+        JSON snapshot B
+        <textarea
+          name="rightSnapshotText"
+          [(ngModel)]="rightSnapshotText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+    </div>
+
+    <div class="compare-actions">
+      <div class="button-row">
+        <button type="button" class="primary" (click)="compareSnapshots()">So sánh</button>
+        <button type="button" (click)="downloadCompareResult()">Xuất JSON so sánh</button>
+        <button type="button" (click)="clearComparison()">Xóa</button>
+      </div>
+
+      <div class="button-row">
+        <button type="button" (click)="useCurrentSnapshot('left')" [disabled]="!localSnapshot()">
+          Đưa snapshot hiện tại vào A
+        </button>
+        <button type="button" (click)="useCurrentSnapshot('right')" [disabled]="!localSnapshot()">
+          Đưa snapshot hiện tại vào B
+        </button>
+        <label class="file-button">
+          Tải A
+          <input type="file" accept="application/json,.json" (change)="loadSnapshotFile($event, 'left')" />
+        </label>
+        <label class="file-button">
+          Tải B
+          <input type="file" accept="application/json,.json" (change)="loadSnapshotFile($event, 'right')" />
+        </label>
+      </div>
+    </div>
+
+    <div class="compare-import">
+      <label>
+        JSON kết quả so sánh
+        <textarea
+          name="compareImportText"
+          [(ngModel)]="compareImportText"
+          spellcheck="false"
+        ></textarea>
+      </label>
+
+      <div class="button-row">
+        <button type="button" (click)="validateCompareImport()">Kiểm tra JSON so sánh</button>
+        <label class="file-button">
+          Tải so sánh
+          <input type="file" accept="application/json,.json" (change)="loadCompareResultFile($event)" />
+        </label>
+      </div>
+    </div>
+
+    <div *ngIf="compareError()" class="error-banner compare-error">{{ compareError() }}</div>
+    <p *ngIf="lastCompareExportName()" class="export-status">{{ lastCompareExportName() }}</p>
+    <p *ngIf="lastCompareImportName()" class="export-status">{{ lastCompareImportName() }}</p>
+
+    @if (compareResult(); as compare) {
+      <div class="compare-result">
+        <dl class="details-list">
+          <div>
+            <dt>Schema so sánh</dt>
+            <dd>{{ compare.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Cùng khóa</dt>
+            <dd>{{ booleanText(compare.sameComparisonKey) }}</dd>
+          </div>
+          <div>
+            <dt>Fallback ngân sách</dt>
+            <dd>
+              {{ booleanDeltaText(compare.campaignBudgetIdFallbackDelta.leftValue, compare.campaignBudgetIdFallbackDelta.rightValue) }}
+            </dd>
+          </div>
+          <div>
+            <dt>Đã lược bỏ foundationSnapshot</dt>
+            <dd>
+              {{ booleanDeltaText(compare.foundationSnapshotOmissionDelta.leftOmitted, compare.foundationSnapshotOmissionDelta.rightOmitted) }}
+            </dd>
+          </div>
+        </dl>
+
+        <div class="metric-grid">
+          <article *ngFor="let metric of compare.metricDeltas; trackBy: trackByMetricDelta" [class.changed]="metric.changed">
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.leftValue }} -> {{ metric.rightValue }}</strong>
+            <code>{{ deltaText(metric.delta) }}</code>
+          </article>
+        </div>
+
+        <div class="compare-columns">
+          <section>
+            <div class="mini-heading">
+              <p class="eyebrow">Chênh lệch an toàn</p>
+              <strong>{{ changedSafetyDeltas().length }}</strong>
+            </div>
+
+            <div class="delta-list">
+              <div *ngFor="let delta of changedSafetyDeltas(); trackBy: trackBySafetyDelta" [class.good]="delta.rightGateClosed" [class.warn]="delta.rightGateOpen">
+                <span>{{ safetyLabel(delta.key) }}</span>
+                <strong>{{ booleanDeltaText(delta.leftValue, delta.rightValue) }}</strong>
+                <em>{{ delta.rightGateClosed ? 'đóng' : 'mở' }}</em>
+              </div>
+              <p *ngIf="!changedSafetyDeltas().length" class="muted">Không có chênh lệch an toàn</p>
+            </div>
+          </section>
+
+          <section>
+            <div class="mini-heading">
+              <p class="eyebrow">Mục cần chú ý</p>
+              <strong>{{ changedAttentionSectionDeltas().length }}</strong>
+            </div>
+
+            <div class="delta-list">
+              <div *ngFor="let section of changedAttentionSectionDeltas(); trackBy: trackByAttentionDelta" class="warn">
+                <span>{{ section.title }}</span>
+                <strong>{{ statusText(section.leftStatus) }} -> {{ statusText(section.rightStatus) }}</strong>
+                <code>{{ section.section_id }}</code>
+              </div>
+              <p *ngIf="!changedAttentionSectionDeltas().length" class="muted">Không có chênh lệch mục cần chú ý</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    }
+  </section>
+
+  @if (docs(); as docs) {
+    <section class="summary-grid">
+      <article *ngFor="let card of summaryCards(); trackBy: trackByLabel" [class.good]="card.tone === 'good'" [class.warn]="card.tone === 'warn'">
+        <span>{{ card.label }}</span>
+        <strong>{{ card.value }}</strong>
+      </article>
+    </section>
+
+    <main class="review-layout">
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Read model</p>
+            <h2>{{ docs.summary.read_model_source }}</h2>
+          </div>
+          <span class="status-pill" [ngClass]="statusClass(docs.summary.docs_status)">
+            {{ statusText(docs.summary.docs_status) }}
+          </span>
+        </div>
+
+        <dl class="details-list">
+          <div>
+            <dt>Schema</dt>
+            <dd>{{ docs.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Thời điểm tạo</dt>
+            <dd>{{ docs.generatedAt }}</dd>
+          </div>
+          <div>
+            <dt>Chế độ tài liệu</dt>
+            <dd>{{ statusText(docs.docsMode) }}</dd>
+          </div>
+          <div>
+            <dt>Bản xuất nguồn</dt>
+            <dd>{{ docs.summary.source_export_schema_version }}</dd>
+          </div>
+          <div>
+            <dt>Ngày snapshot</dt>
+            <dd>{{ docs.query.snapshotDate || 'không có' }}</dd>
+          </div>
+          <div>
+            <dt>Payload đã lược bỏ</dt>
+            <dd>{{ docs.sourceExportDigest.omitted_payloads.join(', ') }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">An toàn</p>
+            <h2>Cổng kiểm soát</h2>
+          </div>
+          <span class="status-pill passed">chỉ đọc</span>
+        </div>
+
+        <div class="gate-grid">
+          <div *ngFor="let gate of safetyGates(); trackBy: trackByGate" [class.pass]="gate.pass" [class.fail]="!gate.pass">
+            <span>{{ gate.label }}</span>
+            <strong>{{ gate.value }}</strong>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    @if (localSnapshot(); as snapshot) {
+      <section class="panel snapshot-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Snapshot cục bộ</p>
+            <h2>JSON tài liệu rà soát</h2>
+          </div>
+          <button type="button" class="primary" (click)="downloadLocalSnapshot()" [disabled]="loading()">
+            Xuất JSON
+          </button>
+        </div>
+
+        <dl class="details-list">
+          <div>
+            <dt>Schema snapshot</dt>
+            <dd>{{ snapshot.schemaVersion }}</dd>
+          </div>
+          <div>
+            <dt>Endpoint nguồn</dt>
+            <dd>{{ snapshot.createdFromEndpoint }}</dd>
+          </div>
+          <div>
+            <dt>API nhà cung cấp</dt>
+            <dd>{{ booleanText(snapshot.provider_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Google Ads API</dt>
+            <dd>{{ booleanText(snapshot.google_ads_api_called) }}</dd>
+          </div>
+          <div>
+            <dt>Validate-only</dt>
+            <dd>{{ booleanText(snapshot.validateOnly_called) }}</dd>
+          </div>
+          <div>
+            <dt>Thực thi lúc này</dt>
+            <dd>{{ booleanText(snapshot.execution_allowed_now) }}</dd>
+          </div>
+          <div>
+            <dt>Fallback ngân sách</dt>
+            <dd>{{ booleanText(snapshot.campaignBudgetId_fallback_used) }}</dd>
+          </div>
+          <div>
+            <dt>Payload snapshot đầy đủ</dt>
+            <dd>{{ booleanText(snapshot.full_foundation_snapshot_payload_included) }}</dd>
+          </div>
+        </dl>
+
+        <div class="snapshot-key">
+          <span>Khóa so sánh</span>
+          <code>{{ snapshot.comparisonKey }}</code>
+        </div>
+
+        <p *ngIf="lastExportName()" class="export-status">{{ lastExportName() }}</p>
+      </section>
+    }
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Ngân sách chiến dịch</p>
+          <h2>{{ campaignBudgetSection()?.title || 'Ghép ngân sách chiến dịch' }}</h2>
+        </div>
+        <span class="status-pill" [ngClass]="statusClass(campaignBudgetSection()?.status || 'empty')">
+          {{ statusText(campaignBudgetSection()?.status || 'empty') }}
+        </span>
+      </div>
+
+      <div class="evidence-lines">
+        <p *ngFor="let line of campaignBudgetSection()?.lines || []; trackBy: trackByValue">{{ line }}</p>
+      </div>
+    </section>
+
+    <section class="section-grid">
+      <article>
+        <div>
+          <p class="eyebrow">Bằng chứng nguồn</p>
+          <h2>{{ statusText(sourceEvidenceSection()?.status || 'empty') }}</h2>
+        </div>
+        <ul>
+          <li *ngFor="let line of sourceEvidenceSection()?.lines || []; trackBy: trackByValue">{{ line }}</li>
+        </ul>
+      </article>
+
+      <article>
+        <div>
+          <p class="eyebrow">Bằng chứng query</p>
+          <h2>{{ statusText(queryEvidenceSection()?.status || 'empty') }}</h2>
+        </div>
+        <ul>
+          <li *ngFor="let line of queryEvidenceSection()?.lines || []; trackBy: trackByValue">{{ line }}</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel" *ngIf="attentionSections().length">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Cần chú ý</p>
+          <h2>Các mục</h2>
+        </div>
+      </div>
+
+      <div class="id-list">
+        <code *ngFor="let section of attentionSections(); trackBy: trackBySection">{{ section.section_id }}</code>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Xem trước</p>
+          <h2>Markdown</h2>
+        </div>
+      </div>
+      <pre>{{ docs.markdownPreview }}</pre>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Route</p>
+          <h2>Đọc lại</h2>
+        </div>
+      </div>
+
+      <div class="route-list">
+        <div *ngFor="let example of docs.routeExamples; trackBy: trackByRoute">
+          <span>{{ example.method }}</span>
+          <code>{{ routePath(example) }}</code>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-grid" *ngIf="otherSections().length">
+      <article *ngFor="let section of otherSections(); trackBy: trackBySection">
+        <div>
+          <p class="eyebrow">{{ section.section_id }}</p>
+          <h2>{{ section.title }}</h2>
+        </div>
+        <ul>
+          <li *ngFor="let line of section.lines; trackBy: trackByValue">{{ line }}</li>
+        </ul>
+      </article>
+    </section>
+  }
+</div>

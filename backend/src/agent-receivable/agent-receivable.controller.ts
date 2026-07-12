@@ -2,13 +2,14 @@ import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, Logger, Re
 import { Response } from 'express';
 import { AgentReceivableService } from './agent-receivable.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
-import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { RequirePermissions, Roles } from '../auth/decorators/auth.decorator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { UserRole } from '../user/user.enum';
 
 /**
  * @deprecated Use /api/agent-payables instead
- * 
+ *
  * CFO Spec v3.1: Route này vẫn hoạt động nhưng nên migrate sang /api/agent-payables
  * vì "payables" đúng góc nhìn công ty (tiền mình phải trả agent).
  */
@@ -95,6 +96,7 @@ export class AgentReceivableController {
 
   @Patch('statements/:id/reopen')
   @RequirePermissions('quotes')
+  @Roles(UserRole.DIRECTOR)
   reopenStatement(@Param('id') id: string) {
     return this.service.reopenStatement(id);
   }

@@ -323,8 +323,8 @@ export class MediaReportComponent {
     this.loading.set(true);
     this.syncResult.set(null);
     
-    console.log('Making request to:', `${this.base}/products/cleanup-images`);
-    this.http.post(`${this.base}/media/auto-sync`, {})
+    console.log('Making request to:', `${this.base}/media/master-sync`);
+    this.http.post(`${this.base}/media/master-sync`, {})
       .subscribe({
         next: (result: any) => {
           console.log('Master sync success:', result);
@@ -332,6 +332,30 @@ export class MediaReportComponent {
           this.loading.set(false);
           
           const data = result.data;
+          const summary = data?.summary || {};
+          const phaseErrors = [
+            ...(data?.phase1?.errors || []),
+            ...(data?.phase2?.errors || []),
+            ...(data?.phase3?.errors || []),
+          ].filter(Boolean);
+
+          if (summary.syncedSuccessfully) {
+            alert(
+              `Dong bo anh thanh cong.\n` +
+              `Files: ${summary.totalFiles || 0}\n` +
+              `Media records: ${summary.totalMediaRecords || 0}\n` +
+              `Product refs: ${summary.totalProductReferences || 0}`
+            );
+          } else {
+            alert(
+              `Dong bo anh hoan tat nhung con loi.\n` +
+              `${phaseErrors.join('\n') || 'Khong co chi tiet loi.'}`
+            );
+          }
+
+          // Tá»± Ä‘á»™ng refresh láº¡i bÃ¡o cÃ¡o sau khi sync
+          setTimeout(() => this.load(), 1000);
+          return;
           alert(`🧹 Làm sạch tự động thành công!
 � Sản phẩm đã kiểm tra: ${data.totalProducts || 0}
 �️ Ảnh không hợp lệ đã xóa: ${data.invalidImages || 0}

@@ -1,88 +1,102 @@
 /**
  * File: features/production-status/production-status.component.ts
- * Mục đích: Giao diện quản lý Trạng thái sản xuất.
+ * Purpose: Inline CRUD UI for production statuses.
  */
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProductionStatusService } from './production-status.service';
-import { ProductionStatus, CreateProductionStatus, UpdateProductionStatus } from './models/production-status.model';
+import {
+  ProductionStatus,
+  CreateProductionStatus,
+  UpdateProductionStatus,
+} from './models/production-status.model';
 
-/**
- * Component quản lý trạng thái sản xuất - Inline editing style
- */
 @Component({
   selector: 'app-production-status',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-  <div class="production-status-page">
-    <div class="toolbar">
-      <div class="left">
-        <h2>🏭 Trạng Thái Sản Xuất</h2>
+    <div class="production-status-page">
+      <div class="toolbar">
+        <div class="left">
+          <h2>🏭 Trạng Thái Sản Xuất</h2>
+        </div>
+        <div class="right">
+          <button class="btn btn-primary" (click)="addNew()">➕ Thêm mới</button>
+          <button class="btn" (click)="refresh()">🔄 Làm mới</button>
+        </div>
       </div>
-      <div class="right">
-        <button class="btn btn-primary" (click)="addNew()">➕ Thêm mới</button>
-        <button class="btn" (click)="refresh()">🔄 Làm mới</button>
+
+      <div class="table-wrapper" *ngIf="!isLoading(); else loadingTpl">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tên trạng thái</th>
+              <th>Màu sắc</th>
+              <th>Mô tả</th>
+              <th>Thứ tự</th>
+              <th>Hoạt động</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let status of productionStatuses(); trackBy: trackById">
+              <td>
+                <input
+                  class="form-control input-inline"
+                  [value]="status.name"
+                  (blur)="updateField(status, 'name', $any($event.target).value)"
+                  placeholder="Tên trạng thái"
+                />
+              </td>
+              <td>
+                <input
+                  type="color"
+                  class="form-control input-color"
+                  [value]="status.color"
+                  (change)="updateField(status, 'color', $any($event.target).value)"
+                />
+              </td>
+              <td>
+                <input
+                  class="form-control input-inline"
+                  [value]="status.description || ''"
+                  (blur)="updateField(status, 'description', $any($event.target).value)"
+                  placeholder="Mô tả"
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  class="form-control input-inline input-number"
+                  [value]="status.order || 0"
+                  (blur)="updateField(status, 'order', +$any($event.target).value)"
+                  min="0"
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  [checked]="status.isActive"
+                  (change)="updateField(status, 'isActive', $any($event.target).checked)"
+                />
+              </td>
+              <td>
+                <button class="btn btn-sm btn-danger" (click)="remove(status._id)">Xóa</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+
+      <ng-template #loadingTpl>
+        <div class="loading">Đang tải...</div>
+      </ng-template>
+
+      <div *ngIf="error()" class="error">{{ error() }}</div>
     </div>
-
-    <div class="table-wrapper" *ngIf="!isLoading(); else loadingTpl">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tên trạng thái</th>
-            <th>Màu sắc</th>
-            <th>Mô tả</th>
-            <th>Thứ tự</th>
-            <th>Hoạt động</th>
-            <th>Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let status of productionStatuses(); trackBy: trackById">
-            <td>
-              <input class="form-control input-inline" 
-                [value]="status.name"
-                (blur)="updateField(status, 'name', $any($event.target).value)"
-                placeholder="Tên trạng thái">
-            </td>
-            <td>
-              <input type="color" class="form-control input-color" 
-                [value]="status.color"
-                (change)="updateField(status, 'color', $any($event.target).value)">
-            </td>
-            <td>
-              <input class="form-control input-inline" 
-                [value]="status.description || ''"
-                (blur)="updateField(status, 'description', $any($event.target).value)"
-                placeholder="Mô tả">
-            </td>
-            <td>
-              <input type="number" class="form-control input-inline input-number" 
-                [value]="status.order || 0"
-                (blur)="updateField(status, 'order', +$any($event.target).value)"
-                min="0">
-            </td>
-            <td>
-              <input type="checkbox" class="form-check-input" 
-                [checked]="status.isActive"
-                (change)="updateField(status, 'isActive', $any($event.target).checked)">
-            </td>
-            <td>
-              <button class="btn btn-sm btn-danger" (click)="remove(status._id)">Xóa</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <ng-template #loadingTpl>
-      <div class="loading">Đang tải...</div>
-    </ng-template>
-
-    <div *ngIf="error()" class="error">{{ error() }}</div>
-  </div>
   `,
   styles: [`
     .production-status-page { padding: 16px; }
@@ -105,13 +119,12 @@ import { ProductionStatus, CreateProductionStatus, UpdateProductionStatus } from
     .loading, .error { padding: 16px; text-align: center; }
     .error { color: #dc3545; }
     .data-table tbody tr:hover { background: #f9fafb; }
-  `]
+  `],
 })
 export class ProductionStatusComponent implements OnInit {
-  // Danh sách trạng thái sản xuất (dùng Signals)
+  private readonly draftBaseName = 'Trạng thái mới';
+
   productionStatuses = signal<ProductionStatus[]>([]);
-  
-  // Các state cho loading và error
   isLoading = signal(false);
   error = signal<string | null>(null);
 
@@ -121,13 +134,10 @@ export class ProductionStatusComponent implements OnInit {
     this.loadProductionStatuses();
   }
 
-  /**
-   * Tải danh sách trạng thái sản xuất từ server
-   */
   loadProductionStatuses(): void {
     this.isLoading.set(true);
     this.error.set(null);
-    
+
     this.productionStatusService.getProductionStatuses().subscribe({
       next: (statuses) => {
         this.productionStatuses.set(statuses);
@@ -136,7 +146,7 @@ export class ProductionStatusComponent implements OnInit {
       error: (error) => {
         this.error.set(error.message || 'Lỗi tải dữ liệu');
         this.isLoading.set(false);
-      }
+      },
     });
   }
 
@@ -144,66 +154,73 @@ export class ProductionStatusComponent implements OnInit {
     this.loadProductionStatuses();
   }
 
-  /**
-   * Thêm trạng thái mới với giá trị mặc định
-   */
   addNew(): void {
     const data: CreateProductionStatus = {
-      name: 'Trạng thái mới',
+      name: this.getNextDraftName(),
       color: '#007bff',
       description: '',
       order: this.productionStatuses().length,
-      isActive: true
+      isActive: true,
     };
 
     this.productionStatusService.createProductionStatus(data).subscribe({
       next: (created) => {
-        this.productionStatuses.update(list => [created, ...list]);
+        this.productionStatuses.update((list) => [created, ...list]);
       },
       error: (error) => {
         this.error.set('Lỗi khi thêm trạng thái: ' + (error.message || error));
-      }
+      },
     });
   }
 
-  /**
-   * Cập nhật field inline
-   */
-  updateField(status: ProductionStatus, field: keyof ProductionStatus, value: any): void {
+  updateField(status: ProductionStatus, field: keyof ProductionStatus, value: unknown): void {
     const updateData: UpdateProductionStatus = { [field]: value };
 
     this.productionStatusService.updateProductionStatus(status._id, updateData).subscribe({
       next: (updated) => {
-        this.productionStatuses.update(list => 
-          list.map(item => item._id === status._id ? updated : item)
+        this.productionStatuses.update((list) =>
+          list.map((item) => (item._id === status._id ? updated : item)),
         );
       },
       error: (error) => {
         this.error.set('Lỗi cập nhật: ' + (error.message || error));
-      }
+      },
     });
   }
 
-  /**
-   * Xóa trạng thái
-   */
   remove(id: string): void {
     if (!confirm('Xóa trạng thái này?')) return;
-    
+
     this.productionStatusService.deleteProductionStatus(id).subscribe({
       next: () => {
-        this.productionStatuses.update(list => list.filter(item => item._id !== id));
+        this.productionStatuses.update((list) => list.filter((item) => item._id !== id));
       },
       error: (error) => {
         this.error.set('Lỗi xóa: ' + (error.message || error));
-      }
+      },
     });
   }
 
-  /**
-   * Track by function cho ngFor
-   */
   trackById(index: number, item: ProductionStatus): string {
     return item._id;
+  }
+
+  private getNextDraftName(): string {
+    const names = new Set(
+      this.productionStatuses()
+        .map((status) => status.name?.trim().toLowerCase())
+        .filter((name): name is string => !!name),
+    );
+
+    if (!names.has(this.draftBaseName.toLowerCase())) {
+      return this.draftBaseName;
+    }
+
+    let index = 2;
+    while (names.has(`${this.draftBaseName} ${index}`.toLowerCase())) {
+      index++;
+    }
+
+    return `${this.draftBaseName} ${index}`;
   }
 }

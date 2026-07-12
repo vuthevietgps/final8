@@ -37,6 +37,7 @@ export class OtherCostComponent implements OnInit {
 
   form = this.fb.group({
     date: ['', Validators.required],
+    dueDate: ['', Validators.required],
     amount: [0, [Validators.required, Validators.min(0)]],
   notes: [''],
   documentLink: ['']
@@ -86,14 +87,29 @@ export class OtherCostComponent implements OnInit {
   openCreate() {
     this.editingId = null;
     const today = new Date().toISOString().slice(0, 10);
-  this.form.reset({ date: today, amount: 0, notes: '', documentLink: '' });
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 7);
+    this.form.reset({
+      date: today,
+      dueDate: dueDate.toISOString().slice(0, 10),
+      amount: 0,
+      notes: '',
+      documentLink: ''
+    });
     this.showModal.set(true);
   }
 
   openEdit(item: OtherCost) {
     this.editingId = item._id || null;
     const date = item.date?.slice(0, 10) || new Date().toISOString().slice(0, 10);
-  this.form.reset({ date, amount: item.amount, notes: item.notes || '', documentLink: item.documentLink || '' });
+    const dueDate = item.dueDate?.slice(0, 10) || date;
+    this.form.reset({
+      date,
+      dueDate,
+      amount: item.amount,
+      notes: item.notes || '',
+      documentLink: item.documentLink || ''
+    });
     this.showModal.set(true);
   }
 

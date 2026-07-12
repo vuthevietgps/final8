@@ -85,11 +85,6 @@ export class ProductController {
     return { success: true, data };
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.productService.findOne(id);
-  }
-
   // List media for a product to help UI show selectable images
   @Get(':id/media')
   async listProductMedia(
@@ -357,6 +352,11 @@ export class ProductController {
       success: true,
       data: report
     };
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.productService.findOne(id);
   }
 
 }

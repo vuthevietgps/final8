@@ -2,12 +2,12 @@
 
 set -Eeuo pipefail
 
-TAG="${1:-version16}"
+TAG="${1:-latest}"
 REPO="${REPO:-vutheviet/final8new}"
 PORT="${PORT:-8090}"
 
 SSH_USER="${SSH_USER:-admin-001}"
-SSH_HOST="${SSH_HOST:-192.168.100.237}"
+SSH_HOST="${SSH_HOST:-htxbachgia.shop}"
 SSH_PORT="${SSH_PORT:-22}"
 TARGET="${SSH_USER}@${SSH_HOST}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
@@ -87,6 +87,7 @@ echo "Repo          : ${REPO}"
 echo "Remote dir    : ${REMOTE_DIR}"
 echo "Compose file  : ${REMOTE_COMPOSE}"
 echo "Override file : ${REMOTE_OVERRIDE}"
+echo "Database URI  : preserve remote .env"
 if [ -n "${SSH_KEY_PATH}" ]; then
   echo "SSH key       : ${SSH_KEY_PATH}"
 fi

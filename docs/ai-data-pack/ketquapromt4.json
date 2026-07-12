@@ -1,0 +1,265 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-1",
+    "status": "completed",
+    "build": "passed",
+    "focused_tests": "passed",
+    "provider_calls": false,
+    "live_execution_added": false,
+    "freshness_gate_added": false
+  },
+  "scope": {
+    "included": [
+      "Mongoose ExportJob contract and persistence wiring",
+      "Internal cached export wrapper using existing read-only builders/exporters",
+      "Minimal cached metadata",
+      "Active-job idempotency with reuse_existing behavior",
+      "Immutable local artifact metadata/checksum lifecycle",
+      "Sanitized failure audit",
+      "Focused tests and acceptance reports"
+    ],
+    "excluded": [
+      "Source registry",
+      "DB-only freshness or coverage gate",
+      "Official or partial export",
+      "Provider adapter or provider API call",
+      "Public endpoint, full RBAC or download",
+      "Action import, generic dry-run or live execution",
+      "Sheet, payment, settlement, recalculation or auto-control mutation",
+      "OpenAI/upload work and Phase 3"
+    ],
+    "blocked_by_scope": false,
+    "scope_notes": [
+      "The BA addendum was read from the provided Downloads path because the repo copy did not already exist.",
+      "Existing GET controller behavior was not changed."
+    ]
+  },
+  "files_changed": [
+    "backend/src/ai-data-pack/export-jobs/export-job.types.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.schema.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-artifact.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-error.util.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job.service.spec.ts",
+    "backend/src/ai-data-pack/ai-data-pack.module.ts",
+    "backend/src/ai-data-pack/contracts/metadata.contract.ts",
+    "backend/src/ai-data-pack/data-pack-metadata.service.ts",
+    "backend/src/ai-data-pack/export/json-exporter.service.ts",
+    "docs/ai-data-pack/ketquapromt4.md",
+    "docs/ai-data-pack/ketquapromt4.json",
+    "docs/ai-data-pack/review-packets/promt4/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt4/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt4/02_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt4/03_export_job_contract.md",
+    "docs/ai-data-pack/review-packets/promt4/04_cached_export_lifecycle.md",
+    "docs/ai-data-pack/review-packets/promt4/05_tests_run.md",
+    "docs/ai-data-pack/review-packets/promt4/06_acceptance_checklist.md",
+    "docs/ai-data-pack/review-packets/promt4/07_security_no_sync_guard.md",
+    "docs/ai-data-pack/review-packets/promt4/08_risks_and_assumptions.md",
+    "docs/ai-data-pack/review-packets/promt4/09_next_recommendation.md"
+  ],
+  "export_job_contract": {
+    "model_or_schema": "AiDataPackExportJob Mongoose code-first schema in collection ai_data_pack_export_jobs",
+    "service": "AiDataPackExportJobService.createCachedExport",
+    "statuses": [
+      "pending",
+      "exporting",
+      "completed",
+      "failed"
+    ],
+    "export_modes_supported_now": [
+      "cached_export"
+    ],
+    "sync_policies_supported_now": [
+      "export_cached"
+    ],
+    "idempotency_components": [
+      "reportDate",
+      "sorted packTypes",
+      "sorted formats",
+      "exportMode=cached_export",
+      "syncPolicy=export_cached",
+      "policyVersion",
+      "requestedByUserId"
+    ],
+    "artifact_fields": [
+      "artifactId",
+      "packType",
+      "format",
+      "fileName",
+      "storageKey",
+      "artifactChecksum",
+      "dataContentChecksum",
+      "fileSizeBytes",
+      "createdAt",
+      "cachedExport"
+    ]
+  },
+  "cached_export_lifecycle": {
+    "states_used": [
+      "pending",
+      "exporting",
+      "completed",
+      "failed"
+    ],
+    "provider_sync_attempted": false,
+    "freshness_gate_evaluated": false,
+    "existing_get_endpoints_changed": false,
+    "metadata_fields_added": [
+      "export_job_id",
+      "export_mode",
+      "cached_export",
+      "sync_policy",
+      "provider_sync_attempted",
+      "freshness_gate_evaluated",
+      "live_execution"
+    ]
+  },
+  "idempotency_and_concurrency": {
+    "duplicate_behavior": "reuse_existing",
+    "active_statuses": [
+      "pending",
+      "exporting"
+    ],
+    "tests": [
+      "Concurrent equivalent request reuses the active exporting job",
+      "Unique partial activeIdempotencyKey schema index is asserted",
+      "Terminal jobs release activeIdempotencyKey"
+    ]
+  },
+  "artifact_lifecycle": {
+    "storage_strategy": "Immutable local files under configurable AI_DATA_PACK_EXPORT_ROOT; safe default process.cwd()/exports/ai-data-pack; persisted storage key is relative.",
+    "checksum_strategy": "SHA-256 artifact byte checksum plus existing deterministic normalized data-content checksum.",
+    "retention_strategy": "not_finalized",
+    "tests": [
+      "Writes and reads artifact under configured root",
+      "Refuses overwrite using wx",
+      "Rejects path traversal",
+      "Records artifact and data-content checksums"
+    ]
+  },
+  "security_no_sync_guard": {
+    "provider_services_injected": [],
+    "provider_calls_possible": false,
+    "action_or_live_services_called": false,
+    "sheet_payment_settlement_mutation_called": false,
+    "sanitization": "Bounded sanitized category/message removes secret values, bearer tokens, email, phone, URLs and does not store stack traces.",
+    "rbac_or_permission_changes": []
+  },
+  "tests_run": [
+    {
+      "command": "cd backend; npm run build",
+      "status": "passed",
+      "summary": "Final NestJS build passed."
+    },
+    {
+      "command": "cd backend; npm test -- --runInBand export-job",
+      "status": "passed",
+      "summary": "Final result: 1 suite, 10 tests passed. Initial attempt exposed explicit Mongoose literal type requirement and was fixed."
+    },
+    {
+      "command": "cd backend; npm test -- --runInBand ai-data-pack",
+      "status": "passed",
+      "summary": "Final result: 3 suites, 30 tests passed, including existing GET/controller and safe-gate tests."
+    },
+    {
+      "command": "cd backend; npx prettier --check src/ai-data-pack/export-jobs/*.ts src/ai-data-pack/contracts/metadata.contract.ts src/ai-data-pack/data-pack-metadata.service.ts src/ai-data-pack/export/json-exporter.service.ts src/ai-data-pack/ai-data-pack.module.ts",
+      "status": "passed",
+      "summary": "All touched code matches Prettier style."
+    },
+    {
+      "command": "full repository tests",
+      "status": "not_run",
+      "summary": "Not required for this scoped phase."
+    }
+  ],
+  "acceptance_checklist": [
+    {
+      "item": "Build pass",
+      "status": "passed",
+      "evidence": "npm run build"
+    },
+    {
+      "item": "Focused AI Data Pack/export job tests pass",
+      "status": "passed",
+      "evidence": "ExportJob 1/10 and AI Data Pack 3/30"
+    },
+    {
+      "item": "ExportJob contract/model/service exists and is tested",
+      "status": "passed",
+      "evidence": "Mongoose schema, service and focused spec"
+    },
+    {
+      "item": "Cached wrapper reuses existing read-only builders/exporters",
+      "status": "passed",
+      "evidence": "Four existing builders and existing JSON/XLSX exporters are injected"
+    },
+    {
+      "item": "cached_export=true in job/artifact/metadata",
+      "status": "passed",
+      "evidence": "Schema, artifact and rendered metadata assertions"
+    },
+    {
+      "item": "Idempotency/duplicate active job tested",
+      "status": "passed",
+      "evidence": "reuse_existing concurrent test and unique active-key index"
+    },
+    {
+      "item": "Artifact/checksum lifecycle tested",
+      "status": "passed",
+      "evidence": "Immutable write, checksum, path guard and multi-artifact tests"
+    },
+    {
+      "item": "Failure/error sanitization tested",
+      "status": "passed",
+      "evidence": "Secret, bearer token, email, phone and URL removed"
+    },
+    {
+      "item": "Existing GET exports remain side-effect-free",
+      "status": "passed",
+      "evidence": "Controller unchanged, source guard and controller tests pass"
+    },
+    {
+      "item": "No provider/action/live/sheet/payment/settlement/recalculation/auto-control call",
+      "status": "passed",
+      "evidence": "No production dependency and focused no-sync guard test"
+    },
+    {
+      "item": "No DB-only freshness gate/source registry/provider adapter",
+      "status": "passed",
+      "evidence": "Only false freshness_gate_evaluated marker exists"
+    },
+    {
+      "item": "Safe decision gates remain disabled",
+      "status": "passed",
+      "evidence": "Existing AI Data Pack safe-gate tests pass"
+    },
+    {
+      "item": "Prompt 4 docs complete",
+      "status": "passed",
+      "evidence": "Main report, JSON and review packet"
+    }
+  ],
+  "risks_and_assumptions": [
+    "Artifact retention and cleanup are not finalized.",
+    "A crashed active job keeps its active idempotency reservation until manual recovery; expiry/recovery is deferred.",
+    "The unique active-job index must be applied/enabled in deployment.",
+    "Local artifact storage is not a shared multi-pod store.",
+    "No public endpoint, RBAC, status polling or download path exists yet.",
+    "Cached export does not prove freshness or coverage.",
+    "A failed multi-artifact job can retain already-written immutable artifacts.",
+    "Full repository tests were not run."
+  ],
+  "next_recommendation": {
+    "ready_for_chatgpt_web_review": true,
+    "recommended_next_pr": "PR-2.3B-2 Source Registry + DB-only Freshness Gate after review",
+    "do_not_start_yet": [
+      "PR-2.3B-2 without review/authorization",
+      "Google Ads or any provider adapter",
+      "Official or partial export",
+      "Public endpoint/full RBAC/download",
+      "Action import, generic dry-run or live execution",
+      "Phase 3"
+    ]
+  }
+}

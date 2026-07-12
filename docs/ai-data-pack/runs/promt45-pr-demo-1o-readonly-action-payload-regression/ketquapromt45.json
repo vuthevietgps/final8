@@ -1,0 +1,50 @@
+{
+  "phase": "PR-DEMO-1O",
+  "status": "implemented_test_guard",
+  "output_root": "docs/ai-data-pack/runs/promt45-pr-demo-1o-readonly-action-payload-regression",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "target": "readonly_action_payload_regression_guard",
+  "targeted_findings_checked": [
+    "low_inventory_best_seller",
+    "supplier_cost_up",
+    "overdue_dealer_receivables",
+    "labor_overtime_high",
+    "slow_supplier_good_cost"
+  ],
+  "guard_implemented_or_verified": true,
+  "guard_method": "Focused Jest test builds all five hardened operational_risk_findings rows from fake in-memory collections, recursively rejects exact banned action/provider/import/live/mutation keys, and requires not_allowed_actions advisory text.",
+  "code_changed": true,
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+      "working_directory": "backend",
+      "result": "passed",
+      "test_suites": "1 passed, 1 total",
+      "tests": "38 passed, 38 total"
+    },
+    {
+      "command": "npm run build",
+      "working_directory": "backend",
+      "result": "passed"
+    }
+  ],
+  "static_scans_classified": true,
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "db_migration_added": false,
+    "business_mutation_added": false
+  },
+  "next_recommendation": "Accept Prompt45 as a read-only evidence contract guard. Extend the same guard whenever future operational risk findings are added."
+}
+

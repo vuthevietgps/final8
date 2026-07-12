@@ -1,0 +1,242 @@
+{
+  "summary": {
+    "status": "completed_public_export_endpoints_no_download",
+    "phase": "PR-2.3B-4E",
+    "implemented": [
+      "POST /ai-data-pack/exports",
+      "GET /ai-data-pack/exports/:jobId/status",
+      "GET /ai-data-pack/exports/:jobId",
+      "GET /ai-data-pack/exports/:jobId/sync-summary"
+    ],
+    "not_implemented": [
+      "download endpoint",
+      "download token",
+      "artifact bytes",
+      "public URL",
+      "OpenAI upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "provider validateOnly",
+      "Phase 3"
+    ],
+    "missing_inputs": [
+      "docs/ai-data-pack/ba-master-addendum-prompt13-review-prompt14-public-endpoint-spec-20260613.md"
+    ]
+  },
+  "files_changed": {
+    "backend": [
+      "backend/src/ai-data-pack/ai-data-pack.module.ts",
+      "backend/src/ai-data-pack/audit/export-endpoint-audit.service.ts",
+      "backend/src/ai-data-pack/export-jobs/export-endpoint-rate-limit.service.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job-response-redactor.service.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job.service.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job.types.ts",
+      "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts",
+      "backend/src/ai-data-pack/rbac/export-endpoint-policy.service.ts"
+    ],
+    "docs": [
+      "docs/ai-data-pack/ketquapromt15.md",
+      "docs/ai-data-pack/ketquapromt15.json",
+      "docs/ai-data-pack/review-packets/promt15/00_summary.md",
+      "docs/ai-data-pack/review-packets/promt15/01_scope.md",
+      "docs/ai-data-pack/review-packets/promt15/02_endpoints.md",
+      "docs/ai-data-pack/review-packets/promt15/03_rbac_redaction.md",
+      "docs/ai-data-pack/review-packets/promt15/04_validation_idempotency_rate_limit.md",
+      "docs/ai-data-pack/review-packets/promt15/05_audit_security.md",
+      "docs/ai-data-pack/review-packets/promt15/06_tests.md",
+      "docs/ai-data-pack/review-packets/promt15/07_safety_checklist.md",
+      "docs/ai-data-pack/review-packets/promt15/08_files_changed.md",
+      "docs/ai-data-pack/review-packets/promt15/09_risks_open_questions.md",
+      "docs/ai-data-pack/review-packets/promt15/10_next_recommendation.md"
+    ]
+  },
+  "endpoints_added": [
+    {
+      "method": "POST",
+      "path": "/ai-data-pack/exports",
+      "purpose": "Create cached, official, or partial export job summary without download.",
+      "download": false
+    },
+    {
+      "method": "GET",
+      "path": "/ai-data-pack/exports/:jobId/status",
+      "purpose": "Read redacted status summary.",
+      "download": false
+    },
+    {
+      "method": "GET",
+      "path": "/ai-data-pack/exports/:jobId",
+      "purpose": "Read redacted job detail and manifest summary.",
+      "download": false
+    },
+    {
+      "method": "GET",
+      "path": "/ai-data-pack/exports/:jobId/sync-summary",
+      "purpose": "Read sanitized source sync summary for privileged profiles.",
+      "download": false
+    }
+  ],
+  "rbac_redaction": {
+    "create_permissions": {
+      "cached_export": "ai-data-pack.export.cached.create",
+      "official_export": "ai-data-pack.export.official.create",
+      "partial_export": "ai-data-pack.export.partial.create"
+    },
+    "read_permissions": {
+      "status": "ai-data-pack.export.status.read",
+      "detail": "ai-data-pack.export.status.read",
+      "audit_summary": "ai-data-pack.export.audit.read",
+      "sync_summary": "ai-data-pack.export.sync-detail.read"
+    },
+    "fail_closed_cases": [
+      "missing permission",
+      "profile mismatch",
+      "artifact profile mismatch",
+      "job owner mismatch",
+      "unassigned reviewer",
+      "investor full pack",
+      "system worker public read/create",
+      "sync summary default-denied profile"
+    ],
+    "response_redaction_fields": [
+      "responseRedaction.isRedacted",
+      "responseRedaction.redactionProfile",
+      "responseRedaction.omittedSections",
+      "responseRedaction.reason",
+      "responseRedaction.manifestOnly"
+    ],
+    "sync_summary_default_denied_profiles": [
+      "manager_marketer",
+      "investor_redacted",
+      "external_consultant_redacted",
+      "reviewer_partial",
+      "unassigned_reviewer"
+    ]
+  },
+  "validation_idempotency_rate_limit": {
+    "allowed_create_fields": [
+      "exportMode",
+      "reportDate",
+      "dateFrom",
+      "dateTo",
+      "packTypes",
+      "formats",
+      "redactionProfile",
+      "sectionAccessProfile",
+      "sourceScope",
+      "googleAdsCustomerIds",
+      "allowDowngradeToPartial",
+      "idempotencyKey",
+      "policyVersion"
+    ],
+    "forbidden_create_fields_rejected": [
+      "providerCredentials",
+      "rawProviderQuery",
+      "gaql",
+      "actionPlan",
+      "approvalPayload",
+      "dryRun",
+      "liveExecution",
+      "openaiUpload",
+      "downloadNow",
+      "publicUrl",
+      "artifactStoragePath",
+      "storageLocation",
+      "roleOverride",
+      "redactionOverride",
+      "downloadToken",
+      "artifactBytes"
+    ],
+    "idempotency_scope": [
+      "requester",
+      "exportMode",
+      "reportDate",
+      "dateFrom",
+      "dateTo",
+      "packTypes",
+      "formats",
+      "redactionProfile",
+      "sectionAccessProfile",
+      "sourceScope",
+      "policyVersion",
+      "idempotencyKey"
+    ],
+    "rate_limits": {
+      "windowMs": 60000,
+      "createPerActor": 10,
+      "createPerMode": 6,
+      "officialCreatePerActor": 2,
+      "statusPollPerActorJob": 60,
+      "syncSummaryPerActorJob": 12,
+      "idempotencyReplayPerActorKey": 20,
+      "denialPerActor": 30,
+      "maxDateRangeDays": 31,
+      "maxPackTypes": 4,
+      "maxFormats": 2,
+      "maxConcurrentOfficialPerActor": 1
+    }
+  },
+  "audit_events": [
+    "export_create_requested",
+    "export_create_denied",
+    "export_create_accepted",
+    "export_status_viewed",
+    "export_status_denied",
+    "export_detail_viewed",
+    "export_detail_denied",
+    "sync_summary_viewed",
+    "sync_summary_denied",
+    "rbac_denied",
+    "redaction_profile_applied",
+    "idempotent_request_reused",
+    "invalid_request_rejected"
+  ],
+  "tests_run": [
+    {
+      "command": "npm test -- --runInBand export-job-endpoint.controller.spec.ts",
+      "result": "passed",
+      "summary": "18 tests passed"
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "passed",
+      "summary": "15 suites passed, 122 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "backend build passed"
+    }
+  ],
+  "safety_checklist": {
+    "download_endpoint_added": false,
+    "download_token_added": false,
+    "artifact_bytes_returned": false,
+    "public_url_returned": false,
+    "full_storage_path_returned": false,
+    "provider_credentials_accepted": false,
+    "raw_provider_query_accepted": false,
+    "direct_provider_call_from_controller": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "phase_3_started": false,
+    "cached_create_triggers_sync": false,
+    "official_partial_delegate_internal_lifecycle_only": true
+  },
+  "risks_and_open_questions": [
+    "Global auth role-permission bindings were not changed because Prompt 15 allowed code changes only under backend/src/ai-data-pack. Runtime users must carry explicit Prompt 15 permissions or a later auth-scope change must bind them.",
+    "Endpoint audit for denied requests without a job is in-memory only; job-known events are appended to export jobs.",
+    "Rate limits are in-memory per process and should be backed by a shared limiter for clustered production.",
+    "The referenced Prompt 13/14 addendum file was missing.",
+    "Download and artifact rendering remain out of scope."
+  ],
+  "next_recommendation": "PR-2.3B-4E-H1 - Public endpoint hardening review"
+}

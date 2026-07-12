@@ -1,0 +1,34 @@
+﻿{
+    "algorithm":  "SHA-256",
+    "generated_at":  "2026-06-13T01:29:35.6495399Z",
+    "files":  {
+                  "director-data-pack-20260612.json":  {
+                                                           "sha256":  "31a99650ecccc09b80c7bec3018151db784eb9bed1a8c01d298c7307daeb3aee",
+                                                           "bytes":  83194
+                                                       },
+                  "director-data-pack-20260612.xlsx":  {
+                                                           "sha256":  "07f17a1a6115ec7465872d0f7c836134a4df0382cb8a7c2ae83ae07f0b9b126b",
+                                                           "bytes":  70046
+                                                       },
+                  "marketer-data-pack-20260612.json":  {
+                                                           "sha256":  "6a087976edfbe6d6f8d334a9eb7b1cdea83a9bd06c5576f8a82401357d2b0086",
+                                                           "bytes":  40466
+                                                       },
+                  "marketer-data-pack-20260612.xlsx":  {
+                                                           "sha256":  "c81c16ef38b4fd7684a7457d3b0ca93fe32e41c236f496bcc16a24267cbe93de",
+                                                           "bytes":  37116
+                                                       },
+                  "data-quality-report-20260612.json":  {
+                                                            "sha256":  "fd8c16955e5c677476b3282b6a209b53224c18910ad9416189498554932b9cba",
+                                                            "bytes":  6494
+                                                        },
+                  "mapping-report-20260612.json":  {
+                                                       "sha256":  "4f9066e9652b47183e9a3d49a64d96e7672af7d1e0fa05fb0699e6a6717330e6",
+                                                       "bytes":  11257
+                                                   },
+                  "decision-history-20260612.json":  {
+                                                         "sha256":  "95784d0da8dfa27a5a22c5d72a7cd94fcd71c8eb2b2ede8818fe49c70281ce63",
+                                                         "bytes":  1308
+                                                     }
+              }
+}

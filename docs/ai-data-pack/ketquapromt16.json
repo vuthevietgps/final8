@@ -1,0 +1,217 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-4E-H1",
+    "status": "completed_public_endpoint_hardening_no_download",
+    "code_changed": true,
+    "docs_changed": true,
+    "auth_permission_binding_checked": true,
+    "auth_permission_binding_changed": true,
+    "persistent_jobless_audit_checked": true,
+    "persistent_jobless_audit_changed": true,
+    "shared_rate_limit_checked": true,
+    "shared_rate_limit_changed": true,
+    "denial_behavior_hardened": true,
+    "redaction_regression_hardened": true,
+    "download_endpoint_added": false,
+    "download_token_added": false,
+    "artifact_bytes_returned": false,
+    "public_url_returned": false,
+    "full_storage_path_returned": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "phase_3_started": false
+  },
+  "files_changed": [
+    "backend/src/auth/role-permissions.ts",
+    "backend/src/ai-data-pack/ai-data-pack.module.ts",
+    "backend/src/ai-data-pack/audit/export-endpoint-audit.schema.ts",
+    "backend/src/ai-data-pack/audit/export-endpoint-audit.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-endpoint-rate-limit.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+    "backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts",
+    "backend/src/ai-data-pack/provider-adapters/google-ads-readonly/google-ads-readonly-source-guard.spec.ts",
+    "docs/ai-data-pack/ketquapromt16.md",
+    "docs/ai-data-pack/ketquapromt16.json",
+    "docs/ai-data-pack/review-packets/promt16/*"
+  ],
+  "auth_permission_binding": {
+    "existing_pattern": "backend/src/auth/role-permissions.ts",
+    "changed": true,
+    "permissions_bound": [
+      "ai-data-pack.export.cached.create",
+      "ai-data-pack.export.official.create",
+      "ai-data-pack.export.partial.create",
+      "ai-data-pack.export.status.read",
+      "ai-data-pack.export.audit.read",
+      "ai-data-pack.export.sync-detail.read"
+    ],
+    "role_mapping": {
+      "director": [
+        "cached create",
+        "official create",
+        "partial create",
+        "status read",
+        "audit read",
+        "sync-detail read",
+        "ai-data-pack profile permissions"
+      ],
+      "manager": [
+        "cached create",
+        "partial create",
+        "status read",
+        "manager_marketer profile"
+      ],
+      "investor": [
+        "status read",
+        "investor_redacted profile"
+      ],
+      "employee_internal_agent_external_agent_supplier_lender": []
+    },
+    "fail_closed_preserved": true
+  },
+  "persistent_audit": {
+    "existing_pattern": "backend/src/ai-data-pack/source-sync/source-sync-audit.schema.ts",
+    "changed": true,
+    "schema_added": "backend/src/ai-data-pack/audit/export-endpoint-audit.schema.ts",
+    "collection": "ai_data_pack_endpoint_audits",
+    "jobless_denied_events_persisted": true,
+    "sanitized_only": true,
+    "forbidden_fields_omitted": [
+      "credentials",
+      "tokens",
+      "raw provider payload",
+      "raw HTTP headers",
+      "raw stack trace",
+      "raw PII",
+      "storage key",
+      "artifact bytes",
+      "public URL"
+    ]
+  },
+  "rate_limit_hardening": {
+    "existing_pattern": "global CacheModule with Redis when REDIS_URL exists and in-memory fallback",
+    "changed": true,
+    "cache_manager_backed_when_available": true,
+    "in_memory_fallback": true,
+    "config_keys": [
+      "AI_DATA_PACK_EXPORT_CREATE_PER_ACTOR",
+      "AI_DATA_PACK_EXPORT_CREATE_PER_MODE",
+      "AI_DATA_PACK_EXPORT_OFFICIAL_CREATE_PER_ACTOR",
+      "AI_DATA_PACK_EXPORT_STATUS_POLL_PER_ACTOR_JOB",
+      "AI_DATA_PACK_EXPORT_SYNC_SUMMARY_PER_ACTOR_JOB",
+      "AI_DATA_PACK_EXPORT_IDEMPOTENCY_REPLAY_PER_ACTOR_KEY",
+      "AI_DATA_PACK_EXPORT_DENIAL_PER_ACTOR",
+      "AI_DATA_PACK_EXPORT_MAX_DATE_RANGE_DAYS",
+      "AI_DATA_PACK_EXPORT_MAX_PACK_TYPES",
+      "AI_DATA_PACK_EXPORT_MAX_FORMATS",
+      "AI_DATA_PACK_EXPORT_MAX_CONCURRENT_OFFICIAL_PER_ACTOR"
+    ],
+    "defaults": {
+      "windowMs": 60000,
+      "createPerActor": 10,
+      "createPerMode": 6,
+      "officialCreatePerActor": 2,
+      "statusPollPerActorJob": 60,
+      "syncSummaryPerActorJob": 12,
+      "idempotencyReplayPerActorKey": 20,
+      "denialPerActor": 30,
+      "maxDateRangeDays": 31,
+      "maxPackTypes": 4,
+      "maxFormats": 2,
+      "maxConcurrentOfficialPerActor": 1
+    }
+  },
+  "denial_behavior": {
+    "hardened": true,
+    "missing_global_permission": "403 generic",
+    "profile_mismatch": "403 generic with sanitized internal audit",
+    "job_owner_or_tenant_mismatch": "404-style generic denial",
+    "unassigned_reviewer": "generic denial without source detail",
+    "unknown_job_vs_non_readable_job": "indistinguishable status response where required",
+    "sync_summary_default_denied": "403 generic without source key leak",
+    "denied_detail": "does not leak audit existence",
+    "audit_emitted": true
+  },
+  "redaction_regression": {
+    "hardened": true,
+    "responses_tested": [
+      "POST create success",
+      "GET status success",
+      "GET detail success",
+      "GET sync-summary success",
+      "denial/error responses"
+    ],
+    "success_response_requirements": [
+      "responseRedaction exists",
+      "manifestOnly true",
+      "omittedSections present",
+      "allowedNextActions excludes download/upload/import/dry_run/live"
+    ],
+    "forbidden_output_absent": [
+      "artifactBytes",
+      "downloadToken",
+      "publicUrl",
+      "storageLocation",
+      "storageKey",
+      "rawProviderResponse",
+      "rawProviderQuery",
+      "credentials/tokens",
+      "stackTrace",
+      "raw PII"
+    ]
+  },
+  "static_safety_checks": {
+    "commands": [
+      "rg -n \"download-token|@(Get|Post|Put|Patch|Delete)\\([^\\n]*download|/download\" backend/src/ai-data-pack",
+      "rg -n \"upload_to_openai|import_action|execute_live|validateOnly|provider mutation route|artifactBytes|downloadToken|publicUrl|storageLocation|storageKey\" backend/src/ai-data-pack/export-jobs backend/src/ai-data-pack/audit backend/src/auth/role-permissions.ts"
+    ],
+    "production_download_route_found": false,
+    "download_false_positives": "tests asserting absence only",
+    "forbidden_field_false_positives": "sanitizer denylists, tests, and internal manifest/artifact model fields",
+    "interpretation": "No new public download/token/artifact-byte/public-url route or response allowlist was introduced."
+  },
+  "tests_run": [
+    {
+      "command": "npm test -- --runInBand export-job-endpoint.controller.spec.ts",
+      "result": "passed",
+      "summary": "29 tests passed"
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "passed",
+      "summary": "15 suites passed, 133 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "backend build passed"
+    }
+  ],
+  "risks_and_open_questions": [
+    "CacheManager-backed rate buckets use read/write updates, not atomic Redis increments.",
+    "Endpoint audit is persistent for AI Data Pack endpoint events but is not a cross-domain central security ledger.",
+    "Audit records do not yet include request path/method because raw request context is not passed into the endpoint service.",
+    "The referenced Prompt 13/14 addendum and optional ledger/roadmap/truc files were missing.",
+    "Download, artifact rendering, OpenAI upload, action import, approval, dry-run/live, provider mutation, and Phase 3 remain out of scope."
+  ],
+  "next_recommendation": {
+    "stop_after_prompt16": true,
+    "recommended_next": "PR-2.3B-4F - Public Create/Status Acceptance Finalization, No Download",
+    "do_not_open": [
+      "download endpoint",
+      "download token",
+      "artifact bytes",
+      "OpenAI upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "provider validateOnly",
+      "Phase 3"
+    ]
+  }
+}

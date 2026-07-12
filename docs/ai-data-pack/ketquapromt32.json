@@ -1,0 +1,251 @@
+{
+  "summary": {
+    "phase": "PR-DEMO-1B-FIX",
+    "status": "completed_12_of_12",
+    "code_changed": true,
+    "docs_changed": true,
+    "safe_demo_db_used": true,
+    "root_cause_completed": true,
+    "missing_findings_before": 3,
+    "missing_findings_after": 0,
+    "expected_ai_findings_present_count": 12,
+    "expected_ai_findings_total": 12,
+    "director_export_executed": true,
+    "director_json_downloaded": true,
+    "downloaded_json_parseable": true,
+    "smoke_harness_documented": true,
+    "cached_export_metadata_decision_recorded": true,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "phase_3_started": false
+  },
+  "root_cause": {
+    "high_sales_late_payment_agent": {
+      "classification": "seed_exists_but_no_export_query",
+      "source_collection": "agentstatements",
+      "local_demo_count": 62,
+      "details": "Rows with notes containing late_payment_agent existed, but Director JSON did not surface this operational risk alias."
+    },
+    "return_rate_above_policy": {
+      "classification": "seed_exists_but_no_export_query",
+      "source_collection": "returnrequests",
+      "local_demo_count": 17,
+      "details": "Rows with reason containing high_return_product existed, but Director JSON did not surface a return-rate policy risk alias."
+    },
+    "inventory_movement_gap": {
+      "classification": "seed_mapping_fix_required",
+      "source_collection": "inventorytransactions",
+      "before_fix": {
+        "inventory_movement_rows": 2140,
+        "dangling_purchase_order_references": 0
+      },
+      "after_fix": {
+        "inventory_movement_without_matching_purchase_order_rows": 54,
+        "dangling_purchase_order_references": 54
+      },
+      "details": "The seed generated inventory movement rows, but all purchaseOrderId values matched existing purchase orders. The seed was fixed to create deterministic dangling purchase-order references for the expected finding."
+    }
+  },
+  "surface_changes": {
+    "seed": {
+      "file": "backend/src/ai-data-pack/demo-seed/director-demo-seed.fixtures.ts",
+      "change": "Every 41st inventory transaction now uses a deterministic missing purchase order id and note inventory_movement_without_matching_purchase_order."
+    },
+    "director_export_query": {
+      "file": "backend/src/ai-data-pack/queries/operations-capacity.query.ts",
+      "change": "Operations capacity now includes operational risk finding rows from agentstatements, returnrequests, inventorytransactions, and purchaseorders."
+    },
+    "director_section": "16_operation_capacity",
+    "new_surface_labels": [
+      "high_sales_late_payment_agent",
+      "return_rate_above_policy_for_single_offer",
+      "inventory_movement_without_matching_purchase_order"
+    ],
+    "test": {
+      "file": "backend/src/ai-data-pack/ai-data-pack.service.spec.ts",
+      "change": "Added unit coverage that OperationsCapacityQuery surfaces the three operational demo finding labels."
+    }
+  },
+  "cached_export_decision": {
+    "decision": "document_current_limitation",
+    "status": "cached_export_not_primary_for_prompt32_download_evidence",
+    "reason": "Prompt 31 found cached_export completed but direct download was denied because cached jobs do not currently persist redactionProfile required by download policy.",
+    "primary_acceptance_path": "partial_export Director JSON artifact download",
+    "fix_deferred": true
+  },
+  "rerun_results": {
+    "safe_demo_db": "mongodb://127.0.0.1:27018/aidp_demo_20260614",
+    "dry_run_small": {
+      "status": "passed",
+      "inventorytransactions_docs": 180,
+      "anomalies_created": 12
+    },
+    "apply_medium": {
+      "status": "passed",
+      "inventorytransactions_docs": 2200,
+      "returnrequests_docs": 100,
+      "agentstatements_docs": 800,
+      "anomalies_created": 12
+    },
+    "idempotency": {
+      "status": "passed",
+      "second_apply_deleted_counts_matched_inserted_counts": true,
+      "counts_did_not_double": true
+    },
+    "root_signal_counts_after_apply": {
+      "agent_late_payment": 62,
+      "high_return_product": 17,
+      "inventory_movement_without_matching_purchase_order": 54,
+      "inventory_movement_dangling_purchase_order": 54
+    },
+    "director_export": {
+      "status": "completed",
+      "job_id": "AIDP-20260614045658-a295d333",
+      "export_mode": "partial_export",
+      "sync_policy": "sync_if_stale",
+      "redaction_profile": "director_redacted",
+      "provider_sync_attempted": false,
+      "live_execution": false,
+      "artifact_id": "6d031b1144ed79478d451ae63a339351",
+      "artifact_class": "downloadable_redacted_artifact",
+      "artifact_rendering": "rendered",
+      "redaction_runtime": "pre_rendered",
+      "download_ready": true,
+      "file_size_bytes": 98124,
+      "checksum_algorithm": "sha256"
+    },
+    "download_validation": {
+      "director_json_downloaded": true,
+      "downloaded_json_parseable": true,
+      "section_count": 25,
+      "operational_risk_finding_count": 3,
+      "storage_path_exposed": false,
+      "public_url_exposed": false,
+      "download_token_exposed": false,
+      "raw_provider_payload_absent": true,
+      "credentials_tokens_absent": true
+    }
+  },
+  "expected_ai_findings": [
+    { "key": "supplier_cost_up", "status": "present", "matched_pattern": "supplier_cost_up_15_percent_without_matching_dealer_price_update" },
+    { "key": "ad_spend_spike", "status": "present", "matched_pattern": "ad_spend_spike_with_lower_lead_volume" },
+    { "key": "cash_gap", "status": "present", "matched_pattern": "cash_gap_next_7_days_from_agent_receivable_delay" },
+    { "key": "overdue_dealer_receivables", "status": "present", "matched_pattern": "overdue_dealer_receivables_for_high_revenue_agent" },
+    { "key": "low_inventory_best_seller", "status": "present", "matched_pattern": "best_selling_product_low_inventory" },
+    { "key": "labor_overtime_high", "status": "present", "matched_pattern": "labor_overtime_high_without_matching_revenue_growth" },
+    { "key": "negative_margin_product_group", "status": "present", "matched_pattern": "negative_margin_product_group" },
+    { "key": "slow_supplier_good_cost", "status": "present", "matched_pattern": "slow_reliability_supplier_with_good_cost" },
+    { "key": "high_sales_late_payment_agent", "status": "present", "matched_pattern": "high_sales_late_payment_agent" },
+    { "key": "return_rate_above_policy", "status": "present", "matched_pattern": "return_rate_above_policy_for_single_offer" },
+    { "key": "google_ads_mapping_gap", "status": "present", "matched_pattern": "ads_account_to_campaign" },
+    { "key": "inventory_movement_gap", "status": "present", "matched_pattern": "inventory_movement_without_matching_purchase_order" }
+  ],
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/demo-seed/director-demo-seed.spec.ts --runInBand",
+      "status": "passed",
+      "result": "5 tests passed"
+    },
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/ai-data-pack.service.spec.ts --runInBand",
+      "status": "passed",
+      "result": "19 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "result": "Nest backend build completed"
+    },
+    {
+      "command": "$env:NODE_ENV='test'; $env:ALLOW_DEMO_SEED='1'; npm run seed:ai-data-pack:director:demo -- --dry-run --profile small",
+      "status": "passed",
+      "result": "dry-run completed without DB write"
+    },
+    {
+      "command": "$env:NODE_ENV='test'; $env:ALLOW_DEMO_SEED='1'; $env:MONGODB_URI='mongodb://127.0.0.1:27018/aidp_demo_20260614'; npm run seed:ai-data-pack:director:demo -- --apply --profile medium",
+      "status": "passed",
+      "result": "medium apply completed on local Docker demo DB"
+    },
+    {
+      "command": "same medium apply command executed a second time",
+      "status": "passed",
+      "result": "idempotent reset-and-reinsert behavior confirmed"
+    },
+    {
+      "command": "compiled Nest partial_export smoke harness and downloadArtifact",
+      "status": "passed",
+      "result": "Director JSON artifact downloaded, parsed, and 12/12 findings present"
+    }
+  ],
+  "static_safety_checks": [
+    {
+      "command": "rg -n \"fetch\\(|axios|node-fetch|OpenAI|ActionImport|ExecutionService|ProviderValidationService|GoogleAds.*Mutat|upload_to_openai|import_action|execute_live\" backend/src/ai-data-pack",
+      "status": "reviewed_existing_matches",
+      "result": "Matches are existing read-only provider adapter/test guard strings and explicit false capability fields; no Prompt 32 code path added OpenAI upload, action import, provider mutation, validateOnly, or live execution."
+    },
+    {
+      "command": "git diff --unified=0 -- backend/src/ai-data-pack/demo-seed/director-demo-seed.fixtures.ts backend/src/ai-data-pack/queries/operations-capacity.query.ts backend/src/ai-data-pack/ai-data-pack.service.spec.ts | rg -n \"fetch\\(|axios|node-fetch|OpenAI|ActionImport|ExecutionService|ProviderValidationService|GoogleAds.*Mutat|upload_to_openai|import_action|execute_live\"",
+      "status": "passed",
+      "result": "no matches in Prompt 32 diff"
+    },
+    {
+      "command": "rg -n \"fetch\\(|axios|node-fetch|OpenAI|ActionImport|ExecutionService|ProviderValidationService|GoogleAds.*Mutat|upload_to_openai|import_action|execute_live\" backend/src/ai-data-pack/demo-seed backend/src/ai-data-pack/queries/operations-capacity.query.ts",
+      "status": "passed",
+      "result": "no matches in changed runtime files"
+    },
+    {
+      "command": "rg -n \"deleteMany\\(\\{\\}\\)|dropDatabase|\\.drop\\(\" backend/src/ai-data-pack/demo-seed",
+      "status": "passed",
+      "result": "no matches"
+    },
+    {
+      "command": "rg -n \"download-token|downloadToken\" backend/src/ai-data-pack/export-jobs/export-job-endpoint.controller.ts backend/src/ai-data-pack/export-jobs/export-job-endpoint.service.ts",
+      "status": "passed",
+      "result": "no matches"
+    }
+  ],
+  "files_changed": [
+    "backend/src/ai-data-pack/demo-seed/director-demo-seed.fixtures.ts",
+    "backend/src/ai-data-pack/queries/operations-capacity.query.ts",
+    "backend/src/ai-data-pack/ai-data-pack.service.spec.ts",
+    "docs/ai-data-pack/ketquapromt32.md",
+    "docs/ai-data-pack/ketquapromt32.json",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/00_fix_overview.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/01_missing_findings_root_cause.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/02_director_export_surface_changes.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/03_smoke_export_harness.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/04_cached_export_metadata_decision.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/05_rerun_apply_export_download.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/06_expected_findings_after_fix.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/07_tests_and_static_checks.md",
+    "docs/ai-data-pack/demo-data-export-evidence-fix/08_next_steps.md",
+    "docs/ai-data-pack/review-packets/promt32/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt32/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt32/02_root_cause.md",
+    "docs/ai-data-pack/review-packets/promt32/03_surface_changes.md",
+    "docs/ai-data-pack/review-packets/promt32/04_harness.md",
+    "docs/ai-data-pack/review-packets/promt32/05_cached_export_decision.md",
+    "docs/ai-data-pack/review-packets/promt32/06_rerun_results.md",
+    "docs/ai-data-pack/review-packets/promt32/07_expected_findings.md",
+    "docs/ai-data-pack/review-packets/promt32/08_tests_static_checks.md",
+    "docs/ai-data-pack/review-packets/promt32/09_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt32/10_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt32/11_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "The smoke export harness still uses compiled backend/dist with a minimal Nest context because source ts-node module loading has known Mongoose schema metadata limitations.",
+    "cached_export direct download remains documented as a current limitation rather than fixed.",
+    "The operational risk findings are surfaced in section 16_operation_capacity; a future schema version may deserve a dedicated operational_risk_findings section."
+  ],
+  "next_recommendation": {
+    "phase": "PR-DEMO-1C",
+    "title": "Upload Demo Director JSON to ChatGPT Web Manually and Attach Analysis Transcript, No OpenAI API, No Action Import",
+    "reason": "Demo apply/export/download evidence now reaches 12 of 12 expected findings."
+  }
+}
+

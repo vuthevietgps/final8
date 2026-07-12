@@ -6,7 +6,7 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsEnum,
+  IsIn,
   IsMongoId,
   Matches,
   IsArray,
@@ -28,7 +28,7 @@ export class CreateProductDto {
   categoryId: Types.ObjectId;
 
   @IsOptional()
-  @IsEnum(['Hoạt động', 'Tạm dừng'])
+  @IsString()
   status?: string;
 
   @IsOptional()

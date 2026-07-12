@@ -21,6 +21,35 @@ export class ProductService {
     private mediaModel: Model<MediaDocument>
   ) {}
 
+  private normalizeObjectId(value: unknown): Types.ObjectId | undefined {
+    if (value instanceof Types.ObjectId) {
+      return value;
+    }
+
+    const raw = value === null || value === undefined ? '' : String(value).trim();
+    if (!raw || !Types.ObjectId.isValid(raw)) {
+      return undefined;
+    }
+
+    return new Types.ObjectId(raw);
+  }
+
+  private buildCategoryFilter(categoryId: unknown) {
+    const categoryObjectId = this.normalizeObjectId(categoryId);
+    const categoryString = categoryObjectId?.toString() ?? String(categoryId ?? '').trim();
+
+    if (!categoryString) {
+      return undefined;
+    }
+
+    if (!categoryObjectId) {
+      return categoryString;
+    }
+
+    // Legacy writes may have stored categoryId as string; keep reads compatible.
+    return { $in: [categoryObjectId, categoryString] };
+  }
+
   private normalizeAssumedReturnRatePercent(value: unknown, fallback: number = 20): number {
     const num = Number(value);
     if (!Number.isFinite(num)) {
@@ -29,10 +58,49 @@ export class ProductService {
     return Math.min(95, Math.max(0, num));
   }
 
+  private normalizeStatus(value: unknown): string | undefined {
+    if (value === null || value === undefined) return undefined;
+
+    const normalized = String(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) return undefined;
+    if (normalized === 'hoat dong') return 'Hoạt động';
+    if (normalized === 'tam dung') return 'Tạm dừng';
+    if (normalized === 'ngung ban') return 'Ngừng bán';
+    return undefined;
+  }
+
+  private async generateNextSku(): Promise<string> {
+    const lastProduct = await this.productModel
+      .findOne({ sku: /^SP\d+$/ })
+      .sort({ sku: -1 })
+      .select('sku')
+      .lean();
+
+    let nextNumber = lastProduct?.sku
+      ? Number(String(lastProduct.sku).replace(/^SP/, '')) + 1
+      : 1;
+
+    while (await this.productModel.exists({ sku: `SP${String(nextNumber).padStart(4, '0')}` })) {
+      nextNumber += 1;
+    }
+
+    return `SP${String(nextNumber).padStart(4, '0')}`;
+  }
+
   async create(createProductDto: CreateProductDto): Promise<Product> {
     const payload: any = { ...createProductDto };
-    payload.status = payload.status || 'Hoạt động';
+    payload.status = this.normalizeStatus(payload.status) || 'Hoạt động';
     payload.color = payload.color || '#3B82F6';
+    const categoryObjectId = this.normalizeObjectId(payload.categoryId);
+    if (categoryObjectId) {
+      payload.categoryId = categoryObjectId;
+    }
 
     // Map supplierIds -> suppliers array (only IDs)
     if (Array.isArray(payload.supplierIds)) {
@@ -47,15 +115,31 @@ export class ProductService {
     payload.minStock = Number(payload.minStock || 0);
     payload.maxStock = Number(payload.maxStock || 0);
     payload.estimatedDeliveryDays = Number(payload.estimatedDeliveryDays || 0);
-    payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 1));
+    payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 12));
     payload.assumedReturnRatePercent = this.normalizeAssumedReturnRatePercent(
       payload.assumedReturnRatePercent,
       20,
     );
     payload.totalCost = payload.importPrice + payload.shippingCost + payload.packagingCost;
 
-    const createdProduct = new this.productModel(payload);
-    return createdProduct.save();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (!payload.sku) {
+        payload.sku = await this.generateNextSku();
+      }
+
+      try {
+        const createdProduct = new this.productModel(payload);
+        return await createdProduct.save();
+      } catch (error: any) {
+        const isDuplicateSku = error?.code === 11000 && error?.keyPattern?.sku;
+        if (!isDuplicateSku) {
+          throw error;
+        }
+        delete payload.sku;
+      }
+    }
+
+    throw new Error('Unable to allocate a unique SKU for the new product');
   }
 
   async findAll(query?: any): Promise<Product[]> {
@@ -63,7 +147,7 @@ export class ProductService {
     
     // Filter by category
     if (query?.categoryId) {
-      filter['categoryId'] = new Types.ObjectId(query.categoryId);
+      filter['categoryId'] = this.buildCategoryFilter(query.categoryId);
     }
     
     // Filter by status
@@ -97,6 +181,10 @@ export class ProductService {
 
   async update(id: string, updateProductDto: UpdateProductDto): Promise<Product> {
     const payload: any = { ...updateProductDto };
+    const categoryObjectId = this.normalizeObjectId(payload.categoryId);
+    if (categoryObjectId) {
+      payload.categoryId = categoryObjectId;
+    }
 
     if (Array.isArray((payload as any).supplierIds)) {
       payload.suppliers = (payload as any).supplierIds.map((id: any) => ({ supplierId: new Types.ObjectId(id) }));
@@ -105,6 +193,10 @@ export class ProductService {
 
     if (payload.usageDurationMonths !== undefined) {
       payload.usageDurationMonths = Math.max(1, Number(payload.usageDurationMonths || 1));
+    }
+
+    if (payload.status !== undefined) {
+      payload.status = this.normalizeStatus(payload.status) || payload.status;
     }
 
     if (payload.assumedReturnRatePercent !== undefined) {
@@ -171,8 +263,9 @@ export class ProductService {
 
   // Get products by category
   async getByCategory(categoryId: string): Promise<Product[]> {
+    const categoryFilter = this.buildCategoryFilter(categoryId);
     return this.productModel
-      .find({ categoryId: new Types.ObjectId(categoryId) })
+      .find(categoryFilter ? { categoryId: categoryFilter } : {})
       .populate('categoryId', 'name code icon color')
       .sort({ createdAt: -1 })
       .exec();

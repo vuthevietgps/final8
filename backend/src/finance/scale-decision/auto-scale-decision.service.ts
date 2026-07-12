@@ -1,13 +1,13 @@
 /**
  * Auto Scale Decision Service (Refactored)
- * 
+ *
  * Service chính để quyết định scale/kill cho ad groups
- * 
+ *
  * ## Cấu trúc mới:
  * - Sử dụng OptimalSpendCalculatorService để tính chi phí tối ưu
  * - Sử dụng ScaleRulesService cho các rules cơ bản
  * - Sử dụng PhaseRulesService cho rules theo testing phase
- * 
+ *
  * ## Flow:
  * 1. Cashflow Safety Checks (CSI, DSO, Return Rate)
  * 2. Calculate Optimal Spend (diminishing returns analysis)
@@ -59,7 +59,7 @@ export class AutoScaleDecisionService {
 
   /**
    * Quyết định scale/kill cho một ad group
-   * 
+   *
    * Priority Order:
    * 1. Cashflow Safety (CSI, DSO, Return Rate)
    * 2. Optimal Spend Analysis
@@ -70,7 +70,7 @@ export class AutoScaleDecisionService {
     try {
       // 0. Get ad group info
       const adGroup = await this.adGroupModel.findOne({ adGroupId });
-      
+
       if (!adGroup) {
         throw new Error(`Ad group ${adGroupId} not found`);
       }
@@ -113,7 +113,7 @@ export class AutoScaleDecisionService {
 
       // ===== STEP 6: APPLY PHASE RULES WITH OPTIMAL SPEND =====
       const phase = this.phaseRulesService.determinePhase(adGroup.daysSinceLaunch || 999);
-      
+
       let decision = this.phaseRulesService.applyPhaseRules(
         metrics,
         optimalSpend,
@@ -158,7 +158,7 @@ export class AutoScaleDecisionService {
     for (const adGroupId of adGroupIds) {
       const adGroup = await this.adGroupModel.findOne({ adGroupId });
       const currentBudget = adGroup?.dailyBudget || 0;
-      
+
       const decision = await this.makeDecision(adGroupId, currentBudget);
       results.set(adGroupId, decision);
     }
@@ -171,7 +171,7 @@ export class AutoScaleDecisionService {
   private async checkCashflowSafety(currentBudget: number): Promise<ScaleDecision | null> {
     // Check CSI
     const csiResult = await this.cashflowSafetyService.calculateCSI();
-    
+
     if (csiResult.CSI < 0.7) {
       return {
         action: 'SCALE_DOWN',
@@ -180,10 +180,12 @@ export class AutoScaleDecisionService {
         confidence: 99,
         cashflowProtection: true,
         alert: '🚨 CASHFLOW EMERGENCY',
+        protectionAction: 'CRITICAL_CASH_SHORTAGE',
+        systemLocked: true,
         metrics: null as any
       };
     }
-    
+
     if (csiResult.CSI < 1.0) {
       return {
         action: 'MAINTAIN',
@@ -197,7 +199,7 @@ export class AutoScaleDecisionService {
 
     // Check DSO
     const dsoResult = await this.cashflowSafetyService.calculateDSO();
-    
+
     if (dsoResult.level === 'CRITICAL') {
       return {
         action: 'MAINTAIN',
@@ -206,21 +208,25 @@ export class AutoScaleDecisionService {
         confidence: 95,
         cashflowProtection: true,
         alert: '⚠️ DSO CRITICAL',
+        protectionAction: 'STOP_SCALE',
+        systemLocked: true,
         metrics: null as any
       };
     }
 
     // Check System Return Rate
     const returnRateResult = await this.cashflowSafetyService.getSystemReturnRate();
-    
+
     if (returnRateResult.level === 'CATASTROPHIC') {
       return {
         action: 'KILL',
         newBudget: 0,
-        reason: `🚨 System return rate ${returnRateResult.returnRate.toFixed(1)}% > 35%`,
+        reason: 'Return rate exceeds catastrophic threshold (35%). System locked to protect cashflow. Forced kill for low ROI.',
         confidence: 99,
         cashflowProtection: true,
-        alert: '🚨 RETURN RATE CATASTROPHIC',
+        alert: 'EMERGENCY_RETURN_PROTECTION',
+        protectionAction: 'EMERGENCY_RETURN_PROTECTION',
+        systemLocked: true,
         metrics: null as any
       };
     }
@@ -235,7 +241,7 @@ export class AutoScaleDecisionService {
     reach: number,
     audienceSize: number
   ): FrequencyCheck {
-    
+
     // High Frequency = Audience Fatigue
     if (frequency >= 2.5) {
       return {
@@ -245,11 +251,11 @@ export class AutoScaleDecisionService {
         action: 'MAINTAIN'
       };
     }
-    
+
     // Medium Frequency
     if (frequency >= 1.5 && frequency < 2.5) {
       const reachRate = reach / audienceSize;
-      
+
       if (reachRate < 0.3) {
         return {
           canScale: true,
@@ -258,7 +264,7 @@ export class AutoScaleDecisionService {
           action: 'SCALE_UP_MODERATE'
         };
       }
-      
+
       return {
         canScale: false,
         reason: 'Đã reach >30% audience với frequency cao',
@@ -266,7 +272,7 @@ export class AutoScaleDecisionService {
         action: 'MAINTAIN'
       };
     }
-    
+
     // Low Frequency = Healthy
     if (frequency < 1.5) {
       return {
@@ -276,7 +282,7 @@ export class AutoScaleDecisionService {
         action: 'SCALE_UP_AGGRESSIVE'
       };
     }
-    
+
     return {
       canScale: true,
       maxScaleRate: MAX_SAFE_INCREASE_RATE,
@@ -312,10 +318,10 @@ export class AutoScaleDecisionService {
     daysSinceLaunch: number,
     metrics: AggregatedMetrics
   ): ScaleDecision {
-    const maxSafeIncrease = daysSinceLaunch < 30 
-      ? LEARNING_PHASE_INCREASE_RATE 
+    const maxSafeIncrease = daysSinceLaunch < 30
+      ? LEARNING_PHASE_INCREASE_RATE
       : MAX_SAFE_INCREASE_RATE;
-    
+
     const increaseRate = (decision.newBudget - currentBudget) / currentBudget;
 
     if (increaseRate > maxSafeIncrease) {
@@ -387,15 +393,15 @@ export class AutoScaleDecisionService {
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - 7);
-    
+
     const summary = await this.adGroupDailyReportService.getAdGroupDailyReport({
       adGroupId,
       fromDate: startDate.toISOString().split('T')[0],
       toDate: endDate.toISOString().split('T')[0]
     });
-    
+
     const reports = summary?.details || [];
-    
+
     if (reports.length === 0) {
       return this.createDefaultMetrics(adGroupId, currentBudget, adGroup);
     }
@@ -404,7 +410,7 @@ export class AutoScaleDecisionService {
     const totalAdsCost = reports.reduce((sum, r) => sum + (r.adsCost || 0), 0);
     const totalNetProfit = reports.reduce((sum, r) => sum + (r.netProfit || 0), 0);
     const totalRevenue = totalNetProfit > 0 ? totalNetProfit / 0.4 : 0;
-    
+
     const roi = totalAdsCost > 0 ? (totalNetProfit / totalAdsCost) * 100 : 0;
     const roas = totalAdsCost > 0 ? totalRevenue / totalAdsCost : 0;
     const profitMargin = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0;
@@ -428,11 +434,11 @@ export class AutoScaleDecisionService {
     // Risk level
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
     let predictionAccuracy = 0;
-    
+
     try {
       const safetyCheck = await this.qualityControlService.performSafetyCheck(adGroupId);
       riskLevel = safetyCheck.riskLevel;
-      
+
       const qualityMetrics = await this.qualityControlService.getQualityMetrics(adGroupId);
       predictionAccuracy = qualityMetrics.recentAccuracy || 0;
     } catch {

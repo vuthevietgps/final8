@@ -19,7 +19,7 @@ export class FundsController {
    */
   @Get('overview')
   async getFundsOverview(): Promise<FundsOverview> {
-    this.logger.log('GET /api/funds/overview');
+    this.logger.debug('GET /api/funds/overview');
     return this.fundsService.computeFundsOverview();
   }
 

@@ -4,13 +4,18 @@
  * API endpoints cho quản lý khoản vay cao cấp
  */
 
-import { Controller, Get, Post, Param, Body, Query, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, Logger, UseGuards } from '@nestjs/common';
 import { LoanManagementService } from './loan-management.service';
 import { CreateLoanPaymentDto } from './dto/loan-management.dto';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
+import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @FeatureModule('finance')
 @Controller('loan-management')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions('finance')
 export class LoanManagementController {
   private readonly logger = new Logger(LoanManagementController.name);
 
@@ -41,12 +46,14 @@ export class LoanManagementController {
    * Thực hiện thanh toán khoản vay
    */
   @Post('loans/:id/pay')
+  @RequirePermissions('finance.loan.manage')
   async createPayment(
+    @CurrentUser() currentUser: any,
     @Param('id') loanId: string,
     @Body() dto: CreateLoanPaymentDto,
   ) {
     this.logger.log(`POST /api/loan-management/loans/${loanId}/pay`);
-    return this.service.createPayment(loanId, dto);
+    return this.service.createPayment(loanId, dto, String(currentUser?.id || ''));
   }
 
   /**

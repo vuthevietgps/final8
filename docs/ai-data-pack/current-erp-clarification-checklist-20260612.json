@@ -1,0 +1,880 @@
+{
+  "summary": {
+    "audit_date": "2026-06-12",
+    "scope": "Read-only clarification audit before AI Data Pack technical specification",
+    "can_start_technical_documents": true,
+    "can_build_v1_read_only_export_after_documents": true,
+    "safe_to_embed_openai_key_now": false,
+    "safe_to_build_generic_action_import_now": false,
+    "safe_to_expand_live_action_execution_now": false,
+    "reference_report": "reports/erp-ai-data-pack-readiness-audit-20260612.md",
+    "required_output_report": "docs/ai-data-pack/current-erp-clarification-audit-20260612.md",
+    "verification": {
+      "command": "npm test -- --runInBand openai-config ai-marketing ops-action google-ads api-token ad-group/ad-group.auto-control.service.spec.ts",
+      "test_suites_passed": 19,
+      "tests_passed": 104
+    },
+    "core_decisions": [
+      "Use only actual cash and actual loan disbursements in cash_available.",
+      "Exclude mock/random/demo finance sources from canonical Data Pack exports.",
+      "Use ProductCategory as service_group and Product as product_variant for V1, with explicit mapping confidence.",
+      "Analyze ads by service_group; calculate quotes, orders, revenue, costs and profit by product_variant.",
+      "Keep all ChatGPT Web action files as drafts until ERP validation, approval and controlled execution gates pass."
+    ]
+  },
+  "clarification_items": [
+    {
+      "area": "director_manual_inputs",
+      "question": "ERP hiện có nơi nhập toàn bộ giới hạn và bối cảnh quyết định do giám đốc cung cấp không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/finance/schemas/system-settings.schema.ts",
+          "symbol": "SystemSettings",
+          "note": "Có key/value generic, description và updatedBy nhưng không phải contract Director manual inputs có version/audit."
+        },
+        {
+          "file": "backend/src/ad-group/schemas/ad-group.schema.ts",
+          "symbol": "AdGroup",
+          "note": "Có testingPhase, manualOverrideReason và maxDailyScaleRate nhưng không có protected/test allowlist đầy đủ."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-export.service.ts",
+          "symbol": "GoogleAdsExportService.loadDatasets",
+          "note": "Đọc business_daily_notes trực tiếp từ collection nhưng không thấy model/controller/service quản trị tương ứng."
+        }
+      ],
+      "impact": "Director Data Pack thiếu nguồn chính thức cho max test loss, protected campaign, mục tiêu tháng/quý và ghi chú chiến lược.",
+      "priority": "P0",
+      "recommendation": "Đặc tả director_manual_inputs V1 bằng file/config có owner, effective time, provenance và confidence; thiết kế model/UI/audit V2."
+    },
+    {
+      "area": "financing_context",
+      "question": "ERP có biểu đạt đúng proposed, approved-not-disbursed, disbursed, rejected và repaid không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/finance/schemas/loan-contract.schema.ts",
+          "symbol": "LoanContract",
+          "note": "Có status draft/active/closed và disbursementStatus pending/partial/fully."
+        },
+        {
+          "file": "backend/src/finance/schemas/loan-repayment.schema.ts",
+          "symbol": "LoanRepayment",
+          "note": "Có kỳ trả gốc/lãi, dueDate và paid state."
+        },
+        {
+          "file": "backend/src/finance/finance.service.ts",
+          "symbol": "recordDisbursement",
+          "note": "Ghi nhận giải ngân thực tế và cập nhật trạng thái giải ngân."
+        }
+      ],
+      "impact": "Không thể tin cậy hoàn toàn financing_context và cashflow_scenarios nếu không định nghĩa alias và quality flag.",
+      "priority": "P0",
+      "recommendation": "V1 dùng alias có cảnh báo và không suy đoán rejected; V2 bổ sung status chuẩn, purpose, interest_type, allowed_for_ads, max_ads_usage_amount và risk fields."
+    },
+    {
+      "area": "service_group_product_variant",
+      "question": "ERP có thể phân tích ads theo nhóm dịch vụ nhưng tính lợi nhuận theo biến thể sản phẩm không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/product-category/schemas/product-category.schema.ts",
+          "symbol": "ProductCategory",
+          "note": "Là proxy hiện tại phù hợp nhất cho service_group."
+        },
+        {
+          "file": "backend/src/product/schemas/product.schema.ts",
+          "symbol": "Product",
+          "note": "Có category, SKU và cost context; chưa có parent/variant relationship rõ ràng."
+        },
+        {
+          "file": "backend/src/ad-group/schemas/ad-group.schema.ts",
+          "symbol": "AdGroup",
+          "note": "Có productCategoryId và selectedProducts nhưng mapping là tùy chọn."
+        },
+        {
+          "file": "backend/src/test-order2/schemas/test-order2.schema.ts",
+          "symbol": "TestOrder2",
+          "note": "Order gắn productId và profit fields."
+        }
+      ],
+      "impact": "Nếu không tách cấp phân tích, ads efficiency và unit economics có thể bị trộn sai.",
+      "priority": "P0",
+      "recommendation": "V1 alias ProductCategory=service_group và Product=product_variant; V2 migration nếu taxonomy này không phản ánh nghiệp vụ chính thức."
+    },
+    {
+      "area": "director_data_pack",
+      "question": "ERP có đủ dữ liệu để xuất toàn bộ Director Data Pack V1 không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "reports/erp-ai-data-pack-readiness-audit-20260612.md",
+          "symbol": "Kết luận nhanh",
+          "note": "Đánh giá Director Data Pack 6/10 và mapping ads-to-profit 5/10."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-export.service.ts",
+          "symbol": "GoogleAdsExportService",
+          "note": "Có export ZIP chuyên Google nhưng chưa có Director Data Pack toàn ERP."
+        }
+      ],
+      "impact": "Có thể xuất V1 read-only nhưng một số section chỉ có confidence thấp hoặc phải ghi unavailable.",
+      "priority": "P0",
+      "recommendation": "Viết schema/section contract trước; dùng alias và quality flags; không che giấu thiếu LTV, operation capacity, mapping và manual inputs."
+    },
+    {
+      "area": "chatgpt_web_rules",
+      "question": "ERP có nơi lưu và xuất quy tắc đọc/nghiên cứu cho ChatGPT Web không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/common/ai-assistant-quality.ts",
+          "symbol": "AI assistant quality rules",
+          "note": "Có guardrail tĩnh về data quality, ads scale và sales claims."
+        },
+        {
+          "file": "backend/src/ai-operator/ai-operator.v2-registry.ts",
+          "symbol": "decision rules and attribution_quality_score",
+          "note": "Có rule/metric tĩnh nhưng chưa phải export contract versioned."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-export.service.ts",
+          "symbol": "expertAnalysisPrompt",
+          "note": "Có prompt bắt buộc action chỉ là plan để ERP validate."
+        }
+      ],
+      "impact": "ChatGPT Web có thể kết luận quá mạnh hoặc nghiên cứu nguồn không nhất quán.",
+      "priority": "P0",
+      "recommendation": "Export chatgpt_web_reading_rules và chatgpt_web_research_rules trong V1; chỉ cho UI V2 cấu hình threshold/allowlist, không cho tắt safety invariants."
+    },
+    {
+      "area": "openai_key_readiness",
+      "question": "Có an toàn để nhúng OpenAI API key ngay không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/openai-config/schemas/openai-config.schema.ts",
+          "symbol": "OpenAIConfig",
+          "note": "Schema vẫn có apiKey plaintext và apiKeyEnc."
+        },
+        {
+          "file": "backend/src/openai-config/openai-config.service.ts",
+          "symbol": "OpenAIConfigService.resolveApiKey",
+          "note": "Runtime ưu tiên decrypt nhưng vẫn fallback plaintext."
+        },
+        {
+          "file": "backend/src/auth/role-permissions.ts",
+          "symbol": "ROLE_PERMISSIONS",
+          "note": "Quyền openai-configs được cấp cho cả Director và Manager."
+        }
+      ],
+      "impact": "Credential có thể bị lộ hoặc bị quản trị bởi phạm vi quyền quá rộng.",
+      "priority": "P0",
+      "recommendation": "Chưa nhúng key; trước hết bỏ plaintext/fallback, migrate/rotate, tách quyền read/write/test/use, thêm credential audit và redaction."
+    },
+    {
+      "area": "upload_normalization",
+      "question": "ERP có nền tảng chung để nhận file ChatGPT Web, chuẩn hóa, validate và chờ duyệt không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/app.module.ts",
+          "symbol": "MulterModule.register",
+          "note": "Có upload destination và size limit chung."
+        },
+        {
+          "file": "backend/src/import-user/import-user.controller.ts",
+          "symbol": "ImportUserController",
+          "note": "Có parser/validation CSV cục bộ."
+        },
+        {
+          "file": "backend/src/advertising-cost/advertising-cost.service.ts",
+          "symbol": "AdvertisingCostService upload import",
+          "note": "Có XLSX parser theo nghiệp vụ và xóa temp file."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-action-plan-import.service.ts",
+          "symbol": "GoogleAdsActionPlanImportService",
+          "note": "Có ZIP/checksum/AJV/business validation nhưng chưa phải upload artifact lifecycle chung."
+        }
+      ],
+      "impact": "Không truy vết đầy đủ original, normalized, validation errors, review state, retention và security boundary.",
+      "priority": "P0",
+      "recommendation": "Đặc tả UploadArtifact, NormalizationJob, schema version, errors, review/audit, retention, PII/secret redaction và prompt-injection policy trước khi code."
+    },
+    {
+      "area": "action_execution",
+      "question": "Action nào có thể là draft, dry-run hoặc controlled execution?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/google-ads/google-ads-execution.service.ts",
+          "symbol": "GoogleAdsExecutionService",
+          "note": "Có dry-run, production gate, idempotency, execution log và post-execution flow."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-execution-policy.service.ts",
+          "symbol": "GoogleAdsExecutionPolicyService",
+          "note": "Chặn nếu thiếu provider validateOnly, approval/confirmation hoặc vi phạm policy."
+        },
+        {
+          "file": "backend/src/ops-action/ops-action.service.ts",
+          "symbol": "OpsActionService",
+          "note": "Approval-only; liveApplyEnabled=false."
+        },
+        {
+          "file": "backend/src/ai-marketing/ai-marketing.service.ts",
+          "symbol": "validateDataQualityForProviderAction",
+          "note": "Legacy provider actions có quality thresholds nhưng guardrail yếu hơn Google V2."
+        }
+      ],
+      "impact": "Mở generic live execution có thể né guardrail provider/domain.",
+      "priority": "P0",
+      "recommendation": "V1 chỉ task/draft; V2 dry-run sau typed schema/idempotency/policy; V3 chỉ Google Search scoped path trước, không dùng legacy path để né kiểm soát."
+    },
+    {
+      "area": "data_mapping_quality",
+      "question": "ERP có Data Quality và Mapping Quality đủ để khóa quyết định rủi ro không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/ai-marketing/ai-marketing.service.ts",
+          "symbol": "scoreDataQuality",
+          "note": "Có score theo lead, spend, order, metadata và sample size."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-export.service.ts",
+          "symbol": "buildDataQualityReport",
+          "note": "Có cảnh báo cơ bản nhưng missingFiles/missingColumns/duplicateKeys trong report build đang để trống."
+        },
+        {
+          "file": "backend/src/ai-operator/ai-operator.v2-registry.ts",
+          "symbol": "attribution_quality_score",
+          "note": "Có metric khái niệm nhưng chưa thay thế mapping report toàn ERP."
+        }
+      ],
+      "impact": "AI có thể scale hoặc kết luận profit/LTV dựa trên mapping không bền.",
+      "priority": "P0",
+      "recommendation": "Đặc tả 11 chỉ số mapping/quality, công thức, provenance, freshness và threshold khóa scale/live execution."
+    },
+    {
+      "area": "finance_canonical_source",
+      "question": "Nguồn finance nào được phép dùng làm canonical Data Pack?",
+      "current_status": "unclear",
+      "evidence": [
+        {
+          "file": "backend/src/finance/financial-control.service.ts",
+          "symbol": "FinancialControlService",
+          "note": "Có bankBalance, committedCash, freeCash, survivalFloor và forecast7D; là nền tảng gần canonical nhất."
+        },
+        {
+          "file": "backend/src/finance/finance.service.ts",
+          "symbol": "computeAvailableFunds",
+          "note": "Cộng collectedRevenue và loanAvailable nhưng hai nguồn tự động có vấn đề ngữ nghĩa."
+        },
+        {
+          "file": "backend/src/finance/data-collection.service.ts",
+          "symbol": "DataCollectionService",
+          "note": "Có nhiều bước ghi rõ mock."
+        },
+        {
+          "file": "backend/src/cashflow-control/services/profit.service.ts",
+          "symbol": "ProfitService mock order generation",
+          "note": "Có Math.random để tạo mock orders."
+        }
+      ],
+      "impact": "Data Pack có thể trộn tiền thật, ước tính, room vay và dữ liệu demo.",
+      "priority": "P0",
+      "recommendation": "Lập allowlist canonical source; dùng actual cash/disbursement/debt schedule/order reports; loại mock/random và gắn provenance/quality flags."
+    },
+    {
+      "area": "security",
+      "question": "Secret handling hiện có đủ chặt cho OpenAI/upload/action execution không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/api-token/schemas/api-token.schema.ts",
+          "symbol": "ApiToken",
+          "note": "Có tokenEnc nhưng runtime/schema ecosystem vẫn hỗ trợ plaintext token."
+        },
+        {
+          "file": "backend/src/api-token/api-token.service.ts",
+          "symbol": "ApiTokenService create/update/rotate/resolve",
+          "note": "Non-Google provider có các đường lưu/fallback plaintext."
+        },
+        {
+          "file": "backend/src/common/interceptors/secret-redaction.interceptor.ts",
+          "symbol": "SecretRedactionInterceptor",
+          "note": "Có redaction utility nhưng áp dụng chưa chứng minh đồng đều cho mọi credential/upload route."
+        },
+        {
+          "file": "backend/dongbodulieuweb-8de0c9a12896.json",
+          "symbol": "working-tree credential-like artifact",
+          "note": "File chưa commit được nhận diện theo tên; audit không mở nội dung."
+        }
+      ],
+      "impact": "Có nguy cơ lộ secret qua storage, runtime fallback, permission, log hoặc artifact.",
+      "priority": "P0",
+      "recommendation": "Hoàn tất secret migration/rotation, secret manager, permission split, audit/redaction và artifact security trước OpenAI key hoặc generic execution."
+    }
+  ],
+  "technical_findings": [
+    {
+      "area": "finance_context",
+      "question": "collectedRevenue có phải doanh thu đã thu thực tế không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "backend/src/finance/finance.service.ts",
+          "symbol": "getCollectedRevenueToday",
+          "note": "Aggregate hiện sum netProfit theo orderDate."
+        }
+      ],
+      "impact": "Có thể nhầm lợi nhuận thành tiền thu và làm sai cash_available.",
+      "priority": "P0",
+      "recommendation": "Cấm dùng hàm này làm canonical collected revenue trong V1; đặc tả nguồn cash receipt thực tế."
+    },
+    {
+      "area": "finance_context",
+      "question": "loanAvailable có chỉ gồm tiền vay đã giải ngân không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "backend/src/finance/finance.service.ts",
+          "symbol": "getLoanRoomAvailable",
+          "note": "Sum principalRemaining hoặc principal cho mọi loan chưa closed."
+        },
+        {
+          "file": "backend/src/finance/finance.service.ts",
+          "symbol": "computeAvailableFunds",
+          "note": "Cộng loanAvailable vào available."
+        }
+      ],
+      "impact": "Khoản vay dự kiến/chưa giải ngân có thể bị dùng như tiền mặt thật.",
+      "priority": "P0",
+      "recommendation": "Chỉ cộng recordDisbursement/cashflow thực tế; approved chưa giải ngân chỉ vào expected_cash_inflow."
+    },
+    {
+      "area": "attribution_quality",
+      "question": "Attribution confidence có xác minh mapping đầy đủ không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "backend/src/google-ads/google-ads-export.service.ts",
+          "symbol": "order_profit_attribution rows",
+          "note": "Gán attributionConfidence=1 nếu row.adGroupId tồn tại."
+        }
+      ],
+      "impact": "ChatGPT có thể kết luận attribution quá chắc chắn hoặc gán nhầm platform/account.",
+      "priority": "P0",
+      "recommendation": "Dùng weighted verified keys, valid resource mapping và freshness; dưới 0.8 khóa scale/live."
+    },
+    {
+      "area": "data_quality",
+      "question": "Google quality report có phát hiện cấu trúc thiếu/trùng không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/google-ads/google-ads-export.service.ts",
+          "symbol": "buildDataQualityReport",
+          "note": "missingFiles, missingColumns và duplicateKeys được trả về dưới dạng mảng rỗng cố định ở report build."
+        }
+      ],
+      "impact": "File có thể trông hợp lệ dù thiếu cột hoặc có key trùng.",
+      "priority": "P0",
+      "recommendation": "Định nghĩa validation cấu trúc và uniqueness trong Data Quality Report toàn ERP."
+    },
+    {
+      "area": "order_mapping",
+      "question": "Order có durable mapping tới lead/customer/campaign/ad/keyword không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/test-order2/schemas/test-order2.schema.ts",
+          "symbol": "TestOrder2",
+          "note": "Có productId, agentId, adGroupId và profit; không thấy durable leadId/customerId/campaignId/adId/criterionId/UTM."
+        },
+        {
+          "file": "backend/src/customer/customer.service.ts",
+          "symbol": "CustomerService",
+          "note": "Customer được dẫn xuất từ order và giữ latest product/order context thay vì order giữ customerId bền vững."
+        }
+      ],
+      "impact": "Funnel, LTV và ads-to-profit chỉ có confidence thấp/trung bình.",
+      "priority": "P0",
+      "recommendation": "V1 export proxy riêng với confidence; V2 thêm durable mapping và lịch sử."
+    },
+    {
+      "area": "openai_security",
+      "question": "OpenAI config có hoàn toàn loại plaintext secret không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/openai-config/schemas/openai-config.schema.ts",
+          "symbol": "OpenAIConfig.apiKey",
+          "note": "Plaintext field vẫn tồn tại."
+        },
+        {
+          "file": "backend/src/openai-config/openai-config.service.ts",
+          "symbol": "resolveApiKey",
+          "note": "Vẫn fallback plaintext."
+        }
+      ],
+      "impact": "Không đạt điều kiện thêm key production an toàn.",
+      "priority": "P0",
+      "recommendation": "Migrate/rotate, xóa plaintext field/fallback và bắt buộc encryption key/secret manager."
+    },
+    {
+      "area": "credential_permissions",
+      "question": "Quyền quản trị OpenAI credential có được tách nhỏ không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "backend/src/openai-config/openai-config.controller.ts",
+          "symbol": "OpenAIConfigController",
+          "note": "Mọi endpoint dùng cùng permission openai-configs."
+        },
+        {
+          "file": "backend/src/auth/role-permissions.ts",
+          "symbol": "ROLE_PERMISSIONS",
+          "note": "Director và Manager đều có openai-configs."
+        }
+      ],
+      "impact": "Phạm vi đọc/sửa/test key quá rộng và khó audit.",
+      "priority": "P0",
+      "recommendation": "Tách credentials.read/write/test/use và giới hạn write/test cho security admin/Director được chỉ định."
+    },
+    {
+      "area": "api_token_security",
+      "question": "Non-Google API token có còn plaintext storage/runtime fallback không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/api-token/api-token.service.ts",
+          "symbol": "ApiTokenService",
+          "note": "Các đường create/rotate/import của non-Google còn lưu token plaintext và nhiều resolver fallback token."
+        },
+        {
+          "file": "backend/src/advertising-cost/advertising-cost.facebook-sync.service.ts",
+          "symbol": "resolve token fallback",
+          "note": "Ưu tiên tokenEnc nhưng fallback token plaintext."
+        }
+      ],
+      "impact": "Token provider có thể lộ từ database hoặc runtime path cũ.",
+      "priority": "P0",
+      "recommendation": "Migrate/rotate toàn bộ provider, bỏ plaintext storage/fallback và audit mọi token access."
+    },
+    {
+      "area": "google_sheets_credential_security",
+      "question": "Google Sheets credential có được lưu an toàn thay vì ghi plaintext ra file không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "backend/src/order-sheet-sync/order-sheet-sync.service.ts",
+          "symbol": "saveCredentials",
+          "note": "Ghi JSON chứa client_email/private_key vào google-sheets-credentials.json bằng fs.writeFileSync."
+        },
+        {
+          "file": "backend/src/google-sync/google-sync.service.ts",
+          "symbol": "Google credential resolution",
+          "note": "Hỗ trợ GOOGLE_APPLICATION_CREDENTIALS file path và log đường dẫn credential."
+        }
+      ],
+      "impact": "Service credential có thể tồn tại plaintext trên filesystem và tăng nguy cơ lộ qua backup/export/working tree.",
+      "priority": "P0",
+      "recommendation": "Không ghi credential ra file thường; dùng secret manager hoặc encrypted storage, hạn chế permission và audit access."
+    },
+    {
+      "area": "upload_artifacts",
+      "question": "ERP có lưu original, normalized, validation errors và review state chung không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "backend/src/google-ads/google-ads-action-plan-import.service.ts",
+          "symbol": "importPending",
+          "note": "Lưu original filename/hash và normalized plan nhưng không phải generic artifact model lưu raw original/errors/review lifecycle."
+        },
+        {
+          "file": "backend/src/advertising-cost/advertising-cost.service.ts",
+          "symbol": "XLSX import cleanup",
+          "note": "Parser nghiệp vụ xóa temp file sau xử lý."
+        }
+      ],
+      "impact": "Không đủ auditability và review boundary cho file ChatGPT Web.",
+      "priority": "P0",
+      "recommendation": "Thiết kế UploadArtifact/NormalizedArtifact/ValidationResult/ReviewDecision trước khi tích hợp OpenAI."
+    },
+    {
+      "area": "google_action_execution",
+      "question": "Google Search action path có controlled execution không?",
+      "current_status": "found",
+      "evidence": [
+        {
+          "file": "backend/src/google-ads/google-ads-provider-validation.service.ts",
+          "symbol": "GoogleAdsProviderValidationService",
+          "note": "Thực hiện provider validateOnly."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-execution-policy.service.ts",
+          "symbol": "GoogleAdsExecutionPolicyService",
+          "note": "Yêu cầu provider validation, approval, confirmation và policy."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-execution.service.ts",
+          "symbol": "GoogleAdsExecutionService",
+          "note": "Có dry-run, GOOGLE_ADS_PRODUCTION_ENABLED gate, idempotency, log và post-execution."
+        },
+        {
+          "file": "backend/src/google-ads/google-ads-operation-builder.service.ts",
+          "symbol": "buildCreateCampaign",
+          "note": "Campaign Search mới bắt buộc PAUSED."
+        }
+      ],
+      "impact": "Là path tham chiếu tốt cho V3, nhưng không chứng minh provider/domain khác an toàn.",
+      "priority": "P1",
+      "recommendation": "Giữ scoped Google Search path; bổ sung quality/mapping lock và evaluation ngày 1 trước khi coi là contract hoàn chỉnh."
+    },
+    {
+      "area": "action_evaluation",
+      "question": "Action có đánh giá sau 1/3/7 ngày không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/google-ads/google-ads-post-execution.service.spec.ts",
+          "symbol": "GoogleAdsPostExecutionService tests",
+          "note": "Chứng minh scheduling đánh giá ngày 3 và 7, chưa thấy ngày 1."
+        }
+      ],
+      "impact": "Không đáp ứng đầy đủ contract controlled execution mục tiêu.",
+      "priority": "P1",
+      "recommendation": "Đặc tả và bổ sung evaluation ngày 1 ở giai đoạn sau, không sửa trong audit này."
+    },
+    {
+      "area": "ops_actions",
+      "question": "ERP internal/operation/finance actions có live apply không?",
+      "current_status": "found",
+      "evidence": [
+        {
+          "file": "backend/src/ops-action/ops-action.service.ts",
+          "symbol": "OpsActionService",
+          "note": "Tạo approval-only plan và ghi liveApplyEnabled=false."
+        }
+      ],
+      "impact": "Phù hợp cho V1 task/draft và tránh thay đổi nghiệp vụ ngoài ý muốn.",
+      "priority": "P1",
+      "recommendation": "Giữ approval-only; chỉ thiết kế preview/dry-run trước mọi domain-specific execution."
+    },
+    {
+      "area": "legacy_multi_provider_actions",
+      "question": "Meta/TikTok legacy actions có guardrail tương đương Google V2 không?",
+      "current_status": "partial",
+      "evidence": [
+        {
+          "file": "backend/src/ai-marketing/ai-marketing.service.ts",
+          "symbol": "validateDataQualityForProviderAction",
+          "note": "Có thresholds increase=70, decrease=55, pause=45 nhưng thiếu validateOnly/idempotency/policy mạnh như Google V2."
+        },
+        {
+          "file": "backend/src/advertising-optimization/ai-optimization/budget-apply.service.ts",
+          "symbol": "BudgetApplyService",
+          "note": "Có provider apply paths cho legacy ads actions."
+        }
+      ],
+      "impact": "Có nguy cơ dùng legacy path để né controlled execution.",
+      "priority": "P0",
+      "recommendation": "V1 chỉ draft/task; V2 chỉ dry-run sau hardening; chưa cho generic live execution."
+    },
+    {
+      "area": "finance_provenance",
+      "question": "Có nguy cơ lấy nhầm dữ liệu mock/random làm finance canonical không?",
+      "current_status": "found",
+      "evidence": [
+        {
+          "file": "backend/src/finance/data-collection.service.ts",
+          "symbol": "DataCollectionService mock sync steps",
+          "note": "Nhiều bước ghi rõ mock."
+        },
+        {
+          "file": "backend/src/cashflow-control/services/profit.service.ts",
+          "symbol": "generate mock orders",
+          "note": "Dùng Math.random để tạo dữ liệu."
+        }
+      ],
+      "impact": "Director Data Pack có thể chứa số liệu demo nếu export theo module name thay vì allowlist.",
+      "priority": "P0",
+      "recommendation": "Dùng allowlist canonical sources và bắt buộc provenance/source_type trong mọi section finance."
+    },
+    {
+      "area": "operation_capacity",
+      "question": "ERP có đủ dữ liệu để chặn đề xuất tăng lead khi vận hành quá tải không?",
+      "current_status": "missing",
+      "evidence": [
+        {
+          "file": "reports/erp-ai-data-pack-readiness-audit-20260612.md",
+          "symbol": "operation capacity findings",
+          "note": "Thiếu deadline/capacity/status history đủ để kết luận tải vận hành."
+        }
+      ],
+      "impact": "AI có thể đề xuất tăng lead khi đội vận hành không đáp ứng được.",
+      "priority": "P1",
+      "recommendation": "V1 xuất unavailable/low confidence và cấm kết luận mạnh; V2 thiết kế capacity/SLA model."
+    }
+  ],
+  "business_questions_for_director": [
+    {
+      "id": "BQ-01",
+      "question": "Định nghĩa chính thức của cash_available, expected_cash_inflow và free_cash là gì?",
+      "default_v1_assumption": "Chỉ tiền thực tế và khoản vay đã giải ngân thực tế được tính vào cash_available."
+    },
+    {
+      "id": "BQ-02",
+      "question": "Khoản vay nào được phép dùng cho ads và giới hạn tối đa là bao nhiêu?",
+      "default_v1_assumption": "Không dùng khoản vay cho ads nếu chưa có phê duyệt rõ."
+    },
+    {
+      "id": "BQ-03",
+      "question": "Quỹ dự phòng tối thiểu và survival months mục tiêu là bao nhiêu?",
+      "default_v1_assumption": "Dùng config hiện tại và ghi rõ assumption."
+    },
+    {
+      "id": "BQ-04",
+      "question": "Ngân sách test, mức lỗ test tối đa và stop-loss là bao nhiêu?",
+      "default_v1_assumption": "Không đề xuất live test; chỉ tạo decision option."
+    },
+    {
+      "id": "BQ-05",
+      "question": "Giới hạn tăng ngân sách mỗi ngày và tổng kỳ là bao nhiêu?",
+      "default_v1_assumption": "Dùng mức chặt nhất trong rule hiện có."
+    },
+    {
+      "id": "BQ-06",
+      "question": "Dịch vụ/campaign nào được bảo vệ và dịch vụ/campaign nào được phép test nhỏ?",
+      "default_v1_assumption": "Không pause tài sản chủ lực; không live test nếu thiếu allowlist."
+    },
+    {
+      "id": "BQ-07",
+      "question": "ProductCategory có phải taxonomy service_group chính thức không?",
+      "default_v1_assumption": "Dùng ProductCategory làm service_group với confidence medium."
+    },
+    {
+      "id": "BQ-08",
+      "question": "Mục tiêu tháng/quý theo revenue, profit, cash, lead và capacity là gì?",
+      "default_v1_assumption": "Không kết luận đạt/chưa đạt mục tiêu."
+    },
+    {
+      "id": "BQ-09",
+      "question": "Ai nhập ghi chú chiến lược hằng ngày và ai được tạo/duyệt/xác nhận/thực thi action?",
+      "default_v1_assumption": "Mọi action là draft/task; giữ guardrail Google hiện tại."
+    },
+    {
+      "id": "BQ-10",
+      "question": "Chính sách nguồn nghiên cứu web, citation, PII và file retention là gì?",
+      "default_v1_assumption": "Chỉ nguồn công khai đáng tin, ghi URL/ngày truy cập, tối thiểu hóa PII và không lưu vô thời hạn."
+    }
+  ],
+  "recommended_next_documents": [
+    {
+      "order": 1,
+      "document": "Director and Marketer Data Pack Contract",
+      "must_cover": [
+        "JSON schemas",
+        "XLSX multi-sheet structure",
+        "metadata",
+        "provenance",
+        "freshness",
+        "quality flags"
+      ]
+    },
+    {
+      "order": 2,
+      "document": "Finance Canonical Source and Financing Scenario Specification",
+      "must_cover": [
+        "actual versus expected cash",
+        "loan status aliases",
+        "debt service 30/90 days",
+        "survival buffer",
+        "mock source exclusion"
+      ]
+    },
+    {
+      "order": 3,
+      "document": "Service Group and Product Variant Mapping Specification",
+      "must_cover": [
+        "ProductCategory alias",
+        "Product alias",
+        "ads analysis level",
+        "order/profit calculation level"
+      ]
+    },
+    {
+      "order": 4,
+      "document": "Data Quality and Mapping Report Specification",
+      "must_cover": [
+        "11 requested metrics",
+        "formulas",
+        "thresholds",
+        "decision locks",
+        "confidence"
+      ]
+    },
+    {
+      "order": 5,
+      "document": "ChatGPT Web Reading and Research Rules",
+      "must_cover": [
+        "12 mandatory rules",
+        "research source policy",
+        "citations",
+        "fact versus inference"
+      ]
+    },
+    {
+      "order": 6,
+      "document": "Credential, Upload Artifact and Normalization Security Specification",
+      "must_cover": [
+        "secret migration",
+        "permission split",
+        "audit/redaction",
+        "original/normalized artifacts",
+        "review state",
+        "retention",
+        "prompt injection controls"
+      ]
+    },
+    {
+      "order": 7,
+      "document": "Action File Capability, Dry-run and Controlled Execution Specification",
+      "must_cover": [
+        "provider/domain matrix",
+        "typed schema",
+        "idempotency",
+        "approval",
+        "validateOnly",
+        "rollback",
+        "post-sync",
+        "evaluation 1/3/7 days"
+      ]
+    }
+  ],
+  "implementation_phases": [
+    {
+      "order": 1,
+      "name": "Technical documents",
+      "scope": "Specify Director/Marketer Data Packs, quality/mapping, ChatGPT rules, schemas, manual inputs, financing, service groups, security and permissions.",
+      "live_execution_allowed": false
+    },
+    {
+      "order": 2,
+      "name": "Read-only export layer",
+      "scope": "Export normalized data and quality reports only.",
+      "live_execution_allowed": false
+    },
+    {
+      "order": 3,
+      "name": "OpenAI key and upload normalization",
+      "scope": "After P0 secret handling, accept uploads, normalize to internal schema, validate, store original/normalized/errors and wait for review.",
+      "live_execution_allowed": false
+    },
+    {
+      "order": 4,
+      "name": "Action import, validation and dry-run",
+      "scope": "Validate schema, permission, data quality, mapping and policy; run dry-run only.",
+      "live_execution_allowed": false
+    },
+    {
+      "order": 5,
+      "name": "Controlled execution",
+      "scope": "Execute only when schema, quality, mapping, approval, dry-run, provider validation, confirmation, rollback, logging, post-sync and evaluation gates pass.",
+      "live_execution_allowed": true
+    }
+  ],
+  "risks": [
+    {
+      "priority": "P0",
+      "risk": "Unfunded loan room may be counted as available cash.",
+      "control": "Use actual disbursement/cashflow only."
+    },
+    {
+      "priority": "P0",
+      "risk": "Net profit may be mislabeled as collected revenue.",
+      "control": "Exclude getCollectedRevenueToday from canonical cash."
+    },
+    {
+      "priority": "P0",
+      "risk": "Attribution confidence is overstated when only adGroupId exists.",
+      "control": "Use verified weighted confidence and decision locks."
+    },
+    {
+      "priority": "P0",
+      "risk": "Mock/random finance data may enter management analysis.",
+      "control": "Canonical source allowlist and provenance."
+    },
+    {
+      "priority": "P0",
+      "risk": "OpenAI/non-Google credentials can remain plaintext or use plaintext fallback.",
+      "control": "Migrate, rotate and remove plaintext paths before adding OpenAI key."
+    },
+    {
+      "priority": "P0",
+      "risk": "Uploaded ChatGPT files lack a common secure artifact/review lifecycle.",
+      "control": "Specify and implement original/normalized/error/review/retention controls."
+    },
+    {
+      "priority": "P0",
+      "risk": "Legacy multi-provider action paths may bypass Google V2-grade guardrails.",
+      "control": "Keep non-Google actions as draft/task or dry-run until equivalent controls exist."
+    },
+    {
+      "priority": "P1",
+      "risk": "Operation capacity is unavailable, so lead growth recommendations may overload operations.",
+      "control": "Export unavailable/low-confidence flag and block strong recommendation."
+    }
+  ],
+  "evidence_files": [
+    "reports/erp-ai-data-pack-readiness-audit-20260612.md",
+    "backend/src/finance/finance.service.ts",
+    "backend/src/finance/financial-control.service.ts",
+    "backend/src/finance/data-collection.service.ts",
+    "backend/src/finance/schemas/system-settings.schema.ts",
+    "backend/src/finance/schemas/funding-source.schema.ts",
+    "backend/src/finance/schemas/budget-bucket.schema.ts",
+    "backend/src/finance/schemas/capital-allocation-policy.schema.ts",
+    "backend/src/finance/schemas/available-fund-snapshot.schema.ts",
+    "backend/src/finance/schemas/loan-contract.schema.ts",
+    "backend/src/finance/schemas/loan-repayment.schema.ts",
+    "backend/src/cashflow-control/services/profit.service.ts",
+    "backend/src/product/schemas/product.schema.ts",
+    "backend/src/product-category/schemas/product-category.schema.ts",
+    "backend/src/ad-group/schemas/ad-group.schema.ts",
+    "backend/src/test-order2/schemas/test-order2.schema.ts",
+    "backend/src/test-order2/services/order-calculation.service.ts",
+    "backend/src/test-order2/services/order-report.service.ts",
+    "backend/src/customer/customer.service.ts",
+    "backend/src/google-ads/google-ads-export.service.ts",
+    "backend/src/google-ads/google-ads-action-plan-import.service.ts",
+    "backend/src/google-ads/google-ads-provider-validation.service.ts",
+    "backend/src/google-ads/google-ads-execution-policy.service.ts",
+    "backend/src/google-ads/google-ads-execution.service.ts",
+    "backend/src/google-ads/google-ads-operation-builder.service.ts",
+    "backend/src/google-ads/google-ads-post-execution.service.spec.ts",
+    "backend/src/ai-marketing/ai-marketing.service.ts",
+    "backend/src/ops-action/ops-action.service.ts",
+    "backend/src/openai-config/schemas/openai-config.schema.ts",
+    "backend/src/openai-config/openai-config.service.ts",
+    "backend/src/openai-config/openai-config.controller.ts",
+    "backend/src/api-token/schemas/api-token.schema.ts",
+    "backend/src/api-token/api-token.service.ts",
+    "backend/src/order-sheet-sync/order-sheet-sync.service.ts",
+    "backend/src/google-sync/google-sync.service.ts",
+    "backend/src/auth/role-permissions.ts",
+    "backend/src/common/interceptors/secret-redaction.interceptor.ts",
+    "backend/src/common/ai-assistant-quality.ts",
+    "backend/src/ai-operator/ai-operator.knowledge.ts",
+    "backend/src/ai-operator/ai-operator.v2-registry.ts",
+    "backend/src/app.module.ts",
+    "backend/src/import-user/import-user.controller.ts",
+    "backend/src/advertising-cost/advertising-cost.service.ts",
+    "backend/dongbodulieuweb-8de0c9a12896.json",
+    "backend/exports/"
+  ]
+}

@@ -21,6 +21,11 @@ export class OwnerFundService {
 
   constructor(private http: HttpClient) {}
 
+  private createIdempotencyKey(prefix: string): string {
+    const uuid = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}-${uuid}`;
+  }
+
   // ==================== OWNER METHODS ====================
 
   getAllOwners(): Observable<Owner[]> {
@@ -150,15 +155,21 @@ export class OwnerFundService {
   /**
    * Chuyển tiền từ Bank Balance vào Quỹ Owner
    */
-  transferToOwnerFund(data: { amount: number; description?: string }): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/fund-account/transfer-in`, data);
+  transferToOwnerFund(data: { amount: number; description?: string; idempotencyKey?: string }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/fund-account/transfer-in`, {
+      ...data,
+      idempotencyKey: data.idempotencyKey || this.createIdempotencyKey('owner-transfer-in'),
+    });
   }
 
   /**
    * Chuyển tiền từ Quỹ Owner về Bank Balance (trả lại công ty)
    */
-  transferFromOwnerFund(data: { amount: number; description?: string }): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/fund-account/transfer-out`, data);
+  transferFromOwnerFund(data: { amount: number; description?: string; idempotencyKey?: string }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/fund-account/transfer-out`, {
+      ...data,
+      idempotencyKey: data.idempotencyKey || this.createIdempotencyKey('owner-transfer-out'),
+    });
   }
 
   /**
@@ -167,10 +178,14 @@ export class OwnerFundService {
   ownerWithdrawFromFund(data: { 
     amount: number; 
     description?: string; 
-    bankAccount?: string; 
+    bankAccount?: string;
     bankName?: string;
+    idempotencyKey?: string;
   }): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/fund-account/withdraw`, data);
+    return this.http.post<any>(`${this.apiUrl}/fund-account/withdraw`, {
+      ...data,
+      idempotencyKey: data.idempotencyKey || this.createIdempotencyKey('owner-withdraw'),
+    });
   }
 
   /**

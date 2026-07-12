@@ -1,7 +1,14 @@
 [
   {
-    "context": ["/api", "/media"],
-    "target": "http://localhost:3000",
+    "context": ["/api/"],
+    "target": "http://127.0.0.1:3000",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "warn"
+  },
+  {
+    "context": ["/media/serve/**", "/media/*/*/*"],
+    "target": "http://127.0.0.1:3000",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "warn"

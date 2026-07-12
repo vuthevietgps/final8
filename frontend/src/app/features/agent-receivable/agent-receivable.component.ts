@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { AuthService } from '../../core/services/auth.service';
 import { AgentReceivableService, AgentReceivableRow, AgentStatement } from './agent-receivable.service';
 import { UserService } from '../user/user.service';
 import { User } from '../user/user.model';
@@ -29,9 +30,6 @@ export class AgentReceivableComponent implements OnInit {
   statementNotes = '';
   statementLoading = false;
 
-  // User info for role check
-  currentUserRole = '';
-
   // Modal states
   paymentModal = false;
   confirmModal = false;
@@ -46,27 +44,20 @@ export class AgentReceivableComponent implements OnInit {
     documentLinks: ''
   };
 
-  constructor(private service: AgentReceivableService, private userService: UserService) {}
+  constructor(
+    private service: AgentReceivableService,
+    private userService: UserService,
+    private authService: AuthService,
+  ) {}
 
   ngOnInit(): void {
-    // Get user role from localStorage
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        this.currentUserRole = user.role || '';
-      } catch (e) {
-        this.currentUserRole = '';
-      }
-    }
-    
     this.loadAgents();
     this.loadSummary();
     this.loadStatements();
   }
 
   get isDirector(): boolean {
-    return this.currentUserRole === 'director';
+    return this.authService.user()?.role === 'director';
   }
 
   loadAgents() {
@@ -102,7 +93,7 @@ export class AgentReceivableComponent implements OnInit {
     if (this.statementFrom) params.from = this.statementFrom;
     if (this.statementTo) params.to = this.statementTo;
     if (this.statementStatus) params.status = this.statementStatus;
-    
+
     this.service.listStatements(params).subscribe({
       next: (res) => { this.statements = res || []; this.statementLoading = false; },
       error: () => { this.statements = []; this.statementLoading = false; }
@@ -142,7 +133,7 @@ export class AgentReceivableComponent implements OnInit {
   onFileSelect(event: any) {
     const files: FileList = event.target.files;
     if (!files || files.length === 0) return;
-    
+
     // Giới hạn 5 files
     const remainingSlots = 5 - this.paymentForm.files.length;
     const filesToAdd = Array.from(files).slice(0, remainingSlots);
@@ -158,7 +149,7 @@ export class AgentReceivableComponent implements OnInit {
 
     // Upload files nếu có (giả định có service upload, hoặc convert base64)
     let uploadedLinks: string[] = [];
-    
+
     // Nếu có files, convert sang base64 hoặc upload (simplified: chỉ lưu tên file như demo)
     if (this.paymentForm.files.length > 0) {
       // TODO: Thực tế cần upload lên server/cloud storage
@@ -222,7 +213,7 @@ export class AgentReceivableComponent implements OnInit {
       alert('Chỉ Giám đốc mới có quyền mở lại kỳ đã chốt');
       return;
     }
-    
+
     if (!confirm(`Bạn có chắc muốn MỞ LẠI kỳ đã chốt này?\n\nKỳ: ${new Date(statement.periodFrom).toLocaleDateString()} → ${new Date(statement.periodTo).toLocaleDateString()}\n\nSau khi mở lại, kỳ này có thể được chỉnh sửa lại.`)) {
       return;
     }
@@ -245,7 +236,7 @@ export class AgentReceivableComponent implements OnInit {
       alert('Vui lòng đăng nhập lại');
       return;
     }
-    
+
     // Call backend PDF export endpoint with token in URL
     const url = `${this.service['baseUrl']}/statements/${statement._id}/pdf?token=${token}`;
     window.open(url, '_blank');

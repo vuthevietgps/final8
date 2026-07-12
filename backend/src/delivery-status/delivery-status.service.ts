@@ -1,26 +1,34 @@
-/**
- * File: delivery-status.service.ts
- * Mục đích: Nghiệp vụ xử lý trạng thái giao hàng và thao tác dữ liệu tương ứng.
- */
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateDeliveryStatusDto } from './dto/create-delivery-status.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { DeliveryStatus, DeliveryStatusDocument } from './schemas/delivery-status.schema';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
+import { OrderStatus } from '../test-order2/constants/test-order2.constants';
+
+type DeliveryStatusSeed = Record<string, any>;
 
 @Injectable()
-export class DeliveryStatusService {
+export class DeliveryStatusService implements OnModuleInit {
+  private readonly logger = new Logger(DeliveryStatusService.name);
+
   constructor(
-    @InjectModel(DeliveryStatus.name) 
+    @InjectModel(DeliveryStatus.name)
     private deliveryStatusModel: Model<DeliveryStatusDocument>,
     @InjectModel(TestOrder2.name)
     private testOrder2Model: Model<TestOrder2Document>,
   ) {}
 
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.ensureDefaultStatuses();
+    } catch (error: any) {
+      this.logger.warn(`Failed to bootstrap delivery statuses: ${error?.message || error}`);
+    }
+  }
+
   async create(createDeliveryStatusDto: CreateDeliveryStatusDto): Promise<DeliveryStatus> {
-    // Tự động set order nếu không được cung cấp
     if (!createDeliveryStatusDto.order) {
       const count = await this.deliveryStatusModel.countDocuments();
       createDeliveryStatusDto.order = count + 1;
@@ -31,6 +39,7 @@ export class DeliveryStatusService {
   }
 
   async findAll(): Promise<DeliveryStatus[]> {
+    await this.ensureDefaultStatuses();
     return this.deliveryStatusModel.find().sort({ order: 1 }).exec();
   }
 
@@ -48,13 +57,11 @@ export class DeliveryStatusService {
       throw new NotFoundException(`Delivery status with ID ${id} not found`);
     }
 
-    // Nếu đổi tên, kiểm tra xem có đơn hàng nào đang dùng tên cũ không
     if (updateDeliveryStatusDto.name && updateDeliveryStatusDto.name !== existing.name) {
       const ordersUsingStatus = await this.testOrder2Model.countDocuments({ orderStatus: existing.name });
       if (ordersUsingStatus > 0) {
         throw new BadRequestException(
-          `Không thể đổi tên trạng thái "${existing.name}" vì có ${ordersUsingStatus} đơn hàng đang sử dụng. ` +
-          `Vui lòng cập nhật trạng thái các đơn hàng trước.`
+          `Khong the doi ten trang thai "${existing.name}" vi co ${ordersUsingStatus} don hang dang su dung.`,
         );
       }
     }
@@ -62,7 +69,7 @@ export class DeliveryStatusService {
     const deliveryStatus = await this.deliveryStatusModel
       .findByIdAndUpdate(id, updateDeliveryStatusDto, { new: true })
       .exec();
-    
+
     return deliveryStatus!;
   }
 
@@ -72,12 +79,10 @@ export class DeliveryStatusService {
       throw new NotFoundException(`Delivery status with ID ${id} not found`);
     }
 
-    // Kiểm tra xem có đơn hàng nào đang dùng trạng thái này không
     const ordersUsingStatus = await this.testOrder2Model.countDocuments({ orderStatus: existing.name });
     if (ordersUsingStatus > 0) {
       throw new BadRequestException(
-        `Không thể xóa trạng thái "${existing.name}" vì có ${ordersUsingStatus} đơn hàng đang sử dụng. ` +
-        `Vui lòng cập nhật trạng thái các đơn hàng trước.`
+        `Khong the xoa trang thai "${existing.name}" vi co ${ordersUsingStatus} don hang dang su dung.`,
       );
     }
 
@@ -96,36 +101,24 @@ export class DeliveryStatusService {
     return this.deliveryStatusModel.find({ isFinal: true }).sort({ order: 1 }).exec();
   }
 
-  /**
-   * Lấy các trạng thái trigger thanh toán (NCC + hoa hồng đại lý)
-   * Dùng để query đơn hàng đủ điều kiện thanh toán
-   */
   async getPaymentTriggerStatuses(): Promise<DeliveryStatus[]> {
+    await this.ensureDefaultStatuses();
     return this.deliveryStatusModel.find({ isPaymentTrigger: true }).sort({ order: 1 }).exec();
   }
 
-  /**
-   * Lấy danh sách tên các trạng thái trigger thanh toán
-   * Dùng trực tiếp trong query { orderStatus: { $in: [...] } }
-   */
   async getPaymentTriggerStatusNames(): Promise<string[]> {
     const statuses = await this.getPaymentTriggerStatuses();
-    return statuses.map(s => s.name);
+    return statuses.map((status) => status.name);
   }
 
-  /**
-   * Lấy các trạng thái hoàn hàng (tính phí hoàn)
-   */
   async getReturnStatuses(): Promise<DeliveryStatus[]> {
+    await this.ensureDefaultStatuses();
     return this.deliveryStatusModel.find({ isReturnStatus: true }).sort({ order: 1 }).exec();
   }
 
-  /**
-   * Lấy danh sách tên các trạng thái hoàn hàng
-   */
   async getReturnStatusNames(): Promise<string[]> {
     const statuses = await this.getReturnStatuses();
-    return statuses.map(s => s.name);
+    return statuses.map((status) => status.name);
   }
 
   async getStatsSummary() {
@@ -139,81 +132,162 @@ export class DeliveryStatusService {
       active,
       inactive,
       finalStatuses,
-      averageEstimatedDays: await this.getAverageEstimatedDays()
+      averageEstimatedDays: await this.getAverageEstimatedDays(),
     };
   }
 
   private async getAverageEstimatedDays(): Promise<number> {
-    const statuses = await this.deliveryStatusModel.find({ estimatedDays: { $exists: true, $ne: null } });
+    const statuses = await this.deliveryStatusModel.find({
+      estimatedDays: { $exists: true, $ne: null },
+    });
     if (statuses.length === 0) return 0;
-    
+
     const sum = statuses.reduce((acc, status) => acc + (status.estimatedDays || 0), 0);
     return Math.round(sum / statuses.length);
   }
 
-  // Method để seed dữ liệu mẫu với encoding UTF-8 đúng
-  async seedSampleData(): Promise<DeliveryStatus[]> {
-    // Xóa tất cả dữ liệu cũ
-    await this.deliveryStatusModel.deleteMany({});
-    
-    // CHỈ 4 TRẠNG THÁI CẦN THIẾT CHO THANH TOÁN
-    const sampleData = [
+  private getDefaultStatuses(): DeliveryStatusSeed[] {
+    return [
       {
-        name: 'Chưa có mã vận đơn',
-        description: 'Đơn hàng chưa được tạo mã vận đơn',
-        color: '#6b7280',  // gray
-        icon: '📦',
+        name: OrderStatus.NO_TRACKING,
+        description: 'Don hang chua co ma van don',
+        color: '#6b7280',
+        icon: 'box',
         isActive: true,
         isFinal: false,
         isPaymentTrigger: false,
         isReturnStatus: false,
         order: 1,
         estimatedDays: 0,
-        trackingNote: 'Chờ tạo mã vận đơn'
+        trackingNote: 'Cho tao ma van don',
       },
       {
-        name: 'Đang giao',
-        description: 'Hàng hóa đang được vận chuyển đến khách hàng',
-        color: '#3b82f6',  // blue
-        icon: '🚚',
+        name: OrderStatus.SHIPPING,
+        description: 'Hang hoa dang duoc van chuyen den khach hang',
+        color: '#3b82f6',
+        icon: 'truck',
         isActive: true,
         isFinal: false,
         isPaymentTrigger: false,
         isReturnStatus: false,
         order: 2,
         estimatedDays: 3,
-        trackingNote: 'Dự kiến giao trong 2-3 ngày'
+        trackingNote: 'Du kien giao trong 2-3 ngay',
       },
       {
-        name: 'Giao thành công',
-        description: 'Đơn hàng đã giao thành công → TRIGGER THANH TOÁN',
-        color: '#22c55e',  // green
-        icon: '✅',
+        name: OrderStatus.DELIVERED,
+        description: 'Don hang da giao thanh cong va phat sinh thanh toan',
+        color: '#22c55e',
+        icon: 'check',
         isActive: true,
         isFinal: true,
-        isPaymentTrigger: true,   // ← TRIGGER
+        isPaymentTrigger: true,
         isReturnStatus: false,
         order: 3,
         estimatedDays: 0,
-        trackingNote: 'Đơn hoàn thành - ghi nhận thanh toán'
+        trackingNote: 'Don hoan thanh - ghi nhan thanh toan',
       },
       {
-        name: 'Hàng hoàn',
-        description: 'Đơn hàng bị hoàn → TRIGGER THANH TOÁN + PHÍ HOÀN',
-        color: '#ef4444',  // red
-        icon: '↩️',
+        name: OrderStatus.RETURNED,
+        description: 'Don hang bi hoan va phat sinh phi hoan hang',
+        color: '#ef4444',
+        icon: 'return',
         isActive: true,
         isFinal: true,
-        isPaymentTrigger: true,   // ← TRIGGER
-        isReturnStatus: true,     // ← TÍNH PHÍ HOÀN
+        isPaymentTrigger: true,
+        isReturnStatus: true,
         order: 4,
         estimatedDays: 0,
-        trackingNote: 'Đơn hoàn - tính phí hoàn hàng'
-      }
+        trackingNote: 'Don hoan - tinh phi hoan hang',
+      },
     ];
+  }
+
+  private async migrateOrdersToCanonicalName(sourceNames: string[], canonicalName: string): Promise<number> {
+    let modified = 0;
+
+    for (const sourceName of sourceNames) {
+      if (!sourceName || sourceName === canonicalName) continue;
+
+      const result = await this.testOrder2Model.updateMany(
+        { orderStatus: sourceName },
+        { $set: { orderStatus: canonicalName } },
+      ).exec();
+      modified += result.modifiedCount || 0;
+    }
+
+    return modified;
+  }
+
+  async ensureDefaultStatuses(): Promise<void> {
+    const defaults = this.getDefaultStatuses();
+    const existing = await this.deliveryStatusModel.find().sort({ order: 1 }).exec();
+
+    if (existing.length === 0) {
+      await this.deliveryStatusModel.insertMany(defaults, { ordered: true });
+      this.logger.log('Bootstrapped default delivery statuses');
+      return;
+    }
+
+    let changed = 0;
+
+    for (const canonical of defaults) {
+      const matched = existing.filter(
+        (status) => status.name === canonical.name || status.order === canonical.order,
+      );
+
+      let primary = matched.find((status) => status.name === canonical.name) ?? matched[0];
+
+      if (!primary) {
+        primary = await this.deliveryStatusModel.create(canonical);
+        existing.push(primary);
+        changed++;
+      } else {
+        const updates: Record<string, any> = {};
+        for (const [key, value] of Object.entries(canonical)) {
+          if ((primary as any)[key] !== value) {
+            updates[key] = value;
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await this.deliveryStatusModel.updateOne({ _id: primary._id }, { $set: updates }).exec();
+          Object.assign(primary, updates);
+          changed++;
+        }
+      }
+
+      changed += await this.migrateOrdersToCanonicalName(
+        matched.map((status) => status.name),
+        canonical.name,
+      );
+
+      const duplicates = matched.filter((status) => String(status._id) !== String(primary._id));
+      for (const duplicate of duplicates) {
+        await this.testOrder2Model.updateMany(
+          { orderStatus: duplicate.name },
+          { $set: { orderStatus: canonical.name } },
+        ).exec();
+        await this.deliveryStatusModel.deleteOne({ _id: duplicate._id }).exec();
+
+        const duplicateIndex = existing.findIndex((status) => String(status._id) === String(duplicate._id));
+        if (duplicateIndex >= 0) {
+          existing.splice(duplicateIndex, 1);
+        }
+        changed++;
+      }
+    }
+
+    if (changed > 0) {
+      this.logger.log('Synchronized delivery statuses with canonical defaults');
+    }
+  }
+
+  async seedSampleData(): Promise<DeliveryStatus[]> {
+    await this.deliveryStatusModel.deleteMany({});
 
     const createdRecords = [];
-    for (const data of sampleData) {
+    for (const data of this.getDefaultStatuses()) {
       const created = new this.deliveryStatusModel(data);
       createdRecords.push(await created.save());
     }

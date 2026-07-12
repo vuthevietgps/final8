@@ -1,0 +1,107 @@
+{
+  "phase": "PR-DEMO-1E",
+  "status": "acceptance_packet_completed",
+  "output_root": "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet",
+  "single_folder_mode": true,
+  "legacy_paths_created": false,
+  "prompt34_source_status": "quality_gate_completed",
+  "acceptance_packet": {
+    "created": true,
+    "readme_created": true,
+    "evidence_index_created": true,
+    "accepted_facts_summary_created": true,
+    "residual_risk_register_created": true,
+    "next_non_action_options_created": true,
+    "closeout_decision_memo_created": true,
+    "safety_boundary_created": true
+  },
+  "closeout_decision": {
+    "manual_director_json_chatgpt_web_loop": "accepted_for_demo_evidence",
+    "accepted_for_production_automation": false,
+    "accepted_for_action_draft_schema": false,
+    "accepted_for_provider_execution": false
+  },
+  "evidence_summary": {
+    "director_json_expected_findings": "12/12",
+    "transcript_validated": true,
+    "expected_findings_classified": "12/12",
+    "detected_with_evidence": 7,
+    "detected_but_weak_evidence": 5,
+    "missed": 0,
+    "hallucinated_or_unsupported": 0
+  },
+  "evidence_mirrors": {
+    "created": true,
+    "missing_evidence_file_created": false,
+    "files": [
+      "evidence/prompt34_quality_gate_summary.md",
+      "evidence/prompt34_expected_finding_evidence_matrix.md",
+      "evidence/prompt34_weak_evidence_hardening_backlog.md",
+      "evidence/prompt34_manual_loop_quality_rubric.md"
+    ]
+  },
+  "next_non_action_options": [
+    "weak_evidence_erp_data_hardening_spec",
+    "cached_export_metadata_download_hardening_spec",
+    "director_json_production_readiness_gap_checklist"
+  ],
+  "safety": {
+    "openai_api_used": false,
+    "action_draft_schema_opened": false,
+    "detailed_brainstorming_opened": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "ads_platform_mutation_added": false,
+    "phase_3_started": false,
+    "production_db_used": false,
+    "fake_transcript_created": false,
+    "new_demo_seed_generation_added": false,
+    "new_export_download_behavior_added": false,
+    "new_provider_integration_added": false
+  },
+  "verification": {
+    "single_folder_layout_check": "passed",
+    "legacy_paths_check": "passed",
+    "result_json_parse_check": "passed",
+    "diff_check": "passed"
+  },
+  "files_changed": [
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/00_README.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/01_evidence_index.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/02_accepted_facts_summary.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/03_residual_risk_register.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/04_next_non_action_branch_options.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/05_closeout_decision_memo.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/06_safety_boundary.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/ketquapromt35.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/ketquapromt35.json",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/truc-giu-ba-ai-data-pack-v37.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/chuoi-promt-codex-chatgptweb-ledger-v37.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/LEGACY_PATHS_NOT_USED.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/evidence/prompt34_quality_gate_summary.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/evidence/prompt34_expected_finding_evidence_matrix.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/evidence/prompt34_weak_evidence_hardening_backlog.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/evidence/prompt34_manual_loop_quality_rubric.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/00_summary.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/01_scope.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/02_acceptance_packet_index.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/03_accepted_facts.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/04_residual_risks.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/05_next_non_action_options.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/06_closeout_decision.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/07_axis_ledger.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/08_safety_checks.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/09_files_changed.md",
+    "docs/ai-data-pack/runs/promt35-pr-demo-1e-acceptance-packet/review-packet/10_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "Five weak-evidence findings still require future ERP data hardening before production-grade director analysis.",
+    "The original transcript arithmetic mismatch remains documented and non-blocking.",
+    "The manual ChatGPT Web loop is accepted for demo evidence only, not production automation."
+  ],
+  "next_recommendation": "Submit Prompt 35 acceptance packet for review. If accepted, choose only a non-action PR-DEMO-1F branch: weak-evidence ERP data hardening spec, cached-export metadata/download hardening spec, or Director JSON production-readiness gap checklist."
+}

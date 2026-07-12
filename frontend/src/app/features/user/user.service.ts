@@ -1,7 +1,3 @@
-/**
- * File: features/user/user.service.ts
- * Mục đích: Giao tiếp API Người dùng (CRUD, lọc theo vai trò, kích hoạt...).
- */
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -10,12 +6,20 @@ import { User, CreateUserDto, UpdateUserDto } from './user.model';
 import { environment } from '../../../environments/environment';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class UserService {
   private apiUrl = `${environment.apiUrl}/users`;
 
   constructor(private http: HttpClient) {}
+
+  private buildActiveParams(active?: boolean): HttpParams {
+    let params = new HttpParams();
+    if (active !== undefined) {
+      params = params.set('active', String(active));
+    }
+    return params;
+  }
 
   getUsers(role?: string, active?: boolean): Observable<User[]> {
     let params = new HttpParams();
@@ -29,7 +33,7 @@ export class UserService {
   }
 
   getUser(id: string): Observable<User> {
-  return this.http.get<User>(`${this.apiUrl}/${id}`, { withCredentials: true }).pipe(timeout(10000));
+    return this.http.get<User>(`${this.apiUrl}/${id}`, { withCredentials: true }).pipe(timeout(10000));
   }
 
   createUser(user: CreateUserDto): Observable<User> {
@@ -48,19 +52,28 @@ export class UserService {
     return this.http.get<User>(`${this.apiUrl}/email/${email}`, { withCredentials: true });
   }
 
-  /**
-   * Lấy danh sách đại lý (tối giản) cho dropdown, không cần quyền 'users'.
-   * Backend bảo vệ bằng quyền 'orders'.
-   */
-  getAgents(): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/agents`, { withCredentials: true });
+  getAgents(active?: boolean): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/agents`, {
+      params: this.buildActiveParams(active),
+      withCredentials: true,
+    });
   }
 
-  /**
-   * Lấy danh sách đại lý cho module quảng cáo.
-   * Backend bảo vệ bằng quyền 'ad-groups'.
-   */
-  getAgentsForAds(): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/agents-for-ads`, { withCredentials: true });
+  getAgentsForAds(active?: boolean): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/agents-for-ads`, {
+      params: this.buildActiveParams(active),
+      withCredentials: true,
+    });
+  }
+
+  getSuppliersForOrders(active?: boolean): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/suppliers-for-orders`, {
+      params: this.buildActiveParams(active),
+      withCredentials: true,
+    });
+  }
+
+  getAdsOperators(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/ads-operators`, { withCredentials: true });
   }
 }

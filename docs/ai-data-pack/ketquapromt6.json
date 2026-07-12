@@ -1,0 +1,590 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-3A",
+    "status": "completed",
+    "code_changed": false,
+    "provider_calls": false,
+    "real_sync_performed": false,
+    "provider_mutation": false,
+    "live_execution_added": false,
+    "official_or_partial_export_added": false,
+    "conclusion": "A future Google Ads read-only adapter is feasible only through a new narrow internal adapter around GoogleAdsReadonlySyncService.sync with strict isolation and guards.",
+    "missing_input_files": [
+      "backend/src/config/",
+      "docs/ai-ads-v2/00-index.md"
+    ],
+    "available_index_used": "docs/ai-ads-v2/00_README_INDEX.md"
+  },
+  "google_ads_inventory": [
+    {
+      "file": "backend/src/google-ads/google-ads-readonly-sync.service.ts",
+      "class_or_function": "GoogleAdsReadonlySyncService.sync",
+      "purpose": "Synchronize Google Ads account, entity, RSA, and daily metric data into local cache with a durable sync run.",
+      "provider_endpoints": [
+        "POST /customers/{customerId}/googleAds:searchStream"
+      ],
+      "provider_resources": [
+        "customer",
+        "campaign",
+        "campaign_budget",
+        "ad_group",
+        "keyword_view",
+        "responsive_search_ad",
+        "campaign/ad_group/keyword/ad daily metrics"
+      ],
+      "writes_provider": false,
+      "writes_local_collections": [
+        "adaccounts",
+        "google_ads_campaigns",
+        "google_ads_campaign_budgets",
+        "google_ads_ad_groups",
+        "google_ads_keywords",
+        "google_ads_ads",
+        "google_ads_daily_metrics",
+        "google_ads_sync_runs"
+      ],
+      "scope": "Active local Google ad accounts, optionally filtered by requested normalized customer IDs.",
+      "tests": [
+        "Maps Google conversion metrics.",
+        "Builds read-only metric queries.",
+        "Rejects a query containing mutate before credential loading."
+      ],
+      "gaps": [
+        "No request or total timeout.",
+        "No retry/backoff or explicit rate-limit handling.",
+        "No distributed lock or sync idempotency.",
+        "No maximum date range or date ordering policy.",
+        "No fail-closed rejection for unknown requested customer IDs.",
+        "No dedicated customer/login-customer allowlist.",
+        "Unexpected failure can leave a run in running.",
+        "No export-job linkage or per-account durable status.",
+        "No exact outbound endpoint/method allowlist test."
+      ]
+    },
+    {
+      "file": "backend/src/google-ads/schemas/google-ads-sync-run.schema.ts",
+      "class_or_function": "GoogleAdsSyncRun",
+      "purpose": "Durable read-only sync audit.",
+      "fields": [
+        "runId",
+        "status",
+        "startedAt",
+        "completedAt",
+        "dateFrom",
+        "dateTo",
+        "customerIds",
+        "counts",
+        "syncErrors"
+      ],
+      "missing_future_fields": [
+        "exportJobId",
+        "policyVersion",
+        "scopeHash/idempotencyKey",
+        "lock outcome",
+        "attempts",
+        "timeout/rate-limit classification",
+        "per-account status",
+        "post-sync assessment references"
+      ]
+    },
+    {
+      "file": "backend/src/google-ads/google-ads.controller.ts",
+      "class_or_function": "GoogleAdsController.syncReadonly/latestSyncRun",
+      "purpose": "Manual sync trigger and latest-run read.",
+      "permission": "google-ads.read",
+      "risk": "Director and Manager currently have google-ads.read, so broad read permission can trigger provider sync and read sync details."
+    },
+    {
+      "file": "backend/src/google-ads/google-ads-evaluation.service.ts",
+      "class_or_function": "GoogleAdsEvaluationService",
+      "purpose": "Hourly post-action evaluation that invokes readonly sync and writes evaluation state.",
+      "pre_export_use": "forbidden"
+    },
+    {
+      "file": "backend/src/google-ads/google-ads-post-execution.service.ts",
+      "class_or_function": "GoogleAdsPostExecutionService",
+      "purpose": "Post-mutation sync, change-log creation, and evaluation scheduling.",
+      "pre_export_use": "forbidden"
+    },
+    {
+      "file": "backend/src/advertising-cost/advertising-cost.google-sync.service.ts",
+      "class_or_function": "AdvertisingCostGoogleSyncService",
+      "purpose": "Read Google ad-group costs and upsert advertisingcosts.",
+      "provider_endpoint": "POST /customers/{customerId}/googleAds:searchStream",
+      "risk": "Not isolated for data-pack use; helper can schedule business recalculation and lacks equivalent durable sync-run/error controls."
+    },
+    {
+      "file": "backend/src/emergency-action/emergency-action-verification.service.ts",
+      "class_or_function": "EmergencyActionVerificationService Google methods",
+      "purpose": "Read provider state to verify emergency task results.",
+      "risk": "Emergency-action and mixed-provider context; not a pre-export adapter boundary."
+    },
+    {
+      "file": "backend/src/ad-account/ad-account.timezone-check.service.ts",
+      "class_or_function": "AdAccountTimezoneCheckService.validateGoogle",
+      "purpose": "Read customer timezone during ad-account validation.",
+      "risk": "Coupled to account-management create/update workflow."
+    }
+  ],
+  "readonly_candidate_matrix": [
+    {
+      "classification": "safe_read_only_candidate",
+      "file": "backend/src/google-ads/google-ads-readonly-sync.service.ts",
+      "class_or_function": "GoogleAdsReadonlySyncService.sync",
+      "reads_provider": true,
+      "writes_provider": false,
+      "writes_local_db": true,
+      "mutation_risk": "low only after narrow adapter isolation; high if broad module/controller is reused",
+      "credential_usage": "ApiTokenService OAuth refresh-token runtime config",
+      "test_coverage": "partial",
+      "recommendation": "Wrap only this method in a new isolated internal adapter with exact transport and local-write allowlists."
+    },
+    {
+      "classification": "read_only_but_needs_guard",
+      "file": "backend/src/advertising-cost/advertising-cost.google-sync.service.ts",
+      "class_or_function": "AdvertisingCostGoogleSyncService",
+      "reads_provider": true,
+      "writes_provider": false,
+      "writes_local_db": true,
+      "mutation_risk": "business-side-effect risk through recalculation queue",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "not sufficient for adapter invariant",
+      "recommendation": "Do not reuse for google_ads adapter."
+    },
+    {
+      "classification": "read_only_but_needs_guard",
+      "file": "backend/src/emergency-action/emergency-action-verification.service.ts",
+      "class_or_function": "EmergencyActionVerificationService Google methods",
+      "reads_provider": true,
+      "writes_provider": false,
+      "writes_local_db": false,
+      "mutation_risk": "workflow coupling and error exposure",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "not sufficient",
+      "recommendation": "Do not use in pre-export."
+    },
+    {
+      "classification": "unclear_needs_manual_review",
+      "file": "backend/src/ad-account/ad-account.timezone-check.service.ts",
+      "class_or_function": "AdAccountTimezoneCheckService.validateGoogle",
+      "reads_provider": true,
+      "writes_provider": false,
+      "writes_local_db": false,
+      "mutation_risk": "coupled to account create/update workflow",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "not assessed as adapter",
+      "recommendation": "Keep outside data-pack adapter."
+    },
+    {
+      "classification": "read_only_but_needs_guard",
+      "file": "backend/src/google-ads/google-ads-export.service.ts",
+      "class_or_function": "GoogleAdsExportService",
+      "reads_provider": false,
+      "writes_provider": false,
+      "writes_local_db": true,
+      "mutation_risk": "local ZIP/export audit only",
+      "credential_usage": "none",
+      "test_coverage": "local export tests exist",
+      "recommendation": "Do not treat as provider freshness adapter."
+    },
+    {
+      "classification": "execution_path_do_not_call",
+      "file": "backend/src/google-ads/google-ads-provider-validation.service.ts",
+      "class_or_function": "GoogleAdsProviderValidationService",
+      "reads_provider": false,
+      "writes_provider": "calls mutate with validateOnly=true",
+      "writes_local_db": true,
+      "mutation_risk": "prepares and submits mutation operations",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "validateOnly tests exist",
+      "recommendation": "Never import/inject/call from adapter."
+    },
+    {
+      "classification": "execution_path_do_not_call",
+      "file": "backend/src/google-ads/google-ads-execution.service.ts",
+      "class_or_function": "GoogleAdsExecutionService",
+      "reads_provider": false,
+      "writes_provider": true,
+      "writes_local_db": true,
+      "mutation_risk": "live mutation",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "execution safety tests exist",
+      "recommendation": "Never import/inject/call from adapter."
+    },
+    {
+      "classification": "unsafe_mutation_capable",
+      "file": "backend/src/ad-group/ad-group.auto-control.service.ts",
+      "class_or_function": "AdGroupAutoControlService.pauseGoogleAdGroup",
+      "reads_provider": false,
+      "writes_provider": true,
+      "writes_local_db": true,
+      "mutation_risk": "ad-group pause mutation",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "not relevant to adapter",
+      "recommendation": "Never import/inject/call from adapter."
+    },
+    {
+      "classification": "unsafe_mutation_capable",
+      "file": "backend/src/advertising-optimization/ai-optimization/budget-apply.service.ts",
+      "class_or_function": "BudgetApplyService Google methods",
+      "reads_provider": false,
+      "writes_provider": true,
+      "writes_local_db": true,
+      "mutation_risk": "budget/status mutations",
+      "credential_usage": "ApiTokenService OAuth",
+      "test_coverage": "not relevant to adapter",
+      "recommendation": "Never import/inject/call from adapter."
+    }
+  ],
+  "mutation_risk_map": [
+    {
+      "capability": "create campaign/budget/ad group/keyword/RSA",
+      "path": "GoogleAdsOperationBuilderService -> GoogleAdsProviderValidationService or GoogleAdsExecutionService",
+      "why_forbidden": "Constructs and submits provider mutation operations.",
+      "current_guard": "PAUSED defaults plus validation/approval/execution policy.",
+      "additional_guard": "Adapter dependency graph must exclude all operation/action services."
+    },
+    {
+      "capability": "update campaign budget",
+      "path": "GoogleAdsOperationBuilderService.updateCampaignBudget -> mutate",
+      "why_forbidden": "Changes provider budget.",
+      "current_guard": "Requires campaignBudgetId/resourceName.",
+      "additional_guard": "No mutation dependency; never infer budget ID from campaignId/adGroupId."
+    },
+    {
+      "capability": "pause/resume campaign or ad group",
+      "path": "GoogleAdsOperationBuilderService and AdGroupAutoControlService",
+      "why_forbidden": "Changes provider status.",
+      "current_guard": "Action policy; auto-control currently disabled until approval integration.",
+      "additional_guard": "Exact searchStream-only endpoint allowlist."
+    },
+    {
+      "capability": "provider validateOnly",
+      "path": "GoogleAdsProviderValidationService.validatePlan",
+      "why_forbidden": "Calls mutate and prepares execution even when validateOnly=true.",
+      "current_guard": "google-ads.plan and pending plan state.",
+      "additional_guard": "Treat as execution path and exclude."
+    },
+    {
+      "capability": "execute action plan",
+      "path": "GoogleAdsExecutionService.execute/callProvider",
+      "why_forbidden": "Calls live mutate.",
+      "current_guard": "Approval, provider validation, idempotency, production/provider/dry-run flags, google-ads.execute.",
+      "additional_guard": "Never reachable from adapter."
+    },
+    {
+      "capability": "future delete or status mutation",
+      "path": "No approved current pre-export path",
+      "why_forbidden": "Pre-export must never mutate provider resources.",
+      "current_guard": "Not applicable.",
+      "additional_guard": "Contract-level deny-all except exact searchStream read."
+    }
+  ],
+  "credential_rbac_security_review": [
+    {
+      "area": "credential_storage",
+      "finding": "Google refresh token and provider config are encrypted in tokenEnc/providerConfigEnc using AES-256-GCM; production requires API_TOKEN_SECRET.",
+      "risk": "ApiToken schema and service retain legacy plaintext token/notes fallbacks.",
+      "recommendation": "Keep adapter credentials internal and remove/migrate Google plaintext fallback in a separately approved security change."
+    },
+    {
+      "area": "oauth",
+      "finding": "Repository uses OAuth 2.0 refresh-token exchange through google.auth.OAuth2.",
+      "risk": "Access-token exchange collapses all failures to undefined.",
+      "recommendation": "Return sanitized typed internal auth errors; do not add service-account support without separate review."
+    },
+    {
+      "area": "redaction",
+      "finding": "SecretRedactionInterceptor, redactSecrets, and redactSecretString exist.",
+      "risk": "Pattern/key redaction does not make arbitrary raw provider payloads safe.",
+      "recommendation": "Persist bounded typed errors only; never raw headers/body/stack."
+    },
+    {
+      "area": "rbac",
+      "finding": "Current readonly sync route inherits google-ads.read, held by Director and Manager.",
+      "risk": "Broad read permission can trigger provider calls.",
+      "recommendation": "Use dedicated internal ai-data-pack.source-sync.google-ads.readonly.execute permission and separate sanitized sync-detail read permission."
+    },
+    {
+      "area": "account_scope",
+      "finding": "Sync filters requested IDs against active local Google accounts.",
+      "risk": "No dedicated allowlist or fail-closed unknown-ID rejection; login-customer pairing is not explicitly policy validated.",
+      "recommendation": "Fail closed on normalized customer/login-customer scope before credential load/provider call."
+    },
+    {
+      "area": "identifier_exposure",
+      "finding": "Sync runs contain customer IDs and errors.",
+      "risk": "Customer IDs reveal account topology even though they are not credentials.",
+      "recommendation": "Restrict sync-detail reads and sanitize errors."
+    }
+  ],
+  "adapter_contract_spec": {
+    "identity": {
+      "sourceKey": "google_ads",
+      "mode": "read_only",
+      "supportsSourceRegistry": true
+    },
+    "methods": [
+      "assessLocalFreshness(input)",
+      "syncReadOnly(input)",
+      "assessCoverage(input)"
+    ],
+    "input_contract": {
+      "required": [
+        "exportJobId",
+        "correlationId",
+        "sourceKey=google_ads",
+        "reportDate",
+        "dateFrom",
+        "dateTo",
+        "approved normalized customerIds",
+        "syncPolicy",
+        "policyVersion",
+        "internal requester audit identity",
+        "absolute deadline"
+      ],
+      "forbidden": [
+        "credentials",
+        "generic URL",
+        "generic HTTP method",
+        "caller-supplied GAQL",
+        "action plan",
+        "mutation operations"
+      ]
+    },
+    "provider_transport": {
+      "origin": "https://googleads.googleapis.com",
+      "method": "POST",
+      "path_suffix": "/customers/{allowlistedCustomerId}/googleAds:searchStream",
+      "query_source": "adapter-owned static GAQL templates only",
+      "mutation_allowed": false,
+      "validate_only_allowed": false
+    },
+    "allowed_local_write_collections": [
+      "adaccounts approved sync metadata fields",
+      "google_ads_campaigns",
+      "google_ads_campaign_budgets",
+      "google_ads_ad_groups",
+      "google_ads_keywords",
+      "google_ads_ads",
+      "google_ads_daily_metrics",
+      "google_ads_sync_runs"
+    ],
+    "forbidden_local_writes": [
+      "action plans",
+      "approvals",
+      "operation payloads",
+      "execution logs",
+      "change logs",
+      "evaluations",
+      "advertising-cost recalculation queues",
+      "business-control state",
+      "deletes"
+    ],
+    "timeout_retry_rate_limit": {
+      "proposed_connection_timeout_seconds": 5,
+      "proposed_request_timeout_seconds": 30,
+      "proposed_total_deadline_seconds": 180,
+      "proposed_max_retries_after_first_attempt": 2,
+      "retry_behavior": "Exponential backoff with jitter; honor safe provider retry guidance.",
+      "retryable": [
+        "transient network error",
+        "HTTP 429",
+        "eligible 5xx"
+      ],
+      "not_retryable": [
+        "invalid scope",
+        "policy denial",
+        "invalid GAQL",
+        "auth/permission error",
+        "unsupported version",
+        "local validation error"
+      ],
+      "concurrency": "Bounded per worker and customer/login-customer scope."
+    },
+    "locking_idempotency": {
+      "lock_key": "google_ads:{customerScopeHash}:{dateFrom}:{dateTo}",
+      "owner": "exportJobId plus random owner token",
+      "requirements": [
+        "renewable TTL beyond total deadline",
+        "owner-only release",
+        "reuse compatible successful run for sync_if_stale",
+        "persist scope hash and export-job link",
+        "prevent duplicate concurrent provider calls"
+      ]
+    },
+    "partial_failure": {
+      "isolation": "per customer and step",
+      "successful_upserts_preserved": true,
+      "partial_when": "At least one approved step succeeds and another fails.",
+      "failed_when": "No useful approved step succeeds.",
+      "terminal_run_required": true,
+      "post_sync_db_assessment_required": true
+    },
+    "error_categories": [
+      "policy_denied",
+      "invalid_scope",
+      "not_configured",
+      "auth_failed",
+      "permission_denied",
+      "rate_limited",
+      "provider_timeout",
+      "provider_transient",
+      "provider_query_invalid",
+      "provider_version_unsupported",
+      "local_persistence_failed",
+      "lock_unavailable",
+      "unexpected"
+    ],
+    "no_mutation_invariants": [
+      "Only exact searchStream provider endpoint is reachable.",
+      "No mutation/action/execution dependency is in the adapter module graph.",
+      "Only allowlisted local cache and sync-run writes occur.",
+      "canImportActionFile remains false.",
+      "canDryRun remains false.",
+      "canExecuteLive remains false."
+    ]
+  },
+  "integration_plan": {
+    "implemented_in_prompt6": false,
+    "future_flow": [
+      "Create future official/partial export job.",
+      "Run existing DB-only source registry/freshness/coverage assessment.",
+      "If policy allows and google_ads is stale or lacks required coverage, validate scope and acquire lock.",
+      "Call narrow Google Ads read-only adapter.",
+      "Write approved local cache and durable sync run only.",
+      "Re-run existing DB-only freshness and coverage assessment.",
+      "Apply eligibility and decision gates.",
+      "Snapshot and export."
+    ],
+    "cached_export": {
+      "adapter_call_allowed": false,
+      "cached_export": true,
+      "sync_policy": "export_cached",
+      "provider_sync_attempted": false,
+      "freshness_gate_evaluated": false
+    },
+    "future_official_export": {
+      "block_ads_dependent_claims_when": [
+        "Google Ads stale",
+        "Google Ads missing",
+        "Google Ads sync failed",
+        "Google Ads report-date coverage missing"
+      ],
+      "fresh_with_zero_report_date_coverage": "Does not pass; canRecommendAdsScale remains false."
+    },
+    "future_partial_export": {
+      "requires_explicit_policy": true,
+      "warnings_required": true,
+      "affected_strong_decision_gates_disabled": true,
+      "missing_or_zero_must_not_be_claimed_as_verified_zero": true
+    },
+    "required_future_prerequisites": [
+      "Narrow adapter module and registry.",
+      "Official/partial job lifecycle in separate approved scope.",
+      "Provider-sync audit and export-job linkage.",
+      "Dedicated permissions.",
+      "Distributed lock/idempotency/timeout/retry/rate policy.",
+      "Post-sync DQ and decision-gate metadata."
+    ]
+  },
+  "test_plan": [
+    "Adapter never calls mutate, validateOnly, create, update, delete, or status methods.",
+    "Transport rejects every origin/path/method except allowlisted searchStream POST.",
+    "No caller-supplied URL, method, or GAQL is accepted.",
+    "Read-only sync writes only approved local collections and never deletes.",
+    "Invalid or unapproved customer/login-customer scope fails before credentials/provider call.",
+    "Timeout, total deadline, retry, backoff, rate-limit, and bounded concurrency work.",
+    "Authentication/policy/query errors are not retried.",
+    "Distributed lock prevents concurrent equivalent provider sync.",
+    "Idempotency reuses a compatible successful run for sync_if_stale.",
+    "Every started sync run reaches a terminal status.",
+    "Per-account/step failure produces partial or failed correctly.",
+    "Provider and secret errors are typed, bounded, and redacted.",
+    "Stale source triggers adapter only when future policy allows.",
+    "Fresh and covered source skips adapter.",
+    "Cached export never resolves or calls adapter.",
+    "Provider failure becomes a warning and is followed by DB-only reassessment.",
+    "Fresh timestamp with zero report-date coverage keeps ads-scale gate false.",
+    "canImportActionFile, canDryRun, and canExecuteLive remain false.",
+    "Existing GET exports remain side-effect-free.",
+    "Adapter module dependency graph contains no action, validation, execution, evaluation, post-execution, emergency, or auto-control service.",
+    "RBAC denies broad google-ads.read users from triggering internal adapter sync."
+  ],
+  "risks_and_assumptions": [
+    {
+      "type": "risk",
+      "item": "Broad GoogleAdsModule exports read and mutation/execution services together."
+    },
+    {
+      "type": "risk",
+      "item": "Current google-ads.read permission is too broad for provider-sync execution."
+    },
+    {
+      "type": "risk",
+      "item": "Provider latency, quota/rate limits, auth, version, and per-account permission differences can produce partial coverage."
+    },
+    {
+      "type": "risk",
+      "item": "No current distributed lock or provider-sync idempotency."
+    },
+    {
+      "type": "risk",
+      "item": "Successful provider response or fresh timestamp does not prove report-date coverage."
+    },
+    {
+      "type": "risk",
+      "item": "Legacy plaintext credential/config fallback weakens encrypted-storage invariant."
+    },
+    {
+      "type": "risk",
+      "item": "Current redaction cannot make arbitrary raw provider payloads safe."
+    },
+    {
+      "type": "assumption",
+      "item": "ERP remains the only component allowed to call Google Ads."
+    },
+    {
+      "type": "assumption",
+      "item": "Pre-export adapter can only read provider and upsert approved local cache/audit."
+    },
+    {
+      "type": "assumption",
+      "item": "Final freshness and coverage decisions remain DB-only after sync."
+    },
+    {
+      "type": "assumption",
+      "item": "Official and partial exports are not authorized in Prompt 6."
+    },
+    {
+      "type": "assumption",
+      "item": "OAuth refresh-token mechanism remains the approved Google Ads credential method unless separately reviewed."
+    }
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "ready_for_code": "conditionally, only after separate review and authorization of the listed controls",
+    "recommended_next_pr": "PR-2.3B-3B - Google Ads Read-only Adapter isolation and guards",
+    "required_approvals_before_code": [
+      "Narrow module/dependency boundary.",
+      "Exact provider endpoint and local-write allowlists.",
+      "Dedicated sync-execution and sync-detail permissions.",
+      "Fail-closed customer/login-customer scope.",
+      "Lock, idempotency, timeout, retry, rate-limit, and partial-failure policy.",
+      "Sync-run audit/schema changes and export-job linkage.",
+      "No-mutation dependency-graph and transport tests."
+    ],
+    "still_forbidden": [
+      "Official or partial export orchestration.",
+      "Public adapter endpoint.",
+      "Action import.",
+      "Provider validateOnly.",
+      "Approval.",
+      "Generic dry-run.",
+      "Live execution.",
+      "OpenAI/upload work.",
+      "Phase 3.",
+      "Automatic Prompt 7 creation."
+    ]
+  }
+}

@@ -224,7 +224,7 @@
   </table>
 
   <!-- Modal (không dùng khi tạo nhanh) -->
-  <div class="modal" *ngIf="false && showModal()">
+  <div class="modal" *ngIf="showModal()">
     <div class="modal-content">
       <h3>{{ editingId ? 'Cập nhật' : 'Thêm mới' }} Chi Phí Quảng Cáo</h3>
       <form [formGroup]="form" (ngSubmit)="save()">

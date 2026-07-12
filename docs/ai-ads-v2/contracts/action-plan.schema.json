@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://htxbachgia.shop/schemas/ai-ads-v2/action-plan.schema.json",
+  "title": "AI Ads V2 Google Ads Action Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "planId",
+    "sourceExportId",
+    "targetProvider",
+    "currency",
+    "timezone",
+    "executionMode",
+    "analysisSummary",
+    "actions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "planId": { "type": "string", "pattern": "^PLAN-[A-Z0-9][A-Z0-9_-]{5,79}$" },
+    "sourceExportId": { "type": "string", "pattern": "^EXP-[A-Z0-9][A-Z0-9_-]{5,79}$" },
+    "targetProvider": { "const": "google" },
+    "currency": { "const": "VND" },
+    "timezone": { "const": "Asia/Ho_Chi_Minh" },
+    "executionMode": { "const": "pending_approval" },
+    "analysisSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mainConclusion", "dataQuality"],
+      "properties": {
+        "mainConclusion": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "dataQuality": {
+          "enum": ["good", "good_with_warnings", "partial", "insufficient"]
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "maxItems": 100
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/action" }
+    }
+  },
+  "$defs": {
+    "providerId": { "type": "string", "pattern": "^\\d+$" },
+    "resourceName": { "type": "string", "pattern": "^customers/\\d+/.+$" },
+    "httpsUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "nonEmptyString": { "type": "string", "minLength": 1, "maxLength": 5000 },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "provider",
+        "actionType",
+        "customerId",
+        "resourceType",
+        "operation",
+        "typedPayload",
+        "reason",
+        "evidence",
+        "confidence",
+        "risk",
+        "dataQuality",
+        "approvalRequired",
+        "idempotencyKey",
+        "rollbackIf"
+      ],
+      "properties": {
+        "actionId": { "type": "string", "pattern": "^ACT[A-Z0-9_-]{3,79}$" },
+        "provider": { "const": "google" },
+        "actionType": {
+          "enum": [
+            "create_search_campaign",
+            "create_ad_group",
+            "create_keyword",
+            "create_responsive_search_ad",
+            "update_campaign_budget",
+            "pause_campaign",
+            "resume_campaign",
+            "pause_ad_group",
+            "resume_ad_group",
+            "monitor_only"
+          ]
+        },
+        "customerId": { "$ref": "#/$defs/providerId" },
+        "loginCustomerId": { "$ref": "#/$defs/providerId" },
+        "resourceType": {
+          "enum": ["campaign", "campaign_budget", "ad_group", "keyword", "responsive_search_ad", "monitor"]
+        },
+        "operation": { "enum": ["create", "update", "pause", "resume", "monitor"] },
+        "typedPayload": { "type": "object" },
+        "reason": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence": { "type": "object" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "risk": { "enum": ["low", "medium", "high"] },
+        "dataQuality": { "enum": ["good", "good_with_warnings", "partial", "insufficient"] },
+        "approvalRequired": { "const": true },
+        "idempotencyKey": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9_.:-]{7,199}$" },
+        "rollbackIf": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "maxItems": 50
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "actionType": { "const": "create_search_campaign" } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "campaign" },
+              "operation": { "const": "create" },
+              "typedPayload": { "$ref": "#/$defs/createSearchCampaignPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "create_ad_group" } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "ad_group" },
+              "operation": { "const": "create" },
+              "typedPayload": { "$ref": "#/$defs/createAdGroupPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "create_keyword" } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "keyword" },
+              "operation": { "const": "create" },
+              "typedPayload": { "$ref": "#/$defs/createKeywordPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "create_responsive_search_ad" } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "responsive_search_ad" },
+              "operation": { "const": "create" },
+              "typedPayload": { "$ref": "#/$defs/createRsaPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "update_campaign_budget" } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "campaign_budget" },
+              "operation": { "const": "update" },
+              "typedPayload": { "$ref": "#/$defs/updateBudgetPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "enum": ["pause_campaign", "resume_campaign"] } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "campaign" },
+              "typedPayload": { "$ref": "#/$defs/campaignStatusPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "enum": ["pause_ad_group", "resume_ad_group"] } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "ad_group" },
+              "typedPayload": { "$ref": "#/$defs/adGroupStatusPayload" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "pause_campaign" } }, "required": ["actionType"] },
+          "then": { "properties": { "operation": { "const": "pause" } } }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "resume_campaign" } }, "required": ["actionType"] },
+          "then": { "properties": { "operation": { "const": "resume" } } }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "pause_ad_group" } }, "required": ["actionType"] },
+          "then": { "properties": { "operation": { "const": "pause" } } }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "resume_ad_group" } }, "required": ["actionType"] },
+          "then": { "properties": { "operation": { "const": "resume" } } }
+        },
+        {
+          "if": { "properties": { "actionType": { "const": "monitor_only" } }, "required": ["actionType"] },
+          "then": {
+            "properties": {
+              "resourceType": { "const": "monitor" },
+              "operation": { "const": "monitor" },
+              "typedPayload": { "$ref": "#/$defs/monitorPayload" }
+            }
+          }
+        }
+      ]
+    },
+    "createSearchCampaignPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaignName", "budgetName", "dailyBudget", "advertisingChannelType", "status", "biddingStrategyType", "startDate", "finalUrl"],
+      "properties": {
+        "campaignName": { "$ref": "#/$defs/nonEmptyString" },
+        "budgetName": { "$ref": "#/$defs/nonEmptyString" },
+        "dailyBudget": { "type": "number", "exclusiveMinimum": 0 },
+        "advertisingChannelType": { "const": "SEARCH" },
+        "status": { "const": "PAUSED" },
+        "biddingStrategyType": { "enum": ["MAXIMIZE_CONVERSIONS", "MAXIMIZE_CONVERSION_VALUE", "MANUAL_CPC"] },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "finalUrl": { "$ref": "#/$defs/httpsUrl" },
+        "adGroups": { "type": "array", "items": { "type": "object" }, "default": [] }
+      }
+    },
+    "createAdGroupPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaignId", "adGroupName", "status"],
+      "properties": {
+        "campaignId": { "$ref": "#/$defs/providerId" },
+        "adGroupName": { "$ref": "#/$defs/nonEmptyString" },
+        "status": { "const": "PAUSED" },
+        "cpcBidMicros": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "createKeywordPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adGroupId", "keywordText", "matchType", "negative"],
+      "properties": {
+        "adGroupId": { "$ref": "#/$defs/providerId" },
+        "keywordText": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "matchType": { "enum": ["EXACT", "PHRASE", "BROAD"] },
+        "negative": { "type": "boolean" }
+      }
+    },
+    "createRsaPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adGroupId", "headlines", "descriptions", "finalUrl"],
+      "properties": {
+        "adGroupId": { "$ref": "#/$defs/providerId" },
+        "headlines": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 15,
+          "items": { "type": "string", "minLength": 1, "maxLength": 30 }
+        },
+        "descriptions": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": { "type": "string", "minLength": 1, "maxLength": 90 }
+        },
+        "finalUrl": { "$ref": "#/$defs/httpsUrl" },
+        "path1": { "type": "string", "maxLength": 15 },
+        "path2": { "type": "string", "maxLength": 15 }
+      }
+    },
+    "updateBudgetPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dailyBudget"],
+      "anyOf": [
+        { "required": ["campaignBudgetId"] },
+        { "required": ["campaignBudgetResourceName"] }
+      ],
+      "properties": {
+        "campaignBudgetId": { "$ref": "#/$defs/providerId" },
+        "campaignBudgetResourceName": {
+          "type": "string",
+          "pattern": "^customers/\\d+/campaignBudgets/\\d+$"
+        },
+        "dailyBudget": { "type": "number", "exclusiveMinimum": 0 },
+        "currentDailyBudget": { "type": "number", "minimum": 0 }
+      }
+    },
+    "campaignStatusPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaignId"],
+      "properties": {
+        "campaignId": { "$ref": "#/$defs/providerId" },
+        "campaignResourceName": {
+          "type": "string",
+          "pattern": "^customers/\\d+/campaigns/\\d+$"
+        }
+      }
+    },
+    "adGroupStatusPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adGroupId"],
+      "properties": {
+        "adGroupId": { "$ref": "#/$defs/providerId" },
+        "adGroupResourceName": {
+          "type": "string",
+          "pattern": "^customers/\\d+/adGroups/\\d+$"
+        }
+      }
+    },
+    "monitorPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["monitorUntil", "metrics"],
+      "properties": {
+        "monitorUntil": { "type": "string", "format": "date" },
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+        }
+      }
+    }
+  }
+}

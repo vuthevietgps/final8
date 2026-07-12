@@ -1,0 +1,1058 @@
+{
+  "metadata": {
+    "checksum": "526477b482f1692913bb954b2c1a7847a96fb1d41af6ba3bcf397f5ce4b183ae",
+    "company_id": null,
+    "company_name": null,
+    "currency": "VND",
+    "data_pack_id": "marketer-2026-06-12",
+    "data_pack_type": "marketer",
+    "data_sources": [],
+    "export_format": "json",
+    "exported_at": "2026-06-12T10:20:45.235Z",
+    "generated_by": {
+      "buffer": {
+        "0": 105,
+        "1": 204,
+        "2": 97,
+        "3": 195,
+        "4": 211,
+        "5": 42,
+        "6": 40,
+        "7": 80,
+        "8": 238,
+        "9": 59,
+        "10": 183,
+        "11": 166
+      }
+    },
+    "report_date": "2026-06-12",
+    "schema_version": "1.0",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "warnings": [
+      "company_id and company_name are not configured in a canonical source."
+    ]
+  },
+  "sections": {
+    "00_README": {
+      "data": [
+        {
+          "do_not_execute_actions": true,
+          "pack": "Marketer Data Pack Google-focused V1"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "01_metadata": {
+      "data": {
+        "checksum": "526477b482f1692913bb954b2c1a7847a96fb1d41af6ba3bcf397f5ce4b183ae",
+        "company_id": null,
+        "company_name": null,
+        "currency": "VND",
+        "data_pack_id": "marketer-2026-06-12",
+        "data_pack_type": "marketer",
+        "data_sources": [],
+        "export_format": "json",
+        "exported_at": "2026-06-12T10:20:45.235Z",
+        "generated_by": {
+          "buffer": {
+            "0": 105,
+            "1": 204,
+            "2": 97,
+            "3": 195,
+            "4": 211,
+            "5": 42,
+            "6": 40,
+            "7": 80,
+            "8": 238,
+            "9": 59,
+            "10": 183,
+            "11": 166
+          }
+        },
+        "report_date": "2026-06-12",
+        "schema_version": "1.0",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "warnings": [
+          "company_id and company_name are not configured in a canonical source."
+        ]
+      },
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "02_chatgpt_web_reading_rules": {
+      "data": [
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-01",
+          "rule_text": "Không kết luận mạnh nếu data quality thấp.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-02",
+          "rule_text": "Không scale ads nếu mapping campaign → service thấp.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-03",
+          "rule_text": "Không tăng ngân sách mạnh nếu chưa rõ dòng tiền.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-04",
+          "rule_text": "Không dùng khoản vay giả định như tiền mặt thật.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-05",
+          "rule_text": "Không dùng LTV theo campaign nếu customer mapping chưa bền.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-06",
+          "rule_text": "Không kết luận sale kém nếu thiếu call/activity log.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-07",
+          "rule_text": "Không đề xuất tăng lead nếu vận hành đang quá tải hoặc capacity không rõ.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-08",
+          "rule_text": "Không đề xuất tắt campaign chủ lực nếu chưa đủ mẫu và chưa có duyệt.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-09",
+          "rule_text": "Luôn phân biệt estimated profit và realized profit.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-10",
+          "rule_text": "Luôn ghi rõ dữ liệu thiếu và việc cần kiểm tra thêm.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-11",
+          "rule_text": "Khi cần dữ liệu thị trường/đối thủ/pháp lý, ChatGPT Web phải nghiên cứu web và ghi nguồn.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        },
+        {
+          "applies_to": "all_analysis",
+          "can_be_overridden": false,
+          "rule_id": "READ-12",
+          "rule_text": "File hành động do ChatGPT Web tạo chỉ là nháp, ERP chưa được thực thi ngay.",
+          "rule_type": "mandatory",
+          "severity": "blocking"
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "03_chatgpt_web_research_rules": {
+      "data": [
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "market_demand",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "competitor",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "ads_platform",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "legal_policy",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "customer_voice",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        },
+        {
+          "citation_required": true,
+          "live_action_allowed": false,
+          "output_required": "Tách fact, inference, nguồn và ngày truy cập.",
+          "required_sources": "Nguồn công khai đáng tin cậy; ưu tiên nguồn chính thức.",
+          "research_area": "seasonality",
+          "when_to_research": "Khi Data Pack không đủ bối cảnh nội bộ để trả lời câu hỏi thuộc lĩnh vực này."
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    },
+    "04_accounts": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "05_campaigns": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "06_ad_groups": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "07_keywords": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "08_ads_creatives": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "09_daily_metrics": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only provider metadata and daily metrics.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "search_terms",
+          "geo_performance",
+          "device_performance",
+          "hour_performance",
+          "audience_performance"
+        ],
+        "period": "custom",
+        "source": "Google Ads read-only sync + legacy adgroups/adaccounts",
+        "source_table_or_service": "google_ads_* + adgroups + adaccounts",
+        "warning": [
+          "Multi-channel campaign/ad/keyword detail is partial."
+        ]
+      }
+    },
+    "10_leads_by_source": {
+      "data": [],
+      "quality": {
+        "calculation_method": "Read-only aggregation of lead status/source/mapping fields.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "missing",
+        "freshness_at": null,
+        "missing_fields": [
+          "product_or_service_interest",
+          "assignment_history",
+          "call_activity_log",
+          "status_history"
+        ],
+        "period": "custom",
+        "source": "marketing_leads",
+        "source_table_or_service": "marketing_leads",
+        "warning": [
+          "Some MarketingLead rows may be inferred from chat, pending orders or final orders."
+        ]
+      }
+    },
+    "11_data_quality": {
+      "data": {
+        "decision_gate": {
+          "blocking_reasons": [
+            "lead_source_mapping_rate: threshold not met",
+            "lead_campaign_mapping_rate: threshold not met",
+            "order_lead_mapping_rate: threshold not met",
+            "order_service_mapping_rate: threshold not met",
+            "order_customer_mapping_rate: Order has no durable customerId field.",
+            "order_profit_completion_rate: threshold not met",
+            "campaign_service_mapping_rate: threshold not met",
+            "ads_sync_success_rate: threshold not met",
+            "ads_data_freshness_hours: No ads freshness timestamp.",
+            "attribution_confidence: Durable order-customer and full attribution links are missing.",
+            "estimated_vs_realized_profit_rate: threshold not met"
+          ],
+          "can_conclude_profit": false,
+          "can_dry_run": false,
+          "can_execute_live": false,
+          "can_generate_action_draft": true,
+          "can_import_action_file": false,
+          "can_recommend_ads_scale": false,
+          "can_use_ltv_strongly": false,
+          "warnings": []
+        },
+        "metadata": {
+          "company_id": null,
+          "company_name": null,
+          "currency": "VND",
+          "data_pack_id": "data_quality-2026-06-12",
+          "data_pack_type": "data_quality",
+          "data_sources": [],
+          "export_format": "json",
+          "exported_at": "2026-06-12T10:20:45.235Z",
+          "generated_by": {
+            "buffer": {
+              "0": 105,
+              "1": 204,
+              "2": 97,
+              "3": 195,
+              "4": 211,
+              "5": 42,
+              "6": 40,
+              "7": 80,
+              "8": 238,
+              "9": 59,
+              "10": 183,
+              "11": 166
+            }
+          },
+          "report_date": "2026-06-12",
+          "schema_version": "1.0",
+          "timezone": "Asia/Ho_Chi_Minh",
+          "warnings": [
+            "company_id and company_name are not configured in a canonical source."
+          ]
+        },
+        "metrics": [
+          {
+            "denominator": 0,
+            "metric": "lead_source_mapping_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 90,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": 0,
+            "metric": "lead_campaign_mapping_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 80,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": 0,
+            "metric": "order_lead_mapping_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 80,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": 0,
+            "metric": "order_service_mapping_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 90,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": 0,
+            "metric": "order_customer_mapping_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 90,
+            "unit": "percent",
+            "value": null,
+            "warning": "Order has no durable customerId field."
+          },
+          {
+            "denominator": 0,
+            "metric": "order_profit_completion_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 80,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": 0,
+            "metric": "campaign_service_mapping_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 80,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": 0,
+            "metric": "ads_sync_success_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 95,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          },
+          {
+            "denominator": null,
+            "metric": "ads_data_freshness_hours",
+            "numerator": null,
+            "status": "missing",
+            "threshold": 24,
+            "unit": "hours",
+            "value": null,
+            "warning": "No ads freshness timestamp."
+          },
+          {
+            "denominator": null,
+            "metric": "attribution_confidence",
+            "numerator": null,
+            "status": "blocked",
+            "threshold": 0.8,
+            "unit": "score",
+            "value": 0,
+            "warning": "Durable order-customer and full attribution links are missing."
+          },
+          {
+            "denominator": 0,
+            "metric": "estimated_vs_realized_profit_rate",
+            "numerator": 0,
+            "status": "missing",
+            "threshold": 80,
+            "unit": "percent",
+            "value": null,
+            "warning": null
+          }
+        ],
+        "quality": {
+          "calculation_method": "Deterministic V1 mapping/completeness/freshness formulas.",
+          "can_use_for_decision": "cautious",
+          "confidence": "low",
+          "data_quality_status": "weak",
+          "freshness_at": null,
+          "missing_fields": [
+            "lead_source_mapping_rate",
+            "lead_campaign_mapping_rate",
+            "order_lead_mapping_rate",
+            "order_service_mapping_rate",
+            "order_customer_mapping_rate",
+            "order_profit_completion_rate",
+            "campaign_service_mapping_rate",
+            "ads_sync_success_rate",
+            "ads_data_freshness_hours",
+            "estimated_vs_realized_profit_rate"
+          ],
+          "period": "custom",
+          "source": "AI Data Pack quality calculator",
+          "source_table_or_service": "ordertest2, marketing_leads, adgroups, google_ads_sync_runs",
+          "warning": [
+            "lead_source_mapping_rate: threshold not met",
+            "lead_campaign_mapping_rate: threshold not met",
+            "order_lead_mapping_rate: threshold not met",
+            "order_service_mapping_rate: threshold not met",
+            "order_customer_mapping_rate: Order has no durable customerId field.",
+            "order_profit_completion_rate: threshold not met",
+            "campaign_service_mapping_rate: threshold not met",
+            "ads_sync_success_rate: threshold not met",
+            "ads_data_freshness_hours: No ads freshness timestamp.",
+            "attribution_confidence: Durable order-customer and full attribution links are missing.",
+            "estimated_vs_realized_profit_rate: threshold not met"
+          ]
+        }
+      },
+      "quality": {
+        "calculation_method": "Deterministic V1 mapping/completeness/freshness formulas.",
+        "can_use_for_decision": "cautious",
+        "confidence": "low",
+        "data_quality_status": "weak",
+        "freshness_at": null,
+        "missing_fields": [
+          "lead_source_mapping_rate",
+          "lead_campaign_mapping_rate",
+          "order_lead_mapping_rate",
+          "order_service_mapping_rate",
+          "order_customer_mapping_rate",
+          "order_profit_completion_rate",
+          "campaign_service_mapping_rate",
+          "ads_sync_success_rate",
+          "ads_data_freshness_hours",
+          "estimated_vs_realized_profit_rate"
+        ],
+        "period": "custom",
+        "source": "AI Data Pack quality calculator",
+        "source_table_or_service": "ordertest2, marketing_leads, adgroups, google_ads_sync_runs",
+        "warning": [
+          "lead_source_mapping_rate: threshold not met",
+          "lead_campaign_mapping_rate: threshold not met",
+          "order_lead_mapping_rate: threshold not met",
+          "order_service_mapping_rate: threshold not met",
+          "order_customer_mapping_rate: Order has no durable customerId field.",
+          "order_profit_completion_rate: threshold not met",
+          "campaign_service_mapping_rate: threshold not met",
+          "ads_sync_success_rate: threshold not met",
+          "ads_data_freshness_hours: No ads freshness timestamp.",
+          "attribution_confidence: Durable order-customer and full attribution links are missing.",
+          "estimated_vs_realized_profit_rate: threshold not met"
+        ]
+      }
+    },
+    "12_mapping_report": {
+      "data": {
+        "metadata": {
+          "company_id": null,
+          "company_name": null,
+          "currency": "VND",
+          "data_pack_id": "mapping_report-2026-06-12",
+          "data_pack_type": "mapping_report",
+          "data_sources": [],
+          "export_format": "json",
+          "exported_at": "2026-06-12T10:20:45.235Z",
+          "generated_by": {
+            "buffer": {
+              "0": 105,
+              "1": 204,
+              "2": 97,
+              "3": 195,
+              "4": 211,
+              "5": 42,
+              "6": 40,
+              "7": 80,
+              "8": 238,
+              "9": 59,
+              "10": 183,
+              "11": 166
+            }
+          },
+          "report_date": "2026-06-12",
+          "schema_version": "1.0",
+          "timezone": "Asia/Ho_Chi_Minh",
+          "warnings": [
+            "company_id and company_name are not configured in a canonical source."
+          ]
+        },
+        "overall_attribution_confidence": 0,
+        "quality": {
+          "calculation_method": "Segment completeness rates plus capped weighted attribution confidence.",
+          "can_use_for_decision": "no",
+          "confidence": "low",
+          "data_quality_status": "weak",
+          "freshness_at": null,
+          "missing_fields": [
+            "ads_platform_to_ads_account",
+            "ads_account_to_campaign",
+            "platform_account_to_campaign",
+            "campaign_to_ad_group",
+            "ad_group_to_ad_creative",
+            "ad_creative_to_keyword_search_term",
+            "keyword_search_term_to_utm_landing",
+            "utm_landing_to_lead",
+            "ad_group_to_lead",
+            "lead_to_sale",
+            "lead_to_customer",
+            "sale_to_customer",
+            "lead_to_order",
+            "order_to_customer",
+            "customer_to_order",
+            "order_to_product_variant",
+            "ad_group_to_service_group",
+            "order_to_profit",
+            "product_variant_to_revenue",
+            "revenue_to_gross_profit",
+            "gross_profit_to_net_profit"
+          ],
+          "period": "custom",
+          "source": "AI Data Pack mapping calculator",
+          "source_table_or_service": "ads, marketing_leads, ordertest2, products",
+          "warning": [
+            "Attribution confidence is below 0.8; ads scale/live decisions are blocked."
+          ]
+        },
+        "segments": [
+          {
+            "broken_reason": "Ads account platform/type metadata is missing.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "ads_platform_to_ads_account",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ads_platform",
+            "target_entity": "ads_account"
+          },
+          {
+            "broken_reason": "Campaign account/customer mapping is incomplete.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "ads_account_to_campaign",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ads_account",
+            "target_entity": "campaign"
+          },
+          {
+            "broken_reason": "Missing verified provider account/customer mapping.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "platform_account_to_campaign",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ads_account",
+            "target_entity": "campaign"
+          },
+          {
+            "broken_reason": "Campaign metadata is partial outside Google.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "campaign_to_ad_group",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "campaign",
+            "target_entity": "ad_group"
+          },
+          {
+            "broken_reason": "Multi-channel creative mapping is partial.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "ad_group_to_ad_creative",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "ad_group",
+            "target_entity": "ad_or_creative"
+          },
+          {
+            "broken_reason": "Search term to ad/lead mapping is unavailable.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "ad_creative_to_keyword_search_term",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "ad_or_creative",
+            "target_entity": "keyword_or_search_term"
+          },
+          {
+            "broken_reason": "UTM/search-term tracking is unavailable.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "keyword_search_term_to_utm_landing",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "keyword_or_search_term",
+            "target_entity": "utm_or_landing_page"
+          },
+          {
+            "broken_reason": "Lead has no durable UTM/landing-page relation.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "utm_landing_to_lead",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "utm_or_landing_page",
+            "target_entity": "lead"
+          },
+          {
+            "broken_reason": "Lead ad-group mapping is partial/inferred.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "ad_group_to_lead",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ad_group",
+            "target_entity": "lead"
+          },
+          {
+            "broken_reason": "Assignment history is unavailable.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "lead_to_sale",
+            "missing_count": 0,
+            "required_fix_priority": "P1",
+            "source_entity": "lead",
+            "target_entity": "sale"
+          },
+          {
+            "broken_reason": "Customer mapping is not durable across orders.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "lead_to_customer",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "lead",
+            "target_entity": "customer"
+          },
+          {
+            "broken_reason": "Sale-to-customer relation is only available through partial lead records.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "sale_to_customer",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "sale",
+            "target_entity": "customer"
+          },
+          {
+            "broken_reason": "Many orders do not retain a durable lead relation.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "lead_to_order",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "lead",
+            "target_entity": "order"
+          },
+          {
+            "broken_reason": "TestOrder2 has no durable customerId.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "order_to_customer",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "order",
+            "target_entity": "customer"
+          },
+          {
+            "broken_reason": "TestOrder2 has no durable customerId and Customer only retains latestOrderId.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "customer_to_order",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "customer",
+            "target_entity": "order"
+          },
+          {
+            "broken_reason": "Some orders may not have productId.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "order_to_product_variant",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "order",
+            "target_entity": "product_variant"
+          },
+          {
+            "broken_reason": null,
+            "confidence": "high",
+            "impact": "No material mapping gap detected for this segment.",
+            "mapping_rate": 100,
+            "mapping_segment": "product_variant_to_service_group",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "product_variant",
+            "target_entity": "service_group"
+          },
+          {
+            "broken_reason": "Ad group product/service mapping is optional.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "ad_group_to_service_group",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "ad_group",
+            "target_entity": "service_group"
+          },
+          {
+            "broken_reason": "Cost allocation may still be estimated.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "order_to_profit",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "order",
+            "target_entity": "gross_and_net_profit"
+          },
+          {
+            "broken_reason": "Revenue is order-derived and requires product mapping.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "product_variant_to_revenue",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "product_variant",
+            "target_entity": "revenue"
+          },
+          {
+            "broken_reason": "Some orders may not have complete gross profit.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "revenue_to_gross_profit",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "revenue",
+            "target_entity": "gross_profit"
+          },
+          {
+            "broken_reason": "Net profit may remain estimated until allocations finalize.",
+            "confidence": "low",
+            "impact": "Downstream analysis must lower confidence or block strong decisions.",
+            "mapping_rate": null,
+            "mapping_segment": "gross_profit_to_net_profit",
+            "missing_count": 0,
+            "required_fix_priority": "P0",
+            "source_entity": "gross_profit",
+            "target_entity": "net_profit"
+          }
+        ]
+      },
+      "quality": {
+        "calculation_method": "Segment completeness rates plus capped weighted attribution confidence.",
+        "can_use_for_decision": "no",
+        "confidence": "low",
+        "data_quality_status": "weak",
+        "freshness_at": null,
+        "missing_fields": [
+          "ads_platform_to_ads_account",
+          "ads_account_to_campaign",
+          "platform_account_to_campaign",
+          "campaign_to_ad_group",
+          "ad_group_to_ad_creative",
+          "ad_creative_to_keyword_search_term",
+          "keyword_search_term_to_utm_landing",
+          "utm_landing_to_lead",
+          "ad_group_to_lead",
+          "lead_to_sale",
+          "lead_to_customer",
+          "sale_to_customer",
+          "lead_to_order",
+          "order_to_customer",
+          "customer_to_order",
+          "order_to_product_variant",
+          "ad_group_to_service_group",
+          "order_to_profit",
+          "product_variant_to_revenue",
+          "revenue_to_gross_profit",
+          "gross_profit_to_net_profit"
+        ],
+        "period": "custom",
+        "source": "AI Data Pack mapping calculator",
+        "source_table_or_service": "ads, marketing_leads, ordertest2, products",
+        "warning": [
+          "Attribution confidence is below 0.8; ads scale/live decisions are blocked."
+        ]
+      }
+    },
+    "13_allowed_actions": {
+      "data": [
+        {
+          "action": "monitor_only",
+          "allowed": true
+        },
+        {
+          "action": "live_execution",
+          "allowed": false
+        }
+      ],
+      "quality": {
+        "calculation_method": "Static contract",
+        "can_use_for_decision": "yes",
+        "confidence": "high",
+        "data_quality_status": "ok",
+        "freshness_at": null,
+        "missing_fields": [],
+        "period": "current",
+        "source": "AI Data Pack static V1 contract",
+        "source_table_or_service": null,
+        "warning": []
+      }
+    }
+  }
+}

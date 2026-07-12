@@ -1,24 +1,36 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CapitalAllocationService } from './capital-allocation.service';
 import { AdGroupProfitReportService } from '../ad-group-profit-report/ad-group-profit-report.service';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { BudgetApplyService } from '../advertising-optimization/ai-optimization/budget-apply.service';
+import {
+  canonicalAdsExecutionRequiredPayload,
+  getAdsSafetyConfig,
+} from '../common/ads-safety-config';
+import { CashflowSafetyService } from './cashflow-safety.service';
 
 export interface BudgetAllocationResult {
   totalAvailable: number;
   totalAllocated: number;
+  suggestions?: string[];
+  globalStatus?: string;
+  recommendation?: string;
+  globalAdjustmentRatio?: number;
+  systemLocked?: boolean;
   allocations: Array<{
     adGroupId: string;
     adGroupName: string;
     currentBudget: number;
+    action?: 'SCALE_UP' | 'SCALE_DOWN' | 'MAINTAIN';
     suggestedBudget: number;
     allocatedBudget: number;
     roi: number;
     profit: number;
     applied: boolean;
     reason?: string;
+    baselineBudget?: number;
     scaleCapped?: boolean;  // NEW: Đánh dấu nếu scale bị giới hạn 20%
     scalePercentage?: number;  // NEW: % tăng thực tế
   }>;
@@ -28,9 +40,11 @@ export interface BudgetAllocationResult {
     skippedCount: number;
   };
   horizontalScaling?: {  // NEW: Đề xuất horizontal scaling
+    action?: 'CLONE_AD_GROUP';
     excessBudget: number;
     canCreateNewGroups: boolean;
     suggestedNewGroups: number;
+    strategyHint?: string;
     message: string;
   };
 }
@@ -43,6 +57,7 @@ export class BudgetAllocationService {
     private readonly capitalAllocationService: CapitalAllocationService,
     private readonly adGroupProfitService: AdGroupProfitReportService,
     private readonly budgetApplyService: BudgetApplyService,
+    private readonly cashflowSafetyService: CashflowSafetyService,
     @InjectModel(AdGroup.name) private readonly adGroupModel: Model<AdGroupDocument>,
   ) {}
 
@@ -63,11 +78,24 @@ export class BudgetAllocationService {
     priorityMode?: 'roi' | 'profit' | 'equal'; // Ưu tiên phân bổ
     fundMode?: 'conservative' | 'moderate' | 'aggressive'; // Chế độ tính vốn
   }): Promise<BudgetAllocationResult> {
-    const dryRun = params?.dryRun ?? false;
+    const dryRun = params?.dryRun ?? getAdsSafetyConfig().dryRun;
+
+    // This service is a recommendation/preview engine only. Provider mutations
+    // must use the canonical V2 plan so validateOnly, per-action approval,
+    // idempotency and the execution audit log cannot be bypassed.
+    if (!dryRun) {
+      throw new ForbiddenException(canonicalAdsExecutionRequiredPayload());
+    }
+
     const minBudget = params?.minBudget ?? 50000; // 50k VND
     const maxBudget = params?.maxBudget ?? 10000000; // 10M VND
     const priorityMode = params?.priorityMode ?? 'roi';
     const fundMode = params?.fundMode ?? 'conservative'; // Mặc định dùng conservative
+
+    const health = await this.cashflowSafetyService.getCashflowHealthDashboard();
+    if ((health.csi ?? health.CSI) < 0.7) {
+      return this.buildCriticalCashShortagePlan(dryRun);
+    }
 
     // 1. Lấy vốn tái đầu tư lũy kế còn lại: Tổng tái đầu tư - đã dùng
     const reinvestment = await this.capitalAllocationService.getAvailableReinvestmentBudget();
@@ -135,12 +163,23 @@ export class BudgetAllocationService {
     // 5. Tính tổng optimal spend
     const totalOptimal = weighted.reduce((sum, s) => sum + s.appliedSpend, 0);
 
+    const adGroupConfigs = await this.adGroupModel
+      .find({ adGroupId: { $in: weighted.map(item => item.adGroupId) } })
+      .select('adGroupId dailyBudget preferHorizontalScaling')
+      .lean();
+    const adGroupConfigMap = new Map(
+      adGroupConfigs.map((item: any) => [String(item.adGroupId), item]),
+    );
+
     // 6. Tính budget allocation với giới hạn 20% increase
     let totalAllocated = 0;
     const MAX_SAFE_INCREASE = 0.20;  // 20% max để tránh reset machine learning
     
     const allocations = weighted.map(item => {
       let allocatedBudget = 0;
+      const adGroupConfig = adGroupConfigMap.get(item.adGroupId);
+      const configuredDailyBudget = Number(adGroupConfig?.dailyBudget || 0);
+      const baselineBudget = configuredDailyBudget > 0 ? configuredDailyBudget : item.lastSpend;
 
       if (totalOptimal <= totalAvailable) {
         // Đủ vốn: dùng applied spend
@@ -156,26 +195,37 @@ export class BudgetAllocationService {
       allocatedBudget = Math.max(minBudget, Math.min(maxBudget, allocatedBudget));
       
       // **GIỚI HẠN 20% INCREASE** để tránh reset machine learning
-      const maxAllowedBudget = item.lastSpend * (1 + MAX_SAFE_INCREASE);
-      const scaleCapped = allocatedBudget > maxAllowedBudget;
+      const maxAllowedBudget = baselineBudget > 0
+        ? baselineBudget * (1 + MAX_SAFE_INCREASE)
+        : allocatedBudget;
+      const scaleCapped = baselineBudget > 0 && allocatedBudget > maxAllowedBudget;
       
       if (scaleCapped) {
         allocatedBudget = Math.round(maxAllowedBudget);
       }
       
-      const scalePercentage = ((allocatedBudget - item.lastSpend) / item.lastSpend) * 100;
+      const scalePercentage = baselineBudget > 0
+        ? ((allocatedBudget - baselineBudget) / baselineBudget) * 100
+        : 0;
+      const action: 'SCALE_UP' | 'SCALE_DOWN' | 'MAINTAIN' = allocatedBudget > baselineBudget
+        ? 'SCALE_UP'
+        : allocatedBudget < baselineBudget
+          ? 'SCALE_DOWN'
+          : 'MAINTAIN';
       
       totalAllocated += allocatedBudget;
 
       return {
         adGroupId: item.adGroupId,
         adGroupName: item.adGroupName,
-        currentBudget: item.lastSpend,
+        currentBudget: baselineBudget,
+        action,
         suggestedBudget: item.appliedSpend,
         allocatedBudget,
         roi: item.roi,
         profit: item.lastProfit,
         applied: false,
+        baselineBudget,
         reason: scaleCapped ? `Capped at +20% (${item.lastSpend.toLocaleString()} → ${allocatedBudget.toLocaleString()})` : undefined,
         scaleCapped,
         scalePercentage: Math.round(scalePercentage * 10) / 10  // Round to 1 decimal
@@ -185,6 +235,9 @@ export class BudgetAllocationService {
     // 7. Kiểm tra xem còn dư ngân sách sau khi đã cap 20% chưa
     const excessBudget = totalAvailable - totalAllocated;
     const horizontalScaling = this.calculateHorizontalScaling(excessBudget, allocations);
+    const suggestions = horizontalScaling?.canCreateNewGroups
+      ? ['CLONE_AD_GROUP', horizontalScaling.strategyHint || 'Expand with Lookalike Audience']
+      : [];
 
     // 8. Apply budget nếu không phải dry run
     let successCount = 0;
@@ -231,9 +284,58 @@ export class BudgetAllocationService {
     return {
       totalAvailable,
       totalAllocated,
+      globalStatus: 'NORMAL',
+      recommendation: 'Phân bổ theo hiệu suất ROI hiện tại',
+      globalAdjustmentRatio: 1,
+      systemLocked: false,
+      suggestions,
       allocations,
       summary: { successCount, failedCount, skippedCount },
       horizontalScaling
+    };
+  }
+
+  private async buildCriticalCashShortagePlan(dryRun: boolean): Promise<BudgetAllocationResult> {
+    const reinvestment = await this.capitalAllocationService.getAvailableReinvestmentBudget();
+    const adGroups = await this.adGroupModel
+      .find({ isActive: { $ne: false } })
+      .select('adGroupId name dailyBudget')
+      .lean();
+
+    const allocations = adGroups.map((adGroup: any) => {
+      const currentBudget = Number(adGroup.dailyBudget || 0);
+      const allocatedBudget = Math.max(0, Math.round(currentBudget * 0.5));
+
+      return {
+        adGroupId: String(adGroup.adGroupId),
+        adGroupName: String(adGroup.name || adGroup.adGroupId),
+        currentBudget,
+        action: currentBudget > 0 ? 'SCALE_DOWN' as const : 'MAINTAIN' as const,
+        suggestedBudget: allocatedBudget,
+        allocatedBudget,
+        roi: 0,
+        profit: 0,
+        applied: dryRun,
+        reason: 'Critical cash shortage lock: forced 50% system-wide reduction',
+      };
+    });
+
+    const totalAllocated = allocations.reduce((sum, item) => sum + item.allocatedBudget, 0);
+
+    return {
+      totalAvailable: reinvestment.available,
+      totalAllocated,
+      globalStatus: 'CRITICAL_CASH_SHORTAGE',
+      recommendation: 'Dừng mọi chiến dịch Scale, Giảm 50% toàn bộ hệ thống',
+      globalAdjustmentRatio: 0.5,
+      systemLocked: true,
+      suggestions: ['STOP_ALL_SCALING', 'CUT_50_PERCENT_SYSTEM_WIDE'],
+      allocations,
+      summary: {
+        successCount: allocations.length,
+        failedCount: 0,
+        skippedCount: 0,
+      },
     };
   }
 
@@ -250,8 +352,8 @@ export class BudgetAllocationService {
       return undefined;
     }
 
-    // Tìm các ad groups có ROI cao và đã bị cap 20%
-    const highPerformers = allocations.filter(a => a.roi >= 200 && a.scaleCapped);
+    // ROI ở đây là ratio (2.0 = 200%), không phải percent integer.
+    const highPerformers = allocations.filter(a => a.roi >= 2 && a.scaleCapped);
     
     if (highPerformers.length === 0) {
       return undefined;
@@ -261,10 +363,12 @@ export class BudgetAllocationService {
     const topPerformer = highPerformers.sort((a, b) => b.roi - a.roi)[0];
 
     return {
+      action: 'CLONE_AD_GROUP' as const,
       excessBudget,
       canCreateNewGroups: true,
       suggestedNewGroups: Math.min(suggestedNewGroups, 5),  // Max 5 groups
-      message: `Còn dư ${(excessBudget / 1_000_000).toFixed(1)}M VND. Nên tạo ${Math.min(suggestedNewGroups, 5)} nhóm quảng cáo tương tự "${topPerformer.adGroupName}" (ROI ${topPerformer.roi.toFixed(0)}%) thay vì tăng ngân sách quá 20%.`
+      strategyHint: 'Expand with Lookalike Audience',
+      message: `Còn dư ${(excessBudget / 1_000_000).toFixed(1)}M VND. Nên tạo ${Math.min(suggestedNewGroups, 5)} nhóm quảng cáo tương tự "${topPerformer.adGroupName}" (ROI ${(topPerformer.roi * 100).toFixed(0)}%) thay vì tăng ngân sách quá 20%.`
     };
   }
 

@@ -33,12 +33,12 @@ export class Product {
   @Prop({ min: 0, default: 0 })
   estimatedDeliveryDays: number; // Dự kiến thời gian chờ nhập (ngày)
 
-  @Prop({ min: 1, default: 1 })
+  @Prop({ min: 1, default: 12 })
   usageDurationMonths: number; // Thời gian sử dụng của sản phẩm (tháng)
 
   @Prop({ 
     required: true, 
-    enum: ['Hoạt động', 'Tạm dừng'], 
+    enum: ['Hoạt động', 'Tạm dừng', 'Ngừng bán'],
     default: 'Hoạt động' 
   })
   status: string; // Trạng thái
@@ -74,7 +74,12 @@ export class Product {
       colors: [String],  // ["black", "blue", "silver"]
       features: [String], // ["waterproof", "wireless charging"]
       keywords: [String], // Auto-generated search keywords
-      confidence: { type: Number, min: 0, max: 1 } // AI confidence score
+      confidence: { type: Number, min: 0, max: 1 }, // AI confidence score
+      visibleAttributes: [String],
+      inferredAttributes: [String],
+      evidence: [String],
+      warnings: [String],
+      qualityScore: { type: Number, min: 0, max: 100 }
     }
   }])
   images: Array<{
@@ -88,6 +93,11 @@ export class Product {
       features: string[];
       keywords: string[];
       confidence: number;
+      visibleAttributes?: string[];
+      inferredAttributes?: string[];
+      evidence?: string[];
+      warnings?: string[];
+      qualityScore?: number;
     };
   }>;
 
@@ -173,8 +183,14 @@ ProductSchema.pre('save', function() {
 // Auto-generate SKU before saving
 ProductSchema.pre('save', async function() {
   if (!this.sku) {
-    const count = await (this.constructor as any).countDocuments();
-    this.sku = `SP${String(count + 1).padStart(4, '0')}`;
+    const lastProduct = await (this.constructor as any)
+      .findOne({ sku: /^SP\d+$/ })
+      .sort({ sku: -1 })
+      .select('sku')
+      .lean();
+    const lastSku = lastProduct?.sku;
+    const nextNumber = lastSku ? Number(String(lastSku).replace(/^SP/, '')) + 1 : 1;
+    this.sku = `SP${String(nextNumber).padStart(4, '0')}`;
   }
 });
 

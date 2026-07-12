@@ -1,0 +1,75 @@
+name: API Compatibility Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      latest_fb_graph_version:
+        description: "Optional latest Meta Graph API version (example: v20.0)"
+        required: false
+        type: string
+      latest_google_ads_version:
+        description: "Optional latest Google Ads API version (example: v20)"
+        required: false
+        type: string
+      latest_tiktok_api_version:
+        description: "Optional latest TikTok Marketing API version (example: v1.4)"
+        required: false
+        type: string
+      strict:
+        description: "Fail run when any provided latest version mismatches current code"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 2 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  review-api:
+    runs-on: ubuntu-latest
+    env:
+      LATEST_FB_GRAPH_VERSION: ${{ github.event.inputs.latest_fb_graph_version }}
+      LATEST_GOOGLE_ADS_VERSION: ${{ github.event.inputs.latest_google_ads_version }}
+      LATEST_TIKTOK_API_VERSION: ${{ github.event.inputs.latest_tiktok_api_version }}
+      STRICT_MODE: ${{ github.event.inputs.strict }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run API review script
+        shell: pwsh
+        run: |
+          $args = @(
+            "-OutputDir", "reports/api-review"
+          )
+
+          if ($env:LATEST_FB_GRAPH_VERSION) {
+            $args += @("-LatestFbGraphVersion", $env:LATEST_FB_GRAPH_VERSION)
+          }
+          if ($env:LATEST_GOOGLE_ADS_VERSION) {
+            $args += @("-LatestGoogleAdsVersion", $env:LATEST_GOOGLE_ADS_VERSION)
+          }
+          if ($env:LATEST_TIKTOK_API_VERSION) {
+            $args += @("-LatestTiktokApiVersion", $env:LATEST_TIKTOK_API_VERSION)
+          }
+          if ($env:STRICT_MODE -eq "true") {
+            $args += "-Strict"
+          }
+
+          ./scripts/review-api.ps1 @args
+
+      - name: Upload review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-review-report
+          path: reports/api-review/
+          if-no-files-found: error
+
+      - name: Publish short summary
+        shell: pwsh
+        run: |
+          "API review completed. First lines of report:" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          Get-Content reports/api-review/api-review-report.md -First 80 >> $env:GITHUB_STEP_SUMMARY

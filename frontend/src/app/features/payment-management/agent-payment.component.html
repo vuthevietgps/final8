@@ -3,7 +3,7 @@
   <p class="page-description">
     Đánh dấu và theo dõi thanh toán hoa hồng cho <strong>đại lý ngoài</strong> theo từng đơn hàng.
     <span class="help-text">
-      💡 Hoa hồng = COD - (Báo giá ĐL × SL) - Phí ship - Phí hoàn | Chỉ thanh toán đơn "Giao thành công" hoặc "Hàng hoàn"
+      💡 Hoa hồng hiển thị theo snapshot backend `agentPaidAmount` để đồng nhất danh sách chờ, phiếu đã tạo và báo cáo tài chính.
     </span>
     <br/>
     <span class="help-text" style="background: #e8f5e9; border-left-color: #4caf50; margin-top: 4px;">
@@ -111,7 +111,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let agent of (showAllAgents ? opsSummary.byAgent : opsSummary.byAgent.slice(0, 10))" 
+          <tr *ngFor="let agent of (showAllAgents ? opsSummary.byAgent : opsSummary.byAgent.slice(0, 10))"
               [class.highlight-row]="agent.isOverThreshold"
               [class.has-debt]="agent.clawbackOutstandingAmount > 0"
               (click)="drilldownToAgent(agent.agentId)"
@@ -160,7 +160,7 @@
         <button class="btn-quick" [class.active]="quickDateFilter === 'all'" (click)="setQuickDateFilter('all')">Tất cả</button>
       </div>
     </div>
-    
+
     <div class="filters">
       <label>
         Đại lý
@@ -171,13 +171,13 @@
           </option>
         </select>
       </label>
-      
+
       <label>
         Từ ngày
-        <input type="text" [(ngModel)]="fromDateDisplay" placeholder="dd/mm/yyyy" 
+        <input type="text" [(ngModel)]="fromDateDisplay" placeholder="dd/mm/yyyy"
                (blur)="parseDateInput('from', fromDateDisplay)" />
       </label>
-      
+
       <label>
         Đến ngày
         <input type="text" [(ngModel)]="toDateDisplay" placeholder="dd/mm/yyyy"
@@ -193,7 +193,7 @@
           <option value="15+">>14 ngày</option>
         </select>
       </label>
-      
+
       <button (click)="applyFilters()">🔍 Tìm kiếm</button>
       <button (click)="resetFilters()" class="btn-secondary">🔄 Reset</button>
     </div>
@@ -270,8 +270,8 @@
         <thead>
           <tr>
             <th style="width: 40px;">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 (change)="selectAllPayable($event)"
                 [checked]="selectedCount === payableOnlyOrders.length && payableOnlyOrders.length > 0" />
             </th>
@@ -314,7 +314,7 @@
               <span class="cell-sub">{{ order.agentEligibleAt ? (order.agentEligibleAt | date:'dd/MM') : (order.updatedAt | date:'dd/MM') }}</span>
             </td>
             <td class="num">
-              <span class="aging-badge" 
+              <span class="aging-badge"
                     [class.aging-normal]="getAgingDays(order) <= 7"
                     [class.aging-warning]="getAgingDays(order) > 7 && getAgingDays(order) <= 14"
                     [class.aging-danger]="getAgingDays(order) > 14">
@@ -338,7 +338,7 @@
       <div>
         <h3>⚠️ Đơn Hàng Đại Lý Nợ Công Ty</h3>
         <p class="section-sub">
-          Tổng: <strong>{{ debtOrders.length }}</strong> đơn nợ | 
+          Tổng: <strong>{{ debtOrders.length }}</strong> đơn nợ |
           Tổng nợ: <strong class="text-danger">{{ totalDebtAmount | number:'1.0-0' }} đ</strong>
         </p>
       </div>
@@ -445,7 +445,7 @@
             </td>
             <td>
               <div class="attachment-links" *ngIf="batch.attachments && batch.attachments.length > 0">
-                <a *ngFor="let link of batch.attachments; let i = index" 
+                <a *ngFor="let link of batch.attachments; let i = index"
                    [href]="link" target="_blank" class="attachment-link" title="{{ link }}">
                   📎 {{ i + 1 }}
                 </a>
@@ -472,7 +472,7 @@
       <h3>� Tạo Phiếu Thanh Toán Hoa Hồng Agent</h3>
       <button class="close-btn" (click)="closeBatchModal()">×</button>
     </div>
-    
+
     <div class="modal-body">
       <p class="modal-description">
         Tạo lượt thanh toán hoa hồng cho <strong>{{ selectedCount }}</strong> đơn hàng
@@ -481,24 +481,24 @@
 
       <div class="form-group">
         <label>Mã phiếu thanh toán *</label>
-        <input 
-          type="text" 
-          [(ngModel)]="batchForm.batchId" 
+        <input
+          type="text"
+          [(ngModel)]="batchForm.batchId"
           placeholder="VD: PTTT-AGENT-2026-01-001"
           required />
       </div>
 
       <div class="form-group">
         <label>Ngày thanh toán *</label>
-        <input 
-          type="date" 
+        <input
+          type="date"
           [(ngModel)]="batchForm.paidDate"
           required />
       </div>
 
       <div class="form-group">
         <label>Ghi chú</label>
-        <textarea 
+        <textarea
           [(ngModel)]="batchForm.note"
           rows="3"
           placeholder="VD: Thanh toán hoa hồng tháng 01/2026"></textarea>
@@ -506,8 +506,8 @@
 
       <div class="form-group">
         <label>🔗 Link chứng từ</label>
-        <input 
-          type="text" 
+        <input
+          type="text"
           [(ngModel)]="batchForm.attachments"
           placeholder="VD: https://drive.google.com/... (nhiều link cách nhau bởi dấu phẩy)" />
         <small class="form-hint">Nhập link hình ảnh hoặc file chứng từ thanh toán (bank transfer, receipt, ...)</small>
@@ -526,8 +526,8 @@
           </div>
         </div>
         <label class="checkbox-label">
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             [(ngModel)]="batchForm.confirmOverThreshold"
             required />
           <span>✅ Tôi xác nhận thanh toán vượt ngưỡng và đã đính kèm chứng từ đầy đủ</span>
@@ -547,7 +547,7 @@
 
     <div class="modal-footer">
       <button (click)="closeBatchModal()" class="btn-secondary">Hủy</button>
-      <button (click)="createBatch()" 
+      <button (click)="createBatch()"
               class="btn-primary"
               [disabled]="isOverThreshold && !batchForm.confirmOverThreshold">
         ✅ Xác Nhận Thanh Toán
@@ -563,7 +563,7 @@
       <h3>👁️ Chi Tiết Phiếu Thanh Toán</h3>
       <button class="close-btn" (click)="closeViewBatchModal()">×</button>
     </div>
-    
+
     <div class="modal-body">
       <div class="batch-info" *ngIf="selectedBatch">
         <div class="info-row">

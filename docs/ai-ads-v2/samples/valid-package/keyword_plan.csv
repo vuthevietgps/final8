@@ -1,0 +1,2 @@
+actionId,adGroupRef,keyword,matchType,negative,reason,approvalRequired
+ACT002,9876543210,sample product,PHRASE,false,Qualified commercial intent,true

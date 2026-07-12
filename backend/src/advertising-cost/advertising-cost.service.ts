@@ -2,7 +2,7 @@
  * File: advertising-cost/advertising-cost.service.ts
  * Má»¥c Ä‘Ã­ch: Xá»­ lÃ½ nghiá»‡p vá»¥ CRUD cho Chi PhÃ­ Quáº£ng CÃ¡o.
  */
-import { Injectable, NotFoundException, BadRequestException, Inject, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as XLSX from 'xlsx';
@@ -16,7 +16,7 @@ import { ChatMessage, ChatMessageDocument } from '../chat-message/schemas/chat-m
 import { TestOrder2Service } from '../test-order2/test-order2.service';
 
 @Injectable()
-export class AdvertisingCostService {
+export class AdvertisingCostService implements OnModuleInit {
   private readonly logger = new Logger(AdvertisingCostService.name);
 
   // Chuáº©n hoÃ¡ vá» Ä‘áº§u ngÃ y theo UTC (00:00:00.000Z)
@@ -27,13 +27,38 @@ export class AdvertisingCostService {
   }
 
   // XÃ¡c Ä‘á»‹nh kÃªnh tá»« adGroup náº¿u chÆ°a cÃ³ (fallback facebook)
-  private async inferChannel(adGroupId?: string, incoming?: string): Promise<'facebook' | 'google' | 'tiktok' | 'zalo' | 'other'> {
-    if (incoming) return incoming as any;
-    if (adGroupId) {
-      const grp = await this.adGroupModel.findOne({ adGroupId }).select('platform').lean();
-      if (grp?.platform) return grp.platform as any;
-    }
-    return 'facebook';
+  private async resolveAdContext(adGroupId?: string, incoming?: {
+    channel?: string;
+    customerId?: string;
+    businessCenterId?: string;
+    managementMode?: string;
+  }): Promise<{
+    channel: 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other';
+    customerId?: string;
+    businessCenterId?: string;
+    managementMode?: 'direct' | 'bm' | 'mcc' | 'bc';
+  }> {
+    const fallback = {
+      channel: 'facebook' as const,
+      customerId: this.normalizeCustomerId(incoming?.customerId),
+      businessCenterId: this.normalizeCustomerId(incoming?.businessCenterId),
+      managementMode: (incoming?.managementMode as any) || undefined,
+    };
+    if (!adGroupId) return fallback;
+    const grp = await this.adGroupModel.findOne({ adGroupId }).select('platform adAccountId').lean();
+    if (!grp) return fallback;
+    const account = grp?.adAccountId
+      ? await this.adAccountModel
+        .findById(grp.adAccountId)
+        .select('accountId businessCenterId managementMode')
+        .lean()
+      : null;
+    return {
+      channel: (incoming?.channel as any) || (grp?.platform as any) || 'facebook',
+      customerId: this.normalizeCustomerId(incoming?.customerId || account?.accountId),
+      businessCenterId: this.normalizeCustomerId(incoming?.businessCenterId || account?.businessCenterId),
+      managementMode: ((incoming?.managementMode || account?.managementMode) as any) || undefined,
+    };
   }
 
   private toDayIso(value?: Date | string | null): string | null {
@@ -59,6 +84,11 @@ export class AdvertisingCostService {
     }
   }
 
+  private normalizeCustomerId(value?: string | null): string | undefined {
+    const normalized = String(value || '').replace(/[^0-9]/g, '');
+    return normalized || undefined;
+  }
+
   constructor(
     @InjectModel(AdvertisingCost.name)
     private readonly model: Model<AdvertisingCostDocument>,
@@ -72,11 +102,39 @@ export class AdvertisingCostService {
     private readonly testOrder2Service: TestOrder2Service,
   ) {}
 
+  async onModuleInit(): Promise<void> {
+    try {
+      const indexes = await this.model.collection.indexes();
+      const legacyIndex = indexes.find((index) => index.name === 'uniq_adGroupId_date');
+      if (legacyIndex) {
+        await this.model.collection.dropIndex('uniq_adGroupId_date');
+      }
+
+      const hasCurrentIndex = indexes.some((index) => index.name === 'uniq_channel_customer_adGroup_date');
+      if (!hasCurrentIndex) {
+        await this.model.collection.createIndex(
+          { channel: 1, customerId: 1, adGroupId: 1, date: 1 },
+          { unique: true, name: 'uniq_channel_customer_adGroup_date' },
+        );
+      }
+    } catch (error: any) {
+      this.logger.warn(`Failed to align advertising cost indexes: ${error?.message || 'UNKNOWN_ERROR'}`);
+    }
+  }
+
   async create(dto: CreateAdvertisingCostDto): Promise<AdvertisingCost> {
-    const channel = await this.inferChannel(dto.adGroupId, dto.channel as any);
+    const context = await this.resolveAdContext(dto.adGroupId, {
+      channel: dto.channel as any,
+      customerId: dto.customerId,
+      businessCenterId: dto.businessCenterId,
+      managementMode: dto.managementMode,
+    });
     const payload: Partial<AdvertisingCost> = {
       adGroupId: dto.adGroupId.trim(),
-      channel,
+      customerId: context.customerId,
+      businessCenterId: context.businessCenterId,
+      managementMode: context.managementMode,
+      channel: context.channel,
       frequency: dto.frequency,
       spentAmount: dto.spentAmount ?? 0,
       cpm: dto.cpm ?? 0,
@@ -109,6 +167,9 @@ export class AdvertisingCostService {
     const findCond: any = {};
     if (adGroupIdFilter) findCond.adGroupId = { $in: adGroupIdFilter };
     if (query?.channel && query.channel !== 'all') findCond.channel = query.channel;
+    if (query?.customerId) findCond.customerId = this.normalizeCustomerId(query.customerId);
+    if (query?.businessCenterId) findCond.businessCenterId = this.normalizeCustomerId(query.businessCenterId);
+    if (query?.managementMode && query.managementMode !== 'all') findCond.managementMode = query.managementMode;
 
     const costs = await this.model.find(findCond).sort({ date: -1, createdAt: -1 }).lean();
 
@@ -116,11 +177,11 @@ export class AdvertisingCostService {
     if (costs.length === 0) return costs as any[];
     const uniqueAdGroupIds = Array.from(new Set(costs.map(c => c.adGroupId)));
     const adGroups = await this.adGroupModel.find({ adGroupId: { $in: uniqueAdGroupIds } })
-      .select('adGroupId adAccountId')
+      .select('adGroupId adAccountId platform assignedEmployeeId')
       .lean();
     const adAccountIds = Array.from(new Set(adGroups.map(g => String(g.adAccountId))));
     const adAccounts = await this.adAccountModel.find({ _id: { $in: adAccountIds } })
-      .select('name accountId')
+      .select('name accountId managementMode businessCenterId businessCenterName adsManagerUserId')
       .lean();
     const adGroupMap = new Map(adGroups.map(g => [g.adGroupId, g]));
     const adAccountMap = new Map(adAccounts.map(a => [String(a._id), a]));
@@ -134,6 +195,11 @@ export class AdvertisingCostService {
         adAccountId: grp?.adAccountId ? String(grp.adAccountId) : undefined,
         adAccountName: acc?.name,
         adAccountAccountId: acc?.accountId,
+        businessCenterId: c.businessCenterId || acc?.businessCenterId,
+        businessCenterName: acc?.businessCenterName,
+        managementMode: c.managementMode || acc?.managementMode,
+        adsManagerUserId: acc?.adsManagerUserId ? String(acc.adsManagerUserId) : undefined,
+        assignedEmployeeId: grp?.assignedEmployeeId ? String(grp.assignedEmployeeId) : undefined,
       };
     });
   }
@@ -148,8 +214,18 @@ export class AdvertisingCostService {
     const existing = await this.model.findById(id).lean();
     if (!existing) throw new NotFoundException('Advertising cost not found');
 
+    const context = await this.resolveAdContext(dto.adGroupId || existing.adGroupId, {
+      channel: dto.channel || existing.channel,
+      customerId: dto.customerId ?? existing.customerId,
+      businessCenterId: dto.businessCenterId ?? (existing as any).businessCenterId,
+      managementMode: dto.managementMode ?? (existing as any).managementMode,
+    });
+
     const update: Partial<AdvertisingCost> = { ...dto } as any;
-    if (dto.channel) (update as any).channel = dto.channel;
+    (update as any).channel = context.channel;
+    (update as any).customerId = context.customerId;
+    (update as any).businessCenterId = context.businessCenterId;
+    (update as any).managementMode = context.managementMode;
     if (dto.date) (update as any).date = this.toUtcStartOfDay(dto.date);
     const doc = await this.model.findByIdAndUpdate(id, update, { new: true }).lean();
     if (!doc) throw new NotFoundException('Advertising cost not found');
@@ -381,13 +457,13 @@ export class AdvertisingCostService {
 
     try {
       const buffer = readUploadedFile();
-      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true, cellNF: false, cellText: false });
+      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true, cellNF: false, cellText: false } as any);
       const sheetName = workbook.SheetNames?.[0];
       if (!sheetName) throw new BadRequestException('File Excel khÃ´ng cÃ³ sheet nÃ o');
       const worksheet = workbook.Sheets[sheetName];
       if (!worksheet) throw new BadRequestException('KhÃ´ng thá»ƒ Ä‘á»c sheet Ä‘áº§u tiÃªn cá»§a file Excel');
 
-      const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false }) as any[];
+      const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false } as any) as any[];
       if (!rows || rows.length < 2) throw new BadRequestException('File Excel rá»—ng hoáº·c thiáº¿u dá»¯ liá»‡u (cáº§n header + Ã­t nháº¥t 1 dÃ²ng dá»¯ liá»‡u)');
 
       // Duyá»‡t dá»¯ liá»‡u, bá» qua header

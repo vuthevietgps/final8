@@ -143,6 +143,9 @@ export class PendingOrderService {
   async remove(id: string) { const res = await this.model.findByIdAndDelete(id); if (!res) throw new NotFoundException('Pending order không tồn tại'); }
 
   async approve(id: string, userId: string) {
+    if (!Types.ObjectId.isValid(String(userId || ''))) {
+      throw new BadRequestException('Khong xac dinh duoc nguoi duyet canonical');
+    }
     const pending = await this.model.findById(id);
     if(!pending) throw new NotFoundException('Pending order không tồn tại');
     if(pending.status === 'approved') throw new BadRequestException('Đơn đã được duyệt');
@@ -178,7 +181,12 @@ export class PendingOrderService {
       (dto as any).orderDate = (pending as any).orderDate;
     }
     // create order
-    const order = await this.testOrder2Service.create(dto);
+    const createdOrder = await this.testOrder2Service.create(dto, { id: userId });
+    const order = await this.testOrder2Service.confirmBusiness(
+      String((createdOrder as any)._id),
+      { id: userId },
+      'pending_order_approval',
+    );
     pending.status = 'approved';
     await pending.save();
     // update conversation (best effort)

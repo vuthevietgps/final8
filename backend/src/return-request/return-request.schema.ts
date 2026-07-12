@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 
 export type ReturnRequestDocument = ReturnRequest & Document;
 
-@Schema({ _id: false, timestamps: false })
+@Schema({ timestamps: false })
 export class ReturnItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId!: Types.ObjectId;
@@ -49,3 +49,10 @@ export class ReturnRequest {
 
 export const ReturnRequestSchema = SchemaFactory.createForClass(ReturnRequest);
 ReturnRequestSchema.index({ orderId: 1, createdAt: -1 });
+ReturnRequestSchema.index(
+  { orderId: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'pending' },
+  },
+);

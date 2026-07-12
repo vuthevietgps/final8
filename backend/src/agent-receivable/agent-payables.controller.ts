@@ -1,17 +1,18 @@
 /**
  * Agent Payables Controller - CFO Spec v3.1
- * 
+ *
  * Đây là endpoint chính với naming đúng góc nhìn công ty:
  * - "payables" = tiền mình phải trả agent (AP)
- * 
+ *
  * Route cũ /api/agent-receivables vẫn hoạt động nhưng deprecated.
  */
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, Headers, Logger } from '@nestjs/common';
 import { AgentReceivableService } from './agent-receivable.service';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
-import { RequirePermissions } from '../auth/decorators/auth.decorator';
+import { RequirePermissions, Roles } from '../auth/decorators/auth.decorator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { UserRole } from '../user/user.enum';
 
 @FeatureModule('agent-receivable')
 @Controller('agent-payables')
@@ -102,6 +103,7 @@ export class AgentPayablesController {
    */
   @Patch('statements/:id/reopen')
   @RequirePermissions('quotes')
+  @Roles(UserRole.DIRECTOR)
   reopenStatement(@Param('id') id: string) {
     return this.service.reopenStatement(id);
   }

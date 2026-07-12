@@ -1,0 +1,243 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-5D",
+    "status": "completed_manual_acceptance_package",
+    "code_changed": false,
+    "docs_changed": true,
+    "e2e_manual_acceptance_completed": true,
+    "official_json_export_download_accepted": true,
+    "partial_json_export_download_accepted": true,
+    "downloaded_json_parseable": true,
+    "manual_chatgpt_web_workflow_documented": true,
+    "chatgpt_web_prompt_created": true,
+    "xlsx_required_for_acceptance": false,
+    "openai_upload_added": false,
+    "action_import_added": false,
+    "approval_workflow_added": false,
+    "dry_run_live_added": false,
+    "provider_mutation_added": false,
+    "provider_validate_only_added": false,
+    "new_provider_adapter_added": false,
+    "tokenized_download_added": false,
+    "phase_3_started": false
+  },
+  "inputs_reviewed": {
+    "mandatory_missing": [],
+    "optional_missing": [
+      {
+        "file": "docs/ai-ads-v2/00-index.md",
+        "impact": "Workspace AGENTS references this AI Ads V2 index, but Prompt 26 is scoped to AI Data Pack manual export acceptance.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/ba-master-addendum-prompt25-review-prompt26-e2e-manual-acceptance-20260614.md",
+        "impact": "Optional addendum unavailable; Prompt 26 and Prompt 25 review result defined the phase.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/chuoi-promt-codex-chatgptweb-ledger-v24.md",
+        "impact": "Optional ledger unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/lo-trinh-ai-data-pack-roadmap-v24.md",
+        "impact": "Optional roadmap unavailable; no scope expansion performed.",
+        "can_continue": true
+      },
+      {
+        "file": "docs/ai-data-pack/truc-giu-ba-ai-data-pack-v21.md",
+        "impact": "Optional guardrail unavailable; Prompt 23-26 constraints were used.",
+        "can_continue": true
+      },
+      {
+        "file": "promt25.md",
+        "impact": "Repo-local copy unavailable; Prompt 25 result docs and user-provided review were available.",
+        "can_continue": true
+      },
+      {
+        "file": "promtchatgptweb25.md",
+        "impact": "Optional file unavailable; no scope expansion performed.",
+        "can_continue": true
+      }
+    ]
+  },
+  "e2e_acceptance": {
+    "decision": "ACCEPT_WITH_EXTERNAL_MANUAL_STEP",
+    "erp_side_acceptance_completed": true,
+    "external_chatgpt_web_upload_performed_by_codex": false,
+    "official_json": {
+      "accepted": true,
+      "evidence": [
+        "export-job.service.spec.ts creates an official internal lifecycle job with a rendered redacted JSON artifact",
+        "export-job-endpoint.controller.spec.ts streams a newly rendered official redacted artifact"
+      ],
+      "status": "completed",
+      "artifactClass": "downloadable_redacted_artifact",
+      "redactionRuntime": "pre_rendered",
+      "artifactRendering": "rendered",
+      "downloadReady": true
+    },
+    "partial_json": {
+      "accepted": true,
+      "evidence": [
+        "export-job.service.spec.ts uses sync_if_stale for partial export and reclassifies weak source data as warnings",
+        "Prompt 24/25 endpoint gates are mode/profile checked through the shared direct download service"
+      ],
+      "status": "completed_with_warnings_supported",
+      "artifactClass": "downloadable_redacted_artifact",
+      "redactionRuntime": "pre_rendered",
+      "artifactRendering": "rendered",
+      "downloadReady": true
+    }
+  },
+  "downloaded_json_validation": {
+    "parseable": true,
+    "official_endpoint_body_asserted": true,
+    "official_render_content_parsed_before_artifact_write": true,
+    "expected_metadata": [
+      "export_job_id",
+      "export_mode",
+      "redaction_runtime=pre_rendered",
+      "artifact_rendering=rendered",
+      "download_ready=true"
+    ],
+    "forbidden_markers_absent_by_test_or_static_check": [
+      "storageKey",
+      "storageLocation",
+      "artifactStoragePath",
+      "publicUrl",
+      "downloadToken",
+      "artifactBytes",
+      "rawProviderResponse",
+      "credentials",
+      "tokens"
+    ]
+  },
+  "security_negative_tests": {
+    "manager_official_download_denied": true,
+    "investor_status_only_default": true,
+    "unassigned_reviewer_no_leak_denied": true,
+    "system_internal_worker_human_download_denied": true,
+    "manifest_only_artifact_not_downloadable": true,
+    "checksum_mismatch_blocks_download": true,
+    "forbidden_download_query_rejected_before_job_lookup": true,
+    "storage_path_public_url_not_exposed": true,
+    "download_token_route_absent": true
+  },
+  "manual_chatgpt_web_workflow": {
+    "documented": true,
+    "guide": "docs/ai-data-pack/manual-chatgpt-web-acceptance/04_manual_chatgpt_web_upload_guide.md",
+    "manual_upload_only": true,
+    "erp_upload_added": false,
+    "openai_api_call_added": false,
+    "erp_import_or_execute_added": false
+  },
+  "chatgpt_web_prompt": {
+    "created": true,
+    "file": "docs/ai-data-pack/manual-chatgpt-web-acceptance/chatgpt-web-analysis-prompt.md",
+    "requires_sections": [
+      "analysis_summary",
+      "data_quality_findings",
+      "business_findings",
+      "recommendations",
+      "action_draft_non_executable",
+      "missing_data",
+      "confidence"
+    ],
+    "non_executable": true,
+    "api_calls_forbidden": true,
+    "provider_mutation_forbidden": true
+  },
+  "tests_run": [
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/export-jobs/export-job.service.spec.ts --runInBand",
+      "status": "passed",
+      "summary": "20 passed"
+    },
+    {
+      "command": "npm test -- --runTestsByPath src/ai-data-pack/export-jobs/export-job-endpoint.controller.spec.ts --runInBand",
+      "status": "passed",
+      "summary": "41 passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test:e2e",
+      "status": "not_run",
+      "summary": "backend package script exists, but backend/test/jest-e2e.json is absent; local AI Data Pack E2E harness is not configured"
+    }
+  ],
+  "static_safety_checks": [
+    {
+      "check": "No OpenAI/action/execution/provider validation/mutation/Google Ads service dependencies in scoped export/download files.",
+      "status": "passed"
+    },
+    {
+      "check": "No download-token route or downloadToken integration in endpoint controller/service.",
+      "status": "passed"
+    },
+    {
+      "check": "Direct artifact download route remains present and no POST download route exists.",
+      "status": "passed"
+    },
+    {
+      "check": "Download response headers do not expose storage/public/token/debug/provider/credential metadata.",
+      "status": "passed"
+    },
+    {
+      "check": "Prompt 26 result JSON parses.",
+      "status": "passed"
+    }
+  ],
+  "files_changed": [
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/00_acceptance_overview.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/01_e2e_scenarios.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/02_downloaded_json_validation.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/03_security_negative_tests.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/04_manual_chatgpt_web_upload_guide.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/05_chatgpt_web_analysis_prompt.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/06_acceptance_decision.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/07_remaining_gaps.md",
+    "docs/ai-data-pack/manual-chatgpt-web-acceptance/chatgpt-web-analysis-prompt.md",
+    "docs/ai-data-pack/ketquapromt26.md",
+    "docs/ai-data-pack/ketquapromt26.json",
+    "docs/ai-data-pack/review-packets/promt26/00_summary.md",
+    "docs/ai-data-pack/review-packets/promt26/01_scope.md",
+    "docs/ai-data-pack/review-packets/promt26/02_e2e_acceptance_results.md",
+    "docs/ai-data-pack/review-packets/promt26/03_downloaded_json_validation.md",
+    "docs/ai-data-pack/review-packets/promt26/04_security_negative_tests.md",
+    "docs/ai-data-pack/review-packets/promt26/05_manual_chatgpt_web_workflow.md",
+    "docs/ai-data-pack/review-packets/promt26/06_chatgpt_web_prompt.md",
+    "docs/ai-data-pack/review-packets/promt26/07_tests_run.md",
+    "docs/ai-data-pack/review-packets/promt26/08_static_safety_checks.md",
+    "docs/ai-data-pack/review-packets/promt26/09_files_changed.md",
+    "docs/ai-data-pack/review-packets/promt26/10_risks_open_questions.md",
+    "docs/ai-data-pack/review-packets/promt26/11_next_recommendation.md"
+  ],
+  "risks_open_questions": [
+    "External ChatGPT Web manual upload output was not captured by Codex.",
+    "No backend/test/jest-e2e.json local E2E harness exists.",
+    "Partial JSON HTTP download has no separate named smoke command; acceptance relies on partial render readiness plus shared direct endpoint gate coverage.",
+    "XLSX official/partial rendering remains unsupported and is not required for Prompt 26.",
+    "Artifact expiration, revocation, and quarantine states are not modeled yet.",
+    "Rate limiting/audit posture remains internal acceptance grade, not high-volume multi-pod public grade."
+  ],
+  "next_recommendation": {
+    "if_accepted": "PR-2.3B-5E - Final BA Closeout for Manual ChatGPT Web Export Loop, No OpenAI, No Action Import",
+    "if_human_chatgpt_evidence_required_first": "PR-2.3B-5D-HUMAN-EVIDENCE - Attach Manual ChatGPT Web Output Evidence, No OpenAI, No Action Import",
+    "still_forbidden": [
+      "OpenAI upload",
+      "action import",
+      "approval workflow",
+      "dry-run/live execution",
+      "provider mutation",
+      "provider validateOnly",
+      "new provider adapter",
+      "tokenized download",
+      "Phase 3"
+    ]
+  }
+}
+

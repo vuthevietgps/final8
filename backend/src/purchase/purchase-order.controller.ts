@@ -42,6 +42,14 @@ export class PurchaseOrderController {
     return this.service.supplierReport({ from, to, supplierId });
   }
 
+  @Get('price-history')
+  @RequirePermissions('purchase-costs')
+  priceHistory(
+    @Query(new ValidationPipe({ transform: true, whitelist: true })) query: PurchasePriceHistoryDto,
+  ) {
+    return this.service.priceHistory(query);
+  }
+
   @Get(':id')
   @RequirePermissions('purchase-costs')
   findOne(@Param('id') id: string) {
@@ -64,13 +72,5 @@ export class PurchaseOrderController {
   @RequirePermissions('purchase-costs')
   receive(@Param('id') id: string, @Body(new ValidationPipe({ whitelist: true, transform: true })) dto: ReceivePurchaseDto) {
     return this.service.receive(id, dto);
-  }
-
-  @Get('price-history')
-  @RequirePermissions('purchase-costs')
-  priceHistory(
-    @Query(new ValidationPipe({ transform: true, whitelist: true })) query: PurchasePriceHistoryDto,
-  ) {
-    return this.service.priceHistory(query);
   }
 }

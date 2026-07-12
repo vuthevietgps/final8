@@ -7,11 +7,14 @@ export type CashflowEntryDocument = CashflowEntry & Document;
 
 @Schema({ timestamps: true })
 export class CashflowEntry {
+  @Prop({ trim: true })
+  idempotencyKey?: string;
+
   @Prop({ enum: ['in', 'out'], required: true })
   direction: 'in' | 'out';
 
-  @Prop({ enum: ['cod', 'deposit', 'loan', 'equity', 'other'], required: true })
-  sourceType: 'cod' | 'deposit' | 'loan' | 'equity' | 'other';
+  @Prop({ enum: ['cod', 'deposit', 'loan', 'equity', 'other', 'owner_fund'], required: true })
+  sourceType: 'cod' | 'deposit' | 'loan' | 'equity' | 'other' | 'owner_fund';
 
   @Prop({ required: true })
   amount: number;
@@ -36,3 +39,7 @@ export class CashflowEntry {
 }
 
 export const CashflowEntrySchema = SchemaFactory.createForClass(CashflowEntry);
+CashflowEntrySchema.index(
+  { idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
+);

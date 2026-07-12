@@ -1,0 +1,162 @@
+{
+  "summary": {
+    "phase": "PR-2.3B-3B",
+    "status": "completed_with_hardening_required",
+    "code_changed": true,
+    "provider_calls": false,
+    "real_sync_performed": false,
+    "provider_mutation": false,
+    "public_endpoint_added": false,
+    "official_or_partial_export_added": false,
+    "action_import_dry_run_live_openai_added": false,
+    "forbidden_service_imports": false,
+    "blocked_by_dependency_boundary": false,
+    "distributed_lock_runtime": "interface_only",
+    "permission_key_proposed_not_bound": true,
+    "ready_for_integration": false
+  },
+  "files_changed": {
+    "scope": [
+      "backend/src/ai-data-pack/provider-adapters/",
+      "docs/ai-data-pack/ketquapromt7.md",
+      "docs/ai-data-pack/ketquapromt7.json",
+      "docs/ai-data-pack/review-packets/promt7/"
+    ],
+    "existing_runtime_files_modified": false,
+    "migration_or_schema_change": false
+  },
+  "adapter_contract": {
+    "sourceKey": "google_ads",
+    "mode": "read_only",
+    "supportsSourceRegistry": true,
+    "methods": [
+      "assessLocalFreshness",
+      "syncReadOnly",
+      "assessCoverage"
+    ],
+    "decision_invariants": {
+      "canImportActionFile": false,
+      "canDryRun": false,
+      "canExecuteLive": false,
+      "mutationAttempted": false
+    }
+  },
+  "dependency_boundary": {
+    "broad_google_ads_module_imported": false,
+    "narrow_sync_port": "GOOGLE_ADS_READONLY_SYNC_PORT",
+    "underlying_allowed_service": "GoogleAdsReadonlySyncService",
+    "module_exports": [
+      "AI_DATA_PACK_GOOGLE_ADS_READONLY_ADAPTER"
+    ],
+    "integrated_into_ai_data_pack_module": false,
+    "integrated_into_export_job": false,
+    "public_controller": false
+  },
+  "scope_policy": {
+    "required_permission": "ai-data-pack.source-sync.google-ads.readonly.execute",
+    "sync_detail_permission_proposed": "ai-data-pack.export.sync-detail.read",
+    "google_ads_read_alone_is_sufficient": false,
+    "customer_ids": "normalized unique non-empty 10-digit active local Google accounts",
+    "login_customer_ids": "validated when configured",
+    "unknown_inactive_unapproved_scope": "fail_closed",
+    "default_date_range": "reportDate-only",
+    "max_range_days": 31,
+    "forbidden_input": [
+      "credentials",
+      "tokens",
+      "URL/origin/path/method",
+      "caller-supplied query/GAQL",
+      "action plan",
+      "mutation operations"
+    ]
+  },
+  "transport_and_write_policy": {
+    "origin": "https://googleads.googleapis.com",
+    "method": "POST",
+    "path_family": "/v*/customers/{allowlistedCustomerId}/googleAds:searchStream",
+    "query_source": "adapter-owned static templates",
+    "mutation_allowed": false,
+    "validate_only_allowed": false,
+    "local_write_allowlist": [
+      "adaccounts approved sync metadata fields",
+      "google_ads_campaigns",
+      "google_ads_campaign_budgets",
+      "google_ads_ad_groups",
+      "google_ads_keywords",
+      "google_ads_ads",
+      "google_ads_daily_metrics",
+      "google_ads_sync_runs"
+    ]
+  },
+  "timeout_retry_lock_policy": {
+    "connection_timeout_ms": 5000,
+    "request_timeout_ms": 30000,
+    "total_deadline_ms": 180000,
+    "max_retries_after_first_attempt": 2,
+    "max_concurrent_customers_contract": 2,
+    "lock_ttl_ms": 210000,
+    "lock_key": "google_ads:{scopeHash}:{dateFrom}:{dateTo}",
+    "owner_only_release_contract": true,
+    "distributed_lock_runtime": "interface_only",
+    "retryable": [
+      "transient network",
+      "HTTP 429",
+      "eligible 5xx"
+    ],
+    "not_retryable": [
+      "invalid scope",
+      "policy denial",
+      "invalid GAQL",
+      "auth or permission",
+      "unsupported version",
+      "local validation"
+    ]
+  },
+  "tests_run": [
+    {
+      "command": "npm run build",
+      "result": "pass"
+    },
+    {
+      "command": "npm test -- --runInBand google-ads-readonly",
+      "result": "pass",
+      "suites": 5,
+      "tests": 30
+    },
+    {
+      "command": "npm test -- --runInBand source-registry",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand export-job",
+      "result": "pass",
+      "suites": 1,
+      "tests": 10
+    },
+    {
+      "command": "npm test -- --runInBand ai-data-pack",
+      "result": "pass",
+      "suites": 8,
+      "tests": 67
+    },
+    {
+      "command": "npx prettier --check \"src/ai-data-pack/provider-adapters/**/*.ts\"",
+      "result": "pass"
+    }
+  ],
+  "risks_and_assumptions": [
+    "Distributed lock and DB-only assessment ports are not bound.",
+    "Transport allowlist and connection/request timeouts are contract guards, not an interceptor around the existing Axios transport.",
+    "Existing sync service catches many provider step failures, limiting adapter-level retry enforcement.",
+    "Local-write allowlist does not yet intercept every existing sync-service write.",
+    "Existing sync-run schema lacks future export-job, scope-hash, lock, attempt, and assessment audit fields."
+  ],
+  "next_recommendation": {
+    "stop_after_current_phase": true,
+    "recommended_next_pr": "PR-2.3B-3B-H1 - Google Ads read-only transport, lock, and audit hardening",
+    "integration_pr_allowed_now": false,
+    "do_not_create_prompt8": true
+  }
+}
