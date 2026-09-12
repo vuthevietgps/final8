@@ -23,6 +23,9 @@ export class GoogleAdsActionPlanItem {
   @Prop({ trim: true })
   loginCustomerId?: string;
 
+  @Prop({ trim: true })
+  credentialReferenceId?: string;
+
   @Prop({ required: true, trim: true })
   resourceType: string;
 
@@ -76,6 +79,21 @@ export class GoogleAdsActionPlanItem {
   @Prop({ type: Date })
   providerValidatedAt?: Date;
 
+  @Prop({ type: Date })
+  providerValidationExpiresAt?: Date;
+
+  @Prop({ trim: true, match: /^[a-f0-9]{64}$/ })
+  providerValidationOperationHash?: string;
+
+  @Prop({ trim: true })
+  providerValidationApiVersion?: string;
+
+  @Prop({ trim: true, match: /^[a-f0-9]{64}$/ })
+  providerValidationCredentialBindingHash?: string;
+
+  @Prop({ trim: true })
+  providerValidationCredentialReferenceId?: string;
+
   @Prop()
   approvalText?: string;
 
@@ -88,8 +106,8 @@ export class GoogleAdsActionPlanItem {
   @Prop({ type: Date })
   approvedAt?: Date;
 
-  @Prop({ enum: ['codex_operator'] })
-  approvedBySource?: 'codex_operator';
+  @Prop({ enum: ['codex_operator', 'erp_ui'] })
+  approvedBySource?: 'codex_operator' | 'erp_ui';
 
   @Prop({ type: Boolean, default: true })
   requireExecutionConfirmation?: boolean;
@@ -106,8 +124,8 @@ export class GoogleAdsActionPlanItem {
   @Prop({ type: Date })
   rejectedAt?: Date;
 
-  @Prop({ enum: ['codex_operator'] })
-  rejectedBySource?: 'codex_operator';
+  @Prop({ enum: ['codex_operator', 'erp_ui'] })
+  rejectedBySource?: 'codex_operator' | 'erp_ui';
 
   @Prop({ type: [Object], default: [] })
   approvalHistory?: Array<{
@@ -115,7 +133,7 @@ export class GoogleAdsActionPlanItem {
     text: string;
     by: string;
     byUserId?: string;
-    source: 'codex_operator';
+    source: 'codex_operator' | 'erp_ui';
     at: Date;
   }>;
 }
@@ -126,6 +144,12 @@ export const GoogleAdsActionPlanItemSchema = SchemaFactory.createForClass(Google
 export class GoogleAdsActionPlan {
   @Prop({ required: true, trim: true, unique: true, index: true })
   planId: string;
+
+  @Prop({ trim: true })
+  planName?: string;
+
+  @Prop({ trim: true, index: true })
+  createdByUserId?: string;
 
   @Prop({ required: true, trim: true, index: true })
   sourceExportId: string;
@@ -177,8 +201,8 @@ export class GoogleAdsActionPlan {
   @Prop({ type: Object, required: true })
   manifest: Record<string, any>;
 
-  @Prop({ trim: true })
-  source?: string;
+  @Prop({ trim: true, enum: ['codex_operator', 'erp_ui', 'erp_automation'] })
+  source?: 'codex_operator' | 'erp_ui' | 'erp_automation';
 
   @Prop({ trim: true })
   originalFileName?: string;

@@ -6,6 +6,8 @@ export interface Quote {
   _id?: string;
   productId: string | Product;
   agentId: string | User;
+  shippingFee?: number | null;
+  returnFee?: number | null;
   unitPrice: number; // Đổi từ price sang unitPrice
   status: 'Chờ duyệt' | 'Đã duyệt' | 'Từ chối' | 'Hết hiệu lực';
   validFrom: string; // Đổi từ expiryDate
@@ -19,6 +21,8 @@ export interface Quote {
 export interface CreateQuote {
   productId: string;
   agentId?: string; // Optional khi applyToAllAgents = true
+  shippingFee?: number | null;
+  returnFee?: number | null;
   unitPrice: number; // Đổi từ price sang unitPrice
   status: string; // Thêm lại status field
   validFrom: string; // Đổi từ expiryDate

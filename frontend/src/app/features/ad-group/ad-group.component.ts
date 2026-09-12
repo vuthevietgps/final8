@@ -51,6 +51,7 @@ export class AdGroupComponent implements OnInit {
   error = signal<string | null>(null);
   showModal = signal(false);
   isEditing = signal(false);
+  editingWindsor = signal(false);
   isSaving = signal(false);
   loadingRecommend = signal(false);
   applyingAuto = signal(false);
@@ -137,7 +138,7 @@ export class AdGroupComponent implements OnInit {
       },
       error: (err) => {
         console.error(err);
-        this.error.set('Không tính được đề xuất AI');
+        this.error.set('Không tính được đề xuất ngân sách');
         this.loadingRecommend.set(false);
       }
     });
@@ -147,7 +148,7 @@ export class AdGroupComponent implements OnInit {
   applyAutoAI(): void {
     const selectedIds = Object.entries(this.autoApply()).filter(([_, v]) => v).map(([id]) => id);
     if (!selectedIds.length) {
-      alert('Chọn ít nhất 1 nhóm để áp dụng Auto AI');
+      alert('Chọn ít nhất 1 nhóm để lưu ngân sách vào ERP');
       return;
     }
     this.applyingAuto.set(true);
@@ -164,12 +165,12 @@ export class AdGroupComponent implements OnInit {
           return r;
         }));
         const failedCount = (res.failed || []).length;
-        alert(`Đã áp dụng ${res.applied?.length || 0} nhóm${failedCount ? `, lỗi ${failedCount}` : ''}`);
+        alert(`Đã lưu ngân sách vào ERP cho ${res.applied?.length || 0} nhóm${failedCount ? `, lỗi ${failedCount}` : ''}. Ngân sách trên nền tảng quảng cáo chưa thay đổi.`);
       },
       error: err => {
         console.error(err);
         this.applyingAuto.set(false);
-        alert('Áp dụng Auto AI thất bại');
+        alert('Lưu ngân sách vào ERP thất bại');
       }
     });
   }
@@ -228,7 +229,7 @@ export class AdGroupComponent implements OnInit {
 
   private async loadAdAccounts(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.adAccountService.getAdAccounts({ isActive: true }).subscribe({
+      this.adAccountService.getAdAccounts().subscribe({
         next: (accs) => { this.adAccounts.set(accs as any); resolve(); },
         error: reject
       });
@@ -239,6 +240,8 @@ export class AdGroupComponent implements OnInit {
 
   // Modal methods
   openModal(): void {
+    this.editingWindsor.set(false);
+    this.adGroupForm.enable();
     this.isEditing.set(false);
     this.editingId = null;
     this.adGroupForm.reset();
@@ -249,6 +252,13 @@ export class AdGroupComponent implements OnInit {
   }
 
   editItem(group: AdGroup): void {
+    this.editingWindsor.set(group.sourceSystem === 'windsor');
+    this.adGroupForm.enable();
+    if (this.editingWindsor()) {
+      for (const field of ['name', 'adGroupId', 'fanpageId', 'agentId', 'adAccountId', 'platform']) {
+        this.adGroupForm.get(field)?.disable();
+      }
+    }
     this.isEditing.set(true);
     this.editingId = group._id!;
     const selectedProductId = this.extractFirstSelectedProductId(group);
@@ -293,7 +303,7 @@ export class AdGroupComponent implements OnInit {
     const formData = {
       ...formValue,
       selectedProducts: selectedProductId ? [selectedProductId] : [],
-      assignedEmployeeId: assignedEmployeeId || undefined,
+      assignedEmployeeId: assignedEmployeeId || null,
     };
     delete formData.selectedProductId;
 
@@ -371,7 +381,7 @@ export class AdGroupComponent implements OnInit {
   getAssignedEmployeeName(group: AdGroup): string {
     const id = this.extractId(group.assignedEmployeeId);
     if (!id) return 'Chua gan';
-    if (typeof group.assignedEmployeeId === 'object' && (group.assignedEmployeeId.fullName || group.assignedEmployeeId.email)) {
+    if (group.assignedEmployeeId && typeof group.assignedEmployeeId === 'object' && (group.assignedEmployeeId.fullName || group.assignedEmployeeId.email)) {
       return group.assignedEmployeeId.fullName || group.assignedEmployeeId.email || id;
     }
     const user = this.adsOperators().find((item) => item._id === id);

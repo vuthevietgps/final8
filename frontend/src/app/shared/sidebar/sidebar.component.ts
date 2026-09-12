@@ -65,7 +65,7 @@ export class SidebarComponent implements OnInit {
       children: [
         { icon: "🏭", label: "Nhà Cung Cấp", route: "/suppliers" },
         { icon: "📑", label: "Báo giá NCC", route: "/supplier-quotes" },
-        { icon: "💸", label: "Thanh Toán NCC", route: "/payments/supplier" }
+        { icon: "💸", label: "Công nợ & đối soát NCC", route: "/payments/supplier" }
       ]
     },
     {
@@ -75,7 +75,7 @@ export class SidebarComponent implements OnInit {
       children: [
         { icon: "📋", label: "Danh Sách Đại Lý", route: "/agents" },
         { icon: "📊", label: "Báo Giá Đại Lý", route: "/quotes" },
-        { icon: "💰", label: "Hoa Hồng Đại Lý", route: "/payments/agent" }
+        { icon: "💰", label: "Công nợ & đối soát đại lý", route: "/payments/agent" }
       ]
     },
     {
@@ -84,6 +84,7 @@ export class SidebarComponent implements OnInit {
       route: "/orders",
       children: [
         { icon: "🧪", label: "Đơn Hàng Thử Nghiệm 2", route: "/orders/test2" },
+        { icon: "🔎", label: "Tracking & CRM", route: "/tracking-crm" },
         { icon: "📝", label: "Cập nhật thông tin đơn hàng", route: "/orders/update" },
         { icon: "📊", label: "Sync Google Sheets", route: "/orders/google-sheet-sync" }
       ]
@@ -130,7 +131,10 @@ export class SidebarComponent implements OnInit {
         { icon: "🎯", label: "Tài Khoản Quảng Cáo", route: "/ad-accounts" },
         { icon: "📊", label: "Nhóm Quảng Cáo", route: "/ad-groups" },
         { icon: "💰", label: "Chi Phí Quảng Cáo", route: "/costs/advertising" },
+        { icon: "🔎", label: "Google Search Campaign", route: "/google-ads/campaigns" },
+        { icon: "Ⓜ️", label: "Meta Campaign Control", route: "/meta-ads/campaigns" },
         { icon: "⚙️", label: "Cài Đặt Ads", route: "/ads-settings" },
+        { icon: "🔗", label: "Windsor / Bird", route: "/provider-connections" },
         { icon: "📝", label: "Ngữ Cảnh Kinh Doanh Ads", route: "/ads-business-context" },
         { icon: "🔑", label: "Token API Ads", route: "/api-tokens" },
         { icon: "📊📊", label: "Đề xuất SL nhóm quảng cáo theo SP", route: "/ad-group-counts" }
@@ -166,9 +170,13 @@ export class SidebarComponent implements OnInit {
       route: "/finance",
       children: [
         { icon: "🎛️", label: "Financial Control", route: "/finance/financial-control" },
+        { icon: "📒", label: "Công nợ & tiền thực nhận", route: "/finance/business-ledger" },
+        { icon: "🏦", label: "Đối chiếu ngân hàng", route: "/finance/bank-reconciliation" },
+        { icon: "🤝", label: "Đối soát NCC & đại lý", route: "/finance/counterparties" },
         { icon: "🪣", label: "Budget Buckets", route: "/finance/budget-buckets" },
         { icon: "💼", label: "Quỹ Owner", route: "/owner-fund" },
         { icon: "📊", label: "Chi Phí & Lợi Nhuận Nhóm QC", route: "/finance/ad-group-daily-report" },
+        { icon: "🎯", label: "Quản trị hiệu quả nhóm QC", route: "/finance/ad-group-management" },
 { icon: "💳", label: "Quản lý khoản vay", route: "/loans" }
       ]
     },
@@ -254,18 +262,24 @@ export class SidebarComponent implements OnInit {
     "/manager-handbook": "employee-ads-kpi",
     "/supplier-quotes": "supplier-quote",
     "/inventory": "inventory",
-    "/payments/supplier": "supplier-payable",
-    "/payments/agent": "agent-receivable",
+    "/payments/supplier": "finance.cashflow.manage",
+    "/payments/agent": "finance.cashflow.manage",
     "/finance/financial-control": "finance",
+    "/finance/business-ledger": "finance.cashflow.manage",
+    "/finance/bank-reconciliation": "finance.cashflow.manage",
+    "/finance/counterparties": "finance.cashflow.manage",
     "/finance/available-funds": "finance",
     "/finance/budget-allocation": "finance",
     "/finance/budget-buckets": "finance",
     "/finance/capital-allocation": "finance",
     "/finance/ad-group-daily-report": "finance",
+    "/finance/ad-group-management": "finance.cashflow.manage",
     "/loans": "finance",
     "/owner-fund": "owner-fund",
     "/ai-assistant": "ai-operator",
     "/ai-marketing": "ai-marketing",
+    "/google-ads/campaigns": "ai-marketing",
+    "/meta-ads/campaigns": "ai-marketing",
     "/ads-business-context": "ai-marketing",
     "/ai/ads-approval-evidence-reviewer": "ai-marketing",
     "/ai/ads-foundation-reviewer-docs": "ai-marketing",
@@ -280,6 +294,7 @@ export class SidebarComponent implements OnInit {
   };
 
   canShow(item: MenuItem): boolean {
+    if (item.route === '/tracking-crm') return ['director', 'manager', 'employee'].includes(this.authService.user()?.role || '') && this.authService.hasAnyPermission(['orders-test2']) && this.planService.hasModuleAccess('test-order2');
     if (!this.authService.isAuthenticated()) {
       return item.route === "/login";
     }
@@ -334,12 +349,12 @@ export class SidebarComponent implements OnInit {
       "/purchases/payables": "purchase-costs",
       "/ops-actions": "purchase-costs",
       "/supplier-quotes": "purchase-costs",
-      "/payments/supplier": "purchase-costs",
+      "/payments/supplier": "finance.cashflow.manage",
       "/agents": "users",
       "/production-status": "production-status",
       "/delivery-status": "delivery-status",
       "/quotes": "quotes",
-      "/payments/agent": "quotes",
+      "/payments/agent": "finance.cashflow.manage",
       "/reports/ad-group-profit": "reports",
       "/reports/return-report": "reports",
       "/reports/product-profit": "reports",
@@ -347,6 +362,8 @@ export class SidebarComponent implements OnInit {
       "/fanpages": "fanpages",
       "/ai-assistant": "ai-assistant",
       "/ai-marketing": "google-ads.read",
+      "/google-ads/campaigns": "google-ads.read",
+      "/meta-ads/campaigns": "meta-ads.read",
       "/ai/ads-approval-evidence-reviewer": "ai-data-pack.marketer.read",
       "/ai/ads-foundation-reviewer-docs": "ai-data-pack.marketer.read",
       "/ai/ads-platform-source-sync-status-reviewer": "ai-data-pack.marketer.read",
@@ -354,8 +371,12 @@ export class SidebarComponent implements OnInit {
 	"/conversations": "chat-messages",
   "/api-tokens": "google-ads.credentials.read",
       "/ads-settings": "google-ads.credentials.read",
+      "/provider-connections": "google-ads.credentials.read",
       "/ads-business-context": "google-ads.read",
       "/finance/financial-control": "finance",
+      "/finance/business-ledger": "finance.cashflow.manage",
+      "/finance/bank-reconciliation": "finance.cashflow.manage",
+      "/finance/counterparties": "finance.cashflow.manage",
       "/loans": "finance",
       "/reports/daily-profit": "reports",
       "/finance/available-funds": "finance",
@@ -363,6 +384,7 @@ export class SidebarComponent implements OnInit {
       "/finance/budget-buckets": "finance.budget-buckets.manage",
       "/finance/capital-allocation": "finance",
       "/finance/ad-group-daily-report": "finance",
+      "/finance/ad-group-management": "finance.cashflow.manage",
       "/ads-budget": "ads-budget",
       "/employee-ads-kpi": "employee-ads-kpi",
       "/manager-handbook": "manager-handbook",

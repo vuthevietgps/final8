@@ -10,6 +10,7 @@
  */
 import { Injectable, Logger, Inject, ServiceUnavailableException, forwardRef } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Cron } from '@nestjs/schedule';
 import { FinancialControlService } from '../financial-control.service';
 import { FinanceService } from '../finance.service';
 import { FundsService } from '../funds.service';
@@ -20,6 +21,7 @@ import { OtherCostService } from '../../other-cost/other-cost.service';
 import { AgentReceivableService } from '../../agent-receivable/agent-receivable.service';
 import { SupplierPayableService } from '../../supplier-payable/supplier-payable.service';
 import { AdvertisingCostRecalculationQueueService } from '../../advertising-cost/advertising-cost.recalculation-queue.service';
+import { businessDay } from '../../common/business-day';
 import type {
   FinanceStateChangedEvent,
   FinancialControlPolicyUpdatedEvent,
@@ -63,8 +65,25 @@ export class FinanceEventListenerService {
   ) {}
 
   private getBusinessDateString(date: Date): string {
-    const shifted = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-    return shifted.toISOString().slice(0, 10);
+    return businessDay(date);
+  }
+
+  // Persistent dirty snapshots survive restarts. A periodic source rebuild also
+  // repairs events missed between source commit and event delivery; never invent tax data.
+  @Cron('0 */5 * * * *')
+  async retryFinancialSnapshots(): Promise<void> {
+    if (process.env.ERP_LOCAL_SANDBOX === 'true') return;
+    try { await this.rebuildCanonicalSnapshots(); }
+    catch { this.invalidateFinanceCaches('financial-snapshot-retry-failed'); }
+  }
+
+  async refreshOrderFinancialSnapshots(): Promise<void> {
+    // Unlike background invalidation, this awaited path must fail so the durable job retries.
+    for (const windowDays of SNAPSHOT_WINDOWS) {
+      await this.snapshotService.refresh('agent', windowDays, () => this.agentReceivableService.getCashflowSummary(windowDays));
+    }
+    await this.snapshotService.refresh('supplier', -1, () => this.supplierPayableService.getCashflowSummary());
+    this.invalidateFinanceCaches('order-financial-projections-refreshed');
   }
 
   private invalidateFinanceCaches(reason: string): void {
@@ -106,6 +125,8 @@ export class FinanceEventListenerService {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.logger.warn(`[SNAP_REFRESH_QUEUE] ${key} failed: ${message}`);
+        } finally {
+          this.invalidateFinanceCaches(`snapshot-refresh:${key}`);
         }
       }
     } finally {
@@ -136,8 +157,7 @@ export class FinanceEventListenerService {
   private async refreshLaborSnapshots(): Promise<void> {
     for (const w of SNAPSHOT_WINDOWS) {
       try {
-        const data = await this.laborStatementService.getCashflowSummary(w);
-        await this.snapshotService.store('labor', w, data as unknown as Record<string, unknown>);
+        await this.snapshotService.refresh('labor', w, () => this.laborStatementService.getCashflowSummary(w));
       } catch (err) {
         this.logger.warn(`[SNAP_REFRESH] labor/${w} failed`, err);
       }
@@ -148,8 +168,7 @@ export class FinanceEventListenerService {
     await Promise.all(
       SNAPSHOT_WINDOWS.map(async (w) => {
         try {
-          const data = await this.otherCostService.getCashflowSummary(w);
-          await this.snapshotService.store('ops', w, data as unknown as Record<string, unknown>);
+          await this.snapshotService.refresh('ops', w, () => this.otherCostService.getCashflowSummary(w));
         } catch (err) {
           this.logger.warn(`[SNAP_REFRESH] ops/${w} failed`, err);
         }
@@ -160,8 +179,7 @@ export class FinanceEventListenerService {
   private async refreshAgentSnapshots(): Promise<void> {
     for (const w of SNAPSHOT_WINDOWS) {
       try {
-        const data = await this.agentReceivableService.getCashflowSummary(w);
-        await this.snapshotService.store('agent', w, data as unknown as Record<string, unknown>);
+        await this.snapshotService.refresh('agent', w, () => this.agentReceivableService.getCashflowSummary(w));
       } catch (err) {
         this.logger.warn(`[SNAP_REFRESH] agent/${w} failed`, err);
       }
@@ -170,8 +188,7 @@ export class FinanceEventListenerService {
 
   private async refreshSupplierSnapshot(): Promise<void> {
     try {
-      const data = await this.supplierPayableService.getCashflowSummary();
-      await this.snapshotService.store('supplier', -1, data as unknown as Record<string, unknown>);
+      await this.snapshotService.refresh('supplier', -1, () => this.supplierPayableService.getCashflowSummary());
     } catch (err) {
       this.logger.warn(`[SNAP_REFRESH] supplier/-1 failed`, err);
     }
@@ -266,7 +283,7 @@ export class FinanceEventListenerService {
     if (event.orderDate) {
       const orderDate = new Date(event.orderDate);
       if (!Number.isNaN(orderDate.getTime())) {
-        const dateStr = orderDate.toISOString().slice(0, 10);
+        const dateStr = businessDay(orderDate);
         const todayStr = this.getBusinessDateString(new Date());
         if (dateStr < todayStr) {
           this.recalculationQueue.scheduleRecalculation(dateStr, 'retroactive-order-change');

@@ -8,6 +8,11 @@ const action = (overrides: Record<string, any> = {}) => ({
   actionType: 'create_keyword',
   status: 'pending',
   providerValidationStatus: 'provider_validate_passed',
+  providerValidationExpiresAt: new Date(Date.now() + 60_000),
+  providerValidationOperationHash: 'a'.repeat(64),
+  providerValidationApiVersion: 'v24',
+  providerValidationCredentialBindingHash: 'b'.repeat(64),
+  providerValidationCredentialReferenceId: 'credential-ref-1',
   approvalHistory: [],
   ...overrides,
 });
@@ -117,5 +122,20 @@ describe('GoogleAdsActionPlanService', () => {
 
     expect(executionLogModel.find).toHaveBeenCalledWith({ planId: 'PLAN-001' });
     expect(result).toEqual(expect.objectContaining({ total: 1 }));
+  });
+
+  it('blocks the ERP plan creator from approving their own action', async () => {
+    const document = {
+      ...plan([action()]),
+      source: 'erp_ui',
+      createdByUserId: 'user-1',
+    };
+    actionPlanModel.findOne.mockResolvedValueOnce(document);
+
+    await expect(service.approve(director, document.planId, 'ACT001', {
+      approvedBySource: 'erp_ui',
+      approvalText: 'Approve ACT001',
+    })).rejects.toThrow('creator cannot approve');
+    expect(document.save).not.toHaveBeenCalled();
   });
 });

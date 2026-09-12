@@ -1,0 +1,898 @@
+
+    <div class="page">
+      <header class="header">
+        <div>
+          <p class="eyebrow">AI Ads V2 / Trung tâm điều phối ERP</p>
+          <h2>Trung tâm điều khiển tự động Ads</h2>
+          <p>
+            Theo dõi mức sẵn sàng của Google MCC, Meta Business Manager và TikTok
+            Business Center. Màn hình này chỉ dùng siêu dữ liệu đã ẩn và dữ liệu kiểm tra nội bộ;
+            mọi thao tác chạy thật vẫn đang bị chặn.
+          </p>
+        </div>
+        <div class="header-actions">
+          <a class="btn secondary" routerLink="/api-tokens">Token API</a>
+          <a class="btn secondary" routerLink="/provider-connections">Windsor / Bird</a>
+          <a class="btn secondary" routerLink="/ad-accounts">Tài khoản quảng cáo</a>
+          <a class="btn secondary" routerLink="/ad-groups">Nhóm quảng cáo</a>
+          <a class="btn secondary" routerLink="/costs/advertising">Chi phí quảng cáo</a>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Các mục của trung tâm điều khiển tự động Ads">
+        <button
+          *ngFor="let tab of tabs"
+          type="button"
+          [class.active]="activeTab() === tab.id"
+          (click)="selectTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+
+      <div
+        *ngIf="message()"
+        class="message"
+        [class.error]="messageType() === 'error'"
+        [class.success]="messageType() === 'success'"
+      >
+        {{ message() }}
+      </div>
+
+      <section *ngIf="activeTab() === 'overview'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Tổng quan / Mức sẵn sàng</h3>
+            <p class="muted">
+              Kích hoạt thông tin xác thực chỉ mở luồng nhập dữ liệu dạng chỉ đọc. Thay đổi
+              ngân sách, tạm dừng, validateOnly và chạy thật qua nhà cung cấp vẫn bị chặn cho
+              đến khi các cổng kiểm soát ERP được thông qua.
+            </p>
+          </div>
+          <span class="status-chip blocked">chưa cho phép chạy thật</span>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span>Tài khoản quản lý đã cấu hình</span>
+            <strong>{{ configuredManagerCount() }} / {{ managerAccounts().length }}</strong>
+            <small>Các bản ghi MCC/BM/BC hỗ trợ nhiều tài khoản quản lý.</small>
+          </article>
+          <article class="metric-card">
+            <span>Tài khoản con được uỷ quyền</span>
+            <strong>{{ childAccountTotal() }}</strong>
+            <small>Hiện chỉ là mô hình đọc nội bộ; sau này thay bằng kết quả nhập từ máy chủ.</small>
+          </article>
+          <article class="metric-card">
+            <span>Chế độ nhập hằng ngày</span>
+            <strong>chỉ đọc</strong>
+            <small>Tài khoản, nhóm quảng cáo và chi phí sẽ được làm mới sau khi kích hoạt xác thực.</small>
+          </article>
+          <article class="metric-card danger">
+            <span>Thực thi chạy thật</span>
+            <strong>không</strong>
+            <small>Cờ chạy thật và cờ gọi API nhà cung cấp đều đang tắt.</small>
+          </article>
+        </div>
+
+        <div class="manual-sync-panel" aria-label="Đồng bộ dữ liệu tổng quát">
+          <div class="section-head compact-head">
+            <div>
+              <h3>Đồng bộ dữ liệu tổng quát</h3>
+              <p class="muted">
+                Làm mới trạng thái ảnh hưởng ads từ dữ liệu ERP hiện có. Luồng này chỉ đọc dữ liệu,
+                không gọi API nhà cung cấp và không thực thi ads.
+              </p>
+            </div>
+            <div class="manual-sync-actions">
+              <span class="source-pill">{{ manualDataSyncLabel() }}</span>
+              <button class="btn" type="button" (click)="runManualDataSync()" [disabled]="manualDataSyncing()">
+                {{ manualDataSyncing() ? 'Đang đồng bộ...' : 'Đồng bộ dữ liệu' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="evidence-error" *ngIf="manualDataSyncError()">{{ manualDataSyncError() }}</div>
+          <div class="summary-grid evidence-summary">
+            <div *ngFor="let item of manualDataSyncCards()">
+              <span>{{ item.title }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.detail }}</small>
+              <em class="status-chip" [ngClass]="evidenceStatusClass(item.state)">
+                {{ evidenceStatusLabel(item.state) }}
+              </em>
+            </div>
+          </div>
+
+          <div class="evidence-columns" *ngIf="manualDataSyncResult()">
+            <article>
+              <strong>Nguồn dữ liệu ảnh hưởng ads</strong>
+              <ul class="blocker-list compact-list">
+                <li *ngFor="let source of manualDataSyncSourceCoverage()">
+                  <span
+                    class="status-chip"
+                    [ngClass]="source.canUseForAdsAutomationDecision ? 'ready_for_import' : 'blocked'"
+                  >
+                    {{ source.sourceKey }}
+                  </span>
+                  {{ source.coverageBucket }} / {{ source.freshnessStatus }}
+                  <small>{{ sourceCoverageDetail(source) }}</small>
+                </li>
+              </ul>
+            </article>
+
+            <article>
+              <strong>Blocker sau khi đồng bộ</strong>
+              <ul class="blocker-list compact-list" *ngIf="manualDataSyncBlockers().length; else noManualSyncBlockers">
+                <li *ngFor="let blocker of manualDataSyncBlockers()">{{ blocker }}</li>
+              </ul>
+              <ng-template #noManualSyncBlockers>
+                <p class="muted compact">Chưa có blocker từ kết quả đồng bộ gần nhất.</p>
+              </ng-template>
+            </article>
+          </div>
+        </div>
+
+        <div class="scenario-panel" aria-label="Kịch bản thử phương án kinh doanh">
+          <div class="section-head compact-head">
+            <div>
+              <h3>Kịch bản thử phương án kinh doanh</h3>
+              <p class="muted">
+                Thay đổi nhanh vốn vay, lãi vay, giá nhập, giá bán, tồn kho và ngân sách ads để
+                nhìn tác động tài chính trước khi quyết định. Kịch bản này chỉ tính trong trình duyệt.
+              </p>
+            </div>
+            <button class="btn secondary" type="button" (click)="resetBusinessScenario()">
+              Đặt lại kịch bản
+            </button>
+          </div>
+
+          <div class="scenario-source-row">
+            <label>
+              Sản phẩm ERP
+              <select
+                [ngModel]="selectedScenarioProductId()"
+                (ngModelChange)="selectBusinessScenarioProduct($event)"
+                [disabled]="scenarioProductLoading() && !scenarioProducts().length"
+              >
+                <option value="">Nhập tay / chưa chọn sản phẩm</option>
+                <option *ngFor="let product of scenarioProducts()" [value]="product._id">
+                  {{ scenarioProductLabel(product) }}
+                </option>
+              </select>
+            </label>
+            <button class="btn ghost" type="button" (click)="loadScenarioProducts()" [disabled]="scenarioProductLoading()">
+              {{ scenarioProductLoading() ? 'Đang tải sản phẩm...' : 'Tải lại sản phẩm' }}
+            </button>
+          </div>
+          <p class="muted compact" *ngIf="scenarioProductAppliedLabel()">{{ scenarioProductAppliedLabel() }}</p>
+          <div class="evidence-error compact" *ngIf="scenarioProductError()">{{ scenarioProductError() }}</div>
+
+          <div class="form-grid scenario-form">
+            <label>
+              Vốn vay thêm
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().additionalLoanVnd"
+                (ngModelChange)="updateBusinessScenario('additionalLoanVnd', $event)"
+              />
+            </label>
+            <label>
+              Lãi vay / năm (%)
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                [ngModel]="businessScenario().annualInterestRatePercent"
+                (ngModelChange)="updateBusinessScenario('annualInterestRatePercent', $event)"
+              />
+            </label>
+            <label>
+              Kỳ hạn vay (tháng)
+              <input
+                type="number"
+                min="1"
+                [ngModel]="businessScenario().loanTermMonths"
+                (ngModelChange)="updateBusinessScenario('loanTermMonths', $event)"
+              />
+            </label>
+            <label>
+              Giá nhập / đơn
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().purchasePriceVnd"
+                (ngModelChange)="updateBusinessScenario('purchasePriceVnd', $event)"
+              />
+            </label>
+            <label>
+              Giá bán / đơn
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().sellingPriceVnd"
+                (ngModelChange)="updateBusinessScenario('sellingPriceVnd', $event)"
+              />
+            </label>
+            <label>
+              Chi phí xử lý / đơn
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().fulfillmentCostPerOrderVnd"
+                (ngModelChange)="updateBusinessScenario('fulfillmentCostPerOrderVnd', $event)"
+              />
+            </label>
+            <label>
+              Đơn dự kiến / ngày
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().expectedOrdersPerDay"
+                (ngModelChange)="updateBusinessScenario('expectedOrdersPerDay', $event)"
+              />
+            </label>
+            <label>
+              Hoàn/hủy (%)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                [ngModel]="businessScenario().returnRatePercent"
+                (ngModelChange)="updateBusinessScenario('returnRatePercent', $event)"
+              />
+            </label>
+            <label>
+              Ngân sách ads / ngày
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().dailyAdsBudgetVnd"
+                (ngModelChange)="updateBusinessScenario('dailyAdsBudgetVnd', $event)"
+              />
+            </label>
+            <label>
+              Tồn kho khả dụng
+              <input
+                type="number"
+                min="0"
+                [ngModel]="businessScenario().inventoryUnits"
+                (ngModelChange)="updateBusinessScenario('inventoryUnits', $event)"
+              />
+            </label>
+          </div>
+
+          <div class="summary-grid scenario-summary">
+            <div>
+              <span>Doanh thu/ngày</span>
+              <strong>{{ moneyText(businessScenarioResult().grossRevenueVnd) }}</strong>
+              <small>Sau khi trừ tác động hoàn/hủy.</small>
+            </div>
+            <div>
+              <span>Lãi gộp trước ads</span>
+              <strong [class.negative]="businessScenarioResult().grossProfitBeforeAdsVnd < 0">
+                {{ moneyText(businessScenarioResult().grossProfitBeforeAdsVnd) }}
+              </strong>
+              <small>Doanh thu - giá nhập - chi phí xử lý.</small>
+            </div>
+            <div>
+              <span>Lợi nhuận sau ads/ngày</span>
+              <strong [class.negative]="businessScenarioResult().netProfitAfterAdsVnd < 0">
+                {{ moneyText(businessScenarioResult().netProfitAfterAdsVnd) }}
+              </strong>
+              <small>Đã trừ ads và chi phí vốn vay theo ngày.</small>
+            </div>
+            <div>
+              <span>Ngân sách ads hòa vốn/ngày</span>
+              <strong>{{ moneyText(businessScenarioResult().breakEvenDailyAdsBudgetVnd) }}</strong>
+              <small>Ngưỡng không nên vượt nếu muốn giữ lợi nhuận không âm.</small>
+            </div>
+            <div>
+              <span>CPA tối đa</span>
+              <strong>{{ moneyText(businessScenarioResult().maxCpaVnd) }}</strong>
+              <small>Mức chi ads tối đa cho một đơn thành công.</small>
+            </div>
+            <div>
+              <span>Khuyến nghị test ads/ngày</span>
+              <strong>{{ moneyText(businessScenarioResult().recommendedTestAdsBudgetVnd) }}</strong>
+              <small>Ngưỡng thử bảo thủ, chưa phải lệnh chạy thật.</small>
+            </div>
+            <div>
+              <span>Vòng tồn kho</span>
+              <strong>{{ daysOfCoverText(businessScenarioResult().daysOfCover) }}</strong>
+              <small>Tồn kho / đơn dự kiến mỗi ngày.</small>
+            </div>
+            <div>
+              <span>Trạng thái kịch bản</span>
+              <strong>{{ businessScenarioDecisionLabel(businessScenarioResult().decision) }}</strong>
+              <small>{{ businessScenarioResult().blockers.length ? businessScenarioResult().blockers.join(', ') : 'không có blocker chính' }}</small>
+              <em class="status-chip" [ngClass]="businessScenarioDecisionClass(businessScenarioResult().decision)">
+                {{ businessScenarioDecisionShortLabel(businessScenarioResult().decision) }}
+              </em>
+            </div>
+          </div>
+
+          <div class="note-box compact">
+            Đây là sandbox để test giả định kinh doanh bằng UI. Muốn biến kịch bản thành dữ liệu thật,
+            bước sau phải có route backend riêng kiểu preview-only, lưu audit và người duyệt xác nhận.
+          </div>
+        </div>
+
+        <div class="evidence-panel" aria-label="Ads automation evidence snapshot">
+          <div class="section-head compact-head">
+            <div>
+              <h3>ERP evidence snapshot</h3>
+              <p class="muted">
+                Read-only snapshot from GET /api/ads-automation/evidence/snapshot for mapping, cashflow,
+                ads execution gates, and blockers.
+              </p>
+            </div>
+            <span class="source-pill">{{ evidenceSnapshotLabel() }}</span>
+          </div>
+
+          <div class="evidence-error" *ngIf="evidenceError()">{{ evidenceError() }}</div>
+          <div class="summary-grid evidence-summary" *ngIf="!evidenceError()">
+            <div *ngFor="let item of evidenceSummaryCards()">
+              <span>{{ item.title }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.detail }}</small>
+              <em class="status-chip" [ngClass]="evidenceStatusClass(item.state)">
+                {{ evidenceStatusLabel(item.state) }}
+              </em>
+            </div>
+          </div>
+
+          <div class="evidence-columns">
+            <article>
+              <strong>Top blockers</strong>
+              <ul class="blocker-list compact-list" *ngIf="topEvidenceBlockers().length; else noEvidenceBlockers">
+                <li *ngFor="let blocker of topEvidenceBlockers()">
+                  <span class="severity" [ngClass]="blocker.severity">{{ blockerSeverityLabel(blocker.severity) }}</span>
+                  {{ blocker.message }}
+                  <small *ngIf="blocker.source">({{ blocker.source }})</small>
+                </li>
+              </ul>
+              <ng-template #noEvidenceBlockers>
+                <p class="muted compact">No blockers returned by the snapshot.</p>
+              </ng-template>
+            </article>
+
+            <article>
+              <strong>ERP drilldowns</strong>
+              <div class="evidence-links">
+                <a *ngFor="let link of evidenceDrilldownLinks" [routerLink]="link.route">
+                  <span>{{ link.label }}</span>
+                  <small>{{ link.detail }}</small>
+                </a>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="flow-grid">
+          <div class="flow-step" *ngFor="let step of controlPlaneFlow; let index = index">
+            <span>{{ index + 1 }}</span>
+            <strong>{{ step.title }}</strong>
+            <p>{{ step.detail }}</p>
+          </div>
+        </div>
+
+        <div class="safety-strip">
+          <div *ngFor="let flag of safetyFlags">
+            <span>{{ safetyFlagLabel(flag.key) }}</span>
+            <strong>{{ safetyFlagValueLabel(flag.value) }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'managerAccounts'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Tài khoản quản lý</h3>
+            <p class="muted">
+              Google Ads được quản lý qua MCC, Meta qua Business Manager và TikTok qua
+              Business Center. Mô hình giao diện nội bộ có hỗ trợ nhiều tài khoản quản lý.
+            </p>
+          </div>
+          <span class="source-pill">nguồn: /ads-manager-accounts/readiness/summary</span>
+        </div>
+
+        <div class="evidence-error compact" *ngIf="managerRegistryError()">{{ managerRegistryError() }}</div>
+        <p class="muted" *ngIf="managerRegistryLoading()">Đang tải registry tài khoản quản lý...</p>
+        <p class="muted" *ngIf="!managerRegistryLoading() && managerRegistrySummary() && !managerAccounts().length">
+          Registry chưa có tài khoản quản lý. Hãy onboarding metadata và secret reference trước khi import.
+        </p>
+
+        <div class="manager-grid">
+          <article class="manager-card" *ngFor="let manager of managerAccounts()">
+            <div class="card-title">
+              <div>
+                <span class="provider">{{ manager.providerLabel }}</span>
+                <h4>{{ manager.managerName }}</h4>
+              </div>
+              <span class="status-chip" [ngClass]="manager.readiness">{{ readinessLabel(manager.readiness) }}</span>
+            </div>
+            <dl class="definition-grid">
+              <div>
+                <dt>Loại tài khoản quản lý</dt>
+                <dd>{{ manager.managerType }}</dd>
+              </div>
+              <div>
+                <dt>ID tài khoản quản lý</dt>
+                <dd>{{ manager.managerId }}</dd>
+              </div>
+              <div>
+                <dt>Nguồn xác thực</dt>
+                <dd>{{ manager.credentialSource }}</dd>
+              </div>
+              <div>
+                <dt>Tham chiếu secret</dt>
+                <dd>{{ manager.secretReference }}</dd>
+              </div>
+              <div>
+                <dt>Tài khoản con</dt>
+                <dd>{{ manager.childAccountCount }}</dd>
+              </div>
+              <div>
+                <dt>Phạm vi mặc định</dt>
+                <dd>{{ manager.importScope }}</dd>
+              </div>
+            </dl>
+            <div class="blocker-list" *ngIf="manager.blockers.length">
+              <strong>Điểm chặn</strong>
+              <ul>
+                <li *ngFor="let blocker of manager.blockers">{{ blocker }}</li>
+              </ul>
+            </div>
+            <p class="muted compact">{{ manager.executionScope }}</p>
+            <button
+              *ngIf="manager.provider === 'google' && canVerifyManagerAccount()"
+              class="btn ghost"
+              type="button"
+              (click)="verifyManagerReadOnly(manager)"
+              [disabled]="verifyingManagerId() === manager.id">
+              {{ verifyingManagerId() === manager.id ? 'Đang xác minh chỉ đọc...' : 'Xác minh MCC chỉ đọc' }}
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'credentials'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Thông tin xác thực / Token API</h3>
+            <p class="muted">
+              Tab này chỉ hiển thị siêu dữ liệu. Token dạng rõ, refresh token,
+              developer token, client secret và app secret không được hiển thị tại đây.
+            </p>
+          </div>
+          <a class="btn" routerLink="/api-tokens">Mở trang token kỹ thuật</a>
+        </div>
+
+        <div class="credential-grid">
+          <article class="credential-card" *ngFor="let credential of credentials()">
+            <div class="card-title">
+              <div>
+                <span class="provider">{{ credential.providerLabel }}</span>
+                <h4>{{ credential.tokenType }}</h4>
+              </div>
+              <span class="status-chip" [ngClass]="credential.status">{{ readinessLabel(credential.status) }}</span>
+            </div>
+            <dl class="definition-grid">
+              <div>
+                <dt>Siêu dữ liệu đã ẩn</dt>
+                <dd>{{ credential.metadata }}</dd>
+              </div>
+              <div>
+                <dt>Tham chiếu vault</dt>
+                <dd>{{ credential.secretReference }}</dd>
+              </div>
+              <div>
+                <dt>Mở mặc định</dt>
+                <dd>{{ credential.allowedByDefault }}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+
+        <div class="note-box">
+          <strong>Tương thích ngược</strong>
+          <p>
+            Đường dẫn /api-tokens hiện có vẫn dùng được cho quy trình kỹ thuật. Điều hướng sản phẩm
+            hiện xem quản lý thông tin xác thực là một phần của trung tâm điều khiển này.
+          </p>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'childAccounts'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Tài khoản quảng cáo con</h3>
+            <p class="muted">
+              Các tài khoản con đã uỷ quyền nằm dưới thông tin xác thực của tài khoản quản lý.
+              Giao diện hiện dùng dữ liệu mẫu nội bộ cho đến khi máy chủ nối xong luồng discovery/import.
+            </p>
+          </div>
+          <a class="btn secondary" routerLink="/ad-accounts">Mở tài khoản quảng cáo</a>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nền tảng</th>
+                <th>Tài khoản con</th>
+                <th>Tài khoản quản lý</th>
+                <th>Chế độ</th>
+                <th>Nhập dữ liệu</th>
+                <th>Ghép dữ liệu</th>
+                <th>Thực thi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let account of childAccounts()">
+                <td>{{ account.providerLabel }}</td>
+                <td>
+                  <strong>{{ account.accountName }}</strong>
+                  <div class="sub">{{ account.accountId }}</div>
+                </td>
+                <td>{{ account.managerId }}</td>
+                <td>{{ managementModeLabel(account.managementMode) }}</td>
+                <td><span class="status-chip" [ngClass]="account.importState">{{ readinessLabel(account.importState) }}</span></td>
+                <td><span class="status-chip" [ngClass]="account.mappingState">{{ readinessLabel(account.mappingState) }}</span></td>
+                <td>{{ executionModeLabel(account.executionMode) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'importSchedule'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Lịch nhập dữ liệu</h3>
+            <p class="muted">
+              Google Ads hiển thị canonical sync-run mới nhất từ ERP. Meta và TikTok chỉ hiện trạng thái
+              cấu hình cho đến khi có endpoint sync-run tương ứng. Mục này không có thao tác ghi lên nhà cung cấp.
+            </p>
+          </div>
+          <div class="header-actions">
+            <span class="source-pill">GET /google-ads/sync/runs/latest · read-only</span>
+            <button class="btn ghost" type="button" (click)="loadImportRunStatus()" [disabled]="importRunLoading()">
+              {{ importRunLoading() ? 'Đang tải...' : 'Tải lại trạng thái' }}
+            </button>
+            <a class="btn secondary" routerLink="/costs/advertising">Mở chi phí quảng cáo</a>
+          </div>
+        </div>
+
+        <div class="evidence-error compact" *ngIf="importRunError()">{{ importRunError() }}</div>
+        <p class="muted" *ngIf="importRunLoading()">Đang đọc sync-run mới nhất từ ERP...</p>
+
+        <div class="schedule-grid">
+          <article class="schedule-card" *ngFor="let schedule of importSchedules()">
+            <div class="card-title">
+              <h4>{{ schedule.source }}</h4>
+              <span class="status-chip" [ngClass]="schedule.status">{{ readinessLabel(schedule.status) }}</span>
+            </div>
+            <dl class="definition-grid">
+              <div>
+                <dt>Chu kỳ</dt>
+                <dd>{{ schedule.cadence }}</dd>
+              </div>
+              <div>
+                <dt>Lần chạy gần nhất</dt>
+                <dd>{{ schedule.lastRun }}</dd>
+              </div>
+              <div>
+                <dt>Lần chạy kế tiếp</dt>
+                <dd>{{ schedule.nextRun }}</dd>
+              </div>
+              <div>
+                <dt>Hoàn tất</dt>
+                <dd>{{ schedule.completedAt }}</dd>
+              </div>
+              <div>
+                <dt>Customer IDs</dt>
+                <dd>{{ schedule.customerIds }}</dd>
+              </div>
+              <div>
+                <dt>Run ID</dt>
+                <dd>{{ schedule.runId }}</dd>
+              </div>
+              <div>
+                <dt>Nơi ghi dữ liệu</dt>
+                <dd>{{ schedule.destination }}</dd>
+              </div>
+              <div>
+                <dt>Số dòng</dt>
+                <dd>{{ schedule.rowCount }}</dd>
+              </div>
+            </dl>
+            <ul class="inline-list">
+              <li *ngFor="let blocker of schedule.blockers">{{ blocker }}</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'mappingHealth'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Sức khoẻ mapping</h3>
+            <p class="muted">
+              Mọi đề xuất tăng ngân sách vẫn ở chế độ chỉ giám sát nếu thiếu bằng chứng về sản phẩm,
+              nhà cung cấp, đơn hàng, lợi nhuận, dòng tiền, tồn kho, fulfilment, hoàn hàng, độ mới
+              dữ liệu hoặc giới hạn lỗ.
+            </p>
+          </div>
+          <a class="btn secondary" routerLink="/ad-groups">Mở nhóm quảng cáo</a>
+        </div>
+
+        <div class="mapping-grid">
+          <article class="mapping-card" *ngFor="let item of mappingHealth">
+            <div class="card-title">
+              <h4>{{ item.layer }}</h4>
+              <span class="status-chip" [ngClass]="item.status">{{ readinessLabel(item.status) }}</span>
+            </div>
+            <div class="progress-line">
+              <span [style.width.%]="mappingPercent(item)"></span>
+            </div>
+            <p><strong>{{ item.mapped }} / {{ item.total }}</strong> đã mapping</p>
+            <p class="muted">{{ item.evidence }}</p>
+            <p class="blocker">{{ item.blocker }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'executionGates'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Cổng duyệt & thực thi</h3>
+            <p class="muted">
+              Các hành động sau này cần được duyệt, có validateOnly từ nhà cung cấp, preflight
+              dry-run, idempotency, kill switch, bật cờ chạy thật và vượt qua cổng tài chính.
+            </p>
+          </div>
+          <span class="status-chip blocked">chưa sẵn sàng chạy thật</span>
+        </div>
+
+        <div class="gate-grid">
+          <article class="gate-card" *ngFor="let gate of executionGates">
+            <div class="card-title">
+              <h4>{{ gate.label }}</h4>
+              <span class="status-chip" [ngClass]="gate.state">{{ readinessLabel(gate.state) }}</span>
+            </div>
+            <dl class="definition-grid">
+              <div>
+                <dt>Cổng kiểm soát</dt>
+                <dd>{{ gateKeyLabel(gate.key) }}</dd>
+              </div>
+              <div>
+                <dt>Giá trị</dt>
+                <dd>{{ gateValueLabel(gate.value) }}</dd>
+              </div>
+            </dl>
+            <p class="muted">{{ gate.evidence }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'audit'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Bằng chứng audit / rollback</h3>
+            <p class="muted">
+              Kho snapshot hằng ngày là bằng chứng ERP bất biến, đã redaction và không gọi API nhà cung cấp.
+              Màn hình này chỉ đọc latest/history; việc capture không tự chạy từ trình duyệt.
+            </p>
+          </div>
+          <div class="header-actions">
+            <span class="source-pill">GET latest/history · read-only</span>
+            <button class="btn ghost" type="button" (click)="loadImmutableEvidenceSnapshots()" [disabled]="immutableSnapshotsLoading()">
+              {{ immutableSnapshotsLoading() ? 'Đang tải...' : 'Tải lại snapshot' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="evidence-error compact" *ngIf="immutableSnapshotsError()">{{ immutableSnapshotsError() }}</div>
+        <p class="muted" *ngIf="immutableSnapshotsLoading()">Đang đọc kho snapshot ERP bất biến...</p>
+
+        <div class="immutable-snapshot-grid" *ngIf="immutableLatestSnapshot() as latest; else noImmutableSnapshot">
+          <article class="audit-card latest-snapshot-card">
+            <span>Snapshot mới nhất · {{ latest.dateKey }}</span>
+            <strong>{{ latest.environment }} / {{ latest.schemaVersion }}</strong>
+            <dl class="definition-grid compact-definition-grid">
+              <div>
+                <dt>Captured at</dt>
+                <dd>{{ formatDateTime(latest.capturedAt) }}</dd>
+              </div>
+              <div>
+                <dt>Snapshot ID</dt>
+                <dd>{{ latest.payload.snapshotId || 'không có' }}</dd>
+              </div>
+            </dl>
+            <small class="snapshot-hash">SHA-256: {{ latest.hash }}</small>
+          </article>
+
+          <div class="audit-history">
+            <strong>Lịch sử gần đây</strong>
+            <article class="audit-card" *ngFor="let item of immutableSnapshotHistory()">
+              <span>{{ item.dateKey }} · {{ item.environment }}</span>
+              <strong>{{ item.schemaVersion }}</strong>
+              <p>{{ formatDateTime(item.capturedAt) }}</p>
+              <small class="snapshot-hash">{{ item.hash }}</small>
+            </article>
+          </div>
+        </div>
+        <ng-template #noImmutableSnapshot>
+          <p class="muted" *ngIf="!immutableSnapshotsLoading() && !immutableSnapshotsError()">
+            Chưa có snapshot bất biến cho môi trường hiện tại. Scheduler ERP sẽ capture theo lịch Asia/Bangkok.
+          </p>
+        </ng-template>
+
+        <div class="audit-list">
+          <article class="audit-card" *ngFor="let item of auditEvidence">
+            <span>{{ item.event }}</span>
+            <strong>{{ item.result }}</strong>
+            <p>{{ item.evidence }}</p>
+            <small>{{ item.rollback }}</small>
+          </article>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'googleSettings'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Thiết lập kỹ thuật Google MCC</h3>
+            <p class="muted">
+              Khung tương thích với endpoint cấu hình Google hiện có. Các trường secret sẽ được
+              xoá khỏi form sau khi lưu hoặc kiểm thử.
+            </p>
+          </div>
+          <button class="btn ghost" type="button" (click)="activeTab.set('googleGuide')">Mở hướng dẫn</button>
+        </div>
+
+        <div class="note-box" *ngIf="settings()?.google?.configured">
+          <div class="summary-grid">
+            <div><span>MCC</span><strong>{{ settings()?.google?.loginCustomerId || 'chưa đặt' }}</strong></div>
+            <div><span>Phiên bản API</span><strong>{{ settings()?.google?.apiVersion || 'mặc định' }}</strong></div>
+            <div><span>Nguồn cấu hình</span><strong>{{ settings()?.google?.configSource || 'không rõ' }}</strong></div>
+            <div><span>Refresh token</span><strong>{{ settings()?.google?.refreshTokenSource || (settings()?.google?.hasRefreshToken ? 'đã ẩn' : 'thiếu') }}</strong></div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label><span>Developer token *</span><input autocomplete="off" type="password" [(ngModel)]="googleForm.developerToken" placeholder="ERP lưu trữ; xoá khỏi form sau thao tác" /></label>
+          <label><span>Client ID *</span><input autocomplete="off" type="text" [(ngModel)]="googleForm.clientId" placeholder="Siêu dữ liệu OAuth client" /></label>
+          <label><span>Client secret *</span><input autocomplete="off" type="password" [(ngModel)]="googleForm.clientSecret" placeholder="Chỉ dùng cho bước đưa vào kho secret" /></label>
+          <label><span>Refresh token *</span><input autocomplete="off" type="password" [(ngModel)]="googleForm.refreshToken" placeholder="Chỉ dùng cho bước đưa vào kho secret" /></label>
+          <label><span>Login customer ID</span><input autocomplete="off" type="text" [(ngModel)]="googleForm.loginCustomerId" placeholder="Customer ID của MCC" /></label>
+          <label><span>Phiên bản API</span><input autocomplete="off" type="text" [(ngModel)]="googleForm.apiVersion" placeholder="v24" /></label>
+          <label class="wide"><span>Test customer ID *</span><input autocomplete="off" type="text" [(ngModel)]="googleForm.testCustomerId" placeholder="Customer ID con dùng để admin kiểm thử" /></label>
+        </div>
+
+        <div class="actions">
+          <button class="btn secondary" type="button" (click)="testGoogle()" [disabled]="testingGoogle()">
+            {{ testingGoogle() ? 'Đang kiểm thử...' : 'Admin kiểm thử kết nối' }}
+          </button>
+          <button class="btn" type="button" (click)="saveGoogle()" [disabled]="savingGoogle()">
+            {{ savingGoogle() ? 'Đang lưu...' : 'Lưu cấu hình Google MCC' }}
+          </button>
+          <button class="btn ghost" type="button" (click)="testSync('google')" [disabled]="syncing() || !settings()?.google?.configured">
+            {{ syncing() ? 'Đang đồng bộ...' : 'Admin kiểm thử đồng bộ chỉ đọc' }}
+          </button>
+        </div>
+
+        <div class="warning-box">
+          Khung tương thích này có thể gọi endpoint xác thực/đồng bộ hiện có của máy chủ khi quản trị viên
+          chủ động bấm nút. Trạng thái sẵn sàng của trung tâm điều khiển vẫn giữ không cho chạy thật.
+        </div>
+
+        <div class="result" *ngIf="googleTestResult()">
+          <pre>{{ googleTestResult() | json }}</pre>
+        </div>
+        <div class="result" *ngIf="syncResult()">{{ syncResult() }}</div>
+      </section>
+
+      <section *ngIf="activeTab() === 'googleGuide'" class="panel guide">
+        <div class="guide-grid">
+          <article class="guide-card">
+            <h4>1. Thông tin xác thực tài khoản quản lý</h4>
+            <ol>
+              <li>Liên kết các customer account con dưới MCC đã được duyệt.</li>
+              <li>Chỉ lưu OAuth/developer credential qua cơ chế secret của ERP.</li>
+              <li>Dùng cấu hình MCC để mở luồng nhập chỉ đọc trước.</li>
+            </ol>
+          </article>
+
+          <article class="guide-card">
+            <h4>2. Ghép dữ liệu trong ERP</h4>
+            <ol>
+              <li>Mỗi customer con trở thành một tài khoản quảng cáo với chế độ quản lý MCC.</li>
+              <li>Mỗi chiến dịch/nhóm quảng cáo phải ghép với bằng chứng sản phẩm, nhà cung cấp, đơn hàng và lợi nhuận.</li>
+              <li>campaignBudgetId phải đến từ dữ liệu ngân sách đã sync, không fallback bằng campaignId hoặc adGroupId.</li>
+            </ol>
+          </article>
+
+          <article class="guide-card">
+            <h4>3. Ranh giới thực thi</h4>
+            <ol>
+              <li>Luồng nhập chỉ đọc phải chạy trước mọi bản nháp hành động.</li>
+              <li>Về sau bắt buộc có validateOnly từ nhà cung cấp, phê duyệt, preflight, idempotency và kill switch.</li>
+              <li>Tại đây đang chặn tạo campaign live, xoá, Performance Max, Shopping, Display và YouTube.</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+
+      <section *ngIf="activeTab() === 'tiktokSettings'" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Thiết lập kỹ thuật TikTok Business Center</h3>
+            <p class="muted">
+              Khung tương thích với endpoint cấu hình TikTok hiện có. Các trường secret được
+              ẩn khỏi kết quả hiển thị và xoá khỏi form sau khi lưu, exchange hoặc kiểm thử.
+            </p>
+          </div>
+        </div>
+
+        <div class="note-box" *ngIf="settings()?.tiktok?.configured">
+          <div class="summary-grid">
+            <div><span>App ID</span><strong>{{ settings()?.tiktok?.appId || 'đã ẩn' }}</strong></div>
+            <div><span>BC ID</span><strong>{{ settings()?.tiktok?.businessCenterId || 'chưa đặt' }}</strong></div>
+            <div><span>Tên BC</span><strong>{{ settings()?.tiktok?.businessCenterName || 'chưa đặt' }}</strong></div>
+            <div><span>Nguồn cấu hình</span><strong>{{ settings()?.tiktok?.configSource || 'không rõ' }}</strong></div>
+            <div><span>Advertiser</span><strong>{{ settings()?.tiktok?.advertiserIds?.length || 0 }}</strong></div>
+            <div><span>Refresh token</span><strong>{{ settings()?.tiktok?.hasRefreshToken ? 'đã ẩn' : 'thiếu' }}</strong></div>
+            <div><span>Scope</span><strong>{{ settings()?.tiktok?.scopes?.length || 0 }}</strong></div>
+            <div><span>Hết hạn access token</span><strong>{{ formatDateTime(settings()?.tiktok?.accessTokenExpiresAt) }}</strong></div>
+            <div><span>Hết hạn refresh token</span><strong>{{ formatDateTime(settings()?.tiktok?.refreshTokenExpiresAt) }}</strong></div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label><span>App ID *</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.appId" placeholder="Siêu dữ liệu của app" /></label>
+          <label><span>App secret *</span><input autocomplete="off" type="password" [(ngModel)]="tiktokForm.appSecret" placeholder="Chỉ dùng cho bước đưa vào kho secret" /></label>
+          <label><span>Auth code</span><input autocomplete="off" type="password" [(ngModel)]="tiktokForm.authCode" placeholder="Mã tạm của admin; xoá sau thao tác" /></label>
+          <label><span>Access token</span><input autocomplete="off" type="password" [(ngModel)]="tiktokForm.accessToken" placeholder="Được ẩn sau khi lưu/exchange" /></label>
+          <label><span>Refresh token</span><input autocomplete="off" type="password" [(ngModel)]="tiktokForm.refreshToken" placeholder="Chỉ dùng cho bước đưa vào kho secret" /></label>
+          <label><span>Redirect URI</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.redirectUri" placeholder="Callback URI đã cấu hình" /></label>
+          <label><span>Business Center ID</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.businessCenterId" placeholder="BC ID" /></label>
+          <label><span>Tên Business Center</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.businessCenterName" placeholder="Tên hiển thị của BC" /></label>
+          <label><span>Test advertiser ID *</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.testAdvertiserId" placeholder="Advertiser ID con dùng để admin kiểm thử" /></label>
+          <label class="wide"><span>Advertiser ID</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.advertiserIdsText" placeholder="Các advertiser ID con, phân tách bằng dấu phẩy" /></label>
+          <label class="wide"><span>Advertiser ID đã uỷ quyền</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.grantedAdvertiserIdsText" placeholder="ERP điền sau khi exchange/kiểm thử" /></label>
+          <label class="wide"><span>Scope</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.scopesText" placeholder="Siêu dữ liệu scope đọc/nhập dữ liệu" /></label>
+          <label><span>Thời điểm hết hạn access token</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.accessTokenExpiresAt" placeholder="Timestamp ISO dạng siêu dữ liệu" /></label>
+          <label><span>Thời điểm hết hạn refresh token</span><input autocomplete="off" type="text" [(ngModel)]="tiktokForm.refreshTokenExpiresAt" placeholder="Timestamp ISO dạng siêu dữ liệu" /></label>
+        </div>
+
+        <div class="actions">
+          <button class="btn secondary" type="button" (click)="exchangeTikTokAuthCode()" [disabled]="exchangingTikTok()">
+            {{ exchangingTikTok() ? 'Đang đổi mã...' : 'Đổi auth code lấy token' }}
+          </button>
+          <button class="btn secondary" type="button" (click)="testTikTok()" [disabled]="testingTikTok()">
+            {{ testingTikTok() ? 'Đang kiểm thử...' : 'Admin kiểm thử kết nối' }}
+          </button>
+          <button class="btn" type="button" (click)="saveTikTok()" [disabled]="savingTikTok()">
+            {{ savingTikTok() ? 'Đang lưu...' : 'Lưu cấu hình TikTok BC' }}
+          </button>
+          <button class="btn ghost" type="button" (click)="testSync('tiktok')" [disabled]="syncing() || !settings()?.tiktok?.configured">
+            {{ syncing() ? 'Đang đồng bộ...' : 'Admin kiểm thử đồng bộ chỉ đọc' }}
+          </button>
+        </div>
+
+        <div class="warning-box">
+          Khung này giữ nguyên hành vi thiết lập TikTok hiện có. Kích hoạt chỉ có nghĩa là sẵn sàng
+          nhập dữ liệu chỉ đọc; chạy thật vẫn bị tắt.
+        </div>
+
+        <div class="result" *ngIf="tiktokTestResult()">
+          <pre>{{ tiktokTestResult() | json }}</pre>
+        </div>
+        <div class="result" *ngIf="syncResult()">{{ syncResult() }}</div>
+      </section>
+    </div>
+  

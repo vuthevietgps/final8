@@ -415,21 +415,6 @@ export class FinancialControlService implements OnModuleInit {
 
   private async getBankBalance(): Promise<number> {
     return this.calculateBankBalanceFromTransactions();
-
-    // Get từ funding sources (bank accounts)
-    const bankAccounts = await this.fundingSourceModel.find({
-      type: 'bank_account',
-      isActive: true,
-    });
-
-    let balance = bankAccounts.reduce((sum, acc) => sum + (acc.availableBalance || 0), 0);
-
-    // Nếu không có bank account, tính từ vốn + doanh thu - chi phí
-    if (balance === 0) {
-      balance = await this.calculateBankBalanceFromTransactions();
-    }
-
-    return balance;
   }
 
   /**
@@ -1310,6 +1295,7 @@ export class FinancialControlService implements OnModuleInit {
   }
 
   private validateAgentSnapshot<T extends Record<string, any>>(snapshot: T): T & { totalAgentDue14d: number } {
+    if(snapshot.scheduleConfigured===false)throw new Error('Chưa xác định lịch đến hạn công nợ đại lý; không coi dữ liệu thiếu là 0.');
     const totalAgentDue14d = this.requireNonNegativeFinite(snapshot.totalAgentDue14d, 'agent.totalAgentDue14d');
     if (snapshot.byAgent !== undefined && !Array.isArray(snapshot.byAgent)) {
       throw new Error('Invalid agent.byAgent');
@@ -1321,6 +1307,7 @@ export class FinancialControlService implements OnModuleInit {
   }
 
   private validateSupplierSnapshot(snapshot: Record<string, any>): void {
+    if(snapshot.scheduleConfigured===false)throw new Error('Chưa xác định lịch đến hạn công nợ NCC; không dùng dự báo hoa hồng cũ.');
     if (!Array.isArray(snapshot.expectedInflowByDay)) {
       throw new Error('Invalid supplier.expectedInflowByDay');
     }

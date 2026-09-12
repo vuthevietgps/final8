@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Put, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { memoryStorage } from 'multer';
@@ -12,6 +12,12 @@ import { GoogleAdsExecutionService } from './google-ads-execution.service';
 import { GoogleAdsExportService } from './google-ads-export.service';
 import { GoogleAdsProviderValidationService } from './google-ads-provider-validation.service';
 import { GoogleAdsReadonlySyncService } from './google-ads-readonly-sync.service';
+import { CreateGoogleAdsActionPlanDto } from './dto/create-google-ads-action-plan.dto';
+import { GoogleAdsCapabilitiesService } from './google-ads-capabilities.service';
+import { GoogleAdsErpActionPlanService } from './google-ads-erp-action-plan.service';
+import { GoogleAdsLookupService } from './google-ads-lookup.service';
+import { GoogleAdsBiddingLifecycleService } from './google-ads-bidding-lifecycle.service';
+import { UpsertGoogleAdsBiddingLifecycleDto } from './dto/upsert-google-ads-bidding-lifecycle.dto';
 
 @Controller('google-ads')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,7 +31,105 @@ export class GoogleAdsController {
     private readonly providerValidationService: GoogleAdsProviderValidationService,
     private readonly actionPlanService: GoogleAdsActionPlanService,
     private readonly executionService: GoogleAdsExecutionService,
+    private readonly erpActionPlanService: GoogleAdsErpActionPlanService,
+    private readonly capabilitiesService: GoogleAdsCapabilitiesService,
+    private readonly lookupService: GoogleAdsLookupService,
+    private readonly biddingLifecycleService: GoogleAdsBiddingLifecycleService,
   ) {}
+
+  @Get('capabilities')
+  getCapabilities() {
+    return this.capabilitiesService.getCapabilities();
+  }
+
+  @Get('lookups/ad-accounts')
+  getAdAccountLookup() {
+    return this.lookupService.listAdAccounts();
+  }
+
+  @Get('lookups/campaigns/:customerId')
+  getCampaignLookup(@Param('customerId') customerId: string) {
+    return this.lookupService.listCampaigns(customerId);
+  }
+
+  @Get('lookups/ad-groups/:customerId/:campaignId')
+  getAdGroupLookup(
+    @Param('customerId') customerId: string,
+    @Param('campaignId') campaignId: string,
+  ) {
+    return this.lookupService.listAdGroups(customerId, campaignId);
+  }
+
+  @Get('lookups/keywords/:customerId/:adGroupId')
+  getKeywordLookup(
+    @Param('customerId') customerId: string,
+    @Param('adGroupId') adGroupId: string,
+  ) {
+    return this.lookupService.listKeywords(customerId, adGroupId);
+  }
+
+  @Get('lookups/responsive-search-ads/:customerId/:adGroupId')
+  getResponsiveSearchAdLookup(
+    @Param('customerId') customerId: string,
+    @Param('adGroupId') adGroupId: string,
+  ) {
+    return this.lookupService.listResponsiveSearchAds(customerId, adGroupId);
+  }
+
+  @Get('lookups/readiness/:customerId/:campaignId')
+  getSearchReadiness(
+    @Param('customerId') customerId: string,
+    @Param('campaignId') campaignId: string,
+  ) {
+    return this.lookupService.getSearchReadiness(customerId, campaignId);
+  }
+
+  @Get('bidding-lifecycle/:customerId/:campaignId')
+  getBiddingLifecycle(
+    @Param('customerId') customerId: string,
+    @Param('campaignId') campaignId: string,
+  ) {
+    return this.biddingLifecycleService.get(customerId, campaignId);
+  }
+
+  @Put('bidding-lifecycle/:customerId/:campaignId')
+  @RequirePermissions('google-ads.plan')
+  upsertBiddingLifecycle(
+    @CurrentUser() currentUser: any,
+    @Param('customerId') customerId: string,
+    @Param('campaignId') campaignId: string,
+    @Body() body: UpsertGoogleAdsBiddingLifecycleDto,
+  ) {
+    return this.biddingLifecycleService.upsert(
+      customerId,
+      campaignId,
+      body,
+      this.userId(currentUser),
+    );
+  }
+
+  @Post('bidding-lifecycle/:customerId/:campaignId/evaluate')
+  @RequirePermissions('google-ads.plan')
+  evaluateBiddingLifecycle(
+    @CurrentUser() currentUser: any,
+    @Param('customerId') customerId: string,
+    @Param('campaignId') campaignId: string,
+  ) {
+    return this.biddingLifecycleService.evaluate(
+      customerId,
+      campaignId,
+      this.userId(currentUser),
+    );
+  }
+
+  @Post('action-plans')
+  @RequirePermissions('google-ads.plan')
+  createActionPlan(
+    @CurrentUser() currentUser: any,
+    @Body() body: CreateGoogleAdsActionPlanDto,
+  ) {
+    return this.erpActionPlanService.createPlan(body, this.userId(currentUser));
+  }
 
   @Post('action-plans/import')
   @RequirePermissions('google-ads.plan')
@@ -46,7 +150,10 @@ export class GoogleAdsController {
     @UploadedFile() file: Express.Multer.File,
     @Body('source') source?: string,
   ) {
-    return this.actionPlanImportService.importPending(file, { source: source || 'codex_operator' });
+    if (source !== undefined && source !== 'codex_operator') {
+      throw new BadRequestException('ZIP action-plan import source must be codex_operator.');
+    }
+    return this.actionPlanImportService.importPending(file, { source: 'codex_operator' });
   }
 
   @Post('action-plans/:planId/validate')
@@ -134,5 +241,11 @@ export class GoogleAdsController {
   @Get('sync/runs/latest')
   latestSyncRun() {
     return this.readonlySyncService.getLatestRun();
+  }
+
+  private userId(user: any) {
+    const value = user?.id || user?._id || user?.sub;
+    if (!value) throw new BadRequestException('Authenticated user ID is required.');
+    return String(value);
   }
 }

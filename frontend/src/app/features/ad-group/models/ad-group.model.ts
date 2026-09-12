@@ -8,6 +8,9 @@ import { AdsOperatorRef, AdAccount } from '../../ad-account/models/ad-account.mo
 export type AdPlatform = 'facebook' | 'google' | 'tiktok';
 
 export interface AdGroup {
+  sourceSystem?: 'windsor';
+  sourceLastSeenAt?: string;
+  remoteStatus?: string;
   _id?: string;
   name: string;
   adGroupId: string;
@@ -29,7 +32,7 @@ export interface AdGroup {
   minConversations?: number;
   autoPausedReason?: string;
 
-  assignedEmployeeId?: string | AdsOperatorRef;
+  assignedEmployeeId?: string | AdsOperatorRef | null;
   lastOperatorActivityAt?: string;
   isActive: boolean;
   notes?: string;

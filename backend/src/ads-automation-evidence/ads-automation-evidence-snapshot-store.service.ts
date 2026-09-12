@@ -107,7 +107,8 @@ export class AdsAutomationEvidenceSnapshotStoreService {
     return createHash('sha256').update(stableJson(payload)).digest('hex');
   }
 
-  @Cron('0 5 0 * * *', { timeZone: SNAPSHOT_TIME_ZONE })
+  // Capture after the 06:00 cost and 07:30 metrics collection windows.
+  @Cron('0 5 8 * * *', { timeZone: SNAPSHOT_TIME_ZONE })
   async captureDailyOnSchedule(): Promise<void> {
     try {
       const result = await this.captureDaily();
@@ -127,6 +128,7 @@ export class AdsAutomationEvidenceSnapshotStoreService {
     if (
       snapshot?.safety?.providerApiCalled !== false
       || snapshot?.safety?.googleAdsApiCalled !== false
+      || snapshot?.safety?.metaAdsApiCalled !== false
       || snapshot?.safety?.liveExecutionUsed !== false
       || snapshot?.safety?.secretsRedacted !== true
     ) {

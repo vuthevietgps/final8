@@ -3,6 +3,8 @@ export interface AdsSafetyConfig {
   dryRun: boolean;
   providerExecutionEnabled: boolean;
   googleAdsProductionEnabled: boolean;
+  metaAdsProductionEnabled: boolean;
+  metaAdsProviderExecutionEnabled: boolean;
 }
 
 export const CANONICAL_ADS_EXECUTION_REQUIRED = Object.freeze({
@@ -43,6 +45,12 @@ export function getAdsSafetyConfig(env: NodeJS.ProcessEnv = process.env): AdsSaf
     dryRun: readBooleanEnv('AI_MARKETING_DRY_RUN', true, env),
     providerExecutionEnabled: readBooleanEnv('AI_MARKETING_PROVIDER_EXECUTION_ENABLED', false, env),
     googleAdsProductionEnabled: readBooleanEnv('GOOGLE_ADS_PRODUCTION_ENABLED', false, env),
+    metaAdsProductionEnabled: readBooleanEnv('META_ADS_PRODUCTION_ENABLED', false, env),
+    metaAdsProviderExecutionEnabled: readBooleanEnv(
+      'META_ADS_PROVIDER_EXECUTION_ENABLED',
+      false,
+      env,
+    ),
   };
 }
 

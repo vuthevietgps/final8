@@ -10,6 +10,10 @@ import { FeatureModule } from '../plan/feature-module.decorator';
 export class InventoryController {
   constructor(private readonly service: InventoryService) {}
 
+  @Get('batches')
+  @RequirePermissions('purchase-costs')
+  batches(@Query('productId') productId?: string, @Query('orderId') orderId?: string) { return this.service.availableBatches(productId, orderId); }
+
   @Get('summary')
   @RequirePermissions('purchase-costs')
   summary(@Query('page') page?: string, @Query('limit') limit?: string, @Query('q') q?: string) {

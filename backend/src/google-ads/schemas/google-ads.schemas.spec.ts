@@ -11,6 +11,10 @@ import { GoogleAdsActionPlanSchema } from './google-ads-action-plan.schema';
 import { GoogleAdsActionExecutionLogSchema } from './google-ads-action-execution-log.schema';
 import { GoogleAdsActionEvaluationSchema } from './google-ads-action-evaluation.schema';
 import { GoogleAdsChangeLogSchema } from './google-ads-change-log.schema';
+import { GoogleAdsBiddingLifecycleSchema } from './google-ads-bidding-lifecycle.schema';
+import { GoogleAdsConversionActionSchema } from './google-ads-conversion-action.schema';
+import { GoogleAdsCampaignConversionGoalSchema } from './google-ads-campaign-conversion-goal.schema';
+import { GoogleAdsConversionGoalCampaignConfigSchema } from './google-ads-conversion-goal-campaign-config.schema';
 
 const indexByName = (schema: MongooseSchema, name: string) =>
   schema.indexes().find(([, options]) => options?.name === name);
@@ -29,6 +33,13 @@ describe('Google Ads V2 schemas', () => {
     ['google_ads_action_execution_logs', GoogleAdsActionExecutionLogSchema],
     ['google_ads_change_logs', GoogleAdsChangeLogSchema],
     ['google_ads_action_evaluations', GoogleAdsActionEvaluationSchema],
+    ['google_ads_bidding_lifecycles', GoogleAdsBiddingLifecycleSchema],
+    ['google_ads_conversion_actions', GoogleAdsConversionActionSchema],
+    ['google_ads_campaign_conversion_goals', GoogleAdsCampaignConversionGoalSchema],
+    [
+      'google_ads_conversion_goal_campaign_configs',
+      GoogleAdsConversionGoalCampaignConfigSchema,
+    ],
   ])('uses the explicit collection name %s', (collection, schema) => {
     expect(schema.get('collection')).toBe(collection);
   });
@@ -77,6 +88,30 @@ describe('Google Ads V2 schemas', () => {
   it('uses a global unique index for imported action idempotency keys', () => {
     expect(indexByName(GoogleAdsActionPlanSchema, 'uniq_google_ads_action_plan_idempotency_key')).toEqual([
       { idempotencyKeys: 1 },
+      expect.objectContaining({ unique: true }),
+    ]);
+  });
+
+  it('uniquely scopes bidding lifecycle and conversion readiness evidence', () => {
+    expect(indexByName(
+      GoogleAdsBiddingLifecycleSchema,
+      'uniq_google_ads_bidding_lifecycle_campaign',
+    )).toEqual([
+      { customerId: 1, campaignId: 1 },
+      expect.objectContaining({ unique: true }),
+    ]);
+    expect(indexByName(
+      GoogleAdsConversionActionSchema,
+      'uniq_google_ads_conversion_action_customer_action',
+    )).toEqual([
+      { customerId: 1, conversionActionId: 1 },
+      expect.objectContaining({ unique: true }),
+    ]);
+    expect(indexByName(
+      GoogleAdsCampaignConversionGoalSchema,
+      'uniq_google_ads_campaign_conversion_goal',
+    )).toEqual([
+      { customerId: 1, campaignId: 1, category: 1, origin: 1 },
       expect.objectContaining({ unique: true }),
     ]);
   });

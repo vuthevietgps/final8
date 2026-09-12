@@ -2,7 +2,7 @@
  * File: dto/create-quote.dto.ts
  * Mục đích: Định nghĩa kiểu dữ liệu và ràng buộc validate cho yêu cầu tạo mới Báo giá.
  */
-import { IsNotEmpty, IsNumber, IsString, IsOptional, IsMongoId, Min, MaxLength, IsIn } from 'class-validator';
+import { IsNotEmpty, IsInt, IsBoolean, IsString, IsOptional, IsMongoId, Min, Max, MaxLength, IsIn } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 // Chuẩn hoá status về dạng chuẩn (tránh lỗi do dấu/Unicode khác nhau)
@@ -26,6 +26,11 @@ function normalizeStatus(input: any): string {
 import { QUOTE_STATUS_VALUES } from '../quote.enum';
 
 export class CreateQuoteDto {
+  @IsOptional() @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) @Type(() => Number)
+  shippingFee?: number;
+
+  @IsOptional() @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) @Type(() => Number)
+  returnFee?: number;
   @IsNotEmpty()
   @IsMongoId()
   productId: string;
@@ -43,7 +48,8 @@ export class CreateQuoteDto {
   agentName?: string; // Tên đại lý (tùy chọn, sẽ tự động điền theo agentId nếu không gửi)
 
   @IsNotEmpty()
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   @Type(() => Number)
   unitPrice: number; // Đổi từ price sang unitPrice
@@ -71,6 +77,6 @@ export class CreateQuoteDto {
 
   // Tính năng mới: áp dụng cho tất cả đại lý
   @IsOptional()
-  @Type(() => Boolean)
+  @IsBoolean()
   applyToAllAgents?: boolean;
 }

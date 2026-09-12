@@ -36,6 +36,12 @@ export class GoogleAdsAd {
   finalUrls: string[];
 
   @Prop({ trim: true })
+  trackingUrlTemplate?: string;
+
+  @Prop({ trim: true })
+  finalUrlSuffix?: string;
+
+  @Prop({ trim: true })
   path1?: string;
 
   @Prop({ trim: true })

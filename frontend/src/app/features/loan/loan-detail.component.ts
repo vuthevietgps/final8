@@ -2,12 +2,13 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { TreasuryAccountSelectorComponent } from '../../shared/treasury-account-selector.component';
 import { LoanService, LoanContract, LoanRepayment } from './loan.service';
 
 @Component({
   selector: 'app-loan-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule],
+  imports: [CommonModule, RouterModule, FormsModule, TreasuryAccountSelectorComponent],
   templateUrl: './loan-detail.component.html',
   styleUrls: ['./loan-detail.component.css']
 })
@@ -19,6 +20,7 @@ export class LoanDetailComponent implements OnInit {
 
   // Modal giải ngân
   showDisbursementModal = false;
+  ledgerAccountId = '';
   disbursementForm = { amount: 0, date: '', notes: '' };
   disbursementLoading = false;
 
@@ -78,6 +80,7 @@ export class LoanDetailComponent implements OnInit {
     this.disbursementLoading = true;
     this.loanService.recordDisbursement(loan._id, {
       amount: this.disbursementForm.amount,
+      ledgerAccountId: this.ledgerAccountId || undefined,
       date: this.disbursementForm.date || undefined,
       notes: this.disbursementForm.notes || undefined,
     }).subscribe({

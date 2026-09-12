@@ -3,7 +3,8 @@
  * Mục đích: Chứa logic nghiệp vụ cho báo giá (tạo/sửa/xoá/lấy danh sách, thống kê),
  *   truy cập MongoDB qua Mongoose Model và populate các liên kết (product, agent).
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { quoteValidity } from './quote-validity';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Quote, QuoteDocument } from './schemas/quote.schema';
@@ -11,6 +12,8 @@ import { Product, ProductDocument } from '../product/schemas/product.schema';
 import { GoogleSyncService } from '../google-sync/google-sync.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 
 @Injectable()
 export class QuoteService {
@@ -18,10 +21,19 @@ export class QuoteService {
     @InjectModel(Quote.name) private quoteModel: Model<QuoteDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     private readonly googleSync: GoogleSyncService,
+    private readonly events?: EventEmitter2,
   ) {}
 
-  async create(createQuoteDto: CreateQuoteDto): Promise<Quote | Quote[]> {
+  private async dealer(id:string){
+    const users=this.quoteModel.db.models.User||this.quoteModel.db.model('User');
+    const agent=await users.findById(id).exec();
+    if(!agent||agent.isActive===false||agent.role!=='external_agent')throw new BadRequestException('Chỉ báo giá cho đại lý ngoài đang hoạt động.');
+    return agent;
+  }
+
+  async create(createQuoteDto: CreateQuoteDto, actorId = ''): Promise<Quote | Quote[]> {
     const { applyToAllAgents, productId, unitPrice, status, validFrom, validUntil, notes } = createQuoteDto;
+    const validity = quoteValidity(validFrom, validUntil);
     
     // Lấy thông tin sản phẩm
     const productDoc = await this.productModel.findById(productId).exec();
@@ -37,10 +49,7 @@ export class QuoteService {
       const agents = await userModel.find({
         role: { 
           $in: [
-            'external_agent', 
-            'internal_agent', 
-            'external_supplier', 
-            'internal_supplier'
+            'external_agent'
           ] 
         },
         isActive: { $ne: false }
@@ -59,19 +68,24 @@ export class QuoteService {
         const existingQuote = await this.quoteModel.findOne({
           productId: productId,
           agentId: agent._id,
-          isActive: { $ne: false }
+          isActive: { $ne: false },
+          status: { $nin: ['Từ chối','Hết hiệu lực'] },
+          validFrom: { $lte: validity.validUntil },
+          validUntil: { $gte: validity.validFrom },
         }).exec();
         
         if (!existingQuote) {
           const quoteData = {
+            shippingFee: createQuoteDto.shippingFee,
+            returnFee: createQuoteDto.returnFee,
             productId,
             agentId: agent._id,
             product: productDoc.name,
             agentName: agent.fullName,
             unitPrice,
             status: status || 'Chờ duyệt', // Sử dụng status từ DTO
-            validFrom: new Date(validFrom),
-            validUntil: new Date(validUntil),
+            ...validity,
+            commercialHistory: [{ actorId, at: new Date(), action: 'created', unitPrice, shippingFee: createQuoteDto.shippingFee, returnFee: createQuoteDto.returnFee, status: status || 'Chờ duyệt', ...validity }],
             notes: notes || `Báo giá áp dụng cho tất cả đại lý - ${productDoc.name}`,
             isActive: true
           };
@@ -91,32 +105,28 @@ export class QuoteService {
         // TODO: Integrate with Summary4GoogleSyncService if needed
       }
       
+      await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(productId)] });
       return quotes;
     } else {
       // Tạo báo giá cho đại lý cụ thể (logic cũ)
       if (!createQuoteDto.agentId) {
-        throw new Error('Agent ID is required when not applying to all agents');
+        throw new BadRequestException('Cần chọn đại lý khi không áp dụng hàng loạt.');
       }
       
-      let { product, agentName } = createQuoteDto;
-      
-      if (!product || !agentName) {
-        const userModel = this.quoteModel.db.models.User || this.quoteModel.db.model('User');
-        const userDoc = await userModel.findById(createQuoteDto.agentId).exec();
-        
-        product = product || productDoc?.name || 'Unknown Product';
-        agentName = agentName || userDoc?.fullName || 'Unknown Agent';
-      }
+      const userDoc=await this.dealer(createQuoteDto.agentId);
+      const product=productDoc.name,agentName=userDoc.fullName;
 
       const quoteData = {
+        shippingFee: createQuoteDto.shippingFee,
+        returnFee: createQuoteDto.returnFee,
         productId: createQuoteDto.productId,
         agentId: createQuoteDto.agentId,
         product,
         agentName,
         unitPrice: createQuoteDto.unitPrice,
         status: createQuoteDto.status || 'Chờ duyệt', // Sử dụng status từ DTO
-        validFrom: new Date(createQuoteDto.validFrom),
-        validUntil: new Date(createQuoteDto.validUntil),
+        ...validity,
+        commercialHistory: [{ actorId, at: new Date(), action: 'created', unitPrice, shippingFee: createQuoteDto.shippingFee, returnFee: createQuoteDto.returnFee, status: status || 'Chờ duyệt', ...validity }],
         notes: createQuoteDto.notes
       };
       
@@ -127,6 +137,7 @@ export class QuoteService {
       // Google sync removed - using Summary4 sync instead
       // TODO: Integrate with Summary4GoogleSyncService if needed
       
+      await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(productId)] });
       return saved;
     }
   }
@@ -167,15 +178,32 @@ export class QuoteService {
     return quote;
   }
 
-  async update(id: string, updateQuoteDto: UpdateQuoteDto): Promise<Quote> {
+  async update(id: string, updateQuoteDto: UpdateQuoteDto, actorId = ''): Promise<Quote> {
+    const original = await this.quoteModel.findById(id).lean();
+    if (!original) throw new NotFoundException('Không tìm thấy báo giá.');
+    if (updateQuoteDto.applyToAllAgents) throw new BadRequestException('Tạo báo giá hàng loạt bằng chức năng tạo mới.');
+    const validity = quoteValidity(updateQuoteDto.validFrom ?? original.validFrom, updateQuoteDto.validUntil ?? original.validUntil);
+    const terms = ['productId', 'agentId', 'unitPrice', 'shippingFee', 'returnFee'];
+    const changed = terms.some(key => updateQuoteDto[key] !== undefined && String(updateQuoteDto[key]) !== String(original[key]))
+      || +validity.validFrom !== +new Date(original.validFrom) || +validity.validUntil !== +new Date(original.validUntil);
+    const { applyToAllAgents: _bulk, ...input } = updateQuoteDto;
+    if(input.agentId!==undefined){const agent=await this.dealer(input.agentId);input.agentName=agent.fullName;}
+    if(input.productId!==undefined){
+      const product=await this.productModel.findById(input.productId).exec();
+      if(!product)throw new BadRequestException('Sản phẩm không tồn tại.');
+      input.product=product.name;
+    }
+    const updates = { ...input, ...validity, status: changed ? 'Chờ duyệt' : input.status ?? original.status };
+    const audit = { actorId, at: new Date(), action: changed ? 'commercial_edit_pending' : 'updated',
+      before: Object.fromEntries([...terms, 'status', 'validFrom', 'validUntil'].map(key => [key, original[key]])), after: updates };
     const updatedQuote = await this.quoteModel
-      .findByIdAndUpdate(id, updateQuoteDto, { new: true })
+      .findOneAndUpdate({ _id: id, __v: original.__v ?? { $exists: false } }, { $set: updates, $inc: { __v: 1 }, $push: { commercialHistory: audit } }, { new: true, runValidators: true })
       .populate('productId', 'name sku price')
       .populate('agentId', 'fullName email role')
       .exec();
     
     if (!updatedQuote) {
-      throw new NotFoundException(`Quote with ID ${id} not found`);
+      throw new ConflictException('Báo giá vừa thay đổi. Tải lại trước khi lưu.');
   }
     const agentId = String((updatedQuote as any).agentId?._id || (updatedQuote as any).agentId);
     const productId = String((updatedQuote as any).productId?._id || (updatedQuote as any).productId);
@@ -185,6 +213,7 @@ export class QuoteService {
     } else if (agentId) {
       // TODO: Integrate with Summary4GoogleSyncService if needed
     }
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(original.productId), productId] });
     return updatedQuote;
   }
 
@@ -204,6 +233,7 @@ export class QuoteService {
     } else if (agentId) {
       // TODO: Integrate with Summary4GoogleSyncService if needed
     }
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [productId] });
     return deletedQuote;
   }
 

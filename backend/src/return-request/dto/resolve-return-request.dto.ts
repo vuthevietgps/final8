@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsMongoId, IsNumber, IsOptional, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsMongoId, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
 export class ResolveReturnItemDto {
   @IsMongoId()
@@ -22,6 +22,10 @@ export class ResolveReturnItemDto {
 }
 
 export class ResolveReturnRequestDto {
+  @IsOptional() @IsIn(['company', 'supplier', 'agent'])
+  holderKind?: 'company' | 'supplier' | 'agent';
+  @IsOptional() @IsMongoId() holderId?: string;
+  @IsOptional() @IsString() holderAddress?: string;
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ResolveReturnItemDto)

@@ -22,7 +22,7 @@ import { InventoryApi, InventorySummaryRow } from './inventory.service';
       <thead>
         <tr>
           <th>Sản phẩm</th>
-          <th>Tồn hiện tại</th>
+          <th>Chủ hàng</th><th>Nơi giữ</th><th>Tồn hiện tại</th><th>Đang giữ cho đơn</th><th>Có thể xuất</th>
           <th>Giá vốn TB (WAC)</th>
           <th>Cập nhật</th>
           <th></th>
@@ -31,12 +31,12 @@ import { InventoryApi, InventorySummaryRow } from './inventory.service';
       <tbody>
         <tr *ngFor="let r of rows()">
           <td>{{ r.productName || r.productId }}</td>
-          <td>{{ r.onHand | number:'1.0-4' }}</td>
-          <td>{{ r.avgCost | number }}</td>
+          <td>{{ r.ownerName }}</td><td>{{ r.holderName }}</td><td>{{ r.onHand | number:'1.0-4' }}</td>
+          <td>{{ r.reserved | number }}</td><td>{{ r.available | number }}</td><td>{{ r.avgCost | number }}</td>
           <td>{{ r.updatedAt | date:'short' }}</td>
           <td class="actions">
             <a [routerLink]="['/inventory', r.productId]">Xem chi tiết</a>
-            <button class="btn-secondary" (click)="adjust(r)">Điều chỉnh</button>
+            
           </td>
         </tr>
       </tbody>

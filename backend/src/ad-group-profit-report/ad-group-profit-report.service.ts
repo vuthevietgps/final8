@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
@@ -94,9 +94,7 @@ export class AdGroupProfitReportService {
     };
 
     if (onlyFinalized) {
-      matchConditions.orderStatus = {
-        $in: this.finalizedStatuses,
-      };
+      matchConditions.$and = [{ $or: [{ dealerProfitState: 'recognized' }, { retailProfitState: 'recognized' }] }];
     }
 
     if (params?.adGroupIds?.length) {
@@ -119,10 +117,10 @@ export class AdGroupProfitReportService {
             status: '$normalizedOrderStatus',
           },
           totalOrders: { $sum: 1 },
-          totalRevenue: { $sum: '$codCollectedBySupplier' },
+          totalRevenue: { $sum: '$recognizedRevenue' },
           totalNetProfit: { $sum: '$netProfit' },
           totalAdsSpent: { $sum: '$advertisingCost' },
-          totalProductCost: { $sum: '$productCost' },
+          totalProductCost: { $sum: '$recognizedGoodsCost' },
           totalShippingFee: { $sum: '$shippingFee' },
           successOrders: {
             $sum: {
@@ -232,13 +230,71 @@ export class AdGroupProfitReportService {
       },
     ]);
 
-    const adGroupIds = results.map((result) => result._id).filter(Boolean);
-    const adGroups = await this.adGroupModel
-      .find({ adGroupId: { $in: adGroupIds } }, { adGroupId: 1, name: 1 })
-      .lean();
-    const adGroupNameMap = new Map(
-      adGroups.map((adGroup) => [adGroup.adGroupId, adGroup.name || adGroup.adGroupId]),
+    const sourceSpendRows = await this.orderModel.db.collection('advertisingcosts').aggregate([
+      {
+        $match: {
+          date: { $gte: startDate, $lte: endDate },
+          ...(params?.adGroupIds?.length ? { adGroupId: { $in: params.adGroupIds } } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: '$adGroupId',
+          totalAdsSpent: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $isNumber: '$spentAmount' },
+                  { $gte: ['$spentAmount', 0] },
+                  { $lte: ['$spentAmount', 1_000_000_000_000] },
+                ] },
+                '$spentAmount',
+                0,
+              ],
+            },
+          },
+          invalidCount: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $isNumber: '$spentAmount' },
+                  { $gte: ['$spentAmount', 0] },
+                  { $lte: ['$spentAmount', 1_000_000_000_000] },
+                ] },
+                0,
+                1,
+              ],
+            },
+          },
+          identities: { $addToSet: { channel: '$channel', customerId: '$customerId' } },
+        },
+      },
+    ]).toArray();
+    if (sourceSpendRows.some((row: any) => Number(row.invalidCount || 0) > 0)) {
+      throw new BadRequestException('Có chi phí quảng cáo không hợp lệ; đã khóa báo cáo và quyết định ngân sách.');
+    }
+    if (sourceSpendRows.some((row: any) => Array.isArray(row.identities) && row.identities.length > 1)) {
+      throw new BadRequestException('Trùng adGroupId giữa nhiều tài khoản quảng cáo; cần chuẩn hóa định danh trước khi tính lợi nhuận.');
+    }
+    const sourceSpendByAdGroup = new Map(
+      sourceSpendRows.map((row: any) => [String(row._id), Number(row.totalAdsSpent || 0)]),
     );
+
+    const adGroupIds = results.map((result) => result._id).filter(Boolean);
+    const [adGroups, windsorGroups] = await Promise.all([
+      this.adGroupModel.find({ adGroupId: { $in: adGroupIds } }, { adGroupId: 1, name: 1 }).lean(),
+      this.orderModel.db.collection('windsor_ads_resources').find({
+        resourceType: 'ad_group', providerId: { $in: adGroupIds },
+      }, { projection: { providerId: 1, name: 1, lastSeenAt: 1 } }).sort({ lastSeenAt: -1 }).toArray(),
+    ]);
+    const adGroupNameMap = new Map<string, string>();
+    for (const row of windsorGroups) {
+      const id = String(row.providerId || '');
+      if (id && !adGroupNameMap.has(id)) adGroupNameMap.set(id, String(row.name || id));
+    }
+    for (const adGroup of adGroups) {
+      adGroupNameMap.set(String(adGroup.adGroupId), String(adGroup.name || adGroup.adGroupId));
+    }
 
     const daysInPeriod =
       Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) || 1;
@@ -246,8 +302,14 @@ export class AdGroupProfitReportService {
     return results.map((result) => {
       const adGroupId = result._id;
       const totalRevenue = result.totalRevenue || 0;
-      const totalAdsSpent = result.totalAdsSpent || 0;
-      const totalNetProfit = result.totalNetProfit || 0;
+      const allocatedAdsSpent = Number(result.totalAdsSpent || 0);
+      const totalAdsSpent = sourceSpendByAdGroup.has(String(adGroupId))
+        ? Number(sourceSpendByAdGroup.get(String(adGroupId)) || 0)
+        : allocatedAdsSpent;
+      // Order snapshots only contain spend allocated to orders. Reconcile it to the
+      // source total so spend on days without an order still reduces group profit.
+      const unallocatedAdsSpent = totalAdsSpent - allocatedAdsSpent;
+      const totalNetProfit = Number(result.totalNetProfit || 0) - unallocatedAdsSpent;
       const totalOrders = result.totalOrders || 0;
       const successOrders = result.successOrders || 0;
       const returnOrders = result.returnOrders || 0;
@@ -269,20 +331,25 @@ export class AdGroupProfitReportService {
         totalCost: (result.totalProductCost || 0) + (result.totalShippingFee || 0) + totalAdsSpent,
         totalAdsSpent,
         totalNetProfit,
-        successProfit,
+        successProfit: successProfit - unallocatedAdsSpent,
         returnLoss,
         roi,
         profitMargin,
         averageOrderValue,
-        realizedProfit: result.realizedProfit || 0,
+        realizedProfit: Number(result.realizedProfit || 0) - unallocatedAdsSpent,
         pendingProfit: result.pendingProfit || 0,
         riskyProfit: result.riskyProfit || 0,
-        ordersByStatus: (result.ordersByStatus || []).map((item: any) => ({
+        ordersByStatus: [
+          ...(result.ordersByStatus || []).map((item: any) => ({
           status: item.status || 'Unknown',
           count: item.count || 0,
           revenue: item.revenue || 0,
           profit: item.profit || 0,
-        })),
+          })),
+          ...(unallocatedAdsSpent
+            ? [{ status: 'Chi phí quảng cáo chưa phân bổ', count: 0, revenue: 0, profit: -unallocatedAdsSpent }]
+            : []),
+        ],
         startDate,
         endDate,
         daysInPeriod,
@@ -310,7 +377,7 @@ export class AdGroupProfitReportService {
         $match: {
           adGroupId,
           ...this.buildDateRangeMatch(startDate, endDate),
-          orderStatus: { $in: this.finalizedStatuses },
+          $and: [{ $or: [{ dealerProfitState: 'recognized' }, { retailProfitState: 'recognized' }] }],
         },
       },
       {
@@ -336,14 +403,30 @@ export class AdGroupProfitReportService {
       },
       { $sort: { _id: 1 } },
     ]);
-
-    return results.map((r) => ({
-      date: new Date(r._id),
-      spend: r.spend || 0,
-      profit: r.profit || 0,
-      orders: r.orders || 0,
-      returnOrders: r.returnOrders || 0,
-    }));
+    const sourceRows = await this.orderModel.db.collection('advertisingcosts').aggregate([
+      { $match: { adGroupId, date: { $gte: startDate, $lte: endDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: 'Asia/Bangkok' } },
+          spend: { $sum: '$spentAmount' },
+        },
+      },
+    ]).toArray();
+    const ordersByDay = new Map(results.map((row: any) => [String(row._id), row]));
+    const sourceByDay = new Map(sourceRows.map((row: any) => [String(row._id), Number(row.spend || 0)]));
+    const days = new Set([...ordersByDay.keys(), ...sourceByDay.keys()]);
+    return [...days].sort().map((day) => {
+      const row: any = ordersByDay.get(day) || {};
+      const allocatedSpend = Number(row.spend || 0);
+      const spend = sourceByDay.has(day) ? Number(sourceByDay.get(day) || 0) : allocatedSpend;
+      return {
+        date: new Date(`${day}T00:00:00+07:00`),
+        spend,
+        profit: Number(row.profit || 0) + allocatedSpend - spend,
+        orders: Number(row.orders || 0),
+        returnOrders: Number(row.returnOrders || 0),
+      };
+    });
   }
 
   /**
@@ -645,8 +728,11 @@ export class AdGroupProfitReportService {
       const spend = Number(spendRow.spend || performance?.totalAdsSpent || 0);
       const orders = Number(performance?.totalOrders || 0);
       const revenue = Number(performance?.totalRevenue || 0);
-      const netProfit = performance ? Number(performance.totalNetProfit || 0) : (spend > 0 && orders === 0 ? -spend : null);
-      const grossProfit = performance ? Number((performance.totalNetProfit || 0) + (performance.totalAdsSpent || 0)) : 0;
+      const allocatedSpend = Number(performance?.totalAdsSpent || 0);
+      const grossProfit = performance ? Number(performance.totalNetProfit || 0) + allocatedSpend : 0;
+      const netProfit = performance
+        ? grossProfit - spend
+        : (spend > 0 && orders === 0 ? -spend : null);
       const leads = Math.max(
         Array.isArray(leadRow.uniqueSenders) ? leadRow.uniqueSenders.length : 0,
         Number(spendRow.adMetricConversations || 0),

@@ -12,6 +12,8 @@ import { GoogleAdsAdGroup, GoogleAdsAdGroupSchema } from '../google-ads/schemas/
 import { GoogleAdsCampaign, GoogleAdsCampaignSchema } from '../google-ads/schemas/google-ads-campaign.schema';
 import { GoogleAdsCampaignBudget, GoogleAdsCampaignBudgetSchema } from '../google-ads/schemas/google-ads-campaign-budget.schema';
 import { GoogleAdsActionPlan, GoogleAdsActionPlanSchema } from '../google-ads/schemas/google-ads-action-plan.schema';
+import { MetaAdsActionPlan, MetaAdsActionPlanSchema } from '../meta-ads/schemas/meta-ads-action-plan.schema';
+import { MetaAdsAdSet, MetaAdsAdSetSchema } from '../meta-ads/schemas/meta-ads-ad-set.schema';
 import { InventorySummary, InventorySummarySchema } from '../inventory/schemas/inventory-summary.schema';
 import { Product, ProductSchema } from '../product/schemas/product.schema';
 import { SupplierPayable, SupplierPayableSchema } from '../supplier-payable/schemas/supplier-payable.schema';
@@ -35,6 +37,8 @@ import {
       { name: GoogleAdsCampaign.name, schema: GoogleAdsCampaignSchema },
       { name: GoogleAdsCampaignBudget.name, schema: GoogleAdsCampaignBudgetSchema },
       { name: GoogleAdsActionPlan.name, schema: GoogleAdsActionPlanSchema },
+      { name: MetaAdsActionPlan.name, schema: MetaAdsActionPlanSchema },
+      { name: MetaAdsAdSet.name, schema: MetaAdsAdSetSchema },
       { name: Product.name, schema: ProductSchema },
       { name: TestOrder2.name, schema: TestOrder2Schema },
       { name: AdGroupDailyReport.name, schema: AdGroupDailyReportSchema },

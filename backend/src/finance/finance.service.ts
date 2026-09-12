@@ -1,3 +1,5 @@
+import { readRegisteredCashBalance } from '../business-ledger/ledger-cash';
+import { postTreasuryJournal } from '../business-ledger/treasury-journal';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -788,7 +790,7 @@ export class FinanceService {
   // Cashflows
   async createCashflow(
     dto: CreateCashflowEntryDto,
-    options: { session?: ClientSession; emitEvent?: boolean } = {},
+    options: { session?: ClientSession; emitEvent?: boolean; ledgerAccountId?: string; actorId?: string } = {},
   ) {
     const idempotencyKey = String(dto.idempotencyKey || '').trim();
     if (dto.fundingSourceId && !options.session) {
@@ -829,6 +831,13 @@ export class FinanceService {
     }
 
     const doc = new this.cashflowModel(dto);
+    if (['loan_disbursement', 'owner_fund_transfer', 'owner_fund_return'].includes(dto.category || '')) {
+      await postTreasuryJournal(this.cashflowModel.db, options.session, {
+        referenceId: String(doc._id), category: dto.category!, amount: dto.amount,
+        direction: dto.direction, occurredAt: dto.date ? new Date(dto.date) : new Date(),
+        accountId: options.ledgerAccountId, actorId: options.actorId,
+      });
+    }
     let saved: CashflowEntryDocument;
     try {
       saved = await doc.save(options.session ? { session: options.session } : undefined);
@@ -1014,44 +1023,10 @@ export class FinanceService {
   // MASTER BANK BALANCE — Single Source of Truth
   // ═══════════════════════════════════════════════════════════
 
-  /**
-   * NGUỒN SỰ THẬT DUY NHẤT cho Số Dư Ngân Hàng.
-   * Được gọi bởi cả FinancialControlService và FundsService để đảm bảo
-   * mọi dashboard luôn hiển thị cùng một con số.
-   *
-   * Công thức:
-   *   BankBalance
-   *     = personalCapital + loanDisbursed − loanPaid   (vốn ròng)
-   *     + revenue          (supplierPaidAmount, supplierPaymentStatus='paid')
-   *     − agentPaid        (agentPaidAmount,   agentPaymentStatus='paid')
-   *     − adsCost          (spentAmount từ AdvertisingCost)
-   *     − laborCost        (statementPaymentTotal từ LaborStatement đã closed)
-   *     − otherCost        (amount từ OtherCost đã confirmed)
-   *     − cashflowOut      (owner_fund_transfer ra khỏi ngân hàng)
-   *     + cashflowIn       (owner_fund_return trả lại ngân hàng)
-   */
+  /** Cash held in registered company accounts, after confirmed journal movements. */
   async calculateMasterBankBalance(): Promise<number> {
-    const cached = await this.cacheManager.get<number>(FinanceService.CACHE_KEY_MASTER_BANK_BALANCE);
-    if (cached !== undefined && cached !== null) {
-      return cached;
-    }
-
-    if (this.pendingMasterBankBalance) {
-      return this.pendingMasterBankBalance;
-    }
-
-    this.pendingMasterBankBalance = this.doCalculateMasterBankBalance();
-    try {
-      const balance = await this.pendingMasterBankBalance;
-      await this.cacheManager.set(
-        FinanceService.CACHE_KEY_MASTER_BANK_BALANCE,
-        balance,
-        FinanceService.CACHE_TTL_MASTER_BANK_BALANCE,
-      );
-      return balance;
-    } finally {
-      this.pendingMasterBankBalance = null;
-    }
+    // Do not reuse a calculation started before a treasury transaction committed.
+    return this.doCalculateMasterBankBalance();
   }
 
   async invalidateMasterBankBalanceCache(reason = 'unspecified'): Promise<void> {
@@ -1062,116 +1037,9 @@ export class FinanceService {
   }
 
   private async doCalculateMasterBankBalance(): Promise<number> {
-    const [
-      personalCapitalResult,
-      loanResult,
-      repaymentPaidResult,
-      loanPaymentAuditResult,
-      revenueResult,
-      agentPaidResult,
-      adsResult,
-      laborResult,
-      otherResult,
-      cashflowTotals,
-    ] = await Promise.all([
-      // 1. Vốn cá nhân từ FundingSource
-      this.fundingSourceModel.aggregate([
-        { $match: { type: { $in: ['equity', 'internal'] }, status: 'active' } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$principal', 0] } } } },
-      ]),
-      // 2. Khoản vay: đã giải ngân và đã trả (gốc + lãi)
-      this.loanModel.aggregate([
-        {
-          $group: {
-            _id: null,
-            disbursed: { $sum: { $ifNull: ['$disbursedAmount', 0] } },
-          },
-        },
-      ]),
-      this.loanModel.aggregate([
-        {
-          $group: {
-            _id: null,
-            principalPaid: { $sum: { $ifNull: ['$totalPrincipalPaid', 0] } },
-            interestPaid: { $sum: { $ifNull: ['$totalInterestPaid', 0] } },
-          },
-        },
-      ]),
-      // LoanContract totals include payments from every source. Reconcile the
-      // auditable bank-funded subset so Owner Fund payments do not reduce the
-      // company bank balance a second time. Historical unattributed amounts
-      // remain bank-funded conservatively.
-      this.loanPaymentModel.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalRecorded: { $sum: { $ifNull: ['$amount', 0] } },
-            bankRecorded: {
-              $sum: {
-                $cond: [
-                  { $eq: ['$source', PaymentSource.BANK_BALANCE] },
-                  { $ifNull: ['$amount', 0] },
-                  0,
-                ],
-              },
-            },
-          },
-        },
-      ]),
-      // 3. Doanh thu đã thu (tiền NCC chuyển về)
-      this.orderModel.aggregate([
-        { $match: { supplierPaymentStatus: 'paid' } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$supplierPaidAmount', 0] } } } },
-      ]),
-      // 4. Hoa hồng đại lý đã trả
-      this.orderModel.aggregate([
-        { $match: { agentPaymentStatus: 'paid' } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$agentPaidAmount', 0] } } } },
-      ]),
-      // 5. Chi phí quảng cáo đã chi
-      this.adsCostModel.aggregate([
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$spentAmount', 0] } } } },
-      ]),
-      // 6. Lương đã trả (LaborStatement đã closed)
-      this.laborStatementModel.aggregate([
-        { $match: { status: 'closed' } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$statementPaymentTotal', 0] } } } },
-      ]),
-      // 7. Chi phí khác đã xác nhận
-      this.otherCostModel.aggregate([
-        { $match: { isConfirmed: true } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
-      // 8. Cashflow nội bộ (chuyển quỹ owner)
-      this.getCashflowTotals(),
-    ]);
-
-    const personalCapital = personalCapitalResult[0]?.total || 0;
-    const loanDisbursed = loanResult[0]?.disbursed || 0;
-    const contractLoanPaid = (repaymentPaidResult[0]?.principalPaid || 0)
-      + (repaymentPaidResult[0]?.interestPaid || 0);
-    const loanPaid = this.reconcileBankFundedLoanPaid(
-      contractLoanPaid,
-      loanPaymentAuditResult[0]?.totalRecorded || 0,
-      loanPaymentAuditResult[0]?.bankRecorded || 0,
-    );
-    const revenue = revenueResult[0]?.total || 0;
-    const agentPaid = agentPaidResult[0]?.total || 0;
-    const adsCost = adsResult[0]?.total || 0;
-    const laborCost = laborResult[0]?.total || 0;
-    const otherCost = otherResult[0]?.total || 0;
-    const { cashflowOut, cashflowIn } = cashflowTotals;
-
-    const capital = personalCapital + loanDisbursed - loanPaid;
-    const balance = capital + revenue - agentPaid - adsCost - laborCost - otherCost - cashflowOut + cashflowIn;
-
-    this.logger.debug(
-      `[MASTER_BANK_BALANCE] capital=${capital} revenue=${revenue} agentPaid=${agentPaid}` +
-        ` adsCost=${adsCost} laborCost=${laborCost} otherCost=${otherCost}` +
-        ` cashflowOut=${cashflowOut} cashflowIn=${cashflowIn} → balance=${balance}`,
-    );
-
-    return balance;
+    // Registered opening balances already include historical capital and payments.
+    // Never add legacy profit/spend aggregates to them a second time.
+    return readRegisteredCashBalance(this.orderModel.db);
   }
 
   private reconcileBankFundedLoanPaid(
@@ -1415,7 +1283,7 @@ export class FinanceService {
    */
   async recordDisbursement(
     loanId: string,
-    dto: { amount: number; date?: string; notes?: string; idempotencyKey?: string },
+    dto: { amount: number; date?: string; notes?: string; idempotencyKey?: string; ledgerAccountId?: string },
   ) {
     const rawKey = String(dto.idempotencyKey || '').trim();
     if (!rawKey) throw new BadRequestException('idempotencyKey is required for loan disbursement');
@@ -1473,7 +1341,7 @@ export class FinanceService {
       category: 'loan_disbursement',
       referenceId: loanId,
       description: `Giải ngân khoản vay: ${loan.name} - ${dto.notes || ''}`,
-    }, { session, emitEvent: false });
+    }, { session, emitEvent: false, ledgerAccountId: dto.ledgerAccountId });
       });
     } catch (error) {
       if ((error as any)?.code === 11000) {

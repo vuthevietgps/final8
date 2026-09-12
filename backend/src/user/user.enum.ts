@@ -15,7 +15,7 @@ export enum UserRole {
   DIRECTOR = 'director',                    // Giám đốc - quyền cao nhất
   MANAGER = 'manager',                      // Quản lý - quản lý nhân viên
   EMPLOYEE = 'employee',                    // Nhân viên - nhân viên thường
-  INTERNAL_AGENT = 'internal_agent',        // Đại lý nội bộ - đại lý thuộc công ty
+  INTERNAL_AGENT = 'internal_agent',        // Nhân sự/kênh bán của công ty; không phải đại lý mua hàng
   EXTERNAL_AGENT = 'external_agent',        // Đại lý ngoài - đại lý bên ngoài
   INTERNAL_SUPPLIER = 'internal_supplier',  // Nhà cung cấp nội bộ - cung cấp nội bộ
   EXTERNAL_SUPPLIER = 'external_supplier',  // Nhà cung cấp ngoài - cung cấp bên ngoài

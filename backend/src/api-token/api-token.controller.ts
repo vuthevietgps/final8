@@ -31,7 +31,7 @@ export class ApiTokenController {
 
   // Sync fanpages/page tokens from 1 Facebook System User token (auto-run flow).
   @Post('system-user/sync')
-  @RequirePermissions('google-ads.credentials.write')
+  @RequirePermissions('meta-ads.credentials.write')
   syncFromSystemUser(@Body() body?: { businessId?: string; upsertApiTokens?: boolean; syncAdAccounts?: boolean }) {
     return this.service.syncFanpagesFromSystemUserToken({
       businessId: body?.businessId,
@@ -54,13 +54,13 @@ export class ApiTokenController {
   @Post(':id/rotate') @RequirePermissions('google-ads.credentials.write') rotate(@Param('id') id: string, @Body() dto: RotateTokenDto) { return this.service.rotate(id, dto); }
 
   // Đồng bộ token từ fanpages (import accessToken -> api-tokens)
-  @Post('sync/from-fanpages') @RequirePermissions('google-ads.credentials.write') syncFromFanpages(){
+  @Post('sync/from-fanpages') @RequirePermissions('meta-ads.credentials.write') syncFromFanpages(){
     return this.service.syncFromFanpages();
   }
 
   // Test token với 1 tài khoản quảng cáo Facebook
   @Post(':id/test-adaccount')
-  @RequirePermissions('google-ads.credentials.read')
+  @RequirePermissions('meta-ads.credentials.read')
   testAdAccount(
     @Param('id') id: string,
     @Body() body: { adAccountId: string }

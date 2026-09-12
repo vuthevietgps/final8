@@ -11,6 +11,8 @@ import { RegisterDto } from './dto/register.dto';
 import { SalaryConfig, SalaryConfigDocument } from '../salary-config/schemas/salary-config.schema';
 import { LaborCost1, LaborCost1Document } from '../labor-cost1/schemas/labor-cost1.schema';
 import { enforceActiveUserLimit } from '../plan/user-limit.util';
+import { AdvertisingCostRefreshService } from '../advertising-cost/advertising-cost-refresh.module';
+import { businessDayRange } from '../common/business-day';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +22,7 @@ export class AuthService {
     @InjectModel(LaborCost1.name) private laborCostModel: Model<LaborCost1Document>,
     private jwtService: JwtService,
     private sessionLogService: SessionLogService,
+    private readonly financialRefresh: AdvertisingCostRefreshService,
   ) {}
 
   private readonly logger = new Logger(AuthService.name);
@@ -191,14 +194,17 @@ export class AuthService {
         'finance.policy.manage', 'finance.loan.manage', 'finance.cashflow.manage',
         'order-update', 'chat-messages', 'ai-assistant',
         'google-ads.read', 'google-ads.plan', 'google-ads.approve', 'google-ads.execute',
-        'google-ads.credentials.read', 'google-ads.credentials.write', 'google-ads.emergency-pause'
+        'google-ads.credentials.read', 'google-ads.credentials.write', 'google-ads.emergency-pause',
+        'meta-ads.read', 'meta-ads.plan', 'meta-ads.validate', 'meta-ads.approve', 'meta-ads.execute',
+        'meta-ads.credentials.read', 'meta-ads.credentials.write'
       ],
       'manager': [
         'orders-test2', 'pending-orders', 'orders.confirm-business',
         'ad-accounts', 'ad-groups', 'advertising-costs', 'media', // Ads + media
         'fanpages', 'openai-configs', 'chat-messages', 'ai-assistant',
         'ads-budget', 'employee-ads-kpi', 'reports',
-        'google-ads.read', 'google-ads.plan'
+        'google-ads.read', 'google-ads.plan',
+        'meta-ads.read', 'meta-ads.plan', 'meta-ads.validate'
       ],
       'employee': [
         'orders-test2', 'order-update', 'chat-messages'
@@ -257,29 +263,47 @@ export class AuthService {
 
     // 5. Format thời gian
     const formatTime = (d: Date) => {
-      const hours = d.getHours().toString().padStart(2, '0');
-      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const local = new Date(d.getTime() + 7 * 3_600_000);
+      const hours = local.getUTCHours().toString().padStart(2, '0');
+      const minutes = local.getUTCMinutes().toString().padStart(2, '0');
       return `${hours}:${minutes}`;
     };
 
     const startTime = formatTime(loginAt);
     const endTime = formatTime(logoutAt);
-    const date = new Date(loginAt);
-    date.setHours(0, 0, 0, 0);
+    const { day, start: date } = businessDayRange(loginAt);
 
     // 6. Tạo LaborCost1 record
     try {
-      const laborCost = await this.laborCostModel.create({
-        date,
-        userId: new Types.ObjectId(userId),
-        startTime,
-        endTime,
-        workHours,
-        hourlyRate,
-        cost,
-        notes: `Tự động từ logout - Phiên ${session._id}`,
-        sessionCount: 1,
-      });
+      let laborCost: LaborCost1Document;
+      const writeSession = await this.laborCostModel.db.startSession();
+      try {
+        await writeSession.withTransaction(async () => {
+          // Cost and durable invalidation must commit together. A retry only
+          // rebuilds projections; it never creates another labor cost.
+          await this.financialRefresh.mark([day], writeSession, false);
+          [laborCost] = await this.laborCostModel.create([{
+            date,
+            userId: new Types.ObjectId(userId),
+            startTime,
+            endTime,
+            workHours,
+            hourlyRate,
+            cost,
+            notes: `Tự động từ logout - Phiên ${session._id}`,
+            sessionCount: 1,
+          }], { session: writeSession });
+        });
+      } finally {
+        await writeSession.endSession();
+      }
+
+      let financialRefreshPending = true;
+      try {
+        financialRefreshPending = !(await this.financialRefresh.flush(day));
+      } catch {
+        this.logger.warn(`Logout: financial projections pending for ${day}; durable job will retry.`);
+      }
 
       this.logger.log(
         `Logout: User ${userId} worked ${workMinutes} minutes (${workHours.toFixed(2)}h) × ${hourlyRate} VND/h = ${cost.toLocaleString()} VND`
@@ -289,6 +313,7 @@ export class AuthService {
         success: true,
         message: 'Đăng xuất thành công',
         laborCostCreated: true,
+        financialRefreshPending,
         session: {
           id: session._id,
           loginAt,

@@ -277,7 +277,7 @@ export class LoanService {
   // ═══════════════════════════════════════════════════════════
 
   /** Ghi nhận giải ngân khoản vay */
-  recordDisbursement(loanId: string, payload: { amount: number; date?: string; notes?: string; idempotencyKey?: string }): Observable<LoanContract> {
+  recordDisbursement(loanId: string, payload: { amount: number; date?: string; notes?: string; idempotencyKey?: string; ledgerAccountId?: string }): Observable<LoanContract> {
     return this.http.post<LoanContract>(`${this.api}/loans/${loanId}/disburse`, {
       ...payload,
       idempotencyKey: payload.idempotencyKey || this.createIdempotencyKey('loan-disbursement'),

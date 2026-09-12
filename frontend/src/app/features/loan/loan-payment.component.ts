@@ -1,13 +1,14 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TreasuryAccountSelectorComponent } from '../../shared/treasury-account-selector.component';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { LoanService, PaymentOptions, CreatePaymentRequest, PaymentResult } from './loan.service';
 
 @Component({
   selector: 'app-loan-payment',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, TreasuryAccountSelectorComponent],
   templateUrl: './loan-payment.component.html',
   styleUrls: ['./loan-payment.component.css']
 })
@@ -25,6 +26,7 @@ export class LoanPaymentComponent implements OnInit {
   amount = signal<number>(0);
   source = signal<'bank_balance' | 'owner_fund'>('bank_balance');
   sourceAccountId = signal<string>('');
+  ledgerAccountId = '';
   selectedRepaymentId = signal<string>('');
   notes = signal<string>('');
 
@@ -186,6 +188,8 @@ export class LoanPaymentComponent implements OnInit {
     
     if (this.source() === 'owner_fund') {
       payload.sourceAccountId = this.sourceAccountId();
+    } else {
+      payload.sourceAccountId = this.ledgerAccountId || undefined;
     }
     
     if (this.paymentType() === 'scheduled') {

@@ -174,7 +174,7 @@ export class FinanceController {
   @RequirePermissions('finance.loan.manage')
   recordDisbursement(
     @Param('id') id: string,
-    @Body() dto: { amount: number; date?: string; notes?: string; idempotencyKey?: string },
+    @Body() dto: { amount: number; date?: string; notes?: string; idempotencyKey?: string; ledgerAccountId?: string },
   ) {
     return this.financeService.recordDisbursement(id, dto);
   }

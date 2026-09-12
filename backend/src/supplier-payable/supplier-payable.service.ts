@@ -6,7 +6,8 @@
  * Trong công thức Dòng tiền: Đây là INFLOW (Dòng tiền VÀO), không phải OUTFLOW.
  * Tên collection giữ nguyên để tương thích ngược. Không đổi tên DB.
  */
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { CounterpartyLedgerService } from '../business-ledger/counterparty-ledger.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -49,43 +50,13 @@ export class SupplierPayableService {
     private csvExportService: CsvExportService,
     private orderIntegrationService: OrderIntegrationService,
     private eventEmitter: EventEmitter2,
+    @Optional() private counterparties?: CounterpartyLedgerService,
   ) {}
 
   // ============ Payable CRUD Operations ============
 
   async create(dto: CreateSupplierPayableDto) {
-    if (!dto.items || dto.items.length === 0) {
-      throw new BadRequestException('Cần ít nhất 1 dòng công nợ');
-    }
-
-    const items = dto.items.map(it => ({
-      productId: it.productId ? new Types.ObjectId(it.productId) : undefined,
-      productNameSnap: it.productNameSnap,
-      quantity: Number(it.quantity || 0),
-      unitPrice: Number(it.unitPrice || 0),
-      amount: it.amount !== undefined
-        ? Number(it.amount)
-        : Number(it.quantity || 0) * Number(it.unitPrice || 0),
-    }));
-
-    const { totalAmount } = computeTotals(items, dto.totalAmount);
-
-    const doc = await this.model.create({
-      supplierId: new Types.ObjectId(dto.supplierId),
-      supplierNameSnap: dto.supplierNameSnap,
-      orderId: dto.orderId ? new Types.ObjectId(dto.orderId) : undefined,
-      items,
-      totalAmount,
-      amountPaid: 0,
-      balance: totalAmount,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      notes: dto.notes,
-      currency: dto.currency || 'VND',
-      status: dto.status || 'unpaid',
-      payments: [],
-    });
-
-    return doc.toObject();
+    throw new BadRequestException('Công nợ lấy từ đơn hàng, PO và chứng từ Sổ kinh doanh; không tạo khoản trùng ở sổ cũ.');
   }
 
   async findAll(params: {
@@ -99,43 +70,12 @@ export class SupplierPayableService {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Math.min(200, Number(params.limit) || 50));
 
-    const query: any = {};
-    if (params.supplierId) {
-      query.supplierId = assertObjectId(params.supplierId, 'supplierId');
-    }
-    if (params.status) {
-      query.status = params.status;
-    }
-    if (params.from || params.to) {
-      query.createdAt = {} as any;
-      if (params.from) {
-        (query.createdAt as any).$gte = new Date(params.from);
-      }
-      if (params.to) {
-        const to = new Date(params.to);
-        to.setHours(23, 59, 59, 999);
-        (query.createdAt as any).$lte = to;
-      }
-    }
-
-    const [total, data] = await Promise.all([
-      this.model.countDocuments(query),
-      this.model.find(query)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-    ]);
-
-    return {
-      data,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: total ? Math.ceil(total / limit) : 0
-      }
-    };
+    if (!this.counterparties) throw new BadRequestException('Nguồn công nợ chung chưa được cấu hình.');
+    const canonical=await this.counterparties.summary('supplier',{partyId:params.supplierId,from:params.from,to:params.to});
+    const all=canonical.data.flatMap(g=>g.orders.map(r=>({...r,supplierId:g.partyId,supplierName:g.name})));
+    const states={unpaid:'outstanding',partial:'partial',paid:'settled'};
+    const filtered=params.status?all.filter(r=>r.paymentState===(states[params.status]||params.status)):all;
+    return { data:filtered.slice((page-1)*limit,page*limit),pagination:{page,limit,total:filtered.length,totalPages:Math.ceil(filtered.length/limit)},accountingBasis:canonical.basis };
   }
 
   async findOne(id: string) {
@@ -143,7 +83,7 @@ export class SupplierPayableService {
     if (!doc) {
       throw new NotFoundException('Không tìm thấy công nợ');
     }
-    return doc;
+    return {...doc,accountingBasis:'legacy_supplier_cod_statement',settlementEligible:false};
   }
 
   async addPayment(id: string, dto: AddPaymentDto) {
@@ -153,96 +93,11 @@ export class SupplierPayableService {
   }
 
   async statement(params: { supplierId: string; from?: string; to?: string }) {
-    if (!params.supplierId) {
-      throw new BadRequestException('Thiếu supplierId');
-    }
-
-    const supplierObjId = assertObjectId(params.supplierId, 'supplierId');
-    const from = params.from ? new Date(params.from) : undefined;
-    const to = params.to ? new Date(params.to) : undefined;
-    if (to) to.setHours(23, 59, 59, 999);
-
-    const matchSupplier: any = { supplierId: supplierObjId };
-    const payableBeforeMatch: any = { ...matchSupplier };
-    if (from) payableBeforeMatch.createdAt = { $lt: from };
-
-    const payablePeriodMatch: any = { ...matchSupplier };
-    if (from || to) payablePeriodMatch.createdAt = buildPeriodFilter(from, to);
-
-    const [payablesBefore, payablesInPeriod, paymentsBefore, paymentsInPeriod, codInPeriod] =
-      await Promise.all([
-        this.model.aggregate([
-          { $match: payableBeforeMatch },
-          { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-        ]),
-        this.model.aggregate([
-          { $match: payablePeriodMatch },
-          { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-        ]),
-        this.model.aggregate([
-          { $match: matchSupplier },
-          { $unwind: '$payments' },
-          from ? { $match: { 'payments.paidAt': { $lt: from } } } : { $match: {} },
-          { $group: { _id: null, total: { $sum: '$payments.amount' } } },
-        ]),
-        this.model.aggregate([
-          { $match: matchSupplier },
-          { $unwind: '$payments' },
-          (from || to)
-            ? { $match: { 'payments.paidAt': buildPeriodFilter(from, to) } }
-            : { $match: {} },
-          { $group: { _id: null, total: { $sum: '$payments.amount' } } },
-        ]),
-        this.orderModel.aggregate([
-          {
-            $match: {
-              supplierId: supplierObjId,
-              orderStatus: 'Giao thành công',
-              ...(from || to ? { updatedAt: buildPeriodFilter(from, to) } : {}),
-            },
-          },
-          {
-            $project: {
-              codCollected: {
-                $cond: [
-                  { $gt: ['$codCollectedBySupplier', 0] },
-                  '$codCollectedBySupplier',
-                  '$codAmount',
-                ],
-              },
-            },
-          },
-          { $group: { _id: null, total: { $sum: '$codCollected' } } },
-        ]),
-      ]);
-
-    const openingBalance =
-      Number(payablesBefore?.[0]?.total || 0) - Number(paymentsBefore?.[0]?.total || 0);
-    const periodPayables = Number(payablesInPeriod?.[0]?.total || 0);
-    const periodPayments = Number(paymentsInPeriod?.[0]?.total || 0);
-    const periodCodCollected = Number(codInPeriod?.[0]?.total || 0);
-    const closingBalance = openingBalance + periodPayables - periodPayments;
-    const netAfterCod = periodCodCollected - closingBalance;
-
-    return {
-      supplierId: params.supplierId,
-      from,
-      to,
-      openingBalance,
-      periodPayables,
-      periodPayments,
-      periodCodCollected,
-      closingBalance,
-      netAfterCod,
-    };
+    throw new BadRequestException('Xem Công nợ đối tác để lấy nghĩa vụ và thanh toán xác nhận. Báo cáo COD theo kỳ cũ không còn dùng để quyết toán.');
   }
 
   async remove(id: string) {
-    const res = await this.model.findByIdAndDelete(id).lean();
-    if (!res) {
-      throw new NotFoundException('Không tìm thấy công nợ');
-    }
-    return res;
+    throw new BadRequestException('Không xóa lịch sử công nợ. Sử dụng chứng từ điều chỉnh có căn cứ.');
   }
 
   // ============ Statement Management (delegated) ============
@@ -265,19 +120,13 @@ export class SupplierPayableService {
   }
 
   async addStatementPayment(id: string, dto: AddPaymentDto) {
-    const result = await this.statementService.addPaymentToStatement(id, {
+    return this.statementService.addPaymentToStatement(id, {
       amount: dto.amount,
       method: dto.method,
       reference: dto.reference,
       notes: dto.notes,
       paidAt: dto.paidAt,
     });
-    this.eventEmitter.emit(FinanceEvents.SUPPLIER_PAYABLE_UPDATED, {
-      recordId: id,
-      supplierId: result?.supplierId?.toString() ?? '',
-      amountChanged: true,
-    });
-    return result;
   }
 
   async closeStatement(id: string) {
@@ -300,7 +149,12 @@ export class SupplierPayableService {
     to?: string;
     status?: string
   }) {
-    return this.csvExportService.exportCsv(params);
+    if(!this.counterparties)throw new BadRequestException('Nguồn công nợ chung chưa được cấu hình.');
+    const summary=await this.counterparties.summary('supplier',{partyId:params.supplierId,from:params.from,to:params.to});
+    const states={unpaid:'outstanding',partial:'partial',paid:'settled'};
+    const rows=summary.data.flatMap(g=>g.orders.map(r=>({...r,supplierName:g.name}))).filter(r=>!params.status||r.paymentState===(states[params.status]||params.status));
+    const cell=(v:any)=>`"${String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,"'")}"`;
+    return '\ufeff'+[['NCC','Đơn/PO','Tham chiếu','Nghĩa vụ','Điều chỉnh','Thanh toán','Còn lại','Cần rà soát'],...rows.map(r=>[r.supplierName,r.orderId,r.reference,r.obligation,r.adjustments,r.paymentMovement,r.balance,r.reviewReasons.join('; ')])].map(r=>r.map(cell).join(',')).join('\r\n');
   }
 
   // ============ Order Integration (delegated) ============
@@ -325,7 +179,7 @@ export class SupplierPayableService {
   // ============ PDF Generation (delegated) ============
 
   async generateStatementPDF(id: string): Promise<Buffer> {
-    return this.pdfGenerator.generate(id);
+    throw new BadRequestException('Mẫu PDF hoa hồng cũ không dùng quyết toán tiền hàng. Xuất bản chụp CSV tại Công nợ đối tác.');
   }
 
   // ============ Summary for Financial Control ============
@@ -346,6 +200,15 @@ export class SupplierPayableService {
    * 4. Có cả gross/net để audit
    */
   async getCashflowSummary(): Promise<{
+    paymentSchedule?:any;
+    companyReceivable?:number;
+    companyPayable?:number;
+    netCompanyPosition?:number;
+    accountingBasis?:string;
+    scheduleConfigured?:boolean;
+    legacyFieldsUnavailable?:boolean;
+    needsReviewCount?:number;
+    alerts?:string[];
     // === TỔNG HỢP GROSS ===
     totalCommissionGrossEarned: number; // Gross earned (trước adjustments)
     totalAdjustments: number;           // Điều chỉnh từ statement (hoàn/boom/phí) - số âm
@@ -389,6 +252,20 @@ export class SupplierPayableService {
     totalStatements: number;
     openStatements: number;
   }> {
+    if(this.counterparties){
+      const canonical=await this.counterparties.summary('supplier');
+      const companyReceivable=canonical.data.reduce((n,g)=>n+g.receivable,0),companyPayable=canonical.data.reduce((n,g)=>n+g.payable,0);
+      return {companyReceivable,companyPayable,netCompanyPosition:companyReceivable-companyPayable,needsReviewCount:canonical.data.reduce((n,g)=>n+g.reviewCount,0),
+        accountingBasis:canonical.basis,scheduleConfigured:canonical.paymentSchedule?.scheduleConfigured ?? false,
+        paymentSchedule:canonical.paymentSchedule,legacyFieldsUnavailable:true,
+        alerts:['Lịch công nợ hợp nhất nằm trong paymentSchedule; các trường hoa hồng cũ không áp dụng cho công nợ mua bán. Khoản thiếu hạn vẫn được đánh dấu chưa rõ.'],
+        totalCommissionGrossEarned:null,totalAdjustments:null,totalCommissionNetEarned:null,
+        totalCommissionReceived:null,totalCommissionUnreceived:companyReceivable,totalCommissionExpected7d:null,expectedInflowByDay:[],
+        grossEarned:null,unreceived:companyReceivable,totalPaid:null,netAfterCod:null,
+        asOfDate:new Date(Date.now()+7*3600000).toISOString().slice(0,10),timezone:'Asia/Ho_Chi_Minh',settlementCycleDays:null,returnRate:null,onTimeRate:null,
+        settlementProfile:null,settlementCycleSource:null,
+        dueDateFallbackCount:canonical.data.reduce((n,g)=>n+g.orders.length,0),generatedAt:canonical.generatedAt,totalStatements:null,openStatements:null};
+    }
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const settlementCycleDays = await this.getSupplierCashCycleDays();
@@ -783,6 +660,12 @@ export class SupplierPayableService {
    * Query trực tiếp TestOrder2 model (đã inject sẵn).
    */
   async getSupplierAgingSummary(): Promise<{
+    paymentSchedule?:any;
+    companyReceivable?:number;
+    companyPayable?:number;
+    unscheduledAmount?:number;
+    accountingBasis?:string;
+    scheduleConfigured?:boolean;
     aging0_7: { orderCount: number; amount: number };
     aging8_14: { orderCount: number; amount: number };
     aging15plus: { orderCount: number; amount: number };
@@ -793,6 +676,15 @@ export class SupplierPayableService {
       maxAgingDays: number;
     }[];
   }> {
+    if(this.counterparties){
+      const canonical=await this.counterparties.summary('supplier');
+      const companyReceivable=canonical.data.reduce((n,g)=>n+g.receivable,0),companyPayable=canonical.data.reduce((n,g)=>n+g.payable,0);
+      const empty={amount:null,orderCount:null};
+      return {companyReceivable,companyPayable,unscheduledAmount:canonical.paymentSchedule
+        ? canonical.paymentSchedule.unscheduledReceivable+canonical.paymentSchedule.unscheduledPayable : companyReceivable+companyPayable,
+        paymentSchedule:canonical.paymentSchedule,accountingBasis:canonical.basis,scheduleConfigured:canonical.paymentSchedule?.scheduleConfigured ?? false,
+        aging0_7:{...empty},aging8_14:{...empty},aging15plus:{...empty},bySupplierOverThreshold:[]};
+    }
     const today = new Date();
     const THRESHOLD = 5_000_000;
 

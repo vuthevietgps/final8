@@ -1,9 +1,16 @@
+import { responseContractForIntent } from './ai-operator.model-input';
+import { buildRuleBasedAnswer } from './ai-operator.answers';
+import { removeVietnameseTone } from './ai-operator.format';
 import { AiOperatorService } from './ai-operator.service';
+import { AiOperatorSessionService } from './ai-operator.session.service';
 import { buildAiOperatorKnowledge, SCENARIO_WORKFLOWS } from './ai-operator.knowledge';
 
 describe('AiOperatorService agent trace', () => {
   const createService = () => {
-    const deps = Array.from({ length: 29 }, () => ({}));
+    const deps = (Reflect.getMetadata('design:paramtypes', AiOperatorService) as unknown[])
+      .map(type => type === AiOperatorSessionService
+        ? new AiOperatorSessionService({} as any, {} as any)
+        : {});
     return new (AiOperatorService as any)(...deps) as AiOperatorService;
   };
 
@@ -97,7 +104,7 @@ describe('AiOperatorService agent trace', () => {
     expect(route.intent).toBe('ads_budget_cashflow_gate');
     expect(route.reason).toBe('keyword_ads_budget_cashflow_gate');
     expect(route.tokenPolicy.mode).toBe('small_ai');
-    expect(service.responseContractForIntent(route.intent)).toBe('cfoDecision');
+    expect(responseContractForIntent(route.intent)).toBe('cfoDecision');
   });
 
   it('routes marketing funnel, creative fatigue and task creation requests to V2 intents', () => {
@@ -438,7 +445,7 @@ describe('AiOperatorService agent trace', () => {
     expect(openAiSpy).not.toHaveBeenCalled();
     expect(response.modelUsed).toBeNull();
     expect(response.tokenUsage.mode).toBe('no_ai');
-    expect(service.removeVietnameseTone(response.answer)).toContain('Hien tai co 2 san pham');
+    expect(removeVietnameseTone(response.answer)).toContain('Hien tai co 2 san pham');
   });
 
   it('renders ad group profit classification as a table in rule-based fallback', () => {
@@ -509,11 +516,11 @@ describe('AiOperatorService agent trace', () => {
       dataGaps: [],
     };
 
-    const answer = service.buildRuleBasedAnswer(
+    const answer = buildRuleBasedAnswer(
       'Có bao nhiêu nhóm quảng cáo? Nhóm nào lãi/lỗ?',
       snapshot,
       [],
-      {},
+      buildAiOperatorKnowledge('director'),
       'director',
       { intent: 'ad_group_profit_classification', reason: 'test' },
     );

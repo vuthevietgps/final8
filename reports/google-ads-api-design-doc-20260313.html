@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HTX Bach Gia - Google Ads API Design Document</title>
+  <style>
+    :root {
+      --ink: #10253f;
+      --ink-soft: #4d5f77;
+      --accent: #0f5d5c;
+      --accent-soft: #e7f4f1;
+      --line: #d6deea;
+      --paper: #ffffff;
+      --paper-soft: #f5f7fb;
+      --warm: #fff6ea;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef2f8;
+      font: 15px/1.55 "Segoe UI", Arial, sans-serif;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 14mm 15mm 16mm;
+      background: var(--paper);
+    }
+
+    .hero {
+      padding: 18px 22px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at top right, rgba(15, 93, 92, 0.14), transparent 22rem),
+        linear-gradient(135deg, #f6fbfc 0%, #ffffff 62%);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.15;
+    }
+
+    h1 {
+      font-size: 30px;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    h3 {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0 0 10px;
+    }
+
+    .lead {
+      color: var(--ink-soft);
+      max-width: 92%;
+      font-size: 16px;
+    }
+
+    .meta-grid,
+    .three-grid,
+    .link-grid,
+    .cap-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .meta-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .link-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cap-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card,
+    .section,
+    .arch-box {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--paper);
+    }
+
+    .card,
+    .section {
+      padding: 14px 16px;
+    }
+
+    .card span.label,
+    .mini-label {
+      display: inline-block;
+      margin-bottom: 6px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 16px;
+    }
+
+    .muted {
+      color: var(--ink-soft);
+    }
+
+    .section {
+      margin-top: 14px;
+      page-break-inside: avoid;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li + li {
+      margin-top: 5px;
+    }
+
+    .quote {
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent);
+      border-radius: 14px;
+      background: var(--accent-soft);
+      font-weight: 700;
+    }
+
+    .arch-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr 34px 1fr 34px 1fr;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .arch-box {
+      padding: 14px;
+      min-height: 118px;
+      background: var(--paper-soft);
+    }
+
+    .arrow {
+      text-align: center;
+      font-size: 24px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .path {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--warm);
+      color: #7a4a10;
+      font-weight: 600;
+    }
+
+    .link-list a,
+    a {
+      color: #0d4f92;
+      text-decoration: none;
+      word-break: break-word;
+    }
+
+    .link-list a:hover,
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .footer {
+      margin-top: 14px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      margin: 4px 6px 0 0;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f8fbff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        margin: 0;
+        width: auto;
+        min-height: auto;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">Google Ads API Design Documentation</p>
+      <h1>HTX Bach Gia Internal ERP and Advertising Management Tool</h1>
+      <p class="lead">
+        This document explains the business model, system design, intended users, and Google Ads API use case for
+        HTX Bach Gia. The tool is an internal business operations and advertising management system used only by
+        authorized staff.
+      </p>
+
+      <div class="meta-grid">
+        <div class="card">
+          <span class="label">Company</span>
+          <strong>HTX Bach Gia</strong>
+          <div class="muted">Internal business operations and advertising management</div>
+        </div>
+        <div class="card">
+          <span class="label">Primary website</span>
+          <strong><a href="https://htxbachgia.shop/">https://htxbachgia.shop/</a></strong>
+          <div class="muted">Public company website and policy pages are live.</div>
+        </div>
+        <div class="card">
+          <span class="label">Google Ads MCC ID</span>
+          <strong>4345552613</strong>
+          <div class="muted">Manager account used for internal Google Ads account access.</div>
+        </div>
+        <div class="card">
+          <span class="label">Contact</span>
+          <strong>vtv.group333@gmail.com</strong>
+          <div class="muted">Phone: +84 0363614511 | Location: HCM, Vietnam</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="mini-label">Official statement</p>
+      <div class="quote">
+        This system uses the Google Ads API to manage internal advertising campaigns for HTX Bach Gia.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>1. Business Model and Intended Use</h2>
+      <p>
+        HTX Bach Gia runs its own internal ERP platform to connect advertising activity with operations, finance, and
+        internal reporting. Google Ads data is used only for the company's own internal campaign monitoring and
+        management workflows. The system is not a public SaaS product and is not offered as a self-service tool for
+        external customers.
+      </p>
+      <ul>
+        <li>Authorized internal staff use the tool to review campaign data and business performance.</li>
+        <li>The system links Google Ads data with internal ad account records, ad groups, budgets, and reporting.</li>
+        <li>The tool supports internal campaign oversight and budget decisions, not general public access.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>2. Intended Users and Access Control</h2>
+      <div class="three-grid">
+        <div class="card">
+          <span class="label">Users</span>
+          <strong>Internal users only</strong>
+          <div class="muted">Employees and authorized staff of HTX Bach Gia.</div>
+        </div>
+        <div class="card">
+          <span class="label">Authentication</span>
+          <strong>JWT-based login</strong>
+          <div class="muted">Restricted ERP login with role-based permissions.</div>
+        </div>
+        <div class="card">
+          <span class="label">External access</span>
+          <strong>Not public-facing</strong>
+          <div class="muted">No open registration, no public Google Ads management UI.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>3. System Architecture</h2>
+      <p class="muted">High-level internal workflow for the Google Ads integration.</p>
+      <div class="arch-grid">
+        <div class="arch-box">
+          <h3>Internal ERP Frontend</h3>
+          <ul>
+            <li>Login-protected admin interface</li>
+            <li>Ads settings</li>
+            <li>Ad accounts and ad groups</li>
+            <li>Advertising cost and reporting views</li>
+          </ul>
+        </div>
+        <div class="arrow">→</div>
+        <div class="arch-box">
+          <h3>Backend Services</h3>
+          <ul>
+            <li>OAuth and MCC credential storage</li>
+            <li>Scheduled Google Ads sync</li>
+            <li>Budget update logic for mapped campaigns</li>
+            <li>Internal reporting APIs</li>
+          </ul>
+        </div>
+        <div class="arrow">→</div>
+        <div class="arch-box">
+          <h3>Google Ads API</h3>
+          <ul>
+            <li>SearchStream reporting requests</li>
+            <li>Read account, ad group, cost, click, and impression metrics</li>
+            <li>Internal budget update requests for approved workflows</li>
+          </ul>
+        </div>
+      </div>
+      <div class="path">Google Ads data is fetched under the MCC and stored in the internal ERP for authorized business reporting and management.</div>
+    </section>
+
+    <section class="section">
+      <h2>4. Google Ads API Workflow</h2>
+      <ul>
+        <li>HTX Bach Gia stores Google Ads MCC credentials in the internal Ads Settings area: developer token, client ID, client secret, refresh token, and login customer ID.</li>
+        <li>Each Google Ads customer account is mapped internally to an ERP ad account record.</li>
+        <li>Each relevant Google Ads ad group is mapped to an internal ERP ad group record.</li>
+        <li>The backend runs a scheduled sync to pull Google Ads metrics such as cost, impressions, clicks, average CPC, and average CPM.</li>
+        <li>Synced data is used for internal dashboards, advertising cost tracking, and business reporting.</li>
+        <li>When approved internally, the system can send Google Ads API mutate requests to update mapped campaign budgets.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>5. Data Used from the Google Ads API</h2>
+      <div class="cap-grid">
+        <div class="card">
+          <span class="label">Read-only reporting data</span>
+          <strong>Primary use</strong>
+          <ul>
+            <li>Customer account ID</li>
+            <li>Ad group ID</li>
+            <li>Date</li>
+            <li>Cost</li>
+            <li>Impressions</li>
+            <li>Clicks</li>
+            <li>Average CPC</li>
+            <li>Average CPM</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="label">Management data</span>
+          <strong>Internal budget updates</strong>
+          <ul>
+            <li>Mapped campaign budget resource</li>
+            <li>Budget adjustment requests approved inside the ERP</li>
+            <li>No public or anonymous campaign editing</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>6. Capabilities in Scope for This Tool</h2>
+      <p>
+        Based on the current implementation, the tool's Google Ads API use is primarily internal <strong>Reporting</strong>
+        plus limited internal <strong>Campaign Management</strong> for budget adjustments on mapped campaigns.
+      </p>
+      <div>
+        <span class="tag">Reporting</span>
+        <span class="tag">Campaign Management</span>
+      </div>
+      <p class="muted" style="margin-top:10px;">
+        The tool does not provide public account creation, public campaign creation, or keyword planning features.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>7. Campaign Types and Operational Scope</h2>
+      <p>
+        The current workflow is designed for Google Ads customer accounts managed under the HTX Bach Gia MCC and for
+        campaigns that are mapped to internal ERP ad group records for reporting and budget operations. The internal
+        system is used for operational campaign oversight rather than public campaign authoring.
+      </p>
+      <p class="muted">
+        For the application form, the safest scope to declare is the standard campaign types the business manages
+        internally through mapped ad groups, such as Search, Display, Video, and Shopping, only if those are actually
+        in use under the MCC.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>8. Public Website and Compliance Pages</h2>
+      <div class="link-grid link-list">
+        <div class="card">
+          <span class="label">Public pages</span>
+          <ul>
+            <li><a href="https://htxbachgia.shop/">https://htxbachgia.shop/</a></li>
+            <li><a href="https://htxbachgia.shop/about-us">https://htxbachgia.shop/about-us</a></li>
+            <li><a href="https://htxbachgia.shop/contact">https://htxbachgia.shop/contact</a></li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="label">Policy pages</span>
+          <ul>
+            <li><a href="https://htxbachgia.shop/privacy-policy">https://htxbachgia.shop/privacy-policy</a></li>
+            <li><a href="https://htxbachgia.shop/terms-of-service">https://htxbachgia.shop/terms-of-service</a></li>
+            <li><a href="https://htxbachgia.shop/google-ads-api">https://htxbachgia.shop/google-ads-api</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>9. Internal Application Areas</h2>
+      <ul>
+        <li><strong>ERP Login:</strong> restricted internal access for authorized users.</li>
+        <li><strong>Ads Settings:</strong> store and manage MCC credentials and Google Ads integration settings.</li>
+        <li><strong>Ad Accounts:</strong> map internal records to Google Ads customer accounts.</li>
+        <li><strong>Ad Groups:</strong> map internal records to Google Ads ad groups.</li>
+        <li><strong>Advertising Cost:</strong> view synced advertising performance and cost data.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>10. Contact</h2>
+      <p><strong>Company:</strong> HTX Bach Gia</p>
+      <p><strong>Email:</strong> <a href="mailto:vtv.group333@gmail.com">vtv.group333@gmail.com</a></p>
+      <p><strong>Phone:</strong> <a href="tel:+840363614511">+84 0363614511</a></p>
+      <p><strong>Location:</strong> HCM, Vietnam</p>
+    </section>
+
+    <div class="footer">Document date: March 13, 2026</div>
+  </main>
+</body>
+</html>

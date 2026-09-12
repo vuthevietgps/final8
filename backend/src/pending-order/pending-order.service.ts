@@ -150,7 +150,7 @@ export class PendingOrderService {
     if(!pending) throw new NotFoundException('Pending order không tồn tại');
     if(pending.status === 'approved') throw new BadRequestException('Đơn đã được duyệt');
     // basic validation
-    const required = ['customerName','phone','address','adGroupId'];
+    const required = ['customerName','phone','address'];
     for(const field of required){
       if(!(pending as any)[field]) throw new BadRequestException(`Thiếu trường bắt buộc: ${field}`);
     }
@@ -162,7 +162,8 @@ export class PendingOrderService {
       quantity: pending.quantity || 1,
       agentId: (pending.agentId ? pending.agentId.toString() : userId),
       supplierId: pending.supplierId?.toString(),
-      adGroupId: pending.adGroupId || '0',
+      adGroupId: pending.adGroupId || '',
+      customerAcquisitionSource: pending.adGroupId ? 'ads' : 'non_ads',
       isActive: true,
       productionStatus: 'Chưa làm',
       orderStatus: 'Chưa có mã vận đơn',

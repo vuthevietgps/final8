@@ -63,7 +63,7 @@ export class OpsActionService {
     const generatedAt = now.toISOString();
 
     // === SUPPLIER ACTIONS ===
-    if (supplierAging.status === 'fulfilled') {
+    if (supplierAging.status === 'fulfilled'&&supplierAging.value.scheduleConfigured!==false) {
       const aging = supplierAging.value;
 
       if (aging.aging15plus.orderCount > 0) {
@@ -98,15 +98,16 @@ export class OpsActionService {
     if (supplierCashflow.status === 'fulfilled') {
       const summary = supplierCashflow.value;
 
-      if (summary.totalCommissionUnreceived > AMOUNT_THRESHOLD) {
+      const supplierReceivable=summary.companyReceivable??summary.totalCommissionUnreceived;
+      if (supplierReceivable > AMOUNT_THRESHOLD) {
         actions.push({
           actionType: 'SUPPLIER_OVER_THRESHOLD',
           priority: 'high',
-          title: 'Thu hoa hồng NCC tồn đọng lớn',
-          description: `Còn ${this.fmt(summary.totalCommissionUnreceived)} chưa được NCC thanh toán.`,
+          title: 'Công nợ phải thu NCC tồn đọng lớn',
+          description: `Còn ${this.fmt(supplierReceivable)} chưa được NCC thanh toán.`,
           reason: `Số dư chưa thu vượt ngưỡng ${this.fmt(AMOUNT_THRESHOLD)}.`,
           linkTo: '/payments/supplier',
-          amount: summary.totalCommissionUnreceived,
+          amount: supplierReceivable,
           generatedAt,
         });
       }
@@ -199,15 +200,16 @@ export class OpsActionService {
         ? nextPayDay - currentDay
         : 30 - currentDay + nextPayDay;
 
-      if (daysUntilPay <= 3 && agent.totalAgentUnpaid > 0) {
+      const agentPayable=agent.companyPayable??agent.totalAgentUnpaid;
+      if (agent.scheduleConfigured!==false&&daysUntilPay <= 3 && agentPayable > 0) {
         actions.push({
           actionType: 'AGENT_BIWEEKLY_APPROACHING',
           priority: 'medium',
           title: 'Kỳ thanh toán hoa hồng nửa tháng sắp đến',
-          description: `Kỳ thanh toán ngày ${nextPayDay} sắp đến. Còn ${this.fmt(agent.totalAgentUnpaid)} chưa thanh toán.`,
+          description: `Kỳ thanh toán ngày ${nextPayDay} sắp đến. Còn ${this.fmt(agentPayable)} chưa thanh toán.`,
           reason: `Thanh toán nửa tháng vào ngày 1 và 15 hàng tháng. Hiện tại là ngày ${currentDay}.`,
           linkTo: '/payments/agent',
-          amount: agent.totalAgentUnpaid,
+          amount: agentPayable,
           generatedAt,
         });
       }

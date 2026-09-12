@@ -816,9 +816,7 @@ export class OwnerFundService {
           );
         }
 
-        // CashflowEntry is the canonical bank ledger for Owner transfers.
-        // FundingSource has no bank_account type, so do not mutate an arbitrary
-        // capital source as a second pseudo-bank ledger.
+        // Cashflow and the canonical cash journal commit together.
         cashflowEntry = await this.financeService.createCashflow(
           {
             direction: 'out',
@@ -830,7 +828,7 @@ export class OwnerFundService {
             category: 'owner_fund_transfer',
             referenceId,
           },
-          { session, emitEvent: false },
+          { session, emitEvent: false, ledgerAccountId: dto.ledgerAccountId, actorId: String(actorId) },
         );
 
         const updatedAccount = await this.fundAccountModel.findByIdAndUpdate(
@@ -933,7 +931,7 @@ export class OwnerFundService {
       date: new Date().toISOString(),
       category: 'owner_fund_return',
       referenceId,
-    }, { session, emitEvent: false });
+    }, { session, emitEvent: false, ledgerAccountId: dto.ledgerAccountId, actorId: String(actorId) });
 
     // 2. Cáº­p nháº­t sá»‘ dÆ° tÃ i khoáº£n Quá»¹ Owner
     const updatedAccount = await this.fundAccountModel.findOneAndUpdate(

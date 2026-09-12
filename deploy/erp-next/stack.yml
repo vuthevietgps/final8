@@ -1,0 +1,187 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:8.2
+    hostname: mongo
+    command: [mongod, --replSet, erp-next-rs, --bind_ip_all, --keyFile, /run/secrets/mongo_keyfile]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: erp_root
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+    secrets:
+      - source: mongo_root_password
+        target: mongo_root_password
+      - source: mongo_app_password
+        target: mongo_app_password
+      - source: mongo_keyfile
+        target: mongo_keyfile
+        uid: '999'
+        gid: '999'
+        mode: 0400
+    configs:
+      - source: mongo_bootstrap
+        target: /opt/bootstrap-mongo.js
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    networks: [database]
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    deploy:
+      replicas: 1
+      endpoint_mode: dnsrr
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+        delay: 5s
+      update_config:
+        order: stop-first
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  backend:
+    image: htxbachgia/backend:20260911-windsor-read-fix2
+    command: [node, /app/secret-entrypoint.cjs]
+    environment:
+      NODE_ENV: production
+      TRACKING_INGEST_SOURCE_KEY: nghiepvuvantai-com-20260825
+      PORT: '3000'
+      PUBLIC_ORIGIN: http://192.168.100.236:8107
+      CORS_ORIGINS: http://192.168.100.236:8107
+      MEDIA_ABSOLUTE_BASE: http://192.168.100.236:8107
+      MEDIA_DIR: /app/uploads/media
+      MEDIA_PUBLIC_BASE: /media
+      AI_MARKETING_REQUIRE_APPROVAL: 'true'
+      AI_MARKETING_DRY_RUN: 'true'
+      AI_MARKETING_PROVIDER_EXECUTION_ENABLED: 'false'
+      GOOGLE_ADS_PRODUCTION_ENABLED: 'false'
+      META_ADS_PRODUCTION_ENABLED: 'false'
+      META_ADS_PROVIDER_EXECUTION_ENABLED: 'false'
+      FB_SENDING_ENABLED: '0'
+      AI_FB_SENDING_ENABLED: '0'
+      AI_FB_DELIVERY_RECOVERY_ENABLED: '0'
+      ADS_AUTOMATION_DRAFTS_ENABLED: 'false'
+    secrets:
+      - mongodb_uri
+      - jwt_secret
+      - api_token_secret
+      - messenger_verify_token
+      - tracking_ingest_token
+    configs:
+      - source: backend_entrypoint
+        target: /app/secret-entrypoint.cjs
+      - source: production_indexes_v2
+        target: /app/ensure-production-indexes.cjs
+    volumes:
+      - uploads:/app/uploads
+      - media:/app/uploads/media
+    networks: [database, web]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:3000/health/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+        delay: 10s
+      update_config:
+        order: stop-first
+        failure_action: rollback
+    logging: *logging
+  tracking-worker:
+    image: python:3.12-alpine
+    command: [python, -u, /opt/tracking-worker.py]
+    secrets: [tracking_ingest_token]
+    configs:
+      - source: tracking_worker_v1
+        target: /opt/tracking-worker.py
+    volumes:
+      - type: bind
+        source: /opt/websites/sites/nghiepvuvantai-com/database.db
+        target: /source/database.db
+        read_only: true
+      - tracking-state:/state
+    networks: [web]
+    healthcheck:
+      test: [CMD, python, -c, 'import json,datetime; s=json.load(open("/state/status.json")); age=(datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(s["lastSuccessAt"])).total_seconds(); exit(0 if age<180 and s["rejected"]==0 else 1)']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+        delay: 10s
+      update_config:
+        order: stop-first
+    logging: *logging
+  frontend:
+    image: htxbachgia/frontend:20260909-deploy
+    configs:
+      - source: nginx
+        target: /etc/nginx/conf.d/default.conf
+    volumes:
+      - type: volume
+        source: media
+        target: /var/www/media
+        read_only: true
+    ports:
+      - target: 80
+        published: 8107
+        protocol: tcp
+        mode: host
+    networks: [web]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1/login']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+        delay: 5s
+      update_config:
+        order: stop-first
+        failure_action: rollback
+    logging: *logging
+networks:
+  database:
+    driver: overlay
+  web:
+    driver: overlay
+volumes:
+  mongo-data:
+  mongo-config:
+  uploads:
+  media:
+  tracking-state:
+secrets:
+  mongo_root_password: {external: true, name: erp-next-mongo-root-v1}
+  mongo_app_password: {external: true, name: erp-next-mongo-app-v1}
+  mongo_keyfile: {external: true, name: erp-next-mongo-keyfile-v1}
+  mongodb_uri: {external: true, name: erp-next-mongodb-uri-v1}
+  jwt_secret: {external: true, name: erp-next-jwt-v1}
+  api_token_secret: {external: true, name: erp-next-api-token-v1}
+  messenger_verify_token: {external: true, name: erp-next-messenger-v1}
+  tracking_ingest_token: {external: true, name: erp-next-tracking-ingest-v1}
+configs:
+  mongo_bootstrap: {file: ./bootstrap-mongo.js}
+  backend_entrypoint: {file: ./secret-entrypoint.cjs}
+  production_indexes_v2: {file: ./ensure-production-indexes.cjs}
+  nginx: {file: ./nginx.conf}
+  tracking_worker_v1: {file: ./tracking-worker.py}

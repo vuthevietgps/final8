@@ -103,7 +103,7 @@ describe('OwnerFundService Financial Control safety', () => {
     expect(context.financeService.acquireCashflowSerializationLock).toHaveBeenCalledWith(session);
     expect(context.financeService.createCashflow).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 50, category: 'owner_fund_transfer' }),
-      { session, emitEvent: false },
+      { session, emitEvent: false, ledgerAccountId: undefined, actorId: String(actorId) },
     );
     expect(context.fundTransactionSave).toHaveBeenCalledWith({ session });
     expect(context.eventEmitter.emit).toHaveBeenCalledWith(
@@ -144,7 +144,7 @@ describe('OwnerFundService Financial Control safety', () => {
         category: 'owner_fund_return',
         idempotencyKey: 'owner-transfer-out:owner-return',
       }),
-      { session, emitEvent: false },
+      { session, emitEvent: false, ledgerAccountId: undefined, actorId: String(actorId) },
     );
     expect(context.fundAccountModel.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: account._id, balance: { $gte: 10 } },

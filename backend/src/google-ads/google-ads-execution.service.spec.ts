@@ -1,9 +1,27 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import axios from 'axios';
 import { GoogleAdsExecutionService } from './google-ads-execution.service';
+import {
+  googleAdsCredentialBindingHash,
+  googleAdsOperationHash,
+} from './google-ads-integrity.util';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+const runtimeConfig: any = {
+  developerToken: 'developer-secret',
+  refreshToken: 'refresh-secret',
+  loginCustomerId: '4345552613',
+  apiVersion: 'v20',
+  configSource: 'database',
+  refreshTokenSource: 'database',
+  credentialReferenceId: '507f1f77bcf86cd799439011',
+};
+const validatedOperations = [
+  { campaignBudgetOperation: { create: { resourceName: 'customers/1234567890/campaignBudgets/-1' } } },
+  { campaignOperation: { create: { status: 'PAUSED', advertisingChannelType: 'SEARCH' } } },
+];
 
 const action = (overrides: Record<string, any> = {}) => ({
   actionId: 'ACT001',
@@ -17,6 +35,10 @@ const action = (overrides: Record<string, any> = {}) => ({
   requireExecutionConfirmation: true,
   approvedBy: 'director@example.com',
   approvedByUserId: 'approver-user-2',
+  providerValidationOperationHash: googleAdsOperationHash(validatedOperations),
+  providerValidationApiVersion: runtimeConfig.apiVersion,
+  providerValidationCredentialBindingHash: googleAdsCredentialBindingHash(runtimeConfig),
+  providerValidationCredentialReferenceId: runtimeConfig.credentialReferenceId,
   ...overrides,
 });
 
@@ -55,22 +77,14 @@ describe('GoogleAdsExecutionService', () => {
     },
   };
   const apiTokenService = {
-    getGoogleAdsRuntimeConfig: jest.fn().mockResolvedValue({
-      developerToken: 'developer-secret',
-      refreshToken: 'refresh-secret',
-      loginCustomerId: '4345552613',
-      apiVersion: 'v20',
-    }),
+    getGoogleAdsRuntimeConfig: jest.fn().mockResolvedValue(runtimeConfig),
     getGoogleAdsAccessToken: jest.fn().mockResolvedValue('access-secret'),
   };
   const executionPolicy = {
     preflight: jest.fn(async (_plan, actions) => actions.map((item: any) => ({
       action: item,
       beforeState: undefined,
-      operations: [
-        { campaignBudgetOperation: { create: { resourceName: 'customers/1234567890/campaignBudgets/-1' } } },
-        { campaignOperation: { create: { status: 'PAUSED', advertisingChannelType: 'SEARCH' } } },
-      ],
+      operations: validatedOperations,
     }))),
     hasSpendIncreasingExposure: jest.fn().mockResolvedValue(true),
     evaluateFinancialControl: jest.fn().mockResolvedValue({
@@ -87,6 +101,7 @@ describe('GoogleAdsExecutionService', () => {
   const postExecutionService = {
     handleSuccessfulExecution: jest.fn().mockResolvedValue({
       syncResult: { status: 'success' },
+      readbackVerification: { verified: true, blockers: [] },
       evaluationJobs: [{ evaluationDays: 3 }, { evaluationDays: 7 }],
     }),
   };
@@ -105,6 +120,9 @@ describe('GoogleAdsExecutionService', () => {
     jest.clearAllMocks();
     storedSuccessfulLog = null;
     process.env.GOOGLE_ADS_PRODUCTION_ENABLED = 'false';
+    process.env.GOOGLE_ADS_CAMPAIGN_CREATE_ENABLED = 'true';
+    process.env.GOOGLE_ADS_CAMPAIGN_UPDATE_ENABLED = 'true';
+    process.env.GOOGLE_ADS_CAMPAIGN_PAUSE_ENABLED = 'true';
     process.env.AI_MARKETING_PROVIDER_EXECUTION_ENABLED = 'false';
     process.env.AI_MARKETING_DRY_RUN = 'true';
     executionPolicy.hasSpendIncreasingExposure.mockResolvedValue(true);
@@ -169,6 +187,26 @@ describe('GoogleAdsExecutionService', () => {
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
+  it('blocks create live while its server-side action flag is disabled', async () => {
+    process.env.GOOGLE_ADS_PRODUCTION_ENABLED = 'true';
+    process.env.AI_MARKETING_PROVIDER_EXECUTION_ENABLED = 'true';
+    process.env.AI_MARKETING_DRY_RUN = 'false';
+    process.env.GOOGLE_ADS_CAMPAIGN_CREATE_ENABLED = 'false';
+    const document = plan([action()]);
+    (document as any).source = 'erp_ui';
+    actionPlanModel.findOne.mockResolvedValueOnce(document);
+
+    await expect(service.execute(director, document.planId, {
+      actionIds: ['ACT001'],
+      dryRun: false,
+      validateOnly: false,
+      source: 'erp_ui',
+    })).rejects.toThrow('GOOGLE_ADS_CAMPAIGN_CREATE_ENABLED');
+
+    expect(executionPolicy.preflight).not.toHaveBeenCalled();
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
   it('reports separation-of-duties failure in dry-run without calling the provider', async () => {
     const document = plan([action({ approvedByUserId: director.id })]);
     actionPlanModel.findOne.mockResolvedValueOnce(document);
@@ -187,6 +225,20 @@ describe('GoogleAdsExecutionService', () => {
         reason: expect.stringContaining('different user'),
       }),
     }));
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it('rejects an execution source that does not match the persisted plan source', async () => {
+    const document = { ...plan([action()]), source: 'erp_ui' };
+    actionPlanModel.findOne.mockResolvedValueOnce(document);
+
+    await expect(service.execute(director, document.planId, {
+      actionIds: ['ACT001'],
+      dryRun: true,
+      source: 'codex_operator',
+    })).rejects.toThrow('must match the action plan source');
+
+    expect(executionPolicy.preflight).not.toHaveBeenCalled();
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -312,7 +364,34 @@ describe('GoogleAdsExecutionService', () => {
     expect(result.logs[0].providerErrors[0].message).not.toContain('real-secret');
   });
 
-  it('keeps a successful live mutation successful when post-execution processing fails', async () => {
+  it('keeps idempotency reserved when a timeout makes the provider outcome ambiguous', async () => {
+    process.env.GOOGLE_ADS_PRODUCTION_ENABLED = 'true';
+    process.env.AI_MARKETING_PROVIDER_EXECUTION_ENABLED = 'true';
+    process.env.AI_MARKETING_DRY_RUN = 'false';
+    const document = plan([action()]);
+    actionPlanModel.findOne.mockResolvedValueOnce(document);
+    mockedAxios.post.mockRejectedValueOnce({
+      code: 'ECONNABORTED',
+      message: 'timeout of 30000ms exceeded',
+    });
+
+    const result = await service.execute(director, document.planId, {
+      actionIds: ['ACT001'],
+      dryRun: false,
+      validateOnly: false,
+      source: 'codex_operator',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ success: false, failed: 1 }));
+    expect(result.logs[0]).toEqual(expect.objectContaining({
+      status: 'reconciliation_required',
+      idempotencyReserved: true,
+      reconciliationRequired: true,
+      reconciliationReason: expect.stringContaining('targeted readback'),
+    }));
+  });
+
+  it('requires reconciliation when post-execution processing fails after a successful mutation', async () => {
     process.env.GOOGLE_ADS_PRODUCTION_ENABLED = 'true';
     process.env.AI_MARKETING_PROVIDER_EXECUTION_ENABLED = 'true';
     process.env.AI_MARKETING_DRY_RUN = 'false';
@@ -333,10 +412,16 @@ describe('GoogleAdsExecutionService', () => {
       source: 'codex_operator',
     });
 
-    expect(result).toEqual(expect.objectContaining({ success: true, executed: 1, failed: 0 }));
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      executed: 1,
+      failed: 0,
+      reconciliationRequired: 1,
+    }));
     expect(result.logs[0]).toEqual(expect.objectContaining({
       status: 'success',
       idempotencyReserved: true,
+      reconciliationRequired: true,
       postExecutionErrors: [{
         step: 'post_execution',
         message: expect.stringContaining('[REDACTED]'),

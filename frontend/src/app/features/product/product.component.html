@@ -196,6 +196,16 @@
         </div>
 
         <div class="form-group">
+          <label>Khả năng sử dụng lại khi hàng hoàn</label>
+          <select [value]="formData().resalePolicy || 'inspect'" (change)="onInputChange('resalePolicy', $event)">
+            <option value="inspect">Cần kiểm tra từng món khi nhận hoàn</option>
+            <option value="resellable">Có thể bán / giao lại</option>
+            <option value="not_resellable">Độc bản, không thể bán lại</option>
+          </select>
+          <small>Hàng còn giá trị chỉ thu hồi giá vốn khi đã nhận và xác nhận giá trị nhập kho. Nghĩa vụ trả NCC vẫn giữ nguyên.</small>
+          <small>Bán lẻ: công ty vẫn chịu giá vốn NCC, phí giao và phí hoàn. Bán đại lý: đại lý chịu giá bán đã chốt, phí giao và phí hoàn; công ty vẫn giữ giá vốn của đơn.</small>
+          <label>Bán cho đại lý</label>
+          <small>Đại lý là khách hàng của công ty. Sau khi xuất hàng, đại lý chịu đủ giá bán và phí giao; khi hoàn chịu thêm phí hoàn. Hàng hoàn nhận về chỉ giữ hộ đại lý, không thu hồi vào giá vốn công ty.</small>
           <label for="assumedReturnRatePercent">X hàng hoàn (%)</label>
           <input
             type="number"
@@ -370,6 +380,16 @@
         </div>
 
         <div class="form-group">
+          <label>Khả năng sử dụng lại khi hàng hoàn</label>
+          <select [value]="formData().resalePolicy || 'inspect'" (change)="onInputChange('resalePolicy', $event)">
+            <option value="inspect">Cần kiểm tra từng món khi nhận hoàn</option>
+            <option value="resellable">Có thể bán / giao lại</option>
+            <option value="not_resellable">Độc bản, không thể bán lại</option>
+          </select>
+          <small>Hàng còn giá trị chỉ thu hồi giá vốn khi đã nhận và xác nhận giá trị nhập kho. Nghĩa vụ trả NCC vẫn giữ nguyên.</small>
+          <small>Bán lẻ: công ty vẫn chịu giá vốn NCC, phí giao và phí hoàn. Bán đại lý: đại lý chịu giá bán đã chốt, phí giao và phí hoàn; công ty vẫn giữ giá vốn của đơn.</small>
+          <label>Bán cho đại lý</label>
+          <small>Đại lý là khách hàng của công ty. Sau khi xuất hàng, đại lý chịu đủ giá bán và phí giao; khi hoàn chịu thêm phí hoàn. Hàng hoàn nhận về chỉ giữ hộ đại lý, không thu hồi vào giá vốn công ty.</small>
           <label for="edit-assumedReturnRatePercent">X hàng hoàn (%)</label>
           <input
             type="number"

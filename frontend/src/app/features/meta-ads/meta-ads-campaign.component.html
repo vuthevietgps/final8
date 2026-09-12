@@ -1,0 +1,676 @@
+<div class="meta-campaign-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Meta Ads / ERP control plane</p>
+      <h1>Điều khiển Meta campaign</h1>
+      <p>Tất cả thay đổi đi qua ERP. Trình duyệt không nhận token, Graph URL hoặc quyền bật live.</p>
+    </div>
+    <span class="safety-badge">Live mặc định tắt</span>
+  </header>
+
+  <div *ngIf="error()" class="banner error">{{ error() }}</div>
+  <div *ngIf="message()" class="banner success">{{ message() }}</div>
+  <div *ngIf="configurationWarning()" class="banner warning">{{ configurationWarning() }}</div>
+
+  <section class="panel" *ngIf="canRead(); else noReadPermission">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Action plan</p>
+        <h2>Tạo bản nháp</h2>
+      </div>
+      <div class="lookup">
+        <button
+          type="button"
+          (click)="materializeAutomatedPauseDrafts()"
+          [disabled]="!canPlan() || !!loadingAction()"
+        >
+          {{ loadingAction() === 'auto-pause-drafts' ? 'Đang đọc evidence…' : 'Tạo pause draft từ evidence ERP' }}
+        </button>
+        <input [(ngModel)]="lookupPlanId" placeholder="Plan ID đã có" aria-label="Plan ID đã có" />
+        <button type="button" (click)="loadPlan()" [disabled]="!lookupPlanId.trim() || !!loadingAction()">Tải plan</button>
+      </div>
+    </div>
+
+    <div class="operation-tabs" role="tablist" aria-label="Tài nguyên Meta">
+      <button type="button" [class.active]="resourceStage() === 'campaign'" (click)="selectResourceStage('campaign')">1. Campaign</button>
+      <button type="button" [class.active]="resourceStage() === 'ad_set'" (click)="selectResourceStage('ad_set')">2. Ad Set</button>
+      <button type="button" [class.active]="resourceStage() === 'creative'" (click)="selectResourceStage('creative')">3. Creative</button>
+      <button type="button" [class.active]="resourceStage() === 'ad'" (click)="selectResourceStage('ad')">4. Ad</button>
+    </div>
+
+    <div class="operation-tabs" role="tablist" aria-label="Loại thao tác campaign" *ngIf="resourceStage() === 'campaign'">
+      <button type="button" [class.active]="operation() === 'create'" (click)="selectOperation('create')">Tạo campaign</button>
+      <button type="button" [class.active]="operation() === 'update'" (click)="selectOperation('update')">Sửa campaign</button>
+      <button type="button" [class.active]="operation() === 'pause'" (click)="selectOperation('pause')">Tạm dừng</button>
+    </div>
+
+    <div class="operation-tabs" role="tablist" aria-label="Loại thao tác Ad Set" *ngIf="resourceStage() === 'ad_set'">
+      <button type="button" [class.active]="operation() === 'create'" (click)="selectDeliveryOperation('create')">Tạo Ad Set</button>
+      <button type="button" [class.active]="operation() === 'pause'" (click)="selectDeliveryOperation('pause')">Tạm dừng Ad Set</button>
+    </div>
+
+    <div class="locked-policy" *ngIf="operation() === 'create'">
+      <strong>Cấu hình bắt buộc từ máy chủ</strong>
+      <span *ngIf="resourceStage() !== 'creative'">Trạng thái ban đầu: PAUSED</span>
+      <span *ngIf="resourceStage() === 'campaign'">Buying type: AUCTION</span>
+      <span *ngIf="resourceStage() === 'creative'">Creative: không phân phối độc lập</span>
+      <span *ngIf="capabilities()?.graphApiVersion">Graph API: {{ capabilities()?.graphApiVersion }}</span>
+      <small>Trạng thái/buying type do ERP khóa; trình duyệt không nhận token, provider URL hoặc payload thô.</small>
+    </div>
+    <div class="setup-note" *ngIf="operation() === 'create' && resourceStage() === 'campaign'">
+      Campaign chỉ là container PAUSED. Tạo tiếp Ad Set, Creative và Ad ở các bước riêng;
+      mỗi bước vẫn phải qua validate-only, phê duyệt, dry-run và live create-PAUSED.
+    </div>
+    <div class="setup-note" *ngIf="resourceStage() !== 'campaign' && !deliveryActionSupported()">
+      <strong>Fail-closed:</strong> backend capabilities chưa công bố action {{ operationLabel(deliveryActionType() || '') }}.
+      Có thể xem cấu hình nhưng ERP sẽ không cho lưu plan cho đến khi contract máy chủ sẵn sàng.
+    </div>
+
+    <div class="form-grid">
+      <label>
+        Tài khoản Meta đã xác minh
+        <select
+          [(ngModel)]="form.adAccountId"
+          (ngModelChange)="onAccountChange()"
+          [disabled]="accountsLoading()">
+          <option value="">{{ accountsLoading() ? 'Đang tải tài khoản...' : 'Chọn tài khoản Meta' }}</option>
+          <option
+            *ngFor="let account of adAccounts()"
+            [value]="accountId(account)"
+            [disabled]="account.eligible === false || account.liveEligible === false">
+            {{ accountLabel(account) }}
+          </option>
+        </select>
+        <small *ngIf="selectedAccount() as account">
+          {{ accountBlocker(account) || 'ID được ERP cung cấp; trình duyệt không nhận credential.' }}
+        </small>
+      </label>
+
+      <ng-container *ngIf="resourceStage() === 'campaign'">
+      <label *ngIf="operation() !== 'create'">
+        Campaign canonical
+        <select
+          *ngIf="campaignsLoading() || campaignOptions().length; else campaignIdFallback"
+          [(ngModel)]="form.campaignId"
+          (ngModelChange)="onCampaignChange()"
+          [disabled]="campaignsLoading()">
+          <option value="">{{ campaignsLoading() ? 'Đang tải campaign...' : 'Chọn campaign' }}</option>
+          <option *ngFor="let campaign of campaignOptions()" [value]="campaign.campaignId">
+            {{ campaign.name }} ({{ campaign.campaignId }}) · {{ campaign.status || campaign.effectiveStatus }}
+          </option>
+        </select>
+        <ng-template #campaignIdFallback>
+          <input [(ngModel)]="form.campaignId" inputmode="numeric" autocomplete="off" placeholder="Campaign ID" />
+        </ng-template>
+        <small *ngIf="selectedCampaign() as campaign">
+          {{ campaign.objective }} · {{ campaign.budgetMode }}/{{ campaign.budgetType }} · readback {{ campaign.lastReadbackAt | date:'short' }}
+        </small>
+      </label>
+
+      <label *ngIf="operation() !== 'pause'">
+        {{ operation() === 'create' ? 'Tên campaign' : 'Tên mới (tuỳ chọn)' }}
+        <input [(ngModel)]="form.name" maxlength="200" autocomplete="off" />
+      </label>
+
+      <label *ngIf="operation() === 'create'">
+        Mục tiêu ODAX
+        <select
+          [(ngModel)]="form.objective"
+          (ngModelChange)="onObjectiveChange()"
+          [disabled]="capabilitiesLoading() || !objectiveOptions().length">
+          <option *ngFor="let objective of objectiveOptions()" [value]="objective.value" [disabled]="objective.disabled">
+            {{ objective.label }}
+          </option>
+        </select>
+      </label>
+
+      <label *ngIf="operation() === 'create' && form.objective === 'OUTCOME_APP_PROMOTION'">
+        Meta App ID
+        <input [(ngModel)]="form.appId" inputmode="numeric" autocomplete="off" maxlength="32" />
+        <small>Chỉ nhập ID ứng dụng dạng số; ERP sẽ xác minh quyền sở hữu khi validate-only.</small>
+      </label>
+
+      <label *ngIf="operation() === 'create'">
+        Nơi đặt ngân sách
+        <select [(ngModel)]="form.budgetMode" (ngModelChange)="onBudgetModeChange()">
+          <option *ngFor="let option of budgetModeOptions()" [value]="option.value" [disabled]="option.disabled">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <label *ngIf="operation() === 'create'">
+        Loại ngân sách
+        <select
+          [(ngModel)]="form.budgetType"
+          (ngModelChange)="onBudgetTypeChange()"
+          [disabled]="form.budgetMode === 'ABO'">
+          <option *ngFor="let option of budgetTypeOptions()" [value]="option.value" [disabled]="option.disabled">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <label *ngIf="(operation() === 'update' && updateBudgetFieldVisible('DAILY')) || (operation() === 'create' && form.budgetMode === 'CBO' && form.budgetType === 'DAILY')">
+        Ngân sách ngày VND
+        <input [(ngModel)]="form.dailyBudgetVnd" type="number" min="1" step="1000" />
+        <small *ngIf="operation() === 'update'">
+          Chỉ áp dụng cho canonical CBO/DAILY và không được cao hơn ngân sách hiện tại.
+        </small>
+      </label>
+
+      <label *ngIf="(operation() === 'update' && updateBudgetFieldVisible('LIFETIME')) || (operation() === 'create' && form.budgetMode === 'CBO' && form.budgetType === 'LIFETIME')">
+        Ngân sách trọn đời VND
+        <input [(ngModel)]="form.lifetimeBudgetVnd" type="number" min="1" step="1000" />
+        <small *ngIf="operation() === 'update'">
+          Chỉ áp dụng cho canonical CBO/LIFETIME và không được cao hơn ngân sách hiện tại.
+        </small>
+      </label>
+
+      <label *ngIf="operation() === 'create'">
+        Chiến lược giá thầu
+        <select [(ngModel)]="form.bidStrategy">
+          <option *ngFor="let option of bidStrategyOptions()" [value]="option.value" [disabled]="option.disabled">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <label *ngIf="operation() !== 'pause'">
+        Giới hạn tổng chi tiêu VND (tuỳ chọn)
+        <input [(ngModel)]="form.spendCapVnd" type="number" min="1" step="1000" />
+        <small *ngIf="operation() === 'update'">Phase an toàn hiện tại không cho tăng spend cap canonical.</small>
+      </label>
+
+      <label *ngIf="operation() === 'create'">
+        Bắt đầu (giờ tài khoản)
+        <input [(ngModel)]="form.startTime" type="datetime-local" />
+      </label>
+
+      <label *ngIf="operation() !== 'pause'">
+        Kết thúc (tuỳ chọn)
+        <input [(ngModel)]="form.stopTime" type="datetime-local" />
+        <small *ngIf="operation() === 'update'">Chỉ được giữ nguyên hoặc rút ngắn lịch canonical.</small>
+      </label>
+
+      <label *ngIf="operation() === 'create'">
+        Special Ad Categories
+        <select
+          multiple
+          [(ngModel)]="form.specialAdCategories"
+          (ngModelChange)="onSpecialCategoriesChange()"
+          [disabled]="!specialCategoryOptions().length">
+          <option *ngFor="let option of specialCategoryOptions()" [value]="option.value" [disabled]="option.disabled">
+            {{ option.label }}
+          </option>
+        </select>
+        <small>NONE không thể đi cùng danh mục đặc biệt khác.</small>
+        <small class="policy-hint">
+          Có thể lưu draft với option chính thức, nhưng live mặc định chỉ cho NONE. Danh mục regulated cần
+          META_ADS_SPECIAL_CATEGORY_ALLOWLIST ở máy chủ và vẫn phải qua provider validate-only.
+        </small>
+      </label>
+
+      <label *ngIf="operation() === 'create' && !form.specialAdCategories.includes('NONE')">
+        Quốc gia áp dụng Special Ad Category (ISO alpha-2)
+        <input
+          [ngModel]="specialCountriesInput"
+          (ngModelChange)="onSpecialCountriesInput($event)"
+          autocomplete="off"
+          placeholder="VN, US" />
+        <small>Nhập các mã quốc gia hai ký tự, phân cách bằng dấu phẩy. ERP xác minh lại trước khi thực thi.</small>
+      </label>
+
+      <div class="setup-note wide" *ngIf="operation() === 'update'">
+        <strong>Current canonical:</strong> {{ currentCampaignEvidence() }}
+        <br />
+        <strong>Proposed delta:</strong> {{ proposedCampaignEvidence() }}
+      </div>
+      </ng-container>
+
+      <ng-container *ngIf="resourceStage() !== 'campaign' && operation() !== 'pause'">
+        <label>
+          Tên {{ resourceStage() === 'ad_set' ? 'Ad Set' : resourceStage() === 'creative' ? 'Creative' : 'Ad' }} *
+          <input [(ngModel)]="deliveryForm.name" maxlength="200" autocomplete="off" />
+        </label>
+      </ng-container>
+
+      <ng-container *ngIf="resourceStage() === 'ad_set'">
+        <label>
+          Campaign cha *
+          <select
+            *ngIf="campaignsLoading() || campaignOptions().length; else deliveryCampaignIdFallback"
+            [(ngModel)]="deliveryForm.campaignId"
+            (ngModelChange)="onDeliveryCampaignChange()"
+            [disabled]="campaignsLoading()">
+            <option value="">{{ campaignsLoading() ? 'Đang tải campaign...' : 'Chọn campaign PAUSED' }}</option>
+            <option *ngFor="let campaign of campaignOptions()" [value]="campaign.campaignId">
+              {{ campaign.name }} ({{ campaign.campaignId }}) · {{ campaign.budgetMode }}/{{ campaign.budgetType }}
+            </option>
+          </select>
+          <ng-template #deliveryCampaignIdFallback>
+            <input [(ngModel)]="deliveryForm.campaignId" inputmode="numeric" maxlength="32" autocomplete="off" placeholder="Campaign ID" />
+          </ng-template>
+          <small>ERP/provider xác minh lại quan hệ và trạng thái khi validate-only.</small>
+        </label>
+
+        <label *ngIf="operation() === 'pause'">
+          Ad Set ID *
+          <input [(ngModel)]="deliveryForm.adSetId" inputmode="numeric" maxlength="32" autocomplete="off" placeholder="Ad Set ID" />
+          <small>Payload pause để trống; backend chỉ được phép gửi status=PAUSED tới đúng Ad Set ID này.</small>
+        </label>
+
+        <ng-container *ngIf="operation() !== 'pause'">
+        <label>
+          Nơi đặt ngân sách của campaign cha *
+          <select [(ngModel)]="deliveryForm.budgetMode" (ngModelChange)="onAdSetBudgetModeChange()">
+            <option *ngFor="let option of budgetModeOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+          <small>CBO không mang budget/bid ở Ad Set; ABO bắt buộc cấu hình tại đây.</small>
+        </label>
+
+        <label>
+          Loại ngân sách Ad Set *
+          <select
+            [(ngModel)]="deliveryForm.budgetType"
+            (ngModelChange)="onAdSetBudgetTypeChange()"
+            [disabled]="deliveryForm.budgetMode === 'CBO'">
+            <option *ngFor="let option of budgetTypeOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label *ngIf="deliveryForm.budgetMode === 'ABO' && deliveryForm.budgetType === 'DAILY'">
+          Ngân sách ngày VND *
+          <input [(ngModel)]="deliveryForm.dailyBudgetVnd" type="number" min="1" step="1000" />
+        </label>
+
+        <label *ngIf="deliveryForm.budgetMode === 'ABO' && deliveryForm.budgetType === 'LIFETIME'">
+          Ngân sách trọn đời VND *
+          <input [(ngModel)]="deliveryForm.lifetimeBudgetVnd" type="number" min="1" step="1000" />
+        </label>
+
+        <label *ngIf="deliveryForm.budgetMode === 'ABO'">
+          Chiến lược giá thầu Ad Set *
+          <select [(ngModel)]="deliveryForm.adSetBidStrategy" (ngModelChange)="onAdSetBidStrategyChange()">
+            <option *ngFor="let option of adSetBidStrategyOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label *ngIf="deliveryForm.budgetMode === 'ABO' && deliveryForm.adSetBidStrategy !== 'LOWEST_COST_WITHOUT_CAP'">
+          Bid amount VND *
+          <input [(ngModel)]="deliveryForm.bidAmountVnd" type="number" min="1" step="1000" />
+        </label>
+
+        <label>
+          Bắt đầu (giờ tài khoản)
+          <input [(ngModel)]="deliveryForm.startTime" type="datetime-local" />
+        </label>
+
+        <label>
+          Kết thúc
+          <input [(ngModel)]="deliveryForm.stopTime" type="datetime-local" />
+          <small>ABO LIFETIME bắt buộc cả hai thời điểm.</small>
+        </label>
+
+        <label>
+          Optimization goal *
+          <select [(ngModel)]="deliveryForm.optimizationGoal" (ngModelChange)="onOptimizationGoalChange()">
+            <option *ngFor="let option of optimizationGoalOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Billing event *
+          <select [(ngModel)]="deliveryForm.billingEvent">
+            <option *ngFor="let option of billingEventOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Destination *
+          <select [(ngModel)]="deliveryForm.destinationType" (ngModelChange)="onDestinationTypeChange()">
+            <option *ngFor="let option of destinationTypeOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Quốc gia target (ISO alpha-2) *
+          <input
+            [ngModel]="targetingCountriesInput"
+            (ngModelChange)="onTargetingCountriesInput($event)"
+            autocomplete="off"
+            placeholder="VN, TH" />
+        </label>
+
+        <label>
+          Tuổi tối thiểu (18–65)
+          <input [(ngModel)]="deliveryForm.ageMin" type="number" min="18" max="65" />
+        </label>
+
+        <label>
+          Tuổi tối đa (18–65)
+          <input [(ngModel)]="deliveryForm.ageMax" type="number" min="18" max="65" />
+        </label>
+
+        <label>
+          Giới tính (để trống = tất cả)
+          <select multiple [(ngModel)]="deliveryForm.genders">
+            <option [ngValue]="1">Nam</option>
+            <option [ngValue]="2">Nữ</option>
+          </select>
+        </label>
+
+        <label>
+          Publisher platforms (để trống = automatic)
+          <select multiple [(ngModel)]="deliveryForm.publisherPlatforms" (ngModelChange)="onPublisherPlatformsChange()">
+            <option *ngFor="let option of publisherPlatformOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label *ngIf="deliveryForm.publisherPlatforms.includes('FACEBOOK')">
+          Facebook placements
+          <select multiple [(ngModel)]="deliveryForm.facebookPositions">
+            <option *ngFor="let option of facebookPositionOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label *ngIf="deliveryForm.publisherPlatforms.includes('INSTAGRAM')">
+          Instagram placements
+          <select multiple [(ngModel)]="deliveryForm.instagramPositions">
+            <option *ngFor="let option of instagramPositionOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Internal Ad Group ObjectId
+          <input [(ngModel)]="deliveryForm.internalAdGroupId" maxlength="24" autocomplete="off" />
+        </label>
+
+        <label>
+          Internal Product ObjectIds
+          <textarea
+            [ngModel]="internalProductIdsInput"
+            (ngModelChange)="onInternalProductIdsInput($event)"
+            rows="3"
+            placeholder="ObjectId1, ObjectId2"></textarea>
+          <small>Cần ít nhất Ad Group ID hoặc một Product ID để evidence ERP không mất liên kết.</small>
+        </label>
+
+        <label *ngIf="['MESSENGER', 'WHATSAPP', 'ON_AD'].includes(deliveryForm.destinationType)">
+          Page ID *
+          <input [(ngModel)]="deliveryForm.pageId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label *ngIf="deliveryForm.optimizationGoal === 'OFFSITE_CONVERSIONS'">
+          Pixel ID *
+          <input [(ngModel)]="deliveryForm.pixelId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label *ngIf="deliveryForm.optimizationGoal === 'OFFSITE_CONVERSIONS'">
+          Custom event *
+          <select [(ngModel)]="deliveryForm.customEventType">
+            <option *ngFor="let option of customEventOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label *ngIf="deliveryForm.destinationType === 'APP' || deliveryForm.optimizationGoal === 'APP_INSTALLS'">
+          Application ID *
+          <input [(ngModel)]="deliveryForm.applicationId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label *ngIf="deliveryForm.destinationType === 'APP' || deliveryForm.optimizationGoal === 'APP_INSTALLS'">
+          App Store HTTPS URL *
+          <input [(ngModel)]="deliveryForm.objectStoreUrl" type="url" maxlength="2048" autocomplete="off" />
+        </label>
+        </ng-container>
+      </ng-container>
+
+      <ng-container *ngIf="resourceStage() === 'creative'">
+        <label>
+          Facebook Page ID *
+          <input [(ngModel)]="deliveryForm.pageId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label>
+          Instagram Actor ID (tuỳ chọn)
+          <input [(ngModel)]="deliveryForm.instagramActorId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label class="wide">
+          Message *
+          <textarea [(ngModel)]="deliveryForm.message" maxlength="5000" rows="4"></textarea>
+        </label>
+
+        <label>
+          Headline *
+          <input [(ngModel)]="deliveryForm.headline" maxlength="255" autocomplete="off" />
+        </label>
+
+        <label>
+          Description *
+          <textarea [(ngModel)]="deliveryForm.description" maxlength="1000" rows="3"></textarea>
+        </label>
+
+        <label>
+          Call to action *
+          <select [(ngModel)]="deliveryForm.callToActionType">
+            <option *ngFor="let option of callToActionOptions()" [value]="option.value" [disabled]="option.disabled">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Destination HTTPS URL *
+          <input [(ngModel)]="deliveryForm.destinationUrl" type="url" maxlength="2048" autocomplete="off" />
+        </label>
+
+        <label>
+          Image hash (32 hex)
+          <input [(ngModel)]="deliveryForm.imageHash" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label>
+          Video ID
+          <input [(ngModel)]="deliveryForm.videoId" inputmode="numeric" maxlength="32" autocomplete="off" />
+          <small>Creative cần đúng một trong imageHash hoặc videoId.</small>
+        </label>
+
+        <label class="wide">
+          URL tags (tuỳ chọn)
+          <input [(ngModel)]="deliveryForm.urlTags" maxlength="2048" autocomplete="off" placeholder="utm_source=meta&utm_campaign=..." />
+          <small>Được gắn ở Creative; không nhập URL đầy đủ hoặc credential.</small>
+        </label>
+      </ng-container>
+
+      <ng-container *ngIf="resourceStage() === 'ad'">
+        <label>
+          Ad Set ID *
+          <input [(ngModel)]="deliveryForm.adSetId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label>
+          Creative ID *
+          <input [(ngModel)]="deliveryForm.creativeId" inputmode="numeric" maxlength="32" autocomplete="off" />
+        </label>
+
+        <div class="setup-note wide">
+          Ad sẽ tham chiếu Ad Set và Creative đã được provider tạo/readback qua ERP, và luôn được tạo ở trạng thái PAUSED.
+        </div>
+      </ng-container>
+
+      <label class="wide">
+        Lý do kinh doanh *
+        <textarea [(ngModel)]="form.reason" maxlength="500" rows="3" placeholder="Nêu mục tiêu, phê duyệt ngân sách hoặc lý do cần tạm dừng"></textarea>
+        <small>Bắt buộc ít nhất 10 ký tự; ERP không tự sinh lý do chung thay người lập plan.</small>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button class="primary" type="button" (click)="createPlan()" [disabled]="!canPlan() || !!loadingAction() || accountsLoading() || capabilitiesLoading() || (resourceStage() !== 'campaign' && !deliveryActionSupported())">
+        {{ loadingAction() === 'create' ? 'Đang lưu...' : 'Lưu bản nháp ERP' }}
+      </button>
+      <small *ngIf="!canPlan()">Thiếu quyền meta-ads.plan.</small>
+    </div>
+  </section>
+
+  <ng-template #noReadPermission>
+    <section class="panel warning-panel">Thiếu quyền meta-ads.read.</section>
+  </ng-template>
+
+  <section class="panel" *ngIf="plan() as currentPlan">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Plan {{ planId() }}</p>
+        <h2>{{ currentPlan.planName }}</h2>
+      </div>
+      <span class="status">{{ currentPlan.status }}</span>
+    </div>
+
+    <div class="timeline" aria-label="Tiến trình thực thi">
+      <div class="done"><span>1</span><strong>Draft</strong><small>Đã lưu trong ERP</small></div>
+      <div [class.done]="providerValidated()"><span>2</span><strong>Validate</strong><small>{{ providerValidated() ? 'Provider đã xác minh' : 'Chưa đạt' }}</small></div>
+      <div [class.done]="allActionsApproved()"><span>3</span><strong>Approve</strong><small>{{ allActionsApproved() ? 'Đã duyệt' : 'Chờ người khác duyệt' }}</small></div>
+      <div [class.done]="dryRunPassed()"><span>4</span><strong>Dry-run</strong><small>{{ dryRunPassed() ? 'Đã đạt' : 'Chưa chạy' }}</small></div>
+      <div [class.done]="liveExecuted()"><span>5</span><strong>Live</strong><small>{{ liveExecuted() ? 'Đã gửi qua ERP' : 'Bị chặn mặc định' }}</small></div>
+    </div>
+
+    <div class="validation-row">
+      <button type="button" (click)="validatePlan()" [disabled]="!canValidate() || !!loadingAction()">
+        {{ loadingAction() === 'validate' ? 'Đang validate...' : 'Provider validate-only' }}
+      </button>
+      <small *ngIf="currentPlan.providerValidation?.expiresAt">Hết hiệu lực: {{ currentPlan.providerValidation?.expiresAt | date:'medium' }}</small>
+      <small *ngIf="!canValidate()">Thiếu quyền meta-ads.validate.</small>
+    </div>
+
+    <div class="sod-warning" *ngIf="creatorConflict()">
+      Người tạo plan không được tự duyệt. Hãy chuyển cho tài khoản có quyền meta-ads.approve khác.
+    </div>
+
+    <article class="action-card" *ngFor="let action of currentPlan.actions">
+      <div>
+        <strong>{{ operationLabel(action.actionType) }}</strong>
+        <span class="status">{{ actionWorkflowStatus(action) }}</span>
+      </div>
+      <small>Action ID: {{ actionIdentifier(action) }}</small>
+      <small>Revision: {{ action.revision ?? 0 }}</small>
+      <small>Ad Account: {{ action.adAccountId }}</small>
+      <small *ngIf="action.campaignId">Campaign: {{ action.campaignId }}</small>
+      <small *ngIf="action.adSetId">Ad Set: {{ action.adSetId }}</small>
+      <small *ngIf="action.creativeId">Creative: {{ action.creativeId }}</small>
+      <small *ngIf="action.providerCampaignId">Provider campaign: {{ action.providerCampaignId }}</small>
+      <small *ngIf="action.providerAdSetId">Provider Ad Set: {{ action.providerAdSetId }}</small>
+      <small *ngIf="action.providerCreativeId">Provider Creative: {{ action.providerCreativeId }}</small>
+      <small *ngIf="action.providerAdId">Provider Ad: {{ action.providerAdId }}</small>
+      <dl class="configuration-summary">
+        <ng-container *ngIf="action.name"><dt>Tên</dt><dd>{{ action.name }}</dd></ng-container>
+        <ng-container *ngIf="action.objective"><dt>Objective</dt><dd>{{ action.objective }}</dd></ng-container>
+        <ng-container *ngIf="action.budgetMode"><dt>Budget</dt><dd>{{ action.budgetMode }} / {{ action.budgetType }}</dd></ng-container>
+        <ng-container *ngIf="action.dailyBudgetVnd !== undefined"><dt>Ngân sách ngày</dt><dd>{{ action.dailyBudgetVnd | number:'1.0-0' }} VND</dd></ng-container>
+        <ng-container *ngIf="action.lifetimeBudgetVnd !== undefined"><dt>Ngân sách trọn đời</dt><dd>{{ action.lifetimeBudgetVnd | number:'1.0-0' }} VND</dd></ng-container>
+        <ng-container *ngIf="action.spendCapVnd !== undefined"><dt>Spend cap</dt><dd>{{ action.spendCapVnd | number:'1.0-0' }} VND</dd></ng-container>
+        <ng-container *ngIf="action.bidStrategy"><dt>Giá thầu</dt><dd>{{ action.bidStrategy }}</dd></ng-container>
+        <ng-container *ngIf="action.startTime"><dt>Bắt đầu (+07:00)</dt><dd>{{ action.startTime | date:'medium':'+0700' }}</dd></ng-container>
+        <ng-container *ngIf="action.stopTime"><dt>Kết thúc (+07:00)</dt><dd>{{ action.stopTime | date:'medium':'+0700' }}</dd></ng-container>
+        <ng-container *ngIf="action.specialAdCategories?.length"><dt>Special categories</dt><dd>{{ action.specialAdCategories?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.specialAdCategoryCountries?.length"><dt>Quốc gia</dt><dd>{{ action.specialAdCategoryCountries?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.appId"><dt>App ID</dt><dd>{{ action.appId }}</dd></ng-container>
+        <ng-container *ngIf="action.internalAdGroupId"><dt>Internal Ad Group</dt><dd>{{ action.internalAdGroupId }}</dd></ng-container>
+        <ng-container *ngIf="action.internalProductIds?.length"><dt>Internal Products</dt><dd>{{ action.internalProductIds?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.optimizationGoal"><dt>Optimization</dt><dd>{{ action.optimizationGoal }}</dd></ng-container>
+        <ng-container *ngIf="action.billingEvent"><dt>Billing event</dt><dd>{{ action.billingEvent }}</dd></ng-container>
+        <ng-container *ngIf="action.destinationType"><dt>Destination</dt><dd>{{ action.destinationType }}</dd></ng-container>
+        <ng-container *ngIf="action.targetingCountries?.length"><dt>Target countries</dt><dd>{{ action.targetingCountries?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.ageMin !== undefined || action.ageMax !== undefined"><dt>Tuổi</dt><dd>{{ action.ageMin ?? 18 }}–{{ action.ageMax ?? 65 }}</dd></ng-container>
+        <ng-container *ngIf="action.genders?.length"><dt>Giới tính</dt><dd>{{ action.genders?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.publisherPlatforms?.length"><dt>Platforms</dt><dd>{{ action.publisherPlatforms?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.facebookPositions?.length"><dt>Facebook placements</dt><dd>{{ action.facebookPositions?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.instagramPositions?.length"><dt>Instagram placements</dt><dd>{{ action.instagramPositions?.join(', ') }}</dd></ng-container>
+        <ng-container *ngIf="action.bidAmountVnd !== undefined"><dt>Bid amount</dt><dd>{{ action.bidAmountVnd | number:'1.0-0' }} VND</dd></ng-container>
+        <ng-container *ngIf="action.pageId"><dt>Page ID</dt><dd>{{ action.pageId }}</dd></ng-container>
+        <ng-container *ngIf="action.instagramActorId"><dt>Instagram actor</dt><dd>{{ action.instagramActorId }}</dd></ng-container>
+        <ng-container *ngIf="action.pixelId"><dt>Pixel / event</dt><dd>{{ action.pixelId }} / {{ action.customEventType }}</dd></ng-container>
+        <ng-container *ngIf="action.applicationId"><dt>Application</dt><dd>{{ action.applicationId }} · {{ action.objectStoreUrl }}</dd></ng-container>
+        <ng-container *ngIf="action.message"><dt>Message</dt><dd>{{ action.message }}</dd></ng-container>
+        <ng-container *ngIf="action.headline"><dt>Headline</dt><dd>{{ action.headline }}</dd></ng-container>
+        <ng-container *ngIf="action.description"><dt>Description</dt><dd>{{ action.description }}</dd></ng-container>
+        <ng-container *ngIf="action.callToActionType"><dt>CTA</dt><dd>{{ action.callToActionType }}</dd></ng-container>
+        <ng-container *ngIf="action.destinationUrl"><dt>Destination URL</dt><dd>{{ action.destinationUrl }}</dd></ng-container>
+        <ng-container *ngIf="action.imageHash"><dt>Image hash</dt><dd>{{ shortHash(action.imageHash) }}</dd></ng-container>
+        <ng-container *ngIf="action.videoId"><dt>Video ID</dt><dd>{{ action.videoId }}</dd></ng-container>
+        <ng-container *ngIf="action.urlTags"><dt>URL tags</dt><dd>{{ action.urlTags }}</dd></ng-container>
+        <ng-container *ngIf="action.providerValidatedAt"><dt>Validated at</dt><dd>{{ action.providerValidatedAt | date:'medium' }}</dd></ng-container>
+        <ng-container *ngIf="action.providerValidationExpiresAt"><dt>Validation expires</dt><dd>{{ action.providerValidationExpiresAt | date:'medium' }}</dd></ng-container>
+        <ng-container *ngIf="action.payloadHash"><dt>Payload hash</dt><dd>{{ shortHash(action.payloadHash) }}</dd></ng-container>
+        <ng-container *ngIf="action.providerValidationBeforeStateHash"><dt>Before-state hash</dt><dd>{{ shortHash(action.providerValidationBeforeStateHash) }}</dd></ng-container>
+      </dl>
+      <p>{{ action.reason }}</p>
+      <div class="banner error" *ngIf="action.providerValidationError">
+        Provider validation{{ action.providerValidationErrorCode ? ' · ' + action.providerValidationErrorCode : '' }}:
+        {{ action.providerValidationError }}
+      </div>
+      <ul *ngIf="action.blockers?.length">
+        <li *ngFor="let blocker of action.blockers">{{ blocker }}</li>
+      </ul>
+      <div class="action-decisions" *ngIf="actionWorkflowStatus(action) !== 'approved' && actionWorkflowStatus(action) !== 'rejected'">
+        <button class="primary" type="button" (click)="approve(action)" [disabled]="!canApproveAction(action) || !!loadingAction()">Duyệt</button>
+        <input [(ngModel)]="rejectionReason" placeholder="Lý do từ chối" aria-label="Lý do từ chối" />
+        <button type="button" (click)="reject(action)" [disabled]="!canApprove() || !rejectionReason.trim() || !!loadingAction()">Từ chối</button>
+        <small *ngIf="actionWorkflowStatus(action) !== 'pending_approval' || action.providerValidationStatus !== 'passed'">
+          Chỉ được duyệt action ở trạng thái pending_approval đã qua provider validate-only.
+        </small>
+      </div>
+    </article>
+
+    <div class="execution-panel">
+      <div>
+        <h3>Thực thi qua ERP</h3>
+        <p>
+          Dry-run và live dùng cùng action đã duyệt. Frontend bắt buộc dry-run đạt trong phiên hiện tại trước khi mở nút live;
+          backend vẫn là nơi kiểm tra authoritative trước provider mutation.
+        </p>
+      </div>
+      <button type="button" (click)="execute(true)" [disabled]="!canExecute() || !allActionsApproved() || !providerValidated() || !!loadingAction()">
+        {{ loadingAction() === 'dry-run' ? 'Đang dry-run...' : 'Chạy dry-run' }}
+      </button>
+
+      <div class="live-confirmation">
+        <label>
+          Gõ đúng tên plan để xác nhận live
+          <input [(ngModel)]="liveConfirmation" [placeholder]="currentPlan.planName" autocomplete="off" />
+        </label>
+        <button class="danger" type="button" (click)="execute(false)" [disabled]="!canExecute() || !liveEligible() || !dryRunPassed() || approverConflict() || liveConfirmation !== currentPlan.planName || !!loadingAction()">
+          {{ loadingAction() === 'live' ? 'Đang gửi...' : 'Thực thi live qua ERP' }}
+        </button>
+      </div>
+
+      <div class="sod-warning" *ngIf="approverConflict()">Người duyệt không được tự thực thi live.</div>
+      <div class="blockers" *ngIf="!liveEligible() || liveBlockers().length">
+        <strong>Live chưa đủ điều kiện từ máy chủ</strong>
+        <ul><li *ngFor="let blocker of liveBlockers()">{{ blocker }}</li></ul>
+        <small *ngIf="!liveBlockers().length">ERP chưa trả liveEligible=true.</small>
+      </div>
+      <small *ngIf="!canExecute()">Thiếu quyền meta-ads.execute.</small>
+    </div>
+  </section>
+</div>

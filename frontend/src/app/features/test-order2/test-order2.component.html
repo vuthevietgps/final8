@@ -1,8 +1,10 @@
+<app-order-operations *ngIf="operationsOrderId" [orderId]="operationsOrderId" [suppliers]="suppliers()" [agents]="agents()" (closed)="operationsOrderId=''" (changed)="refresh()" />
 <div class="test-order2-page">
   <div class="toolbar">
     <div class="left">
   <button *ngIf="canAddNew() && currentUserRole() !== 'internal_agent' && currentUserRole() !== 'external_agent'" class="btn btn-primary" (click)="addNew()" aria-label="Thêm đơn mới">➕ Thêm mới</button>
       <button class="btn" (click)="refresh()" aria-label="Làm mới dữ liệu">🔄 Làm mới</button>
+      <a *ngIf="canManageLedger()" class="btn" routerLink="/finance/business-ledger">📒 Công nợ & tiền thực nhận</a>
       <button class="btn btn-success" (click)="downloadCSV()" aria-label="Tải Excel">📥 Tải Excel</button>
       <button *ngIf="!isSupplier()" class="btn btn-info" (click)="downloadSupplierExcel()" aria-label="Tải Excel NCC">📊 Excel NCC</button>
       <button *ngIf="!isSupplier()" class="btn btn-warning" (click)="downloadAgentExcel()" aria-label="Tải Excel Đại lý">📊 Excel ĐL</button>
@@ -14,6 +16,34 @@
     </div>
   </div>
 
+  <div *ngIf="newOrderDialogOpen()" class="new-order-source-panel">
+    <strong>Chọn nguồn khách hàng trước khi tạo đơn</strong>
+    <label>
+      <input type="radio" name="newOrderAcquisition" value="ads" [ngModel]="newCustomerAcquisitionSource()"
+        (ngModelChange)="newCustomerAcquisitionSource.set($event)" /> Từ quảng cáo
+    </label>
+    <label>
+      <input type="radio" name="newOrderAcquisition" value="non_ads" [ngModel]="newCustomerAcquisitionSource()"
+        (ngModelChange)="newCustomerAcquisitionSource.set($event); newAdAttributionSelectionKey.set('')" /> Không từ quảng cáo / khách vãng lai
+    </label>
+    <select *ngIf="newCustomerAcquisitionSource() === 'ads'" class="select"
+      [ngModel]="newAdAttributionSelectionKey()" (ngModelChange)="newAdAttributionSelectionKey.set($event)">
+      <option value="">-- Bắt buộc chọn nhóm quảng cáo --</option>
+      <option *ngFor="let g of adGroups()" [value]="g.selectionKey">{{ g.label }}{{ g.status ? ' — ' + g.status : '' }}</option>
+    </select>
+    <div class="new-order-source-actions">
+      <button class="btn" type="button" (click)="cancelAddNew()">Hủy</button>
+      <button class="btn btn-primary" type="button" (click)="createNewOrder()">Tạo đơn</button>
+    </div>
+  </div>
+
+  <div *ngIf="!isSupplier()" class="ads-sync-state" [class.warning]="!adsOptionsSyncedAt()">
+    <ng-container *ngIf="adsOptionsSyncedAt(); else noWindsorSync">
+      Nhóm quảng cáo Windsor trong ERP được đồng bộ gần nhất: {{ adsOptionsSyncedAt() | date:'dd/MM/yyyy HH:mm' }}
+    </ng-container>
+    <ng-template #noWindsorSync>Windsor chưa đồng bộ dữ liệu nhóm quảng cáo vào ERP; dropdown hiện chỉ có danh mục nội bộ.</ng-template>
+  </div>
+
   <div class="filters-grid">
     <input class="input" type="text" placeholder="Tìm KH/SĐT/mã vận đơn" [ngModel]="q()"
       (ngModelChange)="onFilterChange('q', $event)" />
@@ -23,7 +53,7 @@
     </select>
     <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedAgent()" (ngModelChange)="onFilterChange('agent', $event)">
       <option value="all">Đại lý: Tất cả</option>
-      <option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
+      <option value="">Bán lẻ</option><option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
     </select>
     <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedSupplier()" (ngModelChange)="onFilterChange('supplier', $event)">
       <option value="all">Nhà cung cấp: Tất cả</option>
@@ -31,7 +61,7 @@
     </select>
     <select *ngIf="!isSupplier()" class="select" [ngModel]="selectedAdGroup()" (ngModelChange)="onFilterChange('adGroup', $event)">
       <option value="all">ID Nhóm QC: Tất cả</option>
-      <option *ngFor="let g of adGroups()" [value]="g._id">{{ g._id }}</option>
+      <option *ngFor="let g of adGroups()" [value]="g.adGroupId">{{ g.label }}</option>
     </select>
 
     <select class="select status-select" [ngModel]="selectedProductionStatus()"
@@ -115,6 +145,11 @@
             <th class="col-tracking">Mã vận đơn</th>
             <th class="col-wide">Đặt cọc</th>
             <th class="col-wide">COD</th>
+            <th *ngIf="isDirector()" class="col-wide">Giá bán lẻ cả đơn</th>
+            <th *ngIf="isDirector()" class="col-wide">Phí giao / đơn</th>
+            <th *ngIf="isDirector()" class="col-wide">Phí hoàn / đơn</th>
+            <th *ngIf="isDirector()" class="col-wide" title="Đã trừ chi phí phân bổ; chưa gồm điều chỉnh nhập riêng trong sổ kinh doanh.">Lãi trước điều chỉnh sổ</th>
+            <th *ngIf="isDirector()" class="col-wider">Hàng hoàn giữ hộ</th>
             <th class="col-wider">Người nhận</th>
             <th class="col-wide">SĐT</th>
             <th class="col-wider">Địa chỉ</th>
@@ -144,6 +179,7 @@
             <!-- Đại lý: hidden for suppliers -->
             <td *ngIf="!isSupplier()" class="col-agent">
               <select [ngModel]="getId(o.agentId)" (change)="onSelectUpdate(o, 'agentId', $event)">
+                <option value="">Công ty / bán lẻ</option>
                 <option *ngFor="let a of agents()" [value]="a._id">{{ a.name }}</option>
               </select>
             </td>
@@ -152,7 +188,14 @@
             </td>
             <!-- ID Nhóm QC: hidden for suppliers -->
             <td *ngIf="!isSupplier()" class="col-wide">
-              <input type="text" [ngModel]="o.adGroupId" (ngModelChange)="o.adGroupId=$event" list="adGroupOptions" (blur)="onAdGroupIdBlur(o, $event)" placeholder="Nhập hoặc dán ID nhóm QC" />
+              <select class="ad-attribution-select" [ngModel]="adAttributionSelectionKey(o)" (change)="onAdAttributionSelect(o, $event)"
+                [title]="o.adGroupNameSnapshot || o.adGroupId || 'Chưa gắn nguồn quảng cáo'">
+                <option value="">Không có nhóm quảng cáo</option>
+                <option *ngIf="o.adGroupId && adAttributionSelectionKey(o).startsWith('legacy:')" [value]="adAttributionSelectionKey(o)">
+                  ID cũ/chưa đồng bộ: {{ o.adGroupId }}
+                </option>
+                <option *ngFor="let g of adGroups()" [value]="g.selectionKey">{{ g.label }}{{ g.status ? ' — ' + g.status : '' }}</option>
+              </select>
             </td>
             <!-- Kích hoạt: hidden for suppliers -->
             <td *ngIf="!isSupplier()" class="col-active text-center">
@@ -169,7 +212,7 @@
             </td>
             <!-- TT Vận đơn: editable for all -->
             <td class="w-order-status col-order-status" [ngStyle]="statusCellStyle('del', o.orderStatus || 'Chưa có mã vận đơn')">
-              <select class="w-100 status-dropdown" [ngModel]="o.orderStatus || 'Chưa có mã vận đơn'"
+              <select class="w-100 status-dropdown" [disabled]="!!o.shipments?.length" [ngModel]="o.orderStatus || 'Chưa có mã vận đơn'"
                 (change)="onSelectUpdate(o, 'orderStatus', $event)"
                 [ngStyle]="statusSelectStyle('del', o.orderStatus || 'Chưa có mã vận đơn')">
                 <option *ngFor="let s of orderStatuses()" [value]="s" [ngStyle]="getStatusOptionStyle('del', s)">{{ s }}</option>
@@ -191,29 +234,41 @@
             <!-- Link nộp: editable for all -->
             <td class="col-wide col-submit-link"><input type="text" [ngModel]="o.submitLink" (blur)="onInputUpdate(o, 'submitLink', $event)" /></td>
             <!-- Mã vận đơn: editable for all -->
-            <td class="col-tracking"><input type="text" [ngModel]="o.trackingNumber" (blur)="onInputUpdate(o, 'trackingNumber', $event)" /></td>
+            <td class="col-tracking"><input type="text" [disabled]="o.financialModelVersion === 2 || !!o.shipments?.length" [ngModel]="o.trackingNumber" (blur)="onInputUpdate(o, 'trackingNumber', $event)" /></td>
             <!-- Đặt cọc: editable for all -->
             <td class="col-wide"><input type="number" min="0" step="1000" [ngModel]="o.depositAmount"
                 (blur)="onInputUpdate(o, 'depositAmount', $event)" /></td>
             <!-- COD: editable for all -->
             <td class="col-wide"><input type="number" min="0" step="1000" [ngModel]="o.codAmount"
                 (blur)="onInputUpdate(o, 'codAmount', $event)" /></td>
+
+            <td *ngIf="isDirector()" class="col-wide"><input *ngIf="o.saleMode !== 'dealer'" type="number" min="0" [ngModel]="o.retailSaleAmount" (blur)="onInputUpdate(o, 'retailSaleAmount', $event)" placeholder="Tổng giá bán" title="Toàn bộ giá bán; không trừ cọc hoặc tiền trả trước" /></td>
+            <td *ngIf="isDirector()" class="col-wide"><input [disabled]="!!o.shipments?.length" type="number" min="0" [ngModel]="o.shippingFee" (blur)="onInputUpdate(o, 'shippingFee', $event)" /></td>
+            <td *ngIf="isDirector()" class="col-wide"><input type="number" min="0" [disabled]="!!o.shipments?.length" [ngModel]="o.returnFee" (blur)="onInputUpdate(o, 'returnFee', $event)" title="Chỉ tính khi đơn hoàn; đại lý chịu khoản này sau khi đã xuất hàng" /></td>
+            <td *ngIf="isDirector()" class="col-wide" [title]="'Doanh thu hàng: ' + (o.recognizedRevenue || 0) + ' · Giá vốn: ' + (o.recognizedGoodsCost || 0) + ' · Phí thu lại từ đại lý: ' + (o.dealerRecoverableFees || 0)">
+              <span *ngIf="(o.dealerProfitState === 'recognized' || o.retailProfitState === 'recognized')">{{ o.netProfit | number:'1.0-0' }} đ</span><small *ngIf="o.profitAssessment?.state === 'provisional'" [title]="o.profitAssessment?.reasons?.join('; ') || ''"> · Tạm tính</small>
+              <span *ngIf="(o.dealerProfitState === 'missing_quotes' || o.retailProfitState === 'missing_quotes')">Thiếu báo giá</span>
+              <span *ngIf="o.saleMode !== 'dealer' && !o.retailProfitState">Chưa tính lại</span>
+              <span *ngIf="o.retailProfitState === 'missing_sale_price'">Thiếu giá bán lẻ</span>
+              <span *ngIf="o.retailProfitState === 'awaiting_delivery'">Chờ giao thành công</span>
+              <span *ngIf="o.saleMode === 'dealer' && o.dealerProfitState !== 'recognized' && o.dealerProfitState !== 'missing_quotes'">Chưa ghi nhận</span>
+            </td>
+            <td *ngIf="isDirector()" class="col-wider"><button class="btn btn-sm" (click)="operationsOrderId=o._id">Giao / nhận hoàn</button>
+              <span *ngIf="o.returnDisposition === 'dealer_custody'" title="Hàng thuộc đại lý; công ty nhận lại để giữ hộ. Doanh thu và giá vốn của đơn vẫn giữ nguyên.">Hàng của đại lý</span>
+            </td>
             <!-- Người nhận: editable for all -->
             <td class="col-wider"><input type="text" [ngModel]="o.receiverName" (blur)="onInputUpdate(o, 'receiverName', $event)" /></td>
             <!-- SĐT: editable for all -->
             <td class="col-wide"><input type="text" [ngModel]="o.receiverPhone" (blur)="onInputUpdate(o, 'receiverPhone', $event)" /></td>
             <!-- Địa chỉ: editable for all -->
             <td class="col-wider"><input type="text" [ngModel]="o.receiverAddress" (blur)="onInputUpdate(o, 'receiverAddress', $event)" /></td>
-          <td class="center col-delete" *ngIf="canDelete() && currentUserRole() !== 'internal_agent' && currentUserRole() !== 'external_agent'"><button class="btn btn-sm btn-danger" (click)="delete(o)">Xóa</button></td>
+          <td class="center col-delete" *ngIf="canDelete() && currentUserRole() !== 'internal_agent' && currentUserRole() !== 'external_agent'"><a *ngIf="canManageLedger()" class="btn btn-sm" routerLink="/finance/business-ledger" [queryParams]="{orderId: o._id}">Sổ tiền</a><button class="btn btn-sm btn-danger" (click)="delete(o)">Xóa</button></td>
           </tr>
           <tr *ngIf="orders().length===0">
-            <td class="center muted" [attr.colspan]="isSupplier() ? 13 : 17">Chưa có đơn</td>
+            <td class="center muted" [attr.colspan]="(isSupplier() ? 13 : 17) + (isDirector() ? 5 : 0)">Chưa có đơn</td>
           </tr>
         </tbody>
       </table>
-      <datalist id="adGroupOptions">
-        <option *ngFor="let g of adGroups()" [value]="g._id"></option>
-      </datalist>
     </div>
   </div>
 

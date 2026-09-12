@@ -32,6 +32,12 @@ export class GoogleAdsKeyword {
   @Prop({ trim: true })
   status?: string;
 
+  @Prop({ type: Number, min: 0 })
+  cpcBidMicros?: number;
+
+  @Prop({ type: [String], default: [] })
+  finalUrls: string[];
+
   @Prop({ type: Number, min: 0, max: 10 })
   qualityScore?: number;
 

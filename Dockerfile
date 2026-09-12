@@ -1,14 +1,16 @@
 # Stage 1: Build the Angular application
-FROM node:20-alpine as build
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
 # Copy package.json and package-lock.json to leverage Docker cache
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm install
+RUN npm ci
 
 # Copy the rest of the application files
-COPY frontend/. .
+COPY frontend/angular.json frontend/tsconfig*.json ./
+COPY frontend/src ./src
+COPY frontend/public ./public
 
 # Build the application
 RUN npm run build

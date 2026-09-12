@@ -116,10 +116,13 @@ export class AiDeliveryRecoveryService {
     };
     let fbRes: any = null;
     try {
-      const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(pageAccessToken)}`;
+      const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages`;
       fbRes = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${pageAccessToken}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       }).then((r) => r.json());
     } catch (error: any) {

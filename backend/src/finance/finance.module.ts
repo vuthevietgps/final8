@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BusinessLedgerModule } from '../business-ledger/business-ledger.module';
 import { FinanceService } from './finance.service';
 import { FinanceController } from './finance.controller';
 import { BudgetAllocationController } from './budget-allocation.controller';
@@ -66,9 +67,14 @@ import { FinanceEventListenerService } from './events/finance-event-listener.ser
 import { FinancialSnapshotRebuildController } from './financial-snapshot-rebuild.controller';
 import { AdvertisingCostModule } from '../advertising-cost/advertising-cost.module';
 import { TestOrder2Module } from '../test-order2/test-order2.module';
+import { ProviderConnectionsModule } from '../provider-connections/provider-connections.module';
+import { AdsCostProjectionService } from './ads-cost-projection.service';
+import { AdvertisingCostRefreshModule } from '../advertising-cost/advertising-cost-refresh.module';
 
 @Module({
   imports: [
+    BusinessLedgerModule,
+    AdvertisingCostRefreshModule,
     MongooseModule.forFeature([
       { name: FundingSource.name, schema: FundingSourceSchema },
       { name: BudgetBucket.name, schema: BudgetBucketSchema },
@@ -109,6 +115,7 @@ import { TestOrder2Module } from '../test-order2/test-order2.module';
     forwardRef(() => OwnerFundModule),
     forwardRef(() => AdvertisingCostModule),
     forwardRef(() => TestOrder2Module),
+    ProviderConnectionsModule,
   ],
   controllers: [
     FinanceController, 
@@ -121,6 +128,7 @@ import { TestOrder2Module } from '../test-order2/test-order2.module';
     LoanManagementController,
   ],
   providers: [
+    AdsCostProjectionService,
     FinanceService, 
     BudgetAllocationService,
     LoanManagementService, 

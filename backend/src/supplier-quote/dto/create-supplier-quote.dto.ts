@@ -4,7 +4,8 @@ import {
   IsDateString,
   IsMongoId,
   IsNotEmpty,
-  IsNumber,
+  IsInt,
+  Max,
   IsOptional,
   IsString,
   MaxLength,
@@ -22,7 +23,8 @@ export class CreateSupplierQuoteDto {
 
   @IsNotEmpty()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   price!: number;
 
@@ -46,13 +48,15 @@ export class CreateSupplierQuoteDto {
 
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   shippingFee?: number;
 
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   returnFee?: number;
 }

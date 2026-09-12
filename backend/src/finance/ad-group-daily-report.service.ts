@@ -1,5 +1,8 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { Optional } from '@nestjs/common';
+import { BusinessLedgerService } from '../business-ledger/business-ledger.service';
+import { BadRequestException } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
@@ -102,6 +105,7 @@ export class AdGroupDailyReportService {
     @InjectModel(AdGroupDailyReport.name) private readonly reportModel: Model<AdGroupDailyReportDocument>,
     @InjectModel(CapitalAllocationSnapshot.name) private readonly snapshotModel: Model<CapitalAllocationSnapshotDocument>,
     @InjectModel(AdsDailySpending.name) private readonly adsSpendingModel: Model<AdsDailySpendingDocument>,
+    @Optional() private readonly ledger?: BusinessLedgerService,
   ) {}
 
   /**
@@ -120,6 +124,7 @@ export class AdGroupDailyReportService {
         {
           $match: {
             orderDate: { $gte: startDate, $lte: endDate },
+            isActive: { $ne: false },
             adGroupId: { $exists: true, $nin: [null, '', '0'] }
           }
         },
@@ -129,6 +134,8 @@ export class AdGroupDailyReportService {
             // Tổng giá trị lợi nhuận đã phân bổ (với các chi phí cơ bản của sản phẩm)
             // Lợi nhuận của từng đơn hàng từ hàm orderCalculation (chưa có ads cost)
             grossProfit: { $sum: '$grossProfit' },
+            laborCost: { $sum: '$laborCostAllocation' },
+            otherCost: { $sum: '$otherCostAllocation' },
             orderNetProfit: { $sum: '$netProfit' } // Net profit sau phân bổ chi phí có ads (có thể thiếu tính chính xác nếu là 0 order)
           }
         }
@@ -147,10 +154,43 @@ export class AdGroupDailyReportService {
         {
           $group: {
             _id: '$adGroupId',
-            actualSpent: { $sum: '$spentAmount' }
+            actualSpent: {
+              $sum: {
+                $cond: [
+                  { $and: [
+                    { $isNumber: '$spentAmount' },
+                    { $gte: ['$spentAmount', 0] },
+                    { $lte: ['$spentAmount', 1_000_000_000_000] },
+                  ] },
+                  '$spentAmount',
+                  0,
+                ],
+              },
+            },
+            invalidCount: {
+              $sum: {
+                $cond: [
+                  { $and: [
+                    { $isNumber: '$spentAmount' },
+                    { $gte: ['$spentAmount', 0] },
+                    { $lte: ['$spentAmount', 1_000_000_000_000] },
+                  ] },
+                  0,
+                  1,
+                ],
+              },
+            },
+            identities: { $addToSet: { channel: '$channel', customerId: '$customerId' } },
+            estimatedRows: { $sum: { $cond: ['$isEstimated', 1, 0] } },
           }
         }
       ]).toArray();
+      if (adsAggregated.some((row: any) => Number(row.invalidCount || 0) > 0)) {
+        throw new BadRequestException('Có chi phí quảng cáo không hợp lệ; không đồng bộ báo cáo lợi nhuận.');
+      }
+      if (adsAggregated.some((row: any) => Array.isArray(row.identities) && row.identities.length > 1)) {
+        throw new BadRequestException('Trùng adGroupId giữa nhiều tài khoản quảng cáo; không thể gộp lợi nhuận an toàn.');
+      }
 
       // 3. Merge dữ liệu lại bằng adGroupId
       const mergedMap = new Map();
@@ -160,6 +200,7 @@ export class AdGroupDailyReportService {
         mergedMap.set(item._id, {
           adGroupId: item._id,
           grossProfit: item.grossProfit || 0,
+          laborCost: item.laborCost || 0, otherCost: item.otherCost || 0,
           orderNetProfit: item.orderNetProfit || 0,
           adsCost: 0,
           netProfit: item.orderNetProfit || 0
@@ -174,8 +215,9 @@ export class AdGroupDailyReportService {
         if (mergedMap.has(agId)) {
           const mapping = mergedMap.get(agId);
           mapping.adsCost = actualAds;
+          mapping.adsCostEstimated = adsItem.estimatedRows > 0;
           // recalculate netProfit from gross - adsCost
-          mapping.netProfit = mapping.grossProfit - actualAds;
+          mapping.netProfit = mapping.grossProfit - mapping.laborCost - mapping.otherCost - actualAds;
         } else {
           // Lãi khống: 0 đơn nhưng có chi tiêu Ads
           mergedMap.set(agId, {
@@ -183,12 +225,15 @@ export class AdGroupDailyReportService {
             grossProfit: 0,
             orderNetProfit: -actualAds,
             adsCost: actualAds,
+            adsCostEstimated: adsItem.estimatedRows > 0,
             netProfit: -actualAds
           });
         }
       }
 
-      const finalAggregated = Array.from(mergedMap.values());
+      const finalAggregated = this.ledger
+        ? (await this.canonicalDay(date)).details
+        : Array.from(mergedMap.values());
 
       // Lấy thông tin ad group
       const adGroupIds = finalAggregated.map(item => item.adGroupId);
@@ -208,6 +253,7 @@ export class AdGroupDailyReportService {
                 adGroupName: adGroup?.name || '',
                 platform: adGroup?.platform || '',
                 adsCost: item.adsCost,
+                adsCostEstimated: item.adsCostEstimated === true,
                 netProfit: item.netProfit,
                 syncedAt: new Date()
               }
@@ -221,14 +267,10 @@ export class AdGroupDailyReportService {
         const result = await this.reportModel.bulkWrite(bulkOps);
         this.logger.log(`✅ Đồng bộ thành công: ${result.upsertedCount} mới, ${result.modifiedCount} cập nhật`);
 
-        // Tự động cập nhật reinvestmentUsed với tổng chi phí ads trong ngày
-        const totalAdsCost = finalAggregated.reduce((sum, item) => sum + item.adsCost, 0);
-        if (totalAdsCost > 0) {
-          await this.updateReinvestmentUsed(date, totalAdsCost);
-        }
-      } else {
-        this.logger.log(`⚠️ Không có dữ liệu để đồng bộ cho ngày ${date}`);
       }
+      // Remove projections whose underlying costs/orders have disappeared, including a zero-spend correction.
+      await this.reportModel.deleteMany({ date, adGroupId: { $nin: adGroupIds } });
+      await this.updateReinvestmentUsed(date, finalAggregated.reduce((sum, item) => sum + item.adsCost, 0));
 
       return { success: true, date, recordsProcessed: bulkOps.length };
     } catch (error) {
@@ -248,6 +290,29 @@ export class AdGroupDailyReportService {
     platform?: string;
   }) {
     const { fromDate, toDate, adGroupId, platform } = params;
+    if (this.ledger) {
+      const to = toDate || this.getBusinessDateStringDaysAgo(0);
+      const from = fromDate || to.slice(0, 7) + '-01';
+      const start = this.getBusinessDayRangeUtc(from).start;
+      const end = this.getBusinessDayRangeUtc(to).start;
+      const days = (+end - +start) / 86400000 + 1;
+      if (!Number.isInteger(days) || days < 1 || days > 93)
+        throw new BadRequestException('Chọn khoảng báo cáo từ 1 đến 93 ngày.');
+      const details: any[] = [];
+      const quality: any[] = [];
+      for (let day = 0; day < days; day++) {
+        const date = new Date(+start + day * 86400000 + BUSINESS_UTC_OFFSET_MS).toISOString().slice(0, 10);
+        const result = await this.canonicalDay(date);
+        details.push(...result.details.filter(row => (!adGroupId || row.adGroupId === adGroupId)
+          && (!platform || row.platform === platform)));
+        quality.push({ date, ...result.quality });
+      }
+      details.sort((a, b) => b.date.localeCompare(a.date) || b.netProfit - a.netProfit);
+      return { details, summary: details.reduce((sum, row) => ({
+        totalAdsCost: sum.totalAdsCost + row.adsCost, totalNetProfit: sum.totalNetProfit + row.netProfit,
+      }), { totalAdsCost: 0, totalNetProfit: 0 }), dateRange: { from, to },
+      basis: 'business_ledger_live', quality };
+    }
 
     // Build query
     const query: any = {};
@@ -303,6 +368,19 @@ export class AdGroupDailyReportService {
   /**
    * Top nhóm quảng cáo theo lợi nhuận thuần
    */
+  private async canonicalDay(date: string) {
+    const report = await this.ledger!.report(date, date);
+    const groups = await this.adGroupModel.find({ adGroupId: { $in: report.adGroups.map(g => g.key) } }).lean().exec();
+    const metadata = new Map(groups.map(g => [g.adGroupId, g]));
+    return { quality: report.quality, details: report.adGroups.map(row => ({
+      date, adGroupId: row.key, adGroupName: metadata.get(row.key)?.name || row.name || row.key,
+      platform: metadata.get(row.key)?.platform || '', adsCost: row.advertisingCost,
+      netProfit: row.recordedNetProfit, adsCostEstimated: report.quality.estimatedAdsRows > 0,
+      revenue: row.revenue, costs: row.cogs + row.expense + row.advertisingCost,
+      needsReview: row.profitNeedsReview > 0, syncedAt: new Date(),
+    })) };
+  }
+
   async getTopAdGroups(params: {
     fromDate?: string;
     toDate?: string;
@@ -324,6 +402,18 @@ export class AdGroupDailyReportService {
       }
     }
 
+    if (this.ledger) {
+      const report = await this.getAdGroupDailyReport({ fromDate, toDate });
+      const grouped = new Map<string, any>();
+      for (const row of report.details) {
+        const current = grouped.get(row.adGroupId) || { adGroupId: row.adGroupId,
+          adGroupName: row.adGroupName, platform: row.platform, adsCost: 0, netProfit: 0 };
+        current.adsCost += row.adsCost; current.netProfit += row.netProfit;
+        grouped.set(row.adGroupId, current);
+      }
+      const field = sortBy === 'profit' ? 'netProfit' : 'adsCost';
+      return { topAdGroups: [...grouped.values()].sort((a, b) => b[field] - a[field]).slice(0, limit) };
+    }
     // Aggregate by adGroupId
     const pipeline: any[] = [
       { $match: query },
@@ -332,8 +422,8 @@ export class AdGroupDailyReportService {
           _id: '$adGroupId',
           adGroupName: { $first: '$adGroupName' },
           platform: { $first: '$platform' },
-          allocatedAdsCost: { $sum: '$adsCost' },
-          netProfitWithAllocatedCost: { $sum: '$netProfit' }
+          adsCost: { $sum: '$adsCost' },
+          netProfit: { $sum: '$netProfit' }
         }
       },
       {
@@ -877,6 +967,19 @@ export class AdGroupDailyReportService {
   }
 
   private async loadHistoricalReports(fromDate: string): Promise<RawHistoryByAdGroup[]> {
+    if (this.ledger) {
+      const current = await this.getAdGroupDailyReport({ fromDate, toDate: this.getBusinessDateStringDaysAgo(1) });
+      const grouped = new Map<string, RawHistoryByAdGroup>();
+      for (const row of current.details) {
+        if (row.adGroupId === 'unallocated' || row.needsReview || row.adsCostEstimated) continue;
+        const group = grouped.get(row.adGroupId) || { _id: row.adGroupId,
+          adGroupName: row.adGroupName, platform: row.platform, records: [], totalSpend: 0, totalProfit: 0, dayCount: 0 };
+        group.records.push({ date: row.date, adsCost: row.adsCost, netProfit: row.netProfit });
+        group.totalSpend += row.adsCost; group.totalProfit += row.netProfit; group.dayCount++;
+        grouped.set(row.adGroupId, group);
+      }
+      return [...grouped.values()];
+    }
     return this.reportModel.aggregate([
       { $match: { date: { $gte: fromDate } } },
       { $sort: { date: -1 } },
@@ -968,83 +1071,37 @@ export class AdGroupDailyReportService {
 
     return {
       summary: report.summary,
+      ...report,
       details: detailsWithSuggestions,
       dateRange: report.dateRange
     };
   }
 
-  /**
-   * Cập nhật reinvestmentUsed của snapshot với chi phí ads trong ngày
-   * IDEMPOTENT: Chỉ cập nhật 1 lần cho mỗi ngày, tránh trùng lặp khi re-sync
-   *
-   * LOGIC:
-   * 1. Tìm snapshot của ngày đó (hoặc gần nhất trước ngày đó)
-   * 2. Kiểm tra đã track chi phí ngày này chưa (dựa vào ads_daily_spendings)
-   * 3. Nếu chưa → Tạo record tracking + cập nhật snapshot.reinvestmentUsed
-   * 4. Nếu rồi → Skip (tránh cộng trùng)
-   */
+  /** Apply the difference, retaining the originally assigned snapshot. Both writes commit atomically. */
   private async updateReinvestmentUsed(date: string, adsCost: number) {
+    const session = await this.snapshotModel.db.startSession();
     try {
-      // 1. Tìm snapshot phù hợp (của ngày đó hoặc gần nhất trước đó)
-      const targetDate = new Date(date);
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const snapshot = await this.snapshotModel
-        .findOne({
-          date: { $lte: endOfDay }
-        })
-        .sort({ date: -1 })
-        .exec();
-
-      if (!snapshot) {
-        this.logger.warn(`⚠️ Không tìm thấy snapshot để cập nhật reinvestmentUsed cho ngày ${date}`);
-        return;
-      }
-
-      // 2. Kiểm tra đã track chi phí ngày này chưa (IDEMPOTENCY CHECK)
-      const existing = await this.adsSpendingModel.findOne({
-        date,
-        snapshotId: snapshot._id
+      await session.withTransaction(async () => {
+        const existing = await this.adsSpendingModel.findOne({ date }).sort({ createdAt: 1 }).session(session).lean();
+        const snapshot = existing
+          ? await this.snapshotModel.findById(existing.snapshotId).session(session).lean()
+          : await this.snapshotModel.findOne({ date: { $lte: new Date(`${date}T23:59:59.999+07:00`) } })
+            .sort({ date: -1 }).session(session).lean();
+        if (!snapshot) {
+          if (existing) throw new Error('Ads spending references a missing capital snapshot');
+          return; // No capital allocation exists yet; this is not a bank transaction.
+        }
+        const reports = await this.reportModel.find({ date }).session(session).lean();
+        const breakdown = reports.map(r => ({ adGroupId: r.adGroupId, adGroupName: r.adGroupName, adsCost: r.adsCost }));
+        const delta = adsCost - Number(existing?.totalAdsCost || 0);
+        await this.adsSpendingModel.updateOne({ date, snapshotId: snapshot._id }, { $set: {
+          totalAdsCost: adsCost, breakdown, syncedAt: new Date(), source: existing ? 're-sync' : 'auto-sync',
+          note: reports.some(r => r.adsCostEstimated) ? 'Chi phí tạm tính; chờ đối soát Windsor.' : '',
+        } }, { upsert: true, session });
+        if (delta !== 0) await this.snapshotModel.updateOne({ _id: snapshot._id }, {
+          $inc: { reinvestmentUsed: delta },
+        }, { session });
       });
-
-      if (existing) {
-        this.logger.log(`ℹ️ Chi phí ads ngày ${date} đã được cập nhật vào snapshot ${snapshot.date}, skip để tránh trùng`);
-        return;
-      }
-
-      // 3. Lấy breakdown chi tiết từ ad_group_daily_reports
-      const reports = await this.reportModel.find({ date }).lean().exec();
-      const breakdown = reports.map(r => ({
-        adGroupId: r.adGroupId,
-        adGroupName: r.adGroupName,
-        adsCost: r.adsCost
-      }));
-
-      // 4. Tạo record tracking mới
-      await this.adsSpendingModel.create({
-        date,
-        snapshotId: snapshot._id,
-        totalAdsCost: adsCost,
-        breakdown,
-        syncedAt: new Date(),
-        source: 'auto-sync'
-      });
-
-      // 5. Cập nhật snapshot.reinvestmentUsed
-      snapshot.reinvestmentUsed += adsCost;
-      await snapshot.save();
-
-      this.logger.log(`💰 Đã cập nhật reinvestmentUsed +${adsCost.toLocaleString()} VND cho snapshot ${snapshot.date.toISOString().split('T')[0]} (tổng: ${snapshot.reinvestmentUsed.toLocaleString()})`);
-    } catch (error) {
-      // Nếu lỗi duplicate key (E11000) → Bỏ qua (có thể do race condition)
-      if (error.code === 11000) {
-        this.logger.log(`ℹ️ Chi phí ads ngày ${date} đã được cập nhật, skip`);
-        return;
-      }
-      this.logger.error(`❌ Lỗi cập nhật reinvestmentUsed: ${error.message}`, error.stack);
-    }
+    } finally { await session.endSession(); }
   }
 }

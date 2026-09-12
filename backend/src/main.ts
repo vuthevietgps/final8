@@ -135,7 +135,7 @@ async function bootstrap() {
   }
   console.log('[webhook] Messenger endpoint:', webhookUrl);
 
-  await app.listen(port);
+  await app.listen(port, process.env.ERP_LOCAL_SANDBOX === 'true' ? '127.0.0.1' : '0.0.0.0');
   console.log(`Backend server is running on http://localhost:${port}`);
 }
 

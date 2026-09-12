@@ -4,11 +4,15 @@
  */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { DEALER_RETURN_POLICIES, DealerReturnPolicy } from '../../common/dealer-return-policy';
 
 export type ProductDocument = Product & Document;
 
 @Schema({ timestamps: true })
 export class Product {
+  // Resalability is independent of supplier payment liability or return acceptance.
+  @Prop({ type: String, enum: ['not_resellable', 'resellable', 'inspect'], default: 'inspect' })
+  resalePolicy?: string;
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -59,6 +63,16 @@ export class Product {
   // Cho phép xác định hàng có thể hoàn về nhà cung cấp khi giao không thành công
   @Prop({ type: Boolean, default: true })
   isReturnable: boolean;
+
+  // Separate financial policy from the physical ability to return a product.
+  @Prop({ enum: ['unconfigured', 'recoverable', 'production_committed'], default: 'unconfigured' })
+  ledgerReturnPolicy: string;
+
+  @Prop({ type: String, enum: DEALER_RETURN_POLICIES, default: 'unconfigured' })
+  dealerReturnPolicy: DealerReturnPolicy;
+
+  @Prop({ trim: true, maxlength: 500 })
+  dealerReturnTerms?: string;
 
   @Prop({ type: Number, min: 0, max: 95, default: 20 })
   assumedReturnRatePercent: number;

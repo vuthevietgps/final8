@@ -1,7 +1,10 @@
 ﻿import { Injectable, NotFoundException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConflictException } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 import { LaborCost1, LaborCost1Document } from './schemas/labor-cost1.schema';
 import { CreateLaborCost1Dto } from './dto/create-labor-cost1.dto';
 import { UpdateLaborCost1Dto } from './dto/update-labor-cost1.dto';
@@ -9,53 +12,19 @@ import { SalaryConfig, SalaryConfigDocument } from '../salary-config/schemas/sal
 import { SessionLog, SessionLogDocument } from '../session-log/session-log.schema';
 import { FinanceService } from '../finance/finance.service';
 import { TestOrder2Service } from '../test-order2/test-order2.service';
+import { businessDay, businessDayRange, previousBusinessDay } from '../common/business-day';
 
 @Injectable()
 export class LaborCost1Service {
   private readonly logger = new Logger(LaborCost1Service.name);
 
-  private formatDayIso(date: Date, useUtc: boolean): string {
-    const year = useUtc ? date.getUTCFullYear() : date.getFullYear();
-    const month = String((useUtc ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
-    const day = String(useUtc ? date.getUTCDate() : date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  /**
-   * Generate day keys in both local and UTC calendars to avoid timezone drift
-   * when a stored Date was normalized by a different timezone convention.
-   */
-  private collectDayIsoCandidates(value?: Date | string | null): string[] {
-    if (!value) return [];
-
-    const candidates = new Set<string>();
-    if (typeof value === 'string') {
-      const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (m) candidates.add(m[1]);
-    }
-
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return Array.from(candidates);
-
-    candidates.add(this.formatDayIso(date, false));
-    candidates.add(this.formatDayIso(date, true));
-    return Array.from(candidates);
-  }
-
   private async triggerRecalculateForDates(values: Array<Date | string | null | undefined>): Promise<void> {
-    const daySet = new Set<string>();
-    for (const value of values) {
-      for (const dayIso of this.collectDayIsoCandidates(value ?? null)) {
-        daySet.add(dayIso);
-      }
-    }
-
-    for (const dayIso of daySet) {
-      try {
-        await this.testOrder2Service.recalculateOrdersForDate(dayIso);
-      } catch (error: any) {
-        this.logger.error(`Failed to recalculate orders after labor-cost1 change for ${dayIso}`, error);
-      }
+    const dates = [...new Set(values.filter(value => value != null).map(value => businessDay(value!)))];
+    if (!dates.length) return;
+    if (this.events?.emitAsync) {
+      await this.events.emitAsync(FINANCIAL_INPUT_CHANGED, { dates, revalue: false });
+    } else {
+      for (const day of dates) await this.testOrder2Service.recalculateOrdersForDate(day);
     }
   }
 
@@ -66,6 +35,7 @@ export class LaborCost1Service {
     private financeService: FinanceService,
     @Inject(forwardRef(() => TestOrder2Service))
     private testOrder2Service: TestOrder2Service,
+    private readonly events?: EventEmitter2,
   ) {}
 
   private parseTimeToHours(time: string): number {
@@ -87,7 +57,7 @@ export class LaborCost1Service {
 
   /**
    * Parse date input safely for both:
-   * - yyyy-MM-dd (treated as local date)
+   * - yyyy-MM-dd (treated as a Vietnam business date)
    * - full ISO datetime
    */
   private parseDateInput(input: string | Date): Date {
@@ -101,14 +71,9 @@ export class LaborCost1Service {
     const raw = String(input).trim();
     const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (ymd) {
-      const y = Number(ymd[1]);
-      const m = Number(ymd[2]) - 1;
-      const d = Number(ymd[3]);
-      const localDate = new Date(y, m, d);
+      const localDate = new Date(`${raw}T00:00:00+07:00`);
       if (
-        localDate.getFullYear() !== y ||
-        localDate.getMonth() !== m ||
-        localDate.getDate() !== d
+        !Number.isFinite(+localDate) || businessDay(localDate) !== raw
       ) {
         throw new BadRequestException('Invalid date');
       }
@@ -123,9 +88,7 @@ export class LaborCost1Service {
   }
 
   private startOfDay(input: string | Date): Date {
-    const x = this.parseDateInput(input);
-    x.setHours(0,0,0,0);
-    return x;
+    return businessDayRange(this.parseDateInput(input)).start;
   }
 
   async create(dto: CreateLaborCost1Dto): Promise<LaborCost1> {
@@ -161,6 +124,9 @@ export class LaborCost1Service {
   async update(id: string, dto: UpdateLaborCost1Dto): Promise<LaborCost1> {
     const existing = await this.model.findById(id).exec();
     if (!existing) throw new NotFoundException('Báº£n ghi khÃ´ng tá»“n táº¡i');
+    if (existing.paid || existing.statementId || (existing.paymentStatus && existing.paymentStatus !== 'unpaid')) {
+      throw new ConflictException('Chi phí nhân công đã vào kỳ thanh toán không được sửa.');
+    }
 
     const patch: any = {};
     if (dto.date) patch.date = this.startOfDay(dto.date);
@@ -188,6 +154,9 @@ export class LaborCost1Service {
   async remove(id: string): Promise<void> {
     const existing = await this.model.findById(id).exec();
     if (!existing) throw new NotFoundException('Labor cost record not found');
+    if (existing.paid || existing.statementId || (existing.paymentStatus && existing.paymentStatus !== 'unpaid')) {
+      throw new ConflictException('Chi phí nhân công đã vào kỳ thanh toán không được xóa.');
+    }
 
     await this.model.findByIdAndDelete(id).exec();
     await this.triggerRecalculateForDates([existing.date as any]);
@@ -209,8 +178,7 @@ export class LaborCost1Service {
     // Lá»c theo ngÃ y náº¿u cÃ³
     if (date) {
       const targetDate = this.startOfDay(date);
-      const nextDay = new Date(targetDate);
-      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDay = new Date(+targetDate + 24 * 3_600_000);
       filter.loginAt = { $gte: targetDate, $lt: nextDay };
     }
 
@@ -307,7 +275,7 @@ export class LaborCost1Service {
           id: laborCost._id
         });
         created++;
-        affectedDates.add(loginDate.toISOString().slice(0, 10));
+        affectedDates.add(businessDay(loginDate));
       } catch (error) {
         results.push({
           sessionId: session._id,
@@ -351,8 +319,9 @@ export class LaborCost1Service {
   }
 
   private formatTime(date: Date): string {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const shifted = new Date(+date + 7 * 3_600_000);
+    const hours = shifted.getUTCHours().toString().padStart(2, '0');
+    const minutes = shifted.getUTCMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
   }
 
@@ -360,14 +329,12 @@ export class LaborCost1Service {
    * Cron job: Tá»± Ä‘á»™ng táº¡o labor-cost1 tá»« session logs má»—i ngÃ y lÃºc 00:30
    * Táº¡o cho ngÃ y hÃ´m trÆ°á»›c (cÃ¡c session Ä‘Ã£ Ä‘Ã³ng)
    */
-  @Cron('0 30 0 * * *')
+  @Cron('0 30 0 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async autoGenerateLaborCostFromSessions() {
     this.logger.log('ðŸ• Starting auto-generate labor costs from session logs...');
     
     // TÃ­nh ngÃ y hÃ´m qua
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dateStr = yesterday.toISOString().slice(0, 10);
+    const dateStr = previousBusinessDay();
     
     try {
       const result = await this.generateFromSessionLogs(undefined, dateStr);

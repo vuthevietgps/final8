@@ -28,6 +28,12 @@ const ReturnItemSchema = SchemaFactory.createForClass(ReturnItem);
 
 @Schema({ timestamps: true })
 export class ReturnRequest {
+  @Prop({ type: String }) shipmentId?: string;
+  @Prop({ type: String }) ownerKind?: string;
+  @Prop({ type: String }) ownerId?: string;
+  @Prop({ type: String }) holderKind?: string;
+  @Prop({ type: String }) holderId?: string;
+  @Prop({ type: String }) holderAddress?: string;
   @Prop({ type: Types.ObjectId, ref: 'TestOrder2', required: true })
   orderId!: Types.ObjectId;
 

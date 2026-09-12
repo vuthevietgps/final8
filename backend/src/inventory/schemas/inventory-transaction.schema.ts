@@ -7,6 +7,17 @@ export type InventoryTxType = 'receive' | 'adjust' | 'sale' | 'return';
 
 @Schema({ timestamps: true })
 export class InventoryTransaction {
+  @Prop({ type: String, unique: true, sparse: true })
+  businessKey?: string;
+
+  @Prop({ type: String, index: true })
+  orderId?: string;
+
+  @Prop({ type: String })
+  ownerKind?: string;
+
+  @Prop({ type: String })
+  ownerId?: string;
   @Prop({ type: Types.ObjectId, ref: 'Product', index: true, required: true })
   productId!: Types.ObjectId;
 

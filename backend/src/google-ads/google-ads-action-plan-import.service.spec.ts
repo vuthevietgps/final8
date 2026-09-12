@@ -147,6 +147,23 @@ describe('GoogleAdsActionPlanImportService', () => {
     })).rejects.toThrow('Landing page is not allowlisted');
   });
 
+  it.each([
+    'https://user:password@htxbachgia.shop/',
+    'https://htxbachgia.shop/?client_secret=do-not-store',
+    'https://htxbachgia.shop/?access%5Ftoken=do-not-store',
+  ])('rejects credentials and secret-like data in imported landing URLs: %s', async (finalUrl) => {
+    const plan = json(resolve(docsRoot, 'validation-fixtures', 'valid', 'action_plan.valid.json'));
+    const rsa = plan.actions.find((action: any) =>
+      action.actionType === 'create_responsive_search_ad');
+    rsa.typedPayload.finalUrl = finalUrl;
+
+    await expect(service().importPending({
+      originalname: 'secret-in-url.zip',
+      buffer: createZip(plan),
+    })).rejects.toThrow(/allowlisted|secret-like/);
+    expect(actionPlanModel.create).not.toHaveBeenCalled();
+  });
+
   it('rejects a budget update that cannot be verified from synced ERP data', async () => {
     campaignBudgetModel.findOne.mockReturnValueOnce({ lean: async () => null } as any);
     await expect(service().importPending({

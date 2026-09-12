@@ -8,6 +8,7 @@ import { PurchaseOrder, PurchaseOrderDocument } from './schemas/purchase-order.s
 import { InventoryService } from '../inventory/inventory.service';
 import { SupplierPayableService } from '../supplier-payable/supplier-payable.service';
 import { PurchasePriceHistoryDto } from './dto/purchase-price-history.dto';
+import { purchaseUnitCosts } from './purchase-costs';
 
 @Injectable()
 export class PurchaseOrderService {
@@ -87,6 +88,7 @@ export class PurchaseOrderService {
     if (!dto.items || dto.items.length === 0) throw new BadRequestException('Cần ít nhất 1 dòng hàng');
     const totals = this.calcTotals(dto);
     const doc = await this.poModel.create({
+      financialModelVersion: 2,
       supplierId: new Types.ObjectId(dto.supplierId),
       supplierNameSnap: dto.supplierNameSnap,
       status: dto.status || PurchaseStatus.DRAFT,
@@ -203,6 +205,7 @@ export class PurchaseOrderService {
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const po = await this.poModel.findById(this.asObjectId(id, 'id'));
     if (!po) throw new NotFoundException('Không tìm thấy PO');
+    if (po.items.some(i => i.quantityReceived > 0)) throw new BadRequestException('PO đã nhận hàng: giữ nguyên giá trị nhập, NCC và số lượng; cần chứng từ điều chỉnh riêng.');
     if (dto.items && dto.items.length === 0) throw new BadRequestException('Cần ít nhất 1 dòng hàng');
 
     if (dto.supplierId) po.supplierId = new Types.ObjectId(dto.supplierId);
@@ -250,6 +253,8 @@ export class PurchaseOrderService {
   }
 
   async remove(id: string) {
+    const po = await this.poModel.findById(this.asObjectId(id, 'id'));
+    if (po?.items.some(i => i.quantityReceived > 0)) throw new BadRequestException('Không xóa PO đã nhập kho và phát sinh nghĩa vụ NCC.');
     const res = await this.poModel.findByIdAndDelete(this.asObjectId(id, 'id')).lean();
     if (!res) throw new NotFoundException('Không tìm thấy PO');
     return res;
@@ -269,9 +274,10 @@ export class PurchaseOrderService {
         byId.set(String(it.itemId), Number(it.qtyReceived));
       }
       let anyReceived = false;
+      const acquisitionCosts = po.financialModelVersion === 2 ? purchaseUnitCosts(po) : po.items.map(i => i.unitPrice);
       const receivedForTx: Array<{ productId: string; quantity: number; unitPrice: number }> = [];
       const receivedForPayable: Array<{ productId: string; productNameSnap?: string; quantity: number; unitPrice: number }> = [];
-      po.items = (po.items || []).map((it: any) => {
+      po.items = (po.items || []).map((it: any, index: number) => {
         // Support both subdocument _id and fallback by productId for older POs created without subdocument _id
         const requestedQty = byId.get(String((it as any)._id)) ?? byId.get(String((it as any).productId));
         if (requestedQty && requestedQty > 0) {
@@ -282,7 +288,7 @@ export class PurchaseOrderService {
             it.quantityReceived = already + appliedQty;
             anyReceived = true;
             // Record only the applied (non-over) quantity for inventory
-            receivedForTx.push({ productId: String(it.productId), quantity: Number(appliedQty), unitPrice: Number(it.unitPrice || 0) });
+            receivedForTx.push({ productId: String(it.productId), quantity: Number(appliedQty), unitPrice: acquisitionCosts[index] });
             receivedForPayable.push({ productId: String(it.productId), productNameSnap: it.productNameSnap, quantity: Number(appliedQty), unitPrice: Number(it.unitPrice || 0) });
           }
         }
@@ -299,8 +305,8 @@ export class PurchaseOrderService {
       const supplierId = po.supplierId ? String(po.supplierId) : undefined;
       await this.inventory.recordReceiveFromPO(String(po._id), supplierId, receivedForTx, session);
       
-      // Note: Payable creation removed - using dropshipping model (orders only)
-      // Payables are now created from TestOrder2 when status = "Đã trả kết quả"
+      // New PO liabilities are projected once from cumulative receipts in BusinessLedger.
+      // Stock resales do not create a second supplier goods obligation.
       
       result = po.toObject();
     });

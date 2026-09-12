@@ -1,0 +1,191 @@
+{
+  "auditedAt": "2026-09-04T03:36:33.073Z",
+  "database": "erp_profit_audit_1788492992627",
+  "scope": "Actual compiled ERP services and Mongoose schemas; fresh loopback-only MongoDB. External integrations/event subscribers stubbed. No existing demo or production data changed. Diagnostic expectations, not a passing acceptance test.",
+  "matchingCases": 5,
+  "mismatches": 15,
+  "findings": [
+    {
+      "id": "CONTROL-1",
+      "title": "Backend picks approved supplier quote effective on order date",
+      "expected": "6a9a3cc0d033a1753e5e02e8",
+      "actual": "6a9a3cc0d033a1753e5e02e8",
+      "matches": true,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "CONTROL-2",
+      "title": "Existing applied supplier snapshot survives editing its source quote",
+      "expected": 100000,
+      "actual": 100000,
+      "matches": true,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F01a",
+      "title": "UI latest endpoint selects future pending quote",
+      "expected": "approved effective quote",
+      "actual": "pending; 2027-01-01; 160000",
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F01b",
+      "title": "UI follow-up update overwrites applied price while keeping original quote ID",
+      "expected": {
+        "price": 100000,
+        "quoteId": "6a9a3cc0d033a1753e5e02e8"
+      },
+      "actual": {
+        "price": 160000,
+        "quoteId": "6a9a3cc0d033a1753e5e02e8"
+      },
+      "matches": false,
+      "scope": "actual TestOrder2Service.update + MongoDB; UI call sequence reproduced"
+    },
+    {
+      "id": "CONTROL-3",
+      "title": "Approved dealer quote applies to matching product and dealer",
+      "expected": 250000,
+      "actual": 250000,
+      "matches": true,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "CONTROL-4",
+      "title": "Existing dealer price snapshot survives editing source quote",
+      "expected": 250000,
+      "actual": 250000,
+      "matches": true,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F02",
+      "title": "Dealer production complete + tracking, still shipping: gross profit recognized",
+      "expected": 150000,
+      "actual": 0,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F03",
+      "title": "No in-period dealer quote: future quote must not apply silently",
+      "expected": null,
+      "actual": 999000,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F14",
+      "title": "Dealer quote created with apply-to-all must apply like an individually created quote",
+      "expected": 250000,
+      "actual": null,
+      "matches": false,
+      "scope": "actual QuoteService.create applyToAllAgents + actual lookup; runtime reference schemas are Mixed and bulk agentId is ObjectId while lookup uses string"
+    },
+    {
+      "id": "F04",
+      "title": "Recoverable return; dealer owes no goods price; company bears 30k return fee",
+      "expected": -30000,
+      "actual": 220000,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F05",
+      "title": "Explicit dealer sale price must not depend on internal/external login role",
+      "expected": 150000,
+      "actual": 200000,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F06",
+      "title": "No supplier override: product nonreturnable policy is inherited",
+      "expected": false,
+      "actual": true,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F07",
+      "title": "Explicit zero quote fees stay zero rather than being replaced by product fees",
+      "expected": {
+        "shipping": 0,
+        "return": 0
+      },
+      "actual": {
+        "shipping": 20000,
+        "return": 10000
+      },
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F08",
+      "title": "Product fallback: 300k sale - 100k goods - 20k shipping",
+      "expected": 180000,
+      "actual": 160000,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F09",
+      "title": "Delivered order must not pay a quoted return fee",
+      "expected": 180000,
+      "actual": 150000,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F10",
+      "title": "Fallback cost should not silently change on an existing order when product price changes",
+      "expected": 120000,
+      "actual": 170000,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F11",
+      "title": "Non-VND supplier quote requires explicit currency handling, not a VND cost of 10",
+      "expected": null,
+      "actual": 10,
+      "matches": false,
+      "scope": "real service + MongoDB"
+    },
+    {
+      "id": "F12",
+      "title": "Editing only customer name overwrites already allocated costs with estimates",
+      "expected": {
+        "ads": 10000,
+        "labor": 10000,
+        "other": 5000,
+        "net": 175000
+      },
+      "actual": {
+        "ads": 50000,
+        "labor": 0,
+        "other": 0,
+        "net": 150000
+      },
+      "matches": false,
+      "scope": "actual TestOrder2Service.update + MongoDB; existing allocations seeded explicitly"
+    },
+    {
+      "id": "F13",
+      "title": "Report revenue and order profit must use the same revenue basis (not assuming deposits are sales)",
+      "expected": 200000,
+      "actual": 100000,
+      "matches": false,
+      "scope": "reconciliation inconsistency: report adds deposit, order calculation uses COD only"
+    },
+    {
+      "id": "CONTROL-5",
+      "title": "Non-delivered retail order does not recognize gross profit",
+      "expected": 0,
+      "actual": 0,
+      "matches": true,
+      "scope": "real service + MongoDB"
+    }
+  ]
+}

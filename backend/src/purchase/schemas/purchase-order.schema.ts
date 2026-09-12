@@ -32,6 +32,7 @@ const PurchaseItemSchema = SchemaFactory.createForClass(PurchaseItem);
 
 @Schema({ timestamps: true })
 export class PurchaseOrder {
+  @Prop({ type: Number }) financialModelVersion?: number;
   @Prop({ unique: true, sparse: true })
   poNumber?: string; // Số PO (PO-001, PO-002, ...)
 

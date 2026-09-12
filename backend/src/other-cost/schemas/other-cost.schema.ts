@@ -35,7 +35,7 @@ export class OtherCost {
   @Prop({ type: Date, required: true })
   date: Date; // Ngày phát sinh chi phí
 
-  @Prop({ type: Number, required: true, min: 0 })
+  @Prop({ type: Number, required: true, min: 0, max: 1_000_000_000_000 })
   amount: number; // Số tiền chi phí
 
   /**

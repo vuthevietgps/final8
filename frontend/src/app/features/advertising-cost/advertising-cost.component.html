@@ -193,8 +193,8 @@
         <td>{{ r.channel || 'facebook' }}</td>
         <td>{{ r.frequency || '-' }}</td>
         <td>{{ r.adGroupId }}</td>
-        <td>{{ r.adAccountName ? (r.adAccountName + ' (' + r.adAccountAccountId + ')') : '-' }}</td>
-        <td>{{ r.spentAmount || 0 | number:'1.0-0' }}</td>
+        <td>{{ r.adAccountName ? (r.adAccountName + ' (' + r.adAccountAccountId + ')') : 'Chưa liên kết tài khoản ERP' }}</td>
+        <td>{{ r.spentAmount || 0 | number:'1.0-0' }} <small *ngIf="r.isEstimated">(Tạm tính từ lịch sử)</small></td>
         <td>{{ r.cpm || 0 | number:'1.0-2' }}</td>
         <td>{{ r.cpc || 0 | number:'1.0-2' }}</td>
         <!-- New messaging metrics -->

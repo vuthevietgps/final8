@@ -109,7 +109,7 @@ export class ChatMessageController {
   }
 
   private async sendFacebookImageByUrl(accessToken: string, senderPsid: string, imageUrl: string): Promise<any> {
-    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(accessToken)}`;
+    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages`;
     const payload = {
       recipient: { id: senderPsid },
       messaging_type: 'RESPONSE',
@@ -117,7 +117,10 @@ export class ChatMessageController {
     };
     return fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(payload)
     }).then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
   }
@@ -149,10 +152,13 @@ export class ChatMessageController {
       fileFooter,
     ]);
 
-    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(accessToken)}`;
+    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages`;
     return fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
       body: body as any
     }).then(r=> r.json()).catch(e=> ({ ok:false, error: e?.message||String(e) }));
   }
@@ -334,8 +340,15 @@ export class ChatMessageController {
           message: { text: messageText }
         };
         if (messagingType === 'MESSAGE_TAG' && tag) payload.tag = tag;
-        const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(pageAccessToken)}`;
-        const fbRes = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages`;
+        const fbRes = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${pageAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        })
           .then(r => r.json()).catch(e => ({ ok: false, error: (e?.message || String(e)) }));
         responseJson = fbRes;
         if (!fbRes?.message_id) {

@@ -5,6 +5,35 @@ export type InventoryBatchDocument = InventoryBatch & Document;
 
 @Schema({ timestamps: true })
 export class InventoryBatch {
+  @Prop({ type: String, enum: ['company', 'dealer'], index: true })
+  ownerKind?: string;
+
+  @Prop({ type: String, index: true })
+  ownerId?: string;
+
+  @Prop({ type: String, enum: ['company', 'supplier', 'agent'] })
+  holderKind?: string;
+
+  @Prop({ type: String })
+  holderId?: string;
+
+  @Prop({ type: String })
+  holderAddress?: string;
+
+  @Prop({ type: String, index: true })
+  originalOrderId?: string;
+
+  @Prop({ type: String, unique: true, sparse: true })
+  receiptKey?: string;
+
+  @Prop({ type: String, enum: ['resellable', 'unusable'], default: 'resellable' })
+  condition?: string;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  quantityReserved?: number;
+
+  @Prop({ type: [{ orderId: String, quantity: Number, state: String }], default: [] })
+  reservations?: Array<{ orderId: string; quantity: number; state: string }>;
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true, index: true })
   productId!: Types.ObjectId;
 

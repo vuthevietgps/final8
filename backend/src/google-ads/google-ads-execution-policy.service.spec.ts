@@ -1,5 +1,6 @@
 import { GoogleAdsExecutionPolicyService } from './google-ads-execution-policy.service';
 import { GoogleAdsOperationBuilderService } from './google-ads-operation-builder.service';
+import { googleAdsOperationHash } from './google-ads-integrity.util';
 
 const leanResult = (value: any) => {
   const query: any = {
@@ -15,28 +16,45 @@ const model = (value: any = null, values: any[] = []) => ({
   find: jest.fn(() => leanResult(values)),
 });
 
-const action = (overrides: Record<string, any> = {}) => ({
-  actionId: 'ACT001',
-  idempotencyKey: 'PLAN-001:ACT001',
-  actionType: 'create_search_campaign',
-  customerId: '1234567890',
-  loginCustomerId: '4345552613',
-  status: 'approved',
-  providerValidationStatus: 'provider_validate_passed',
-  providerValidatedAt: new Date(),
-  requireExecutionConfirmation: true,
-  typedPayload: {
-    campaignName: 'Search - Safe Draft',
-    budgetName: 'Budget - Safe Draft',
-    dailyBudget: 500000,
-    advertisingChannelType: 'SEARCH',
-    status: 'PAUSED',
-    biddingStrategyType: 'MAXIMIZE_CONVERSIONS',
-    startDate: '2026-06-13',
-    finalUrl: 'https://htxbachgia.shop/',
-  },
-  ...overrides,
-});
+const operationBuilder = new GoogleAdsOperationBuilderService();
+const action = (overrides: Record<string, any> = {}) => {
+  const result: any = {
+    actionId: 'ACT001',
+    idempotencyKey: 'PLAN-001:ACT001',
+    actionType: 'create_search_campaign',
+    customerId: '1234567890',
+    loginCustomerId: '4345552613',
+    status: 'approved',
+    providerValidationStatus: 'provider_validate_passed',
+    providerValidatedAt: new Date(),
+    providerValidationExpiresAt: new Date(Date.now() + 60_000),
+    requireExecutionConfirmation: true,
+    typedPayload: {
+      campaignName: 'Search - Safe Draft',
+      budgetName: 'Budget - Safe Draft',
+      dailyBudget: 500000,
+      advertisingChannelType: 'SEARCH',
+      status: 'PAUSED',
+      biddingStrategyType: 'MAXIMIZE_CONVERSIONS',
+      startDate: '2026-06-13',
+      searchPartnersEnabled: false,
+      positiveGeoTargetType: 'PRESENCE',
+      geoTargetConstantIds: ['2704'],
+      languageConstantIds: ['1040'],
+      doesNotContainEuPoliticalAdvertising: true,
+      finalUrl: 'https://htxbachgia.shop/',
+    },
+    ...overrides,
+  };
+  try {
+    result.providerValidationOperationHash = overrides.providerValidationOperationHash
+      || googleAdsOperationHash(operationBuilder.build(result));
+  } catch {
+    result.providerValidationOperationHash = overrides.providerValidationOperationHash
+      || 'a'.repeat(64);
+  }
+  return result;
+};
 
 const plan = (overrides: Record<string, any> = {}) => ({
   currency: 'VND',
@@ -52,6 +70,8 @@ describe('GoogleAdsExecutionPolicyService', () => {
     currency: 'VND',
     timezoneId: 'Asia/Ho_Chi_Minh',
     loginCustomerId: '4345552613',
+    lastSyncStatus: 'ok',
+    lastSyncAt: freshCompletedAt,
   }, [{
     accountId: '1234567890',
     accountType: 'google',
@@ -59,9 +79,34 @@ describe('GoogleAdsExecutionPolicyService', () => {
     lastSyncStatus: 'ok',
     lastSyncAt: freshCompletedAt,
   }]);
-  const campaignModel = model({ campaignId: '111' });
-  const budgetModel = model({ campaignBudgetId: '222', amountVnd: 500000 });
-  const adGroupModel = model({ adGroupId: '333' });
+  const campaignModel = model({
+    customerId: '1234567890',
+    campaignId: '111',
+    resourceName: 'customers/1234567890/campaigns/111',
+    advertisingChannelType: 'SEARCH',
+    biddingStrategyType: 'MANUAL_CPC',
+    lastSyncAt: freshCompletedAt,
+  });
+  const budgetModel = model({ campaignBudgetId: '222', amountVnd: 500000, lastSyncAt: freshCompletedAt });
+  const adGroupModel = model({ adGroupId: '333', campaignId: '111', type: 'SEARCH_STANDARD', lastSyncAt: freshCompletedAt });
+  const keywordModel = model({
+    customerId: '1234567890', campaignId: '111', adGroupId: '333', criterionId: '444',
+    resourceName: 'customers/1234567890/adGroupCriteria/333~444',
+    negative: false, status: 'PAUSED', lastSyncAt: freshCompletedAt,
+  });
+  const adModel = model({
+    customerId: '1234567890', campaignId: '111', adGroupId: '333', adId: '555',
+    resourceName: 'customers/1234567890/adGroupAds/333~555',
+    adType: 'RESPONSIVE_SEARCH_AD', status: 'PAUSED', policyApprovalStatus: 'APPROVED',
+    finalUrls: ['https://htxbachgia.shop/'], lastSyncAt: freshCompletedAt,
+  });
+  const campaignCriterionModel = model(null, [{
+    customerId: '1234567890', campaignId: '111', criterionType: 'LOCATION',
+    targetConstantId: '2704', negative: false, status: 'ENABLED', lastSyncAt: freshCompletedAt,
+  }, {
+    customerId: '1234567890', campaignId: '111', criterionType: 'LANGUAGE',
+    targetConstantId: '1040', negative: false, status: 'ENABLED', lastSyncAt: freshCompletedAt,
+  }]);
   const legacyAdGroupModel = model(null, [{ adGroupId: 'LEGACY-GOOGLE-1', platform: 'google' }]);
   const syncRunModel = model({
     status: 'success',
@@ -70,6 +115,24 @@ describe('GoogleAdsExecutionPolicyService', () => {
     completedAt: freshCompletedAt,
   });
   const executionLogModel = model(null);
+  const managerAccountModel = model(null, [{
+    provider: 'google',
+    managerAccountType: 'google_ads_mcc',
+    managerAccountId: '4345552613',
+    isActive: true,
+    providerVerificationStatus: 'verified',
+    providerVerificationExpiresAt: new Date(Date.now() + 60_000),
+    runtimeCredentialResolved: true,
+    providerConnectionVerified: true,
+    childAccountsVerifiedByProvider: true,
+    verifiedChildAccounts: [{
+      accountId: '1234567890',
+      name: 'Child',
+      currency: 'VND',
+      timezoneId: 'Asia/Ho_Chi_Minh',
+      status: 'ENABLED',
+    }],
+  }]);
   const financialControlService = {
     getFullMetrics: jest.fn().mockResolvedValue({
       adsBudgetApproved: 7_000_000,
@@ -91,8 +154,12 @@ describe('GoogleAdsExecutionPolicyService', () => {
     legacyAdGroupModel as any,
     syncRunModel as any,
     executionLogModel as any,
-    new GoogleAdsOperationBuilderService(),
+    managerAccountModel as any,
+    operationBuilder,
     financialControlService as any,
+    keywordModel as any,
+    adModel as any,
+    campaignCriterionModel as any,
   );
 
   beforeEach(() => {
@@ -169,6 +236,51 @@ describe('GoogleAdsExecutionPolicyService', () => {
     await expect(service.preflight(plan() as any, [action({
       providerValidatedAt: new Date(Date.now() + 61_000),
     }) as any])).rejects.toThrow('validateOnly evidence is missing or stale');
+  });
+
+  it('blocks operations changed after provider validateOnly', async () => {
+    await expect(service.preflight(plan() as any, [action({
+      providerValidationOperationHash: 'f'.repeat(64),
+    }) as any])).rejects.toThrow('changed after provider validateOnly');
+  });
+
+  it('rechecks MCC provider verification freshness during every preflight', async () => {
+    (managerAccountModel.find as jest.Mock).mockReturnValueOnce(leanResult([{
+      provider: 'google',
+      managerAccountType: 'google_ads_mcc',
+      managerAccountId: '4345552613',
+      isActive: true,
+      providerVerificationStatus: 'verified',
+      providerVerificationExpiresAt: new Date(Date.now() - 1),
+      runtimeCredentialResolved: true,
+      providerConnectionVerified: true,
+      childAccountsVerifiedByProvider: true,
+      verifiedChildAccounts: [{
+        accountId: '1234567890',
+        name: 'Child',
+        currency: 'VND',
+        timezoneId: 'Asia/Ho_Chi_Minh',
+        status: 'ENABLED',
+      }],
+    }]));
+
+    await expect(service.preflight(plan() as any, [action() as any]))
+      .rejects.toThrow('MCC_PROVIDER_VERIFICATION_EXPIRED');
+  });
+
+  it('allows only a safe non-extending Search campaign update', async () => {
+    const update = action({
+      actionType: 'update_search_campaign',
+      typedPayload: {
+        campaignId: '111',
+        campaignResourceName: 'customers/1234567890/campaigns/111',
+        campaignName: 'Canonical Search - safer name',
+      },
+    });
+
+    await expect(service.preflight(plan() as any, [update as any], {
+      enforceFinancialControl: false,
+    })).resolves.toHaveLength(1);
   });
 
   it('fails closed when Financial Control is locked, invalid, unavailable, or exceeded', async () => {
@@ -345,5 +457,58 @@ describe('GoogleAdsExecutionPolicyService', () => {
       enforceFinancialControl: false,
     })).resolves.toHaveLength(1);
     expect(financialControlService.getFullMetrics).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for conversion-bidding campaign activation without canonical goal evidence', async () => {
+    (campaignModel.findOne as jest.Mock).mockReturnValueOnce(leanResult({
+      customerId: '1234567890',
+      campaignId: '111',
+      resourceName: 'customers/1234567890/campaigns/111',
+      status: 'PAUSED',
+      advertisingChannelType: 'SEARCH',
+      biddingStrategyType: 'MAXIMIZE_CONVERSIONS',
+      targetGoogleSearch: true,
+      targetContentNetwork: false,
+      targetPartnerSearchNetwork: false,
+      lastSyncAt: freshCompletedAt,
+    }));
+    const resume = action({
+      actionType: 'resume_campaign',
+      typedPayload: {
+        campaignId: '111',
+        campaignResourceName: 'customers/1234567890/campaigns/111',
+      },
+    });
+    await expect(service.preflight(plan() as any, [resume as any], {
+      enforceFinancialControl: false,
+    })).rejects.toThrow('lacks canonical primary action and biddable goal evidence');
+    expect(campaignCriterionModel.find).toHaveBeenCalledWith(expect.objectContaining({
+      criterionType: 'LOCATION',
+      status: 'ENABLED',
+    }));
+    expect(campaignCriterionModel.find).toHaveBeenCalledWith(expect.objectContaining({
+      criterionType: 'LANGUAGE',
+      status: 'ENABLED',
+    }));
+  });
+
+  it('rechecks that child resume still has a PAUSED canonical campaign', async () => {
+    const enabledParent = {
+      customerId: '1234567890', campaignId: '111', status: 'ENABLED',
+      advertisingChannelType: 'SEARCH', lastSyncAt: freshCompletedAt,
+    };
+    (campaignModel.findOne as jest.Mock)
+      .mockReturnValueOnce(leanResult(enabledParent))
+      .mockReturnValueOnce(leanResult(enabledParent));
+    const resume = action({
+      actionType: 'resume_responsive_search_ad',
+      typedPayload: {
+        campaignId: '111', adGroupId: '333', adId: '555',
+        adGroupAdResourceName: 'customers/1234567890/adGroupAds/333~555',
+      },
+    });
+    await expect(service.preflight(plan() as any, [resume as any], {
+      enforceFinancialControl: false,
+    })).rejects.toThrow('requires a canonical PAUSED Search campaign');
   });
 });

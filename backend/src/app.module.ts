@@ -13,6 +13,7 @@
  */
 
 import { Module } from '@nestjs/common';
+import { ProviderConnectionsModule } from './provider-connections/provider-connections.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as path from 'path';
@@ -34,6 +35,7 @@ import { DeliveryStatusModule } from './delivery-status/delivery-status.module';
 import { ExportUserModule } from './export-user/export-user.module';
 import { GoogleSyncModule } from './google-sync/google-sync.module';
 import { GoogleAdsModule } from './google-ads/google-ads.module';
+import { MetaAdsModule } from './meta-ads/meta-ads.module';
 import { HealthModule } from './health/health.module';
 import { ImportUserModule } from './import-user/import-user.module';
 import { LaborCost1Module } from './labor-cost1/labor-cost1.module';
@@ -46,6 +48,7 @@ import { QuoteModule } from './quote/quote.module';
 import { SalaryConfigModule } from './salary-config/salary-config.module';
 import { SessionLogModule } from './session-log/session-log.module';
 import { TestOrder2Module } from './test-order2/test-order2.module';
+import { TrackingCrmModule } from './tracking-crm/tracking-crm.module';
 import { UserModule } from './user/user.module';
 // Chatbot & AI related modules
 import { FanpageModule } from './fanpage/fanpage.module';
@@ -62,6 +65,7 @@ import { AdReportModule } from './ad-report/ad-report.module';
 import { ReturnReportModule } from './return-report/return-report.module';
 import { SupplierPayableModule } from './supplier-payable/supplier-payable.module';
 import { FinanceModule } from './finance/finance.module';
+import { BusinessLedgerModule } from './business-ledger/business-ledger.module';
 import { ReturnRequestModule } from './return-request/return-request.module';
 import { SupplierQuoteModule } from './supplier-quote/supplier-quote.module';
 import { PurchaseOrderModule } from './purchase/purchase-order.module';
@@ -78,6 +82,7 @@ import { AiOperatorModule } from './ai-operator/ai-operator.module';
 import { AiMarketingModule } from './ai-marketing/ai-marketing.module';
 import { AiDataPackModule } from './ai-data-pack/ai-data-pack.module';
 import { AdsAutomationEvidenceModule } from './ads-automation-evidence/ads-automation-evidence.module';
+import { AdsAutomationDraftModule } from './ads-automation-drafts/ads-automation-draft.module';
 import { AdsBusinessContextModule } from './ads-business-context/ads-business-context.module';
 import { PlanModule } from './plan/plan.module';
 import { FeatureGateGuard } from './plan/feature-gate.guard';
@@ -97,10 +102,11 @@ import { redactSecretString } from './common/utils/secret-redaction.util';
         path.resolve(__dirname, '..', '.env'),
         path.resolve(__dirname, '..', '..', '.env'),
       ],
-      ignoreEnvFile: false,
+      ignoreEnvFile: process.env.ERP_LOCAL_SANDBOX === 'true',
     }),
     // Bật scheduler để dùng cron job
-    ScheduleModule.forRoot(),
+    ScheduleModule.forRoot(process.env.ERP_LOCAL_SANDBOX === 'true'
+      ? { cronJobs: false, intervals: false, timeouts: false } : {}),
 
     // Phase 3: Event-driven architecture — các domain module emit finance events
     // thay vì gọi trực tiếp FinancialControlService (loại bỏ forwardRef circular deps)
@@ -146,6 +152,11 @@ import { redactSecretString } from './common/utils/secret-redaction.util';
 
         if (!uri) {
           throw new Error('Missing database configuration. Set MONGODB_URI or DATABASE_HOST, DATABASE_PORT, DATABASE_NAME.');
+        }
+
+        if (process.env.ERP_LOCAL_SANDBOX === 'true'
+          && uri !== 'mongodb://127.0.0.1:27027/erp_ledger_local_20260904') {
+          throw new Error('Local sandbox requires its isolated loopback database.');
         }
 
         console.log('MongoDB connecting to:', redactSecretString(uri));
@@ -212,6 +223,8 @@ import { redactSecretString } from './common/utils/secret-redaction.util';
     GoogleSyncModule,
     // Google Ads V2 provider-scoped metadata collections. Does not replace legacy adgroups.
     GoogleAdsModule,
+    // Canonical Meta campaign create/update/pause lane; live flags remain fail-closed.
+    MetaAdsModule,
     // Health check endpoint
     HealthModule,
     SessionLogModule,
@@ -219,6 +232,7 @@ import { redactSecretString } from './common/utils/secret-redaction.util';
     FanpageModule,
     OpenAIConfigModule,
     ApiTokenModule,
+    ProviderConnectionsModule,
     ChatMessageModule,
     PendingOrderModule,
     // TODO: Rebuild from OrderTest2 - Will create new forecasting with different data source and rules
@@ -240,7 +254,9 @@ import { redactSecretString } from './common/utils/secret-redaction.util';
     ReturnReportModule,
     ReturnRequestModule,
     FinanceModule,
+    BusinessLedgerModule,
     TestOrder2Module,
+    TrackingCrmModule,
     AdGroupProfitReportModule,
     // Module đồng bộ đơn hàng lên Google Sheets của Đại lý và Nhà cung cấp
     OrderSheetSyncModule,
@@ -260,6 +276,7 @@ import { redactSecretString } from './common/utils/secret-redaction.util';
     AiMarketingModule,
     AiDataPackModule,
     AdsAutomationEvidenceModule,
+    AdsAutomationDraftModule,
     AdsBusinessContextModule,
     // Module Plan - Quản lý gói dịch vụ (Starter/Professional/Enterprise)
     PlanModule,

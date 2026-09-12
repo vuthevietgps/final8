@@ -128,7 +128,7 @@ export class AdvertisingCostTiktokSyncService {
     await this.costModel.updateOne(
       { channel: 'tiktok', customerId: params.advertiserId, adGroupId: params.adGroupId, date },
       { $set: payload },
-      { upsert: true },
+      { upsert: true, runValidators: true },
     );
   }
 

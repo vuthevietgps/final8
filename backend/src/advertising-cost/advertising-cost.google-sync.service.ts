@@ -40,6 +40,8 @@ export class AdvertisingCostGoogleSyncService {
       adGroupId,
       customerId,
       channel: 'google',
+      sourceSystem: 'native_api',
+      isEstimated: false,
       date: day,
       spentAmount: Number(doc.spentAmount || 0),
       cpm: Number(doc.cpm || 0),
@@ -54,7 +56,7 @@ export class AdvertisingCostGoogleSyncService {
     await this.costModel.updateOne(
       { channel: 'google', customerId, adGroupId, date: day },
       { $set: payload },
-      { upsert: true },
+      { upsert: true, runValidators: true },
     );
   }
 

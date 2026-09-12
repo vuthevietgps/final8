@@ -148,7 +148,11 @@ export class AdvertisingCostFacebookSyncService {
       costPerMessagingConversation: Number((doc as any).costPerMessagingConversation || 0),
       messagingFirstReply: Number((doc as any).messagingFirstReply || 0),
     };
-    await this.costModel.updateOne({ channel: 'facebook', adGroupId, date }, { $set: payload }, { upsert: true });
+    await this.costModel.updateOne(
+      { channel: 'facebook', adGroupId, date },
+      { $set: payload },
+      { upsert: true, runValidators: true },
+    );
   }
 
   /** Gọi Graph API lấy insights cho adset (adGroupId) trong 1 ngày */

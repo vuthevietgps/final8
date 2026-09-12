@@ -35,6 +35,22 @@ import {
   GoogleAdsCampaignBudgetDocument,
 } from "./schemas/google-ads-campaign-budget.schema";
 import {
+  GoogleAdsCampaignCriterion,
+  GoogleAdsCampaignCriterionDocument,
+} from "./schemas/google-ads-campaign-criterion.schema";
+import {
+  GoogleAdsCampaignConversionGoal,
+  GoogleAdsCampaignConversionGoalDocument,
+} from "./schemas/google-ads-campaign-conversion-goal.schema";
+import {
+  GoogleAdsConversionAction,
+  GoogleAdsConversionActionDocument,
+} from "./schemas/google-ads-conversion-action.schema";
+import {
+  GoogleAdsConversionGoalCampaignConfig,
+  GoogleAdsConversionGoalCampaignConfigDocument,
+} from "./schemas/google-ads-conversion-goal-campaign-config.schema";
+import {
   GoogleAdsDailyMetric,
   GoogleAdsDailyMetricDocument,
   GoogleAdsMetricLevel,
@@ -53,6 +69,10 @@ type SyncCountKey =
   | "accounts"
   | "campaigns"
   | "campaignBudgets"
+  | "campaignCriteria"
+  | "conversionActions"
+  | "campaignConversionGoals"
+  | "conversionGoalCampaignConfigs"
   | "adGroups"
   | "keywords"
   | "ads"
@@ -81,6 +101,7 @@ type GoogleAdsReadonlySyncContext = {
   allowedCustomerIds: string[];
   absoluteDeadlineAt: string;
   writeTelemetry: GoogleAdsReadonlyWriteTelemetry[];
+  conversionActionRows: Map<string, Promise<any[]>>;
 };
 
 const METRIC_TEMPLATE_BY_LEVEL: Record<
@@ -119,6 +140,18 @@ export class GoogleAdsReadonlySyncService {
     private readonly profitEnrichmentService: GoogleAdsProfitEnrichmentService,
     @Optional()
     private readonly readonlyTransport?: GoogleAdsReadonlyTransportService,
+    @Optional()
+    @InjectModel(GoogleAdsCampaignCriterion.name)
+    private readonly campaignCriterionModel?: Model<GoogleAdsCampaignCriterionDocument>,
+    @Optional()
+    @InjectModel(GoogleAdsConversionAction.name)
+    private readonly conversionActionModel?: Model<GoogleAdsConversionActionDocument>,
+    @Optional()
+    @InjectModel(GoogleAdsCampaignConversionGoal.name)
+    private readonly campaignConversionGoalModel?: Model<GoogleAdsCampaignConversionGoalDocument>,
+    @Optional()
+    @InjectModel(GoogleAdsConversionGoalCampaignConfig.name)
+    private readonly conversionGoalCampaignConfigModel?: Model<GoogleAdsConversionGoalCampaignConfigDocument>,
   ) {}
 
   async sync(params?: {
@@ -176,6 +209,7 @@ export class GoogleAdsReadonlySyncService {
       allowedCustomerIds: customerIds,
       absoluteDeadlineAt,
       writeTelemetry,
+      conversionActionRows: new Map(),
     };
 
     await this.recordWrite(
@@ -231,6 +265,26 @@ export class GoogleAdsReadonlySyncService {
         [
           "campaignBudgets",
           () => this.syncCampaignBudgets(account as any, customerId, context),
+        ],
+        [
+          "campaignCriteria",
+          () => this.syncCampaignCriteria(account as any, customerId, context),
+        ],
+        [
+          "conversionActions",
+          () => this.syncConversionActions(account as any, customerId, context),
+        ],
+        [
+          "campaignConversionGoals",
+          () => this.syncCampaignConversionGoals(account as any, customerId, context),
+        ],
+        [
+          "conversionGoalCampaignConfigs",
+          () => this.syncConversionGoalCampaignConfigs(
+            account as any,
+            customerId,
+            context,
+          ),
         ],
         [
           "adGroups",
@@ -387,6 +441,25 @@ export class GoogleAdsReadonlySyncService {
     const rows = await this.searchRows(account, customerId, context, "account");
     const customer = rows[0]?.customer;
     if (!customer) return { accounts: 0 };
+    const conversion = customer.conversionTrackingSetting
+      || customer.conversion_tracking_setting
+      || {};
+    const googleAdsConversionCustomer =
+      conversion.googleAdsConversionCustomer
+      || conversion.google_ads_conversion_customer;
+    const conversionCustomerId = this.idFromResourceName(
+      googleAdsConversionCustomer,
+    );
+    if (conversionCustomerId) {
+      // This ID is provider-returned canonical scope, not caller input. It is
+      // required for retrieving ConversionAction evidence under cross-account
+      // conversion tracking.
+      (account as any).googleAdsConversionCustomer =
+        googleAdsConversionCustomer;
+      if (!context.allowedCustomerIds.includes(conversionCustomerId)) {
+        context.allowedCustomerIds.push(conversionCustomerId);
+      }
+    }
 
     await this.recordWrite(
       context.writeTelemetry,
@@ -408,6 +481,24 @@ export class GoogleAdsReadonlySyncService {
                 account.name,
               currency: customer.currencyCode || customer.currency_code,
               timezoneId: customer.timeZone || customer.time_zone,
+              conversionTrackingStatus:
+                conversion.conversionTrackingStatus
+                || conversion.conversion_tracking_status,
+              googleAdsConversionCustomer,
+              conversionTrackingId: this.optionalId(
+                conversion.conversionTrackingId
+                ?? conversion.conversion_tracking_id,
+              ),
+              crossAccountConversionTrackingId: this.optionalId(
+                conversion.crossAccountConversionTrackingId
+                ?? conversion.cross_account_conversion_tracking_id,
+              ),
+              acceptedCustomerDataTerms:
+                conversion.acceptedCustomerDataTerms
+                ?? conversion.accepted_customer_data_terms,
+              enhancedConversionsForLeadsEnabled:
+                conversion.enhancedConversionsForLeadsEnabled
+                ?? conversion.enhanced_conversions_for_leads_enabled,
               lastSyncAt: new Date(),
               lastSyncStatus: "ok",
               lastSyncError: undefined,
@@ -435,6 +526,11 @@ export class GoogleAdsReadonlySyncService {
         const campaign = row.campaign || {};
         const campaignBudgetResourceName =
           campaign.campaignBudget || campaign.campaign_budget;
+        const networkSettings = campaign.networkSettings || campaign.network_settings || {};
+        const geoTargetTypeSetting = campaign.geoTargetTypeSetting || campaign.geo_target_type_setting || {};
+        const targetSpend = campaign.targetSpend || campaign.target_spend || {};
+        const maximizeConversions =
+          campaign.maximizeConversions || campaign.maximize_conversions || {};
         return {
           customerId,
           campaignId: this.optionalId(campaign.id),
@@ -446,10 +542,40 @@ export class GoogleAdsReadonlySyncService {
             campaign.advertising_channel_type,
           biddingStrategyType:
             campaign.biddingStrategyType || campaign.bidding_strategy_type,
+          biddingStrategySystemStatus:
+            campaign.biddingStrategySystemStatus
+            || campaign.bidding_strategy_system_status,
+          biddingStrategyResourceName:
+            campaign.biddingStrategy || campaign.bidding_strategy || null,
+          targetSpendCpcBidCeilingMicros: this.number(
+            targetSpend.cpcBidCeilingMicros
+            ?? targetSpend.cpc_bid_ceiling_micros,
+          ),
+          maximizeConversionsTargetCpaMicros: this.number(
+            maximizeConversions.targetCpaMicros
+            ?? maximizeConversions.target_cpa_micros,
+          ),
           campaignBudgetId: this.idFromResourceName(campaignBudgetResourceName),
           campaignBudgetResourceName,
           startDate: campaign.startDate || campaign.start_date,
           endDate: campaign.endDate || campaign.end_date,
+          targetGoogleSearch:
+            networkSettings.targetGoogleSearch ?? networkSettings.target_google_search,
+          targetSearchNetwork:
+            networkSettings.targetSearchNetwork ?? networkSettings.target_search_network,
+          targetContentNetwork:
+            networkSettings.targetContentNetwork ?? networkSettings.target_content_network,
+          targetPartnerSearchNetwork:
+            networkSettings.targetPartnerSearchNetwork ?? networkSettings.target_partner_search_network,
+          positiveGeoTargetType:
+            geoTargetTypeSetting.positiveGeoTargetType
+            || geoTargetTypeSetting.positive_geo_target_type,
+          negativeGeoTargetType:
+            geoTargetTypeSetting.negativeGeoTargetType
+            || geoTargetTypeSetting.negative_geo_target_type,
+          containsEuPoliticalAdvertising:
+            campaign.containsEuPoliticalAdvertising
+            || campaign.contains_eu_political_advertising,
           lastSyncAt: now,
         };
       })
@@ -508,6 +634,203 @@ export class GoogleAdsReadonlySyncService {
         context.writeTelemetry,
         "google_ads_campaign_budgets",
         "campaign_budgets",
+      ),
+    };
+  }
+
+  private async syncCampaignCriteria(
+    account: AdAccountDocument,
+    customerId: string,
+    context: GoogleAdsReadonlySyncContext,
+  ) {
+    if (!this.campaignCriterionModel) return { campaignCriteria: 0 };
+    const rows = await this.searchRows(account, customerId, context, "campaign_criteria");
+    const now = new Date();
+    const documents = rows.map((row) => {
+      const criterion = row.campaignCriterion || row.campaign_criterion || {};
+      const location = criterion.location || {};
+      const language = criterion.language || {};
+      const type = String(criterion.type || '').toUpperCase();
+      const targetResource = type === 'LOCATION'
+        ? location.geoTargetConstant || location.geo_target_constant
+        : language.languageConstant || language.language_constant;
+      return {
+        customerId,
+        campaignId: this.optionalId(row.campaign?.id),
+        resourceName: criterion.resourceName || criterion.resource_name,
+        criterionType: type,
+        negative: criterion.negative === true,
+        targetConstantId: this.idFromResourceName(targetResource),
+        status: criterion.status,
+        lastSyncAt: now,
+      };
+    }).filter((doc) => doc.campaignId && doc.resourceName
+      && ['LOCATION', 'LANGUAGE'].includes(doc.criterionType)
+      && doc.targetConstantId);
+    return {
+      campaignCriteria: await this.upsertMany(
+        this.campaignCriterionModel,
+        documents,
+        ["customerId", "resourceName"],
+        context.writeTelemetry,
+        "google_ads_campaign_criteria",
+        "campaign_criteria",
+      ),
+    };
+  }
+
+  private async syncConversionActions(
+    account: AdAccountDocument,
+    customerId: string,
+    context: GoogleAdsReadonlySyncContext,
+  ) {
+    if (!this.conversionActionModel) return { conversionActions: 0 };
+    const conversionCustomerId = this.idFromResourceName(
+      (account as any).googleAdsConversionCustomer,
+    ) || customerId;
+    const cacheKey = [
+      conversionCustomerId,
+      this.sanitizeId(String(account.loginCustomerId || "")) || "",
+    ].join(":");
+    let rowsPromise = context.conversionActionRows.get(cacheKey);
+    if (!rowsPromise) {
+      rowsPromise = this.searchRows(
+        account,
+        conversionCustomerId,
+        context,
+        "conversion_actions",
+      );
+      context.conversionActionRows.set(cacheKey, rowsPromise);
+    }
+    const rows = await rowsPromise;
+    const now = new Date();
+    const documents = rows.map((row) => {
+      const action = row.conversionAction || row.conversion_action || {};
+      const resourceName = action.resourceName || action.resource_name;
+      const ownerCustomer = action.ownerCustomer || action.owner_customer;
+      return {
+        customerId,
+        conversionActionId:
+          this.optionalId(action.id) || this.idFromResourceName(resourceName),
+        resourceName,
+        ownerCustomerId:
+          this.idFromResourceName(ownerCustomer)
+          || this.idFromResourceName(resourceName),
+        name: action.name,
+        status: action.status,
+        type: action.type,
+        category: action.category,
+        origin: action.origin,
+        primaryForGoal:
+          action.primaryForGoal ?? action.primary_for_goal,
+        lastSyncAt: now,
+      };
+    }).filter((document) => document.conversionActionId && document.resourceName);
+    return {
+      conversionActions: await this.upsertMany(
+        this.conversionActionModel,
+        documents,
+        ["customerId", "conversionActionId"],
+        context.writeTelemetry,
+        "google_ads_conversion_actions",
+        "conversion_actions",
+      ),
+    };
+  }
+
+  private async syncCampaignConversionGoals(
+    account: AdAccountDocument,
+    customerId: string,
+    context: GoogleAdsReadonlySyncContext,
+  ) {
+    if (!this.campaignConversionGoalModel) return { campaignConversionGoals: 0 };
+    const rows = await this.searchRows(
+      account,
+      customerId,
+      context,
+      "campaign_conversion_goals",
+    );
+    const now = new Date();
+    const documents = rows.map((row) => {
+      const goal = row.campaignConversionGoal || row.campaign_conversion_goal || {};
+      const campaignResource = goal.campaign
+        || row.campaign?.resourceName
+        || row.campaign?.resource_name;
+      return {
+        customerId,
+        campaignId:
+          this.optionalId(row.campaign?.id)
+          || this.idFromResourceName(campaignResource),
+        resourceName: goal.resourceName || goal.resource_name,
+        category: goal.category,
+        origin: goal.origin,
+        biddable: goal.biddable === true,
+        lastSyncAt: now,
+      };
+    }).filter((document) => (
+      document.campaignId
+      && document.resourceName
+      && document.category
+      && document.origin
+    ));
+    return {
+      campaignConversionGoals: await this.upsertMany(
+        this.campaignConversionGoalModel,
+        documents,
+        ["customerId", "campaignId", "category", "origin"],
+        context.writeTelemetry,
+        "google_ads_campaign_conversion_goals",
+        "campaign_conversion_goals",
+      ),
+    };
+  }
+
+  private async syncConversionGoalCampaignConfigs(
+    account: AdAccountDocument,
+    customerId: string,
+    context: GoogleAdsReadonlySyncContext,
+  ) {
+    if (!this.conversionGoalCampaignConfigModel) {
+      return { conversionGoalCampaignConfigs: 0 };
+    }
+    const rows = await this.searchRows(
+      account,
+      customerId,
+      context,
+      "conversion_goal_campaign_configs",
+    );
+    const now = new Date();
+    const documents = rows.map((row) => {
+      const config =
+        row.conversionGoalCampaignConfig
+        || row.conversion_goal_campaign_config
+        || {};
+      const campaignResource = config.campaign
+        || row.campaign?.resourceName
+        || row.campaign?.resource_name;
+      return {
+        customerId,
+        campaignId:
+          this.optionalId(row.campaign?.id)
+          || this.idFromResourceName(campaignResource),
+        resourceName: config.resourceName || config.resource_name,
+        goalConfigLevel:
+          config.goalConfigLevel || config.goal_config_level,
+        customConversionGoalResourceName:
+          config.customConversionGoal
+          || config.custom_conversion_goal
+          || null,
+        lastSyncAt: now,
+      };
+    }).filter((document) => document.campaignId && document.resourceName);
+    return {
+      conversionGoalCampaignConfigs: await this.upsertMany(
+        this.conversionGoalCampaignConfigModel,
+        documents,
+        ["customerId", "campaignId"],
+        context.writeTelemetry,
+        "google_ads_conversion_goal_campaign_configs",
+        "conversion_goal_campaign_configs",
       ),
     };
   }
@@ -585,6 +908,12 @@ export class GoogleAdsReadonlySyncService {
           matchType: keyword.matchType || keyword.match_type,
           negative: Boolean(criterion.negative),
           status: criterion.status,
+          cpcBidMicros: this.number(
+            criterion.cpcBidMicros ?? criterion.cpc_bid_micros,
+          ),
+          finalUrls: Array.isArray(criterion.finalUrls || criterion.final_urls)
+            ? criterion.finalUrls || criterion.final_urls
+            : [],
           qualityScore: this.number(
             qualityInfo.qualityScore ?? qualityInfo.quality_score,
           ),
@@ -643,6 +972,9 @@ export class GoogleAdsReadonlySyncService {
           finalUrls: Array.isArray(ad.finalUrls || ad.final_urls)
             ? ad.finalUrls || ad.final_urls
             : [],
+          trackingUrlTemplate:
+            ad.trackingUrlTemplate || ad.tracking_url_template,
+          finalUrlSuffix: ad.finalUrlSuffix || ad.final_url_suffix,
           path1: rsa.path1,
           path2: rsa.path2,
           policyApprovalStatus: policy.approvalStatus || policy.approval_status,
@@ -840,6 +1172,10 @@ export class GoogleAdsReadonlySyncService {
       accounts: 0,
       campaigns: 0,
       campaignBudgets: 0,
+      campaignCriteria: 0,
+      conversionActions: 0,
+      campaignConversionGoals: 0,
+      conversionGoalCampaignConfigs: 0,
       adGroups: 0,
       keywords: 0,
       ads: 0,

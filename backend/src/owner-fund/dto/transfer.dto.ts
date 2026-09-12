@@ -1,6 +1,9 @@
 import { IsString, IsNumber, IsOptional, IsDateString, Min, MaxLength } from 'class-validator';
 
 export class TransferToOwnerFundDto {
+  @IsOptional()
+  @IsString()
+  ledgerAccountId?: string;
   @IsString()
   @MaxLength(200)
   idempotencyKey: string;
@@ -27,6 +30,9 @@ export class TransferToOwnerFundDto {
 }
 
 export class TransferFromOwnerFundDto {
+  @IsOptional()
+  @IsString()
+  ledgerAccountId?: string;
   @IsString()
   @MaxLength(200)
   idempotencyKey: string;

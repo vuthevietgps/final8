@@ -1,10 +1,12 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from './advertising-cost-refresh.module';
 /**
  * File: advertising-cost/advertising-cost.service.ts
  * Má»¥c Ä‘Ã­ch: Xá»­ lÃ½ nghiá»‡p vá»¥ CRUD cho Chi PhÃ­ Quáº£ng CÃ¡o.
  */
 import { Injectable, NotFoundException, BadRequestException, Inject, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import { AdvertisingCost, AdvertisingCostDocument } from './schemas/advertising-cost.schema';
@@ -18,6 +20,15 @@ import { TestOrder2Service } from '../test-order2/test-order2.service';
 @Injectable()
 export class AdvertisingCostService implements OnModuleInit {
   private readonly logger = new Logger(AdvertisingCostService.name);
+
+  private validateMoneyMetrics(value: Partial<CreateAdvertisingCostDto>): void {
+    for (const field of ['spentAmount', 'cpm', 'cpc'] as const) {
+      const amount = value[field];
+      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000_000_000)) {
+        throw new BadRequestException(`${field} phải là số từ 0 đến 1.000.000.000.000`);
+      }
+    }
+  }
 
   // Chuáº©n hoÃ¡ vá» Ä‘áº§u ngÃ y theo UTC (00:00:00.000Z)
   private toUtcStartOfDay(d: Date | string): Date {
@@ -75,6 +86,10 @@ export class AdvertisingCostService implements OnModuleInit {
       if (iso) daySet.add(iso);
     }
 
+    if (this.events) {
+      await this.events.emitAsync(FINANCIAL_INPUT_CHANGED, { dates: [...daySet], revalue: false });
+      return;
+    }
     for (const dayIso of daySet) {
       try {
         await this.testOrder2Service.recalculateOrdersForDate(dayIso);
@@ -100,6 +115,7 @@ export class AdvertisingCostService implements OnModuleInit {
     private readonly chatMessageModel: Model<ChatMessageDocument>,
     @Inject(forwardRef(() => TestOrder2Service))
     private readonly testOrder2Service: TestOrder2Service,
+    private readonly events?: EventEmitter2,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -123,6 +139,7 @@ export class AdvertisingCostService implements OnModuleInit {
   }
 
   async create(dto: CreateAdvertisingCostDto): Promise<AdvertisingCost> {
+    this.validateMoneyMetrics(dto);
     const context = await this.resolveAdContext(dto.adGroupId, {
       channel: dto.channel as any,
       customerId: dto.customerId,
@@ -179,10 +196,13 @@ export class AdvertisingCostService implements OnModuleInit {
     const adGroups = await this.adGroupModel.find({ adGroupId: { $in: uniqueAdGroupIds } })
       .select('adGroupId adAccountId platform assignedEmployeeId')
       .lean();
-    const adAccountIds = Array.from(new Set(adGroups.map(g => String(g.adAccountId))));
-    const adAccounts = await this.adAccountModel.find({ _id: { $in: adAccountIds } })
+    // Imported/legacy groups may have no ERP account mapping yet. Keep their
+    // costs visible instead of passing "undefined" to an ObjectId query.
+    const adAccountIds = Array.from(new Set(adGroups.map(g => String(g.adAccountId))))
+      .filter(id => Types.ObjectId.isValid(id));
+    const adAccounts = adAccountIds.length ? await this.adAccountModel.find({ _id: { $in: adAccountIds } })
       .select('name accountId managementMode businessCenterId businessCenterName adsManagerUserId')
-      .lean();
+      .lean() : [];
     const adGroupMap = new Map(adGroups.map(g => [g.adGroupId, g]));
     const adAccountMap = new Map(adAccounts.map(a => [String(a._id), a]));
 
@@ -211,6 +231,7 @@ export class AdvertisingCostService implements OnModuleInit {
   }
 
   async update(id: string, dto: UpdateAdvertisingCostDto): Promise<AdvertisingCost> {
+    this.validateMoneyMetrics(dto);
     const existing = await this.model.findById(id).lean();
     if (!existing) throw new NotFoundException('Advertising cost not found');
 
@@ -222,12 +243,18 @@ export class AdvertisingCostService implements OnModuleInit {
     });
 
     const update: Partial<AdvertisingCost> = { ...dto } as any;
+    if (dto.spentAmount !== undefined) {
+      update.isEstimated = false;
+      update.sourceSystem = 'manual';
+    }
     (update as any).channel = context.channel;
     (update as any).customerId = context.customerId;
     (update as any).businessCenterId = context.businessCenterId;
     (update as any).managementMode = context.managementMode;
     if (dto.date) (update as any).date = this.toUtcStartOfDay(dto.date);
-    const doc = await this.model.findByIdAndUpdate(id, update, { new: true }).lean();
+    const doc = await this.model.findByIdAndUpdate(id, { $set: update,
+      ...(dto.spentAmount !== undefined ? { $unset: { estimationMethod: 1, estimationSampleDays: 1, estimatedAt: 1, sourceSyncRunId: 1 } } : {}),
+    }, { new: true, runValidators: true }).lean();
     if (!doc) throw new NotFoundException('Advertising cost not found');
     await this.triggerRecalculateForDates([existing.date as any, (doc as any).date as any]);
     return doc as any;
@@ -479,6 +506,7 @@ export class AdvertisingCostService implements OnModuleInit {
           const spentAmount = get(5) !== '' ? Number(get(5)) : 0;
           const cpc = get(6) !== '' ? Number(get(6)) : 0;
           const cpm = get(7) !== '' ? Number(get(7)) : 0;
+          this.validateMoneyMetrics({ spentAmount, cpc, cpm });
 
           if (!adGroupId || rawDate === '') { results.skipped++; results.errors.push(`DÃ²ng ${i + 1}: thiáº¿u ID NhÃ³m QC hoáº·c NgÃ y`); continue; }
 
@@ -492,7 +520,7 @@ export class AdvertisingCostService implements OnModuleInit {
           const res = await this.model.updateOne(
             { adGroupId, date },
             { $set: updateDoc },
-            { upsert: true }
+            { upsert: true, runValidators: true }
           );
           if ((res as any).upserted || (res as any).matchedCount === 0) results.created++; else results.updated++;
           results.processed++;

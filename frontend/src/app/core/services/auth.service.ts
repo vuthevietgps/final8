@@ -48,13 +48,15 @@ export class AuthService {
       'supplier-quotes.approve', 'orders.confirm-business',
       'quotes', 'reports', 'export', 'import', 'settings',
       // Ngân sách Ads & KPI - Director có quyền xem
-      'ads-budget', 'employee-ads-kpi', 'manager-handbook', 'finance', 'finance.budget-buckets.manage', 'finance.policy.manage',
+      'ads-budget', 'employee-ads-kpi', 'manager-handbook', 'finance', 'finance.cashflow.manage', 'finance.budget-buckets.manage', 'finance.policy.manage',
       // Quỹ Owner - Chỉ Director có quyền
       'owner-fund',
       // Cập nhật đơn hàng từ Excel
       'order-update',
       'google-ads.read', 'google-ads.plan', 'google-ads.approve', 'google-ads.execute',
       'google-ads.credentials.read', 'google-ads.credentials.write', 'google-ads.emergency-pause',
+      'meta-ads.read', 'meta-ads.plan', 'meta-ads.validate', 'meta-ads.approve', 'meta-ads.execute',
+      'meta-ads.credentials.read', 'meta-ads.credentials.write',
       'ai-data-pack.marketer.read'
     ],
     [UserRole.MANAGER]: [
@@ -63,7 +65,9 @@ export class AuthService {
       'fanpages', 'openai-configs', 'chat-messages', 'ai-assistant',
       // Ads budget + KPI
       'ads-budget', 'employee-ads-kpi', 'manager-handbook', 'reports',
-      'google-ads.read', 'google-ads.plan', 'ai-data-pack.marketer.read'
+      'google-ads.read', 'google-ads.plan',
+      'meta-ads.read', 'meta-ads.plan', 'meta-ads.validate',
+      'ai-data-pack.marketer.read'
     ],
     [UserRole.EMPLOYEE]: [
       'orders-test2', 'order-update', 'chat-messages'

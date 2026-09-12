@@ -1,0 +1,67 @@
+# Isolated production smoke test. Inject JWT_SECRET and API_TOKEN_SECRET in the shell.
+name: htxbachgia-release-smoke
+services:
+  mongo:
+    image: mongo:8.2
+    command: [mongod, --replSet, rs0, --bind_ip_all]
+    volumes:
+      - smoke-db:/data/db
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, 'db.adminCommand("ping").ok']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  mongo-init:
+    image: mongo:8.2
+    depends_on:
+      mongo:
+        condition: service_healthy
+    entrypoint: [mongosh, --quiet, --host, 'mongo:27017', --eval]
+    command:
+      - 'try { rs.status().ok } catch (e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}).ok }'
+  backend:
+    image: htxbachgia/backend:20260909-deploy
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      MONGODB_URI: mongodb://mongo:27017/release_smoke?replicaSet=rs0
+      JWT_SECRET: ${JWT_SECRET:?Inject an ephemeral JWT_SECRET}
+      API_TOKEN_SECRET: ${API_TOKEN_SECRET:?Inject an ephemeral API_TOKEN_SECRET}
+      AI_MARKETING_REQUIRE_APPROVAL: 'true'
+      AI_MARKETING_DRY_RUN: 'true'
+      AI_MARKETING_PROVIDER_EXECUTION_ENABLED: 'false'
+      GOOGLE_ADS_PRODUCTION_ENABLED: 'false'
+      META_ADS_PRODUCTION_ENABLED: 'false'
+      META_ADS_PROVIDER_EXECUTION_ENABLED: 'false'
+      FB_SENDING_ENABLED: '0'
+      AI_FB_SENDING_ENABLED: '0'
+      AI_FB_DELIVERY_RECOVERY_ENABLED: '0'
+      PUBLIC_ORIGIN: http://localhost:18090
+    ports:
+      - 127.0.0.1:13090:3000
+    volumes:
+      - smoke-uploads:/app/uploads
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:3000/health/ready']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  frontend:
+    image: htxbachgia/frontend:20260909-deploy
+    ports:
+      - 127.0.0.1:18090:80
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1/']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  smoke-db:
+  smoke-uploads:

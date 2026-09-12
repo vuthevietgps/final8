@@ -103,6 +103,8 @@ export interface AdsAutomationFinanceGate {
   availableCash?: number;
   dailyCap?: number;
   monthlyCap?: number;
+  weeklyCap?: number;
+  currentWeeklySpend?: number;
   currentDailySpend: number;
   currentMonthlySpend: number;
   lossLimit?: number;
@@ -160,8 +162,18 @@ export interface AdsAutomationEvidenceSnapshot {
   snapshotId: string;
   generatedAt: string;
   environment: 'local' | 'demo' | 'staging' | 'production';
+  // Backward-compatible Google value. New consumers should use the
+  // platform-specific map below.
   productionEnabled: boolean;
   providerExecutionEnabled: boolean;
+  productionEnabledByPlatform: {
+    googleAds: boolean;
+    metaAds: boolean;
+  };
+  providerExecutionEnabledByPlatform: {
+    googleAds: boolean;
+    metaAds: boolean;
+  };
   dryRun: boolean;
   killSwitchActive: boolean;
   summary: {
@@ -180,6 +192,7 @@ export interface AdsAutomationEvidenceSnapshot {
     localOnly: boolean;
     providerApiCalled: false;
     googleAdsApiCalled: false;
+    metaAdsApiCalled: false;
     liveExecutionUsed: false;
     secretsRedacted: true;
     campaignBudgetIdNoFallback: true;

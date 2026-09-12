@@ -36,7 +36,7 @@ export class GoogleAdsActionPlanService {
   async getPlan(planId: string) {
     const plan = await this.actionPlanModel.findOne({ planId: this.requiredText(planId, 'planId') }).lean();
     if (!plan) throw new NotFoundException('Google Ads action plan not found.');
-    return { success: true, plan };
+    return { success: true, plan: this.publicPlan(plan) };
   }
 
   async getExecutions(planId: string) {
@@ -52,8 +52,8 @@ export class GoogleAdsActionPlanService {
 
   async approve(currentUser: any, planId: string, actionId: string, body: ApprovalBody) {
     const approvalText = this.requiredOriginalText(body?.approvalText, 'approvalText');
-    this.assertCodexSource(body?.approvedBySource, 'approvedBySource');
     const plan: any = await this.loadPlan(planId);
+    const approvalSource = this.decisionSource(plan, body?.approvedBySource, 'approvedBySource');
     const action = this.findAction(plan, actionId);
     this.assertDecisionAllowed(action);
     this.approvalPolicy.assertCanApprove(action);
@@ -61,12 +61,18 @@ export class GoogleAdsActionPlanService {
     const at = new Date();
     const actor = this.userLabel(currentUser);
     const actorId = this.userId(currentUser);
+    if (!actorId) {
+      throw new BadRequestException('Google Ads approval requires a canonical authenticated user ID.');
+    }
+    if (plan.createdByUserId && String(plan.createdByUserId) === actorId) {
+      throw new BadRequestException('Action plan creator cannot approve the same Google Ads plan.');
+    }
     action.status = 'approved';
     action.approvalText = approvalText;
     action.approvedBy = actor;
     action.approvedByUserId = actorId;
     action.approvedAt = at;
-    action.approvedBySource = 'codex_operator';
+    action.approvedBySource = approvalSource;
     action.requireExecutionConfirmation = body?.requireExecutionConfirmation !== false;
     action.rejectionReason = undefined;
     action.rejectedBy = undefined;
@@ -75,29 +81,37 @@ export class GoogleAdsActionPlanService {
     action.rejectedBySource = undefined;
     action.approvalHistory = [
       ...(action.approvalHistory || []),
-      { decision: 'approved', text: approvalText, by: actor, byUserId: actorId, source: 'codex_operator', at },
+      { decision: 'approved', text: approvalText, by: actor, byUserId: actorId, source: approvalSource, at },
     ];
 
     await this.saveDecision(plan);
-    return { success: true, planId: plan.planId, planStatus: plan.status, action };
+    return {
+      success: true,
+      planId: plan.planId,
+      planStatus: plan.status,
+      action: this.publicAction(action),
+    };
   }
 
   async reject(currentUser: any, planId: string, actionId: string, body: RejectionBody) {
     const reason = this.requiredOriginalText(body?.reason, 'reason');
-    this.assertCodexSource(body?.rejectedBySource, 'rejectedBySource');
     const plan: any = await this.loadPlan(planId);
+    const rejectionSource = this.decisionSource(plan, body?.rejectedBySource, 'rejectedBySource');
     const action = this.findAction(plan, actionId);
     this.assertDecisionAllowed(action);
 
     const at = new Date();
     const actor = this.userLabel(currentUser);
     const actorId = this.userId(currentUser);
+    if (!actorId) {
+      throw new BadRequestException('Google Ads rejection requires a canonical authenticated user ID.');
+    }
     action.status = 'rejected';
     action.rejectionReason = reason;
     action.rejectedBy = actor;
     action.rejectedByUserId = actorId;
     action.rejectedAt = at;
-    action.rejectedBySource = 'codex_operator';
+    action.rejectedBySource = rejectionSource;
     action.approvalText = undefined;
     action.approvedBy = undefined;
     action.approvedByUserId = undefined;
@@ -106,11 +120,16 @@ export class GoogleAdsActionPlanService {
     action.requireExecutionConfirmation = undefined;
     action.approvalHistory = [
       ...(action.approvalHistory || []),
-      { decision: 'rejected', text: reason, by: actor, byUserId: actorId, source: 'codex_operator', at },
+      { decision: 'rejected', text: reason, by: actor, byUserId: actorId, source: rejectionSource, at },
     ];
 
     await this.saveDecision(plan);
-    return { success: true, planId: plan.planId, planStatus: plan.status, action };
+    return {
+      success: true,
+      planId: plan.planId,
+      planStatus: plan.status,
+      action: this.publicAction(action),
+    };
   }
 
   private async loadPlan(planId: string) {
@@ -154,10 +173,18 @@ export class GoogleAdsActionPlanService {
     }
   }
 
-  private assertCodexSource(value: any, field: string) {
-    if (value !== undefined && value !== 'codex_operator') {
-      throw new BadRequestException(`${field} must be codex_operator.`);
+  private decisionSource(
+    plan: GoogleAdsActionPlan,
+    supplied: unknown,
+    field: string,
+  ): 'codex_operator' | 'erp_ui' {
+    const source = ['erp_ui', 'erp_automation'].includes(String(plan.source))
+      ? 'erp_ui'
+      : 'codex_operator';
+    if (supplied !== undefined && supplied !== source) {
+      throw new BadRequestException(`${field} must match the action plan source (${source}).`);
     }
+    return source;
   }
 
   private requiredText(value: any, field: string) {
@@ -178,5 +205,24 @@ export class GoogleAdsActionPlanService {
   private userId(user: any) {
     const value = user?.id || user?._id || user?.sub;
     return value ? String(value) : undefined;
+  }
+
+  private publicPlan(plan: any) {
+    return {
+      ...plan,
+      items: (plan?.items || []).map((action: any) => this.publicAction(action)),
+    };
+  }
+
+  private publicAction(action: any) {
+    const plain = action?.toObject ? action.toObject() : action;
+    const {
+      loginCustomerId: _loginCustomerId,
+      credentialReferenceId: _credentialReferenceId,
+      providerValidationCredentialReferenceId: _providerCredentialReferenceId,
+      providerValidationCredentialBindingHash: _providerCredentialBindingHash,
+      ...publicAction
+    } = plain;
+    return publicAction;
   }
 }

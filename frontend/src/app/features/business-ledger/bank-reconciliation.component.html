@@ -1,0 +1,82 @@
+<main class="bank-page">
+  <header>
+    <div>
+      <h1>Đối chiếu sao kê ngân hàng</h1>
+      <p>Sao kê là bằng chứng độc lập. Nhập sao kê không tự tạo doanh thu hoặc thu/chi trong sổ.</p>
+    </div>
+    <a routerLink="/finance/business-ledger">Mở Sổ kinh doanh</a>
+  </header>
+
+  @if (error) { <p class="error" role="alert">{{ error }}</p> }
+  @if (message) { <p class="success" role="status">{{ message }}</p> }
+
+  <section class="panel">
+    <h2>Nhập sao kê chuẩn hóa</h2>
+    <div class="form-grid">
+      <label>Tài khoản<select [(ngModel)]="form.accountId"><option value="">Chọn tài khoản</option>@for (a of accounts; track a._id) {<option [value]="a._id">{{ a.code }} · {{ a.name }}</option>}</select></label>
+      <label>Mã sao kê<input [(ngModel)]="form.statementKey" placeholder="VCB-2026-09" /></label>
+      <label>Từ ngày<input type="date" [(ngModel)]="form.from" /></label>
+      <label>Đến ngày<input type="date" [(ngModel)]="form.to" /></label>
+      <label>Số dư đầu kỳ<input type="number" [(ngModel)]="form.openingBalance" /></label>
+      <label>Số dư cuối kỳ<input type="number" [(ngModel)]="form.closingBalance" /></label>
+      <label class="wide">Nguồn/tệp sao kê<input [(ngModel)]="form.evidence" placeholder="Tên tệp, ngân hàng, ngày tải" /></label>
+      <label class="wide">CSV giao dịch
+        <textarea rows="8" [(ngModel)]="form.csv"></textarea>
+        <small>Cột: externalId, occurredAt, amount, reference, description. Tiền vào dương, tiền ra âm; VND nguyên.</small>
+      </label>
+    </div>
+    <button (click)="importStatement()" [disabled]="busy || !form.accountId">Nhập và kiểm tra toàn vẹn</button>
+  </section>
+
+  <section class="panel">
+    <h2>Sao kê đã nhập</h2>
+    <div class="statement-list">
+      @for (s of statements; track s._id) {
+        <button (click)="loadReport(s._id)" [disabled]="busy">
+          <b>{{ s.statementKey }}</b><span>{{ s.from }} → {{ s.to }}</span><span>{{ amount(s.closingBalance) }}</span>
+        </button>
+      } @empty { <p>Chưa có sao kê.</p> }
+    </div>
+  </section>
+
+  @if (report; as r) {
+    <section class="panel">
+      <div class="report-title">
+        <div><h2>{{ r.statement.statementKey }}</h2><p>{{ r.account.code }} · {{ r.account.name }}</p></div>
+        <strong [class.ok]="r.fullyReconciled">{{ r.fullyReconciled ? 'Đã đối chiếu hoàn toàn' : 'Còn chênh lệch/chưa ghép' }}</strong>
+      </div>
+      <div class="cards">
+        <article><span>Số dư cuối ngân hàng</span><b>{{ amount(r.bank.declaredClosing) }}</b></article>
+        <article><span>Số dư cuối theo sổ</span><b>{{ amount(r.book.closingBalance) }}</b></article>
+        <article><span>Chênh lệch ngân hàng − sổ</span><b>{{ amount(r.difference) }}</b></article>
+        <article><span>Đã ghép</span><b>{{ r.matched.count }} dòng · {{ amount(r.matched.amount) }}</b></article>
+      </div>
+      <p class="hint">Kiểm tra toàn vẹn sao kê: {{ amount(r.bank.integrityDifference) }}. Còn {{ r.unmatchedBankLines.length }} dòng ngân hàng và {{ r.unmatchedLedgerEntries.length }} nghiệp vụ sổ chưa ghép.</p>
+
+      <h3>Dòng ngân hàng chưa ghép</h3>
+      <div class="table-scroll"><table><thead><tr><th>Ngày</th><th>Mã / diễn giải</th><th>Số tiền</th><th>Gợi ý khớp</th></tr></thead><tbody>
+        @for (line of r.unmatchedBankLines; track line._id) {
+          <tr><td>{{ line.occurredAt | date:'dd/MM/yyyy HH:mm' }}</td><td><b>{{ line.externalId }}</b><small>{{ line.description }}</small></td><td [class.negative]="line.amount < 0">{{ amount(line.amount) }}</td><td>
+            @for (candidate of line.candidates; track candidate.entryId) {
+              <button class="candidate" (click)="match(line, candidate)" [disabled]="busy">{{ candidate.occurredAt | date:'dd/MM' }} · {{ candidate.description || candidate.kind }}</button>
+            } @empty { <span>Không có gợi ý cùng số tiền trong ±3 ngày</span> }
+          </td></tr>
+        } @empty { <tr><td colspan="4">Không còn dòng ngân hàng chưa ghép.</td></tr> }
+      </tbody></table></div>
+
+      <h3>Nghiệp vụ sổ chưa có dòng ngân hàng</h3>
+      <div class="table-scroll"><table><thead><tr><th>Ngày</th><th>Nghiệp vụ</th><th>Diễn giải</th><th>Số tiền</th></tr></thead><tbody>
+        @for (entry of r.unmatchedLedgerEntries; track entry.entryId) {
+          <tr><td>{{ entry.occurredAt | date:'dd/MM/yyyy HH:mm' }}</td><td>{{ entry.kind }}</td><td>{{ entry.description }}</td><td [class.negative]="entry.amount < 0">{{ amount(entry.amount) }}</td></tr>
+        } @empty { <tr><td colspan="4">Không còn nghiệp vụ sổ chưa ghép.</td></tr> }
+      </tbody></table></div>
+
+      <details><summary>Xem các dòng đã ghép</summary>
+        @for (line of r.lines || []; track line._id) {
+          @if (line.status === 'matched') { <p>{{ line.externalId }} · {{ amount(line.amount) }} <button (click)="unmatch(line)">Bỏ ghép</button></p> }
+        }
+      </details>
+    </section>
+  }
+</main>
+

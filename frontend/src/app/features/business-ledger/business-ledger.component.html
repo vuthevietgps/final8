@@ -1,0 +1,533 @@
+<main class="ledger">
+  <h1>Công nợ & tiền thực nhận</h1>
+  <p class="intro">
+    Mua bán tạo công nợ. Thu/chi đã xác nhận mới thay đổi tiền. Sổ này chưa tự chuyển dữ liệu thanh
+    toán cũ.
+  </p>
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+  @if (message()) {
+    <p class="success" role="status">{{ message() }}</p>
+  }
+  <div class="filters">
+    <label>Từ ngày<input type="date" [(ngModel)]="from" /></label>
+    <label>Đến ngày<input type="date" [(ngModel)]="to" /></label>
+    <button (click)="reload()" [disabled]="busy()">Xem báo cáo</button>
+    <a routerLink="/orders/test2">Quản lý đơn hàng</a>
+    <a routerLink="/finance/bank-reconciliation">Đối chiếu ngân hàng</a>
+  </div>
+  @if (report(); as r) {
+    <section class="cards" aria-label="Tổng quan">
+      <article>
+        <span>Số dư các tài khoản đã khai báo</span
+        ><strong>{{ amount(r.cash.registeredAccountsBalance) }}</strong
+        ><small>Đến cuối ngày {{ to }} · không cộng tiền đối tác giữ hộ</small>
+      </article>
+      <article>
+        <span>Còn phải thu theo sổ</span><strong>{{ amount(r.totalReceivable) }}</strong
+        ><small>Gồm tiền bán hàng và tiền đối tác cần chuyển lại</small>
+      </article>
+      <article>
+        <span>Còn phải trả theo sổ</span><strong>{{ amount(r.totalPayable) }}</strong
+        ><small>Chưa tự bù trừ công nợ khác đơn</small>
+      </article>
+    </section>
+    <p class="notice">
+      {{ r.quality.unreviewedOrders }} dòng đơn cần bổ sung/kiểm tra nghiệp vụ ·
+      {{ r.pendingCount }} nghiệp vụ chờ xác nhận. Lãi/lỗ dưới đây chỉ gồm doanh thu, giá vốn, chi
+      phí đã ghi sổ và quảng cáo đã nhập. Chưa dùng để tự điều chỉnh ads.
+    </p>
+    @if (r.quality.invalidAds) {
+      <p class="error">
+        Có {{ r.quality.invalidAds }} dòng chi phí quảng cáo không hợp lệ hoặc khác VND, chưa cộng
+        vào báo cáo.
+      </p>
+    }
+    @if (r.quality.ambiguousAdGroupIds.length) {
+      <p class="error">
+        Có ID nhóm quảng cáo thuộc nhiều nguồn/tài khoản. Chi phí được giữ ở phần chưa phân bổ để
+        kiểm tra ánh xạ.
+      </p>
+    }
+    <nav class="tabs" aria-label="Chiều báo cáo">
+      <button [class.active]="view === 'productCategories'" (click)="view = 'productCategories'">
+        Nhóm sản phẩm
+      </button>
+      <button [class.active]="view === 'products'" (click)="view = 'products'">Sản phẩm</button>
+      <button [class.active]="view === 'agents'" (click)="view = 'agents'">Đại lý</button>
+      <button [class.active]="view === 'adGroups'" (click)="view = 'adGroups'">
+        Nhóm quảng cáo
+      </button>
+      <button [class.active]="view === 'orders'" (click)="view = 'orders'">Đơn & đối soát</button>
+      <button [class.active]="view === 'debts'" (click)="view = 'debts'">Công nợ đối tác</button>
+    </nav>
+    <div class="table-scroll">
+      @if (view === 'debts') {
+        <table>
+          <thead>
+            <tr>
+              <th>Đối tác</th>
+              <th>Còn phải thu</th>
+              <th>Còn phải trả</th>
+              <th>Chênh lệch tham khảo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (d of r.debts; track d.partyKey) {
+              <tr>
+                <td>{{ d.name || d.partyKey }}</td>
+                <td>{{ amount(d.receivable) }}</td>
+                <td>{{ amount(d.payable) }}</td>
+                <td>{{ amount(d.net) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="4">Chưa có công nợ được ghi nhận.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else if (view === 'orders') {
+        <table>
+          <thead>
+            <tr>
+              <th>Đơn / sản phẩm</th>
+              <th>Đối soát</th>
+              <th>Còn thu</th>
+              <th>Còn trả</th>
+              <th>Tiền vào công ty trong kỳ</th>
+              <th>Tiền ra trong kỳ</th>
+              <th>Lãi/lỗ đã ghi nhận</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (o of r.orders; track o.orderId) {
+              <tr>
+                <td>
+                  <button
+                    class="link"
+                    (click)="orderId = o.orderId; loadOrder()"
+                    [disabled]="o.adsOnly || o.orderId === 'unallocated'"
+                  >
+                    {{ o.productName }}</button
+                  ><small>{{ o.orderId }}</small>
+                </td>
+                <td>{{ state(o.settlementStatus) }}</td>
+                <td>{{ amount(o.receivable) }}</td>
+                <td>{{ amount(o.payable) }}</td>
+                <td>{{ amount(o.cashIn) }}</td>
+                <td>{{ amount(o.cashOut) }}</td>
+                <td [class.negative]="o.recordedNetProfit < 0">
+                  {{ amount(o.recordedNetProfit) }}
+                  @if (o.needsReview) {
+                    <small>Cần kiểm tra</small>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7">Chưa có dữ liệu trong kỳ.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>Đối tượng</th>
+              <th>Đơn</th>
+              <th>Doanh thu tiền hàng</th>
+              <th>Giá vốn</th>
+              <th>Chi phí sau thu bù</th>
+              <th>Quảng cáo</th>
+              <th>Lãi/lỗ đã ghi nhận</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (g of r[view]; track g.key) {
+              <tr>
+                <td>
+                  {{ g.name }}
+                  @if (g.needsReview) {
+                    <small>{{ g.needsReview }} đơn cần kiểm tra</small>
+                  }
+                </td>
+                <td>{{ g.orders }}</td>
+                <td>{{ amount(g.revenue) }}</td>
+                <td>{{ amount(g.cogs) }}</td>
+                <td>{{ amount(g.expense) }}</td>
+                <td>{{ amount(g.advertisingCost) }}</td>
+                <td [class.negative]="g.recordedNetProfit < 0">
+                  {{ amount(g.recordedNetProfit) }}
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7">Chưa có dữ liệu trong kỳ.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+    <small class="explain"
+      >Đơn mới: lãi/lỗ cập nhật theo nhóm đơn có ngày đặt trong kỳ. Quảng cáo phân bổ theo số lượng cùng ngày, cùng nhóm; phần chưa có đơn được giữ riêng. Công nợ và số dư tiền tính lũy kế đến cuối kỳ.</small
+    >
+  }
+
+  <section class="panel">
+    <h2>Ghi nhận theo đơn</h2>
+    <div class="filters">
+      <label>Mã đơn<input [(ngModel)]="orderId" placeholder="Mã đơn trong test-order2" /></label>
+      <button (click)="loadOrder()">Tải đơn</button>
+    </div>
+    @if (detail(); as d) {
+      <p>
+        <b>{{ d.order.productName }}</b> · SL {{ d.order.quantity }} · {{ d.order.orderStatus }}
+      </p>
+      <p class="notice">
+        Tham khảo dữ liệu cũ: giá NCC {{ amount(d.suggestions.supplierPrice) }}, giá đại lý
+        {{ amount(d.suggestions.dealerPrice) }}, COD {{ amount(d.suggestions.cod) }}. Các số này
+        chưa phải tiền thực nhận.
+      </p>
+      @if (!d.profile) {
+        <div class="form-grid">
+          <label
+            >Quan hệ bán hàng<select [(ngModel)]="saleMode">
+              <option value="retail">Bán lẻ cho khách</option>
+              <option value="dealer">Bán cho đại lý theo giá đại lý</option>
+            </select></label
+          >
+          <label
+            >Nguồn hàng<select [(ngModel)]="fulfillment">
+              <option value="supplier_direct">NCC giao trực tiếp</option>
+              <option value="inventory">Xuất hàng từ kho công ty</option>
+            </select></label
+          >
+          <label>Chính sách giá vốn hàng hoàn<select [(ngModel)]="returnPolicy">
+            <option value="unconfigured">Chọn chính sách theo thỏa thuận</option>
+            <option value="recoverable">Có thể thu hồi giá vốn khi nhận lại hàng</option>
+            <option value="production_committed">Sản xuất xong phải trả NCC; thu hồi kho xét riêng</option>
+          </select></label>
+          <label
+            >Căn cứ xác nhận<input
+              [(ngModel)]="profileEvidence"
+              placeholder="Hợp đồng / thỏa thuận / phiếu đơn"
+          /></label>
+        </div>
+        @if (saleMode === 'dealer') {
+          <p class="notice">Chính sách đại lý của sản phẩm: {{ dealerPolicyLabel(d.suggestions.dealerReturnPolicy) }}.
+            {{ d.suggestions.dealerReturnTerms }}
+            Cấu hình tại danh mục sản phẩm trước khi chốt đơn. Chính sách này được lưu theo đơn.</p>
+        }
+        <button [disabled]="busy() || !profileEvidence.trim() || returnPolicy === 'unconfigured' || (saleMode === 'dealer' && d.suggestions.dealerReturnPolicy === 'unconfigured')" (click)="createProfile()">
+          Xác nhận mô hình đơn
+        </button>
+      } @else {
+        <p>
+          Mô hình đã chốt:
+          {{ d.profile.context.saleMode === 'dealer' ? 'Bán cho đại lý' : 'Bán lẻ' }} ·
+          {{
+            d.profile.context.fulfillment === 'inventory' ? 'Hàng từ kho' : 'NCC giao trực tiếp'
+          }}.
+        </p>
+      }
+      <p class="notice">
+        {{ d.revenueEligibility[d.profile?.context.saleMode || saleMode].reason }}
+        {{ d.revenueEligibility[d.profile?.context.saleMode || saleMode].eligible ? 'Đã đủ điều kiện ghi doanh thu.' : 'Chưa đủ điều kiện ghi doanh thu.' }}
+        Sản xuất: {{ d.order.productionStatus }} · Vận đơn: {{ d.order.trackingNumber || 'Chưa có' }}.
+      </p>
+      <p class="notice">
+        Chính sách giá vốn: {{ returnPolicy === 'production_committed' ? 'Sản xuất xong phải trả NCC; nhận hàng còn giá trị về kho không làm giảm nợ NCC.' : returnPolicy === 'recoverable' ? 'Chỉ thu hồi giá vốn khi có chứng từ nhận lại hàng hoặc NCC giảm nợ.' : 'Chưa xác nhận.' }}
+        Nhận hàng về kho công ty không đồng nghĩa NCC đã giảm nợ. Phí hoàn ghi riêng vào chi phí.
+      </p>
+      @if ((d.profile?.context.saleMode || saleMode) === 'dealer') {
+        <p class="notice">Trách nhiệm đại lý khi hoàn:
+          {{ dealerPolicyLabel(d.profile ? d.profile.context.dealerReturnPolicy : d.suggestions.dealerReturnPolicy) }}.
+          {{ d.profile ? d.profile.context.dealerReturnTerms : d.suggestions.dealerReturnTerms }}
+          @if (d.profile && !d.profile.context.dealerReturnPolicy) {
+            Đơn cũ chưa lưu chính sách đại lý; cần rà soát thỏa thuận gốc, không lấy chính sách sản phẩm hiện tại áp ngược.
+          }
+          Số tiền ghi giảm phải căn cứ chính sách của đơn và chứng từ; chưa tự điều chỉnh công nợ. Phí giao/hoàn xét riêng.
+        </p>
+      }
+    }
+    <p *ngIf="detail()?.order?.financialModelVersion === 2" class="notice">Doanh thu, giá vốn và phí đã lấy từ đơn hàng / kho. Chỉ ghi thêm thu chi thực tế hoặc điều chỉnh có căn cứ, tránh nhập trùng.</p>
+    <label>Thanh toán nhập hàng về kho (nếu có)
+      <select [(ngModel)]="purchaseOrderId" (ngModelChange)="entry.kind='payment'; entry.fromParty='company'; entry.toParty='supplier'">
+        <option value="">Không chọn PO — ghi theo đơn bán / nghiệp vụ chung</option>
+        <option *ngFor="let po of purchases" [value]="po._id">{{ po.poNumber }} · {{ po.supplierNameSnap }} · {{ amount(po.grandTotal) }}</option>
+      </select>
+    </label>
+    <div class="form-grid">
+      <label
+        >Loại nghiệp vụ<select [(ngModel)]="entry.kind">
+          @for (k of availableKinds; track k[0]) {
+            <option [value]="k[0]">{{ k[1] }}</option>
+          }
+        </select></label
+      >
+      <label
+        >Tổng số tiền VND<input type="number" min="0" step="1" [(ngModel)]="entry.amount"
+      /></label>
+      <label
+        >Thời điểm nghiệp vụ<input type="datetime-local" [(ngModel)]="entry.occurredAt"
+      /></label>
+      <label class="check"
+        ><input type="checkbox" [(ngModel)]="entry.orderLinked" /> Gắn với đơn đang chọn</label
+      >
+      @if (entry.kind === 'payment') {
+        <label
+          >Bên trả<select [(ngModel)]="entry.fromParty">
+            @for (p of parties; track p[0]) {
+              <option [value]="p[0]">{{ p[1] }}</option>
+            }
+          </select></label
+        >
+        <label
+          >Bên nhận<select [(ngModel)]="entry.toParty">
+            @for (p of parties; track p[0]) {
+              <option [value]="p[0]">{{ p[1] }}</option>
+            }
+          </select></label
+        >
+        @if (entry.fromParty === 'company') {
+          <label
+            >Tài khoản chi<select [(ngModel)]="entry.fromAccountId">
+              <option value="">Chọn tài khoản</option>
+              @for (a of accounts(); track a._id) {
+                <option [value]="a._id">{{ a.name }}</option>
+              }
+            </select></label
+          >
+        }
+        @if (entry.toParty === 'company') {
+          <label
+            >Tài khoản nhận<select [(ngModel)]="entry.toAccountId">
+              <option value="">Chọn tài khoản</option>
+              @for (a of accounts(); track a._id) {
+                <option [value]="a._id">{{ a.name }}</option>
+              }
+            </select></label
+          >
+        }
+        @if (!entry.orderLinked) {
+          <label class="check"
+            ><input type="checkbox" [(ngModel)]="entry.settlesDebt" /> Thanh toán công nợ ngoài đơn
+            đã ghi trên sổ (bỏ chọn khi góp vốn/chuyển quỹ)</label
+          >
+        }
+      }
+      @if (entry.kind.startsWith('cash_adjustment_')) {
+        <p class="notice">
+          Bỏ chọn gắn với đơn. Chỉ dùng khi đối chiếu sao kê/kiểm quỹ xác nhận số dư sổ sai; đây
+          không phải một lần thu/chi mới.
+        </p>
+        @if (entry.kind === 'cash_adjustment_in') {
+          <label
+            >Tài khoản điều chỉnh tăng<select [(ngModel)]="entry.toAccountId">
+              <option value="">Chọn tài khoản</option>
+              @for (a of accounts(); track a._id) {
+                <option [value]="a._id">{{ a.name }}</option>
+              }
+            </select></label
+          >
+        } @else {
+          <label
+            >Tài khoản điều chỉnh giảm<select [(ngModel)]="entry.fromAccountId">
+              <option value="">Chọn tài khoản</option>
+              @for (a of accounts(); track a._id) {
+                <option [value]="a._id">{{ a.name }}</option>
+              }
+            </select></label
+          >
+        }
+      }
+      @if (
+        ['expense', 'expense_credit', 'opening_receivable', 'opening_payable'].includes(entry.kind)
+      ) {
+        <label
+          >Đối tác công nợ<select [(ngModel)]="entry.expenseParty">
+            <option value="supplier">NCC của đơn</option>
+            <option value="agent">Đại lý của đơn</option>
+            <option value="other">Đối tác khác</option>
+            @if (entry.kind.startsWith('opening_')) {
+              <option value="customer">Bên mua của đơn</option>
+            }
+          </select></label
+        >
+      }
+      <label
+        >Mã đối tác khác (nếu có)<input
+          [(ngModel)]="entry.otherParty"
+          placeholder="Dùng cùng mã khi ghi nợ và trả tiền"
+      /></label>
+      <label
+        >Chứng từ / căn cứ<input
+          [(ngModel)]="entry.evidence"
+          placeholder="Mã chuyển khoản, phiếu thu, biên bản đối soát…"
+      /></label>
+      <label
+        >Diễn giải<input
+          [(ngModel)]="entry.description"
+          placeholder="Khoản tiền / nghĩa vụ thực tế được xác nhận"
+      /></label>
+    </div>
+    <p class="explain">
+      Giá vốn xuất kho không tạo lại công nợ NCC. Hàng của đại lý hoàn về vẫn giữ doanh thu, giá vốn và nghĩa vụ đại lý.
+      Bán lẻ chỉ thu hồi giá vốn khi nhận lại hàng công ty còn giá trị. Phí thu đại lý được bù vào chi phí vận chuyển,
+      không cộng vào doanh thu tiền hàng. Chi phí quảng cáo lấy từ module quảng cáo, không nhập lại ở đây.
+    </p>
+    <button
+      [disabled]="busy() || !entry.evidence.trim() || !entry.description.trim()"
+      (click)="saveEntry()"
+    >
+      Lưu chờ xác nhận
+    </button>
+    <button class="secondary" [disabled]="busy()" (click)="resetEntry()">Nghiệp vụ mới</button>
+    @if (detail()?.entries?.length) {
+      <h3>Lịch sử của đơn</h3>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Ngày</th>
+              <th>Nghiệp vụ</th>
+              <th>Số tiền</th>
+              <th>Trạng thái</th>
+              <th>Chứng từ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of detail().entries; track e._id) {
+              <tr>
+                <td>{{ e.occurredAt | date: 'dd/MM/yyyy HH:mm' : '+0700' }}</td>
+                <td>
+                  {{ label(e.kind) }}<small>{{ e.description }}</small>
+                </td>
+                <td>{{ amount(e.amount) }}</td>
+                <td>{{ state(e.status) }}</td>
+                <td>{{ e.evidence }}</td>
+                <td>
+                  @if (e.status === 'confirmed' && e.kind !== 'reversal') {
+                    <button [disabled]="busy()" (click)="reverse(e)">Sửa bằng bút toán đảo</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="panel">
+    <h2>Chờ đối soát và xác nhận</h2>
+    <p>
+      Chỉ xác nhận thu/chi khi có chứng từ tiền đã giao nhận. Tiền NCC/đại lý thu hộ vẫn ở bên đó
+      cho đến khi có giao dịch chuyển lại.
+    </p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Ngày / đơn</th>
+            <th>Nghiệp vụ</th>
+            <th>Số tiền</th>
+            <th>Chứng từ</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (e of pending(); track e._id) {
+            <tr>
+              <td>
+                {{ e.occurredAt | date: 'dd/MM/yyyy HH:mm' : '+0700'
+                }}<small>{{ e.orderId || 'Ngoài đơn' }}</small>
+              </td>
+              <td>
+                {{ label(e.kind) }}<small>{{ e.description }}</small>
+                @if (e.kind === 'payment') {
+                  <small>{{ e.posting.fromParty }} → {{ e.posting.toParty }}</small>
+                }
+              </td>
+              <td>{{ amount(e.amount) }}</td>
+              <td>{{ e.evidence }}</td>
+              <td>
+                <button [disabled]="busy()" (click)="confirm(e)">
+                  {{
+                    e.kind === 'payment' ? 'Xác nhận đã giao nhận tiền' : 'Xác nhận nghiệp vụ'
+                  }}</button
+                ><button class="secondary" [disabled]="busy()" (click)="reject(e)">Từ chối</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5">Không có nghiệp vụ chờ xác nhận.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <small>Hiển thị tối đa 200 nghiệp vụ chờ gần nhất.</small>
+  </section>
+  <section class="panel">
+    <h2>Tài khoản tiền công ty</h2>
+    <p>
+      Khai báo từng quỹ tiền mặt/tài khoản ngân hàng và số dư đã đối chiếu tại một mốc. Sổ tính tiền
+      từ mốc này; không nhập lại giao dịch đã nằm trong số dư đầu kỳ.
+    </p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Tài khoản</th>
+            <th>Đầu kỳ</th>
+            <th>Tiền vào</th>
+            <th>Tiền ra</th>
+            <th>Điều chỉnh / đảo</th>
+            <th>Số dư sổ</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of report()?.cash?.accounts || []; track a.id) {
+            <tr>
+              <td>
+                {{ a.name }}<small>{{ a.openingAt | date: 'dd/MM/yyyy HH:mm' : '+0700' }}</small>
+              </td>
+              <td>{{ amount(a.openingBalance) }}</td>
+              <td>{{ amount(a.receipts) }}</td>
+              <td>{{ amount(a.payments) }}</td>
+              <td>{{ amount(a.adjustments) }}</td>
+              <td>{{ amount(a.balance) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="form-grid">
+      <label>Mã tài khoản<input [(ngModel)]="account.code" placeholder="quy_tien_mat" /></label>
+      <label
+        >Tên hiển thị<input [(ngModel)]="account.name" placeholder="Quỹ tiền mặt công ty"
+      /></label>
+      <label
+        >Số dư đầu kỳ VND<input type="number" min="0" step="1" [(ngModel)]="account.openingBalance"
+      /></label>
+      <label>Mốc đầu kỳ<input type="datetime-local" [(ngModel)]="account.openingAt" /></label>
+      <label
+        >Căn cứ số dư<input
+          [(ngModel)]="account.evidence"
+          placeholder="Biên bản kiểm quỹ / sao kê ngày…"
+      /></label>
+    </div>
+    <button
+      [disabled]="busy() || !account.code || !account.name || !account.evidence.trim()"
+      (click)="createAccount()"
+    >
+      Xác nhận số dư đầu kỳ
+    </button>
+  </section>
+</main>

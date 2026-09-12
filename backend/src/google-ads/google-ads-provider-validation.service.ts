@@ -4,6 +4,10 @@ import axios from 'axios';
 import { Model } from 'mongoose';
 import { ApiTokenService } from '../api-token/api-token.service';
 import { redactSecretString } from '../common/utils/secret-redaction.util';
+import {
+  googleAdsCredentialBindingHash,
+  googleAdsOperationHash,
+} from './google-ads-integrity.util';
 import { GoogleAdsOperationBuilderService } from './google-ads-operation-builder.service';
 import {
   GoogleAdsActionPlan,
@@ -41,6 +45,13 @@ export class GoogleAdsProviderValidationService {
         providerValidationErrors: result.errors,
         providerRequestId: result.providerRequestId,
         providerValidatedAt: new Date(),
+        providerValidationExpiresAt: result.status === 'provider_validate_passed'
+          ? new Date(Date.now() + this.providerValidationTtlMs())
+          : undefined,
+        providerValidationOperationHash: result.operationHash,
+        providerValidationApiVersion: result.apiVersion,
+        providerValidationCredentialBindingHash: result.credentialBindingHash,
+        providerValidationCredentialReferenceId: result.credentialReferenceId,
       });
       results.push({
         actionId: action.actionId,
@@ -73,18 +84,31 @@ export class GoogleAdsProviderValidationService {
     status: 'provider_validate_passed' | 'provider_validate_failed';
     errors: ValidationError[];
     providerRequestId?: string;
+    operationHash?: string;
+    apiVersion?: string;
+    credentialBindingHash?: string;
+    credentialReferenceId?: string;
   }> {
+    let operationHash: string | undefined;
+    let apiVersion: string | undefined;
+    let credentialBindingHash: string | undefined;
+    let credentialReferenceId: string | undefined;
     try {
       const operations = this.operationBuilder.build(action);
+      operationHash = googleAdsOperationHash(operations);
       if (action.actionType === 'monitor_only') {
-        return { status: 'provider_validate_passed', errors: [] };
+        return { status: 'provider_validate_passed', errors: [], operationHash };
       }
       if (!operations.length) throw new BadRequestException('No Google Ads operations were built for validation.');
 
       const config = await this.apiTokenService.getGoogleAdsRuntimeConfig({
         customerId: action.customerId,
         loginCustomerId: action.loginCustomerId,
+        credentialReferenceId: (action as any).credentialReferenceId,
       });
+      apiVersion = config.apiVersion;
+      credentialBindingHash = googleAdsCredentialBindingHash(config);
+      credentialReferenceId = config.credentialReferenceId;
       if (!config.developerToken) throw new BadRequestException('Missing Google Ads developer token.');
       if (!config.refreshToken) throw new BadRequestException('Missing Google Ads refresh token.');
       const accessToken = await this.apiTokenService.getGoogleAdsAccessToken(config);
@@ -102,7 +126,7 @@ export class GoogleAdsProviderValidationService {
         mutateOperations: operations,
         partialFailure: false,
         validateOnly: true,
-      }, { headers });
+      }, { headers, timeout: this.providerValidationTimeoutMs() });
       if (response?.data?.partialFailureError) {
         const providerError: any = new Error('Google Ads validateOnly returned partial failure.');
         providerError.response = {
@@ -115,12 +139,20 @@ export class GoogleAdsProviderValidationService {
         status: 'provider_validate_passed',
         errors: [],
         providerRequestId: this.requestId(response?.headers, response?.data?.partialFailureError?.details),
+        operationHash,
+        apiVersion,
+        credentialBindingHash,
+        credentialReferenceId,
       };
     } catch (error: any) {
       return {
         status: 'provider_validate_failed',
         errors: this.providerErrors(error),
         providerRequestId: this.requestId(error?.response?.headers, error?.response?.data?.error?.details),
+        operationHash,
+        apiVersion,
+        credentialBindingHash,
+        credentialReferenceId,
       };
     }
   }
@@ -163,5 +195,17 @@ export class GoogleAdsProviderValidationService {
   private numericId(value: any) {
     const normalized = String(value || '').replace(/\D/g, '');
     return normalized || undefined;
+  }
+
+  private providerValidationTimeoutMs() {
+    const configured = Number(process.env.GOOGLE_ADS_VALIDATION_TIMEOUT_MS);
+    if (!Number.isFinite(configured)) return 30_000;
+    return Math.min(120_000, Math.max(5_000, Math.floor(configured)));
+  }
+
+  private providerValidationTtlMs() {
+    const configured = Number(process.env.GOOGLE_ADS_PROVIDER_VALIDATION_TTL_MS);
+    if (!Number.isFinite(configured)) return 15 * 60 * 1000;
+    return Math.min(24 * 60 * 60 * 1000, Math.max(60 * 1000, Math.floor(configured)));
   }
 }

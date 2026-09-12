@@ -280,7 +280,9 @@ export class EnhancedApiTokenService {
    */
   private async validateFacebookToken(token: string): Promise<{isValid: boolean, message: string}> {
     try {
-      const response = await fetch(`https://graph.facebook.com/me?access_token=${token}`);
+      const response = await fetch('https://graph.facebook.com/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
 
       if (response.ok && data.id) {

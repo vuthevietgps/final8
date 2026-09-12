@@ -1,4 +1,6 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { businessDay, businessDayRange } from '../common/business-day';
+import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import { CounterpartyLedgerService } from '../business-ledger/counterparty-ledger.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as dayjs from 'dayjs';
@@ -24,213 +26,22 @@ export class AgentReceivableService {
     @InjectModel(AgentStatement.name) private readonly statementModel: Model<AgentStatementDocument>,
     @InjectModel(TestOrder2.name) private readonly orderModel: Model<TestOrder2>,
     private readonly eventEmitter: EventEmitter2,
+    @Optional() private readonly counterparties?: CounterpartyLedgerService,
   ) {}
 
   /**
    * Tính công nợ đại lý trực tiếp từ đơn TestOrder2 (không phụ thuộc Summary4).
-   * Quy ước: dùng agentQuote nhân quantity; nếu không có, fallback codAmount.
-   * Giao thành công => coi như đã thu đủ giá trị kỳ vọng.
+   * Dùng giá và phí đã chụp; chỉ giao dịch sổ đã xác nhận làm giảm công nợ.
    */
   async getAgentReceivableSummary(filter: { agentId?: string; from?: string; to?: string }) {
-    const match: any = {
-      isActive: { $ne: false },
-      productionStatus: 'Đã trả kết quả',
-    };
-
-    if (filter?.agentId) {
-      match.agentId = new Types.ObjectId(filter.agentId);
-    }
-
-    if (filter?.from || filter?.to) {
-      match.orderDate = {} as any;
-      if (filter.from) match.orderDate.$gte = new Date(filter.from);
-      if (filter.to) match.orderDate.$lte = new Date(filter.to);
-    }
-
-    const pipeline: any[] = [
-      { $match: match },
-      {
-        $lookup: {
-          from: 'products',
-          localField: 'productId',
-          foreignField: '_id',
-          as: 'product',
-        },
-      },
-      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
-      {
-        $addFields: {
-          _qty: { $ifNull: ['$quantity', 1] },
-          _price: { $ifNull: ['$agentQuote', 0] },
-          _cod: { $ifNull: ['$codAmount', 0] },
-          // Sử dụng trực tiếp từ ordertest2 (đã được tính sẵn)
-          _shippingFee: { $ifNull: ['$shippingFee', 0] },
-          _returnFee: { $ifNull: ['$returnFee', 0] },
-          _isReturnable: { $ifNull: ['$product.isReturnable', true] },
-          _isReturnStatus: {
-            $regexMatch: {
-              input: { $ifNull: ['$orderStatus', ''] },
-              regex: /hoàn/i,
-            },
-          },
-        },
-      },
-      {
-        $addFields: {
-          quoteAmount: {
-            $cond: [
-              { $gt: ['$_price', 0] },
-              { $multiply: ['$_price', '$_qty'] },
-              '$_cod',
-            ],
-          },
-        },
-      },
-      {
-        $addFields: {
-          collected: {
-            $cond: [
-              { $eq: ['$orderStatus', 'Giao thành công'] },
-              '$quoteAmount',
-              0,
-            ],
-          },
-        },
-      },
-      {
-        $addFields: {
-          receivableBase: {
-            $cond: [
-              '$_isReturnStatus',
-              { $cond: ['$_isReturnable', 0, '$quoteAmount'] },
-              { $max: [{ $subtract: ['$quoteAmount', '$collected'] }, 0] },
-            ],
-          },
-        },
-      },
-      {
-        $addFields: {
-          receivable: {
-            $max: [
-              { $add: ['$receivableBase', '$_shippingFee', '$_returnFee'] },
-              0,
-            ],
-          },
-        },
-      },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'agentId',
-          foreignField: '_id',
-          as: 'agent',
-        },
-      },
-      { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: '$agentId',
-          agentName: { $first: '$agent.fullName' },
-          agentEmail: { $first: '$agent.email' },
-          role: { $first: '$agent.role' },
-          totalOrders: { $sum: 1 },
-          totalQuoteAmount: { $sum: '$quoteAmount' },
-          collectedAmount: { $sum: '$collected' },
-          receivableAmount: { $sum: '$receivable' },
-        },
-      },
-      { $sort: { receivableAmount: -1, totalQuoteAmount: -1 } },
-    ];
-
-    const [rows, totalsAgg] = await Promise.all([
-      this.orderModel.aggregate(pipeline),
-      this.orderModel.aggregate([
-        { $match: match },
-        {
-          $lookup: {
-            from: 'products',
-            localField: 'productId',
-            foreignField: '_id',
-            as: 'product',
-          },
-        },
-        { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
-        {
-          $addFields: {
-            _qty: { $ifNull: ['$quantity', 1] },
-            _price: { $ifNull: ['$agentQuote', 0] },
-            _cod: { $ifNull: ['$codAmount', 0] },
-            // Sử dụng trực tiếp từ ordertest2 (đã được tính sẵn)
-            _shippingFee: { $ifNull: ['$shippingFee', 0] },
-            _returnFee: { $ifNull: ['$returnFee', 0] },
-            _isReturnable: { $ifNull: ['$product.isReturnable', true] },
-            _isReturnStatus: {
-              $regexMatch: {
-                input: { $ifNull: ['$orderStatus', ''] },
-                regex: /hoàn/i,
-              },
-            },
-          },
-        },
-        {
-          $addFields: {
-            quoteAmount: {
-              $cond: [
-                { $gt: ['$_price', 0] },
-                { $multiply: ['$_price', '$_qty'] },
-                '$_cod',
-              ],
-            },
-            collected: {
-              $cond: [
-                { $eq: ['$orderStatus', 'Giao thành công'] },
-                {
-                  $cond: [
-                    { $gt: ['$_price', 0] },
-                    { $multiply: ['$_price', '$_qty'] },
-                    '$_cod',
-                  ],
-                },
-                0,
-              ],
-            },
-          },
-        },
-        {
-          $addFields: {
-            receivableBase: {
-              $cond: [
-                '$_isReturnStatus',
-                { $cond: ['$_isReturnable', 0, '$quoteAmount'] },
-                { $max: [{ $subtract: ['$quoteAmount', '$collected'] }, 0] },
-              ],
-            },
-          },
-        },
-        {
-          $addFields: {
-            receivable: {
-              $max: [
-                { $add: ['$receivableBase', '$_shippingFee', '$_returnFee'] },
-                0,
-              ],
-            },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalQuoteAmount: { $sum: '$quoteAmount' },
-            collectedAmount: { $sum: '$collected' },
-            receivableAmount: { $sum: '$receivable' },
-            totalOrders: { $sum: 1 },
-          },
-        },
-      ]),
-    ]);
-
-    const totals = totalsAgg[0] || { totalQuoteAmount: 0, collectedAmount: 0, receivableAmount: 0, totalOrders: 0 };
-    return { data: rows, totals };
+    if (!this.counterparties) throw new BadRequestException('Nguồn công nợ chung chưa được cấu hình.');
+    const canonical=await this.counterparties.summary('agent',{partyId:filter.agentId,from:filter.from,to:filter.to});
+    const data=canonical.data.map(g=>({_id:g.partyId,agentName:g.name,totalOrders:g.orders.length,
+      totalQuoteAmount:g.orders.reduce((n,r)=>n+r.obligation,0),contractualAmount:g.orders.reduce((n,r)=>n+r.obligation,0),
+      adjustmentAmount:g.orders.reduce((n,r)=>n+r.adjustments,0),collectedAmount:-g.orders.reduce((n,r)=>n+r.paymentMovement,0),
+      receivableAmount:g.net,needsReviewCount:g.reviewCount,receivable:g.receivable,payable:g.payable}));
+    return {data,totals:data.reduce((t,r)=>{for(const k of Object.keys(t))t[k]+=r[k]||0;return t;},
+      {totalOrders:0,totalQuoteAmount:0,contractualAmount:0,adjustmentAmount:0,collectedAmount:0,receivableAmount:0,needsReviewCount:0}),accountingBasis:canonical.basis};
   }
 
   async listStatements(agentId?: string, from?: string, to?: string, status?: string) {
@@ -256,204 +67,24 @@ export class AgentReceivableService {
         filter.periodTo = { $lte: new Date(to) };
       }
     }
-    return this.statementModel.find(filter).sort({ periodFrom: -1, createdAt: -1 }).lean();
+    const statements=await this.statementModel.find(filter).sort({ periodFrom: -1, createdAt: -1 }).lean();
+    return statements.map(s=>({...s,accountingBasis:'legacy_agent_commission_statement',settlementEligible:false}));
   }
 
   async calculateBalances(agentId: Types.ObjectId, periodFrom: Date, periodTo: Date) {
-    if (dayjs(periodFrom).isAfter(periodTo)) {
-      throw new BadRequestException('periodFrom must be before periodTo');
-    }
-
-    const summaryMatch = {
-      agentId,
-      productionStatus: 'Đã trả kết quả',
-      orderDate: { $gte: periodFrom, $lte: periodTo },
-    } as any;
-
-    const receivablesAgg = await this.orderModel.aggregate([
-      { $match: summaryMatch },
-      {
-        $lookup: {
-          from: 'products',
-          localField: 'productId',
-          foreignField: '_id',
-          as: 'product',
-        },
-      },
-      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
-      {
-        $addFields: {
-          _qty: { $ifNull: ['$quantity', 1] },
-          _price: { $ifNull: ['$agentQuote', 0] },
-          _cod: { $ifNull: ['$codAmount', 0] },
-          // Sử dụng trực tiếp từ ordertest2 (đã được tính sẵn)
-          _shippingFee: { $ifNull: ['$shippingFee', 0] },
-          _returnFee: { $ifNull: ['$returnFee', 0] },
-          _isReturnable: { $ifNull: ['$product.isReturnable', true] },
-          _isReturnStatus: {
-            $regexMatch: {
-              input: { $ifNull: ['$orderStatus', ''] },
-              regex: /hoàn/i,
-            },
-          },
-        },
-      },
-      {
-        $addFields: {
-          quoteAmount: {
-            $cond: [
-              { $gt: ['$_price', 0] },
-              { $multiply: ['$_price', '$_qty'] },
-              '$_cod',
-            ],
-          },
-          collected: {
-            $cond: [
-              { $eq: ['$orderStatus', 'Giao thành công'] },
-              {
-                $cond: [
-                  { $gt: ['$_price', 0] },
-                  { $multiply: ['$_price', '$_qty'] },
-                  '$_cod',
-                ],
-              },
-              0,
-            ],
-          },
-        },
-      },
-      {
-        $addFields: {
-          receivableBase: {
-            $cond: [
-              '$_isReturnStatus',
-              { $cond: ['$_isReturnable', 0, '$quoteAmount'] },
-              { $max: [{ $subtract: ['$quoteAmount', '$collected'] }, 0] },
-            ],
-          },
-        },
-      },
-      {
-        $addFields: {
-          receivable: {
-            $max: [
-              { $add: ['$receivableBase', '$_shippingFee', '$_returnFee'] },
-              0,
-            ],
-          },
-        },
-      },
-      {
-        $group: {
-          _id: '$agentId',
-          periodReceivables: { $sum: '$receivable' },
-          periodCollected: { $sum: '$collected' },
-        },
-      },
-    ]);
-
-    const periodReceivables = receivablesAgg[0]?.periodReceivables || 0;
-    const periodCollected = receivablesAgg[0]?.periodCollected || 0;
-
-    const previousStatement = await this.statementModel
-      .findOne({ agentId, status: 'closed' })
-      .sort({ periodTo: -1 })
-      .lean();
-    const openingBalance = previousStatement?.closingBalance || 0;
-
-    const statementPaymentTotal = await this.statementModel
-      .aggregate([
-        {
-          $match: {
-            agentId,
-            periodFrom: { $gte: periodFrom },
-            periodTo: { $lte: periodTo },
-          },
-        },
-        { $unwind: '$payments' },
-        { $group: { _id: null, total: { $sum: '$payments.amount' } } },
-      ])
-      .then((res) => res[0]?.total || 0);
-
-    // periodReceivables đã trừ phần thu được và cộng phí, nên net chính là periodReceivables
-    const netAfterDelivery = periodReceivables;
-    const closingBalance = openingBalance + netAfterDelivery - statementPaymentTotal;
-
-    return { openingBalance, periodReceivables, periodCollected, statementPaymentTotal, netAfterDelivery, closingBalance };
+    if(!Number.isFinite(+periodFrom)||!Number.isFinite(+periodTo)||+periodFrom>+periodTo)throw new BadRequestException('Khoảng ngày không hợp lệ.');
+    const result=await this.getAgentReceivableSummary({agentId:String(agentId),from:businessDay(periodFrom),to:businessDay(periodTo)});
+    return {periodReceivables:result.totals.contractualAmount,periodCollected:result.totals.collectedAmount,
+      adjustments:result.totals.adjustmentAmount,closingBalance:result.totals.receivableAmount,
+      needsReviewCount:result.totals.needsReviewCount,accountingBasis:'current_balance_of_order_cohort'};
   }
 
   async upsertStatement(agentId: string, periodFrom: string, periodTo: string, notes?: string) {
-    const agentObjectId = new Types.ObjectId(agentId);
-    const from = dayjs(periodFrom).startOf('day').toDate();
-    const to = dayjs(periodTo).endOf('day').toDate();
-
-    const balances = await this.calculateBalances(agentObjectId, from, to);
-
-    const statement = await this.statementModel.findOneAndUpdate(
-      { agentId: agentObjectId, periodFrom: from, periodTo: to },
-      {
-        $set: {
-          periodFrom: from,
-          periodTo: to,
-          notes: notes || '',
-          status: 'open',
-          ...balances,
-        },
-      },
-      { upsert: true, new: true },
-    );
-
-    return statement;
+    throw new BadRequestException('Lập bảng đối soát tại Công nợ đối tác. Kỳ hoa hồng cũ chỉ dùng tra cứu.');
   }
 
-  async addPayment(statementId: string, dto: CreatePaymentDto, createdBy?: string) {
-    const statement = await this.statementModel.findById(statementId);
-    if (!statement) throw new NotFoundException('Statement not found');
-
-    if (statement.status === 'closed') {
-      throw new BadRequestException('Statement is closed');
-    }
-
-    const paidAt = dto.paidAt ? new Date(dto.paidAt as any) : new Date();
-    const payment = {
-      amount: dto.amount,
-      paidAt,
-      method: dto.method,
-      reference: dto.reference,
-      notes: dto.notes,
-      createdBy,
-      documents: dto.documents || [],
-    };
-
-    statement.payments.push(payment);
-    statement.statementPaymentTotal = (statement.statementPaymentTotal || 0) + dto.amount;
-    statement.closingBalance = (statement.closingBalance || 0) - dto.amount;
-    await statement.save();
-
-    // ============ SYNC TO TESTORDER2 (Option B) ============
-    // Generate batch ID for this statement payment
-    const batchId = this.generateStatementBatchId(statementId);
-    const paymentNote = dto.notes || `Thanh toán hoa hồng theo kỳ ${batchId}`;
-
-    // Sync payment to orders in this period
-    const syncResult = await this.syncAgentPaymentToOrders({
-      agentId: statement.agentId.toString(),
-      periodFrom: statement.periodFrom,
-      periodTo: statement.periodTo,
-      batchId,
-      paidAt,
-      paymentNote,
-    });
-
-    this.logger.log(`Agent Statement ${statementId}: Payment added and synced ${syncResult.updated} orders`);
-
-    this.eventEmitter.emit(FinanceEvents.AGENT_RECEIVABLE_UPDATED, {
-      recordId: statementId,
-      agentId: statement.agentId.toString(),
-      amountChanged: true,
-    });
-
-    return statement;
+  async addPayment(_statementId: string, _dto: CreatePaymentDto, _createdBy?: string) {
+    throw new BadRequestException('Ghi thu tiền từng đơn trong Công nợ & tiền thực nhận. Phiếu hoa hồng cũ không được dùng để tất toán tiền hàng đại lý.');
   }
 
   /**
@@ -567,20 +198,11 @@ export class AgentReceivableService {
   }
 
   async closeStatement(id: string) {
-    const statement = await this.statementModel.findById(id);
-    if (!statement) throw new NotFoundException('Statement not found');
-    statement.status = 'closed';
-    return statement.save();
+    throw new BadRequestException('Bảng công nợ cũ chỉ để tra cứu. Xác nhận và tất toán tại Công nợ đối tác.');
   }
 
   async reopenStatement(id: string) {
-    const statement = await this.statementModel.findById(id);
-    if (!statement) throw new NotFoundException('Statement not found');
-    if (statement.status !== 'closed') {
-      throw new BadRequestException('Statement is not closed');
-    }
-    statement.status = 'open';
-    return statement.save();
+    throw new BadRequestException('Bảng công nợ cũ chỉ để tra cứu. Điều chỉnh bằng chứng từ tại Công nợ đối tác.');
   }
 
   // ============ Summary for Financial Control ============
@@ -599,6 +221,14 @@ export class AgentReceivableService {
    * 5. Clawback handling: hoàn sau khi trả → carryForwardAdjustment
    */
   async getCashflowSummary(windowDays: number = 14): Promise<{
+    paymentSchedule?:any;
+    companyReceivable?:number;
+    companyPayable?:number;
+    netCompanyPosition?:number;
+    accountingBasis?:string;
+    scheduleConfigured?:boolean;
+    legacyFieldsUnavailable?:boolean;
+    needsReviewCount?:number;
     // === TỔNG HỢP GROSS ===
     totalAgentCommissionIncurred: number; // Tổng commission đã phát sinh (gross)
     totalAgentAdjustments: number;        // Điều chỉnh từ Hoàn/Boom chưa trả (âm)
@@ -638,6 +268,18 @@ export class AgentReceivableService {
     clawbackByAgentIncomplete: boolean; // true nếu có clawback nhưng byAgent chưa chính xác 100%
     alerts: string[];                   // Cảnh báo cho FC dashboard
   }> {
+    if(this.counterparties){
+      const canonical=await this.counterparties.summary('agent');
+      const companyReceivable=canonical.data.reduce((n,g)=>n+g.receivable,0),companyPayable=canonical.data.reduce((n,g)=>n+g.payable,0);
+      return {companyReceivable,companyPayable,netCompanyPosition:companyReceivable-companyPayable,needsReviewCount:canonical.data.reduce((n,g)=>n+g.reviewCount,0),accountingBasis:canonical.basis,
+        scheduleConfigured:canonical.paymentSchedule?.scheduleConfigured ?? false,paymentSchedule:canonical.paymentSchedule,legacyFieldsUnavailable:true,
+        totalAgentCommissionIncurred:null,totalAgentAdjustments:null,totalAgentClawback:null,totalAgentNetPayable:companyPayable,
+        totalAgentPaid:null,totalAgentUnpaid:companyPayable,totalAgentDue14d:null,
+        byAgent:canonical.data.map(g=>({agentId:g.partyId,agentName:g.name,unpaid:g.payable,due14d:null,clawback:null})),
+        paymentPolicy:'on_demand',asOfDate:new Date(Date.now()+7*3600000).toISOString().slice(0,10),timezone:'Asia/Ho_Chi_Minh',windowDays,
+        generatedAt:canonical.generatedAt,totalStatements:null,openStatements:null,clawbackByAgentIncomplete:false,
+        alerts:['Lịch công nợ hợp nhất nằm trong paymentSchedule; các trường hoa hồng cũ không áp dụng cho công nợ mua bán. Khoản thiếu hạn vẫn được đánh dấu chưa rõ.']};
+    }
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const windowEnd = new Date();

@@ -10,6 +10,9 @@ export type AdGroupDocument = AdGroup & Document;
 
 @Schema({ timestamps: true })
 export class AdGroup {
+  @Prop({ enum: ['windsor'] }) sourceSystem?: string;
+  @Prop({ type: Types.ObjectId, ref: 'ProviderConnection' }) sourceConnectionId?: Types.ObjectId;
+  @Prop({ type: Date }) sourceLastSeenAt?: Date;
   @Prop({ required: true, trim: true })
   name: string; // TÃªn nhÃ³m quáº£ng cÃ¡o
 
@@ -17,7 +20,7 @@ export class AdGroup {
   adGroupId: string; // ID nhÃ³m quáº£ng cÃ¡o (nháº­p tay)
 
   // Tham chiáº¿u cÃ¡c entity chÃ­nh
-  @Prop({ type: Types.ObjectId, ref: 'Fanpage', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Fanpage', required: function () { return this.sourceSystem !== 'windsor'; }, index: true })
   fanpageId: Types.ObjectId; // Tham chiáº¿u fanpage
 
   @Prop({ type: Types.ObjectId, ref: 'ProductCategory', index: true })
@@ -33,7 +36,7 @@ export class AdGroup {
   })
   selectedProducts?: Types.ObjectId[]; // Metadata san pham tuy chon
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: function () { return this.sourceSystem !== 'windsor'; }, index: true })
   agentId: Types.ObjectId; // Tham chiáº¿u Ä‘áº¡i lÃ½ (user role: agent)
 
   @Prop({ type: Types.ObjectId, ref: 'AdAccount', required: true, index: true })

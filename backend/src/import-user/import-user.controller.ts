@@ -164,7 +164,7 @@ export class ImportUserController {
             'director / giám đốc',
             'manager / quản lý', 
             'employee / nhân viên',
-            'internal_agent / đại lý nội bộ',
+            'internal_agent / công ty - nhân sự nội bộ',
             'external_agent / đại lý bên ngoài',
             'internal_supplier / nhà cung cấp nội bộ',
             'external_supplier / nhà cung cấp bên ngoài'

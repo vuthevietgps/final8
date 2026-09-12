@@ -6,6 +6,7 @@
  */
 import { Injectable, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtherCost, OtherCostDocument, OpsCategory } from './schemas/other-cost.schema';
@@ -13,6 +14,8 @@ import { CreateOtherCostDto } from './dto/create-other-cost.dto';
 import { UpdateOtherCostDto } from './dto/update-other-cost.dto';
 import { TestOrder2Service } from '../test-order2/test-order2.service';
 import { FinanceEvents } from '../finance/events/finance-events.constants';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
+import { businessDay } from '../common/business-day';
 
 @Injectable()
 export class OtherCostService {
@@ -49,51 +52,13 @@ export class OtherCostService {
     return new Date(trimmed);
   }
 
-  private formatDayIso(date: Date, useUtc: boolean): string {
-    if (useUtc) {
-      const year = date.getUTCFullYear();
-      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(date.getUTCDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
-    return this.formatBusinessDayIso(date);
-  }
-
-  /**
-   * Generate day keys in both local and UTC calendars to avoid timezone drift
-   * when a stored Date was normalized by a different timezone convention.
-   */
-  private collectDayIsoCandidates(value?: Date | string | null): string[] {
-    if (!value) return [];
-
-    const candidates = new Set<string>();
-    if (typeof value === 'string') {
-      const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (m) candidates.add(m[1]);
-    }
-
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return Array.from(candidates);
-
-    candidates.add(this.formatDayIso(date, false));
-    candidates.add(this.formatDayIso(date, true));
-    return Array.from(candidates);
-  }
-
   private async triggerRecalculateForDates(values: Array<Date | string | null | undefined>): Promise<void> {
-    const daySet = new Set<string>();
-    for (const value of values) {
-      for (const dayIso of this.collectDayIsoCandidates(value ?? null)) {
-        daySet.add(dayIso);
-      }
-    }
-
-    for (const dayIso of daySet) {
-      try {
-        await this.testOrder2Service.recalculateOrdersForDate(dayIso);
-      } catch (error: any) {
-        this.logger.error(`Failed to recalculate orders after other-cost change for ${dayIso}`, error);
-      }
+    const dates = [...new Set(values.filter(value => value != null).map(value => businessDay(value!)))];
+    if (!dates.length) return;
+    if (this.eventEmitter?.emitAsync) {
+      await this.eventEmitter.emitAsync(FINANCIAL_INPUT_CHANGED, { dates, revalue: false });
+    } else {
+      for (const day of dates) await this.testOrder2Service.recalculateOrdersForDate(day);
     }
   }
 
@@ -110,6 +75,9 @@ export class OtherCostService {
    * CFO v3.1: dueDate lÃ  required
    */
   async create(dto: CreateOtherCostDto): Promise<OtherCost> {
+    if (dto.isConfirmed) {
+      throw new BadRequestException('Tạo chi phí ở trạng thái chưa chi, sau đó dùng thao tác xác nhận riêng.');
+    }
     const payload: Partial<OtherCost> = {
       date: new Date(dto.date),
       dueDate: new Date(dto.dueDate), // CFO v3.1: Required
@@ -155,6 +123,12 @@ export class OtherCostService {
   async update(id: string, dto: UpdateOtherCostDto): Promise<OtherCost> {
     const existing = await this.otherCostModel.findById(id).exec();
     if (!existing) throw new NotFoundException('Other cost not found');
+    if (existing.isConfirmed) {
+      throw new ConflictException('Chi phí đã xác nhận không được sửa; cần lập chứng từ điều chỉnh.');
+    }
+    if (dto.isConfirmed !== undefined) {
+      throw new BadRequestException('Dùng thao tác xác nhận riêng để thay đổi trạng thái chi phí.');
+    }
 
     const update: any = { ...dto };
     if (dto.date) {
@@ -174,7 +148,7 @@ export class OtherCostService {
       update.confirmedAt = dto.isConfirmed ? new Date() : undefined;
     }
     const updated = await this.otherCostModel
-      .findByIdAndUpdate(id, update, { new: true })
+      .findByIdAndUpdate(id, update, { new: true, runValidators: true })
       .exec();
     if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­ Ä‘á»ƒ cáº­p nháº­t');
     await this.triggerRecalculateForDates([existing.date as any, updated.date as any]);
@@ -186,8 +160,15 @@ export class OtherCostService {
    * XÃ¡c nháº­n Ä‘Ã£ chi
    */
   async confirm(id: string): Promise<OtherCost> {
+    const existing = await this.otherCostModel.findById(id).exec();
+    if (!existing) throw new NotFoundException('Không tìm thấy chi phí để xác nhận');
+    if (existing.isConfirmed) return existing;
     const updated = await this.otherCostModel
-      .findByIdAndUpdate(id, { isConfirmed: true, confirmedAt: new Date() }, { new: true })
+      .findOneAndUpdate(
+        { _id: id, isConfirmed: { $ne: true } },
+        { isConfirmed: true, confirmedAt: new Date() },
+        { new: true, runValidators: true },
+      )
       .exec();
     if (!updated) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y chi phÃ­ Ä‘á»ƒ xÃ¡c nháº­n');
     await this.triggerRecalculateForDates([updated.date as any]);
@@ -201,6 +182,9 @@ export class OtherCostService {
   async remove(id: string): Promise<{ message: string }> {
     const existing = await this.otherCostModel.findById(id).exec();
     if (!existing) throw new NotFoundException('Other cost not found');
+    if (existing.isConfirmed) {
+      throw new ConflictException('Chi phí đã xác nhận không được xóa; cần lập chứng từ điều chỉnh.');
+    }
 
     const deleted = await this.otherCostModel.findByIdAndDelete(id).exec();
     if (!deleted) throw new NotFoundException('Other cost not found');

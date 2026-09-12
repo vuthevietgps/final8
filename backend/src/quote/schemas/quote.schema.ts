@@ -4,13 +4,20 @@
  *   liên kết tới sản phẩm (productId) và đại lý (agentId).
  */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Types, Schema as MongoSchema } from 'mongoose';
 import { QUOTE_STATUS_VALUES, QuoteStatus } from '../quote.enum';
 
 export type QuoteDocument = Quote & Document;
 
 @Schema({ timestamps: true })
 export class Quote {
+  @Prop({ type: [MongoSchema.Types.Mixed], default: [] })
+  commercialHistory?: any[];
+  @Prop({ type: Number, min: 0 })
+  shippingFee?: number;
+
+  @Prop({ type: Number, min: 0 })
+  returnFee?: number;
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId: Types.ObjectId;
 

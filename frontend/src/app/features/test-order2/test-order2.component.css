@@ -220,3 +220,41 @@ select, .status-dropdown { transition: none !important; will-change: auto !impor
 @media (max-width: 800px) {
   .filters-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
 }
+.ads-sync-state {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 13px;
+}
+
+.ads-sync-state.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.new-order-source-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+}
+
+.new-order-source-panel .select {
+  min-width: min(620px, 100%);
+  flex: 1 1 420px;
+}
+
+.new-order-source-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}

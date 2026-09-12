@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { budgetPeriods } from './budget-periods';
 import { Model, Types } from 'mongoose';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
@@ -14,6 +15,8 @@ import { GoogleAdsAdGroup, GoogleAdsAdGroupDocument } from '../google-ads/schema
 import { GoogleAdsCampaign, GoogleAdsCampaignDocument } from '../google-ads/schemas/google-ads-campaign.schema';
 import { GoogleAdsCampaignBudget, GoogleAdsCampaignBudgetDocument } from '../google-ads/schemas/google-ads-campaign-budget.schema';
 import { GoogleAdsActionPlan, GoogleAdsActionPlanDocument } from '../google-ads/schemas/google-ads-action-plan.schema';
+import { MetaAdsActionPlan, MetaAdsActionPlanDocument } from '../meta-ads/schemas/meta-ads-action-plan.schema';
+import { MetaAdsAdSet, MetaAdsAdSetDocument } from '../meta-ads/schemas/meta-ads-ad-set.schema';
 import { InventorySummary, InventorySummaryDocument } from '../inventory/schemas/inventory-summary.schema';
 import { Product, ProductDocument } from '../product/schemas/product.schema';
 import { SupplierPayable, SupplierPayableDocument } from '../supplier-payable/schemas/supplier-payable.schema';
@@ -59,7 +62,7 @@ interface SnapshotSharedEvidence {
   supplierQuotesByProductId: Map<string, any[]>;
   ordersByCandidateKey: Map<string, any[]>;
   latestReportByCandidateKey: Map<string, any>;
-  spendByCandidateKey: Map<string, { dailySpend: number; monthlySpend: number }>;
+  spendByCandidateKey: Map<string, { dailySpend: number; monthlySpend: number; weeklySpend?: number; estimatedRows?: number }>;
   supplierPayablesByCandidateKey: Map<string, any[]>;
   latestActionPlanByCandidateKey: Map<string, any>;
   latestAvailableFund: any;
@@ -83,6 +86,10 @@ export class AdsAutomationEvidenceService {
     private readonly googleCampaignBudgetModel: Model<GoogleAdsCampaignBudgetDocument>,
     @InjectModel(GoogleAdsActionPlan.name)
     private readonly googleActionPlanModel: Model<GoogleAdsActionPlanDocument>,
+    @InjectModel(MetaAdsActionPlan.name)
+    private readonly metaActionPlanModel: Model<MetaAdsActionPlanDocument>,
+    @InjectModel(MetaAdsAdSet.name)
+    private readonly metaAdSetModel: Model<MetaAdsAdSetDocument>,
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
     @InjectModel(TestOrder2.name)
@@ -150,6 +157,15 @@ export class AdsAutomationEvidenceService {
       environment,
       productionEnabled: safety.googleAdsProductionEnabled,
       providerExecutionEnabled: safety.providerExecutionEnabled,
+      productionEnabledByPlatform: {
+        googleAds: safety.googleAdsProductionEnabled,
+        metaAds: safety.metaAdsProductionEnabled,
+      },
+      providerExecutionEnabledByPlatform: {
+        googleAds: safety.providerExecutionEnabled,
+        metaAds: safety.providerExecutionEnabled
+          && safety.metaAdsProviderExecutionEnabled,
+      },
       dryRun: safety.dryRun,
       killSwitchActive,
       summary,
@@ -159,6 +175,7 @@ export class AdsAutomationEvidenceService {
         localOnly: environment === 'local',
         providerApiCalled: false,
         googleAdsApiCalled: false,
+        metaAdsApiCalled: false,
         liveExecutionUsed: false,
         secretsRedacted: true,
         campaignBudgetIdNoFallback: true,
@@ -170,9 +187,17 @@ export class AdsAutomationEvidenceService {
     const limiter = queryLimiter || new DbQuerySemaphore(
       this.clamp(process.env.ADS_EVIDENCE_QUERY_CONCURRENCY, 1, 16, 6),
     );
-    const [googleAdGroups, legacyAdGroups, adAccounts, managerAccounts] = await Promise.all([
+    const [
+      googleAdGroups,
+      metaAdSets,
+      legacyAdGroups,
+      adAccounts,
+      managerAccounts,
+    ] = await Promise.all([
       limiter.run(() => this.googleAdGroupModel.find({})
         .sort({ lastSyncAt: -1, updatedAt: -1 }).limit(limit).lean().exec()),
+      limiter.run(() => this.metaAdSetModel.find({})
+        .sort({ lastReadbackAt: -1, updatedAt: -1 }).limit(limit).lean().exec()),
       limiter.run(() => this.adGroupModel.find({})
         .sort({ updatedAt: -1 }).limit(limit).lean().exec()),
       limiter.run(() => this.adAccountModel.find({ isActive: { $ne: false } }).lean().exec()),
@@ -218,6 +243,24 @@ export class AdsAutomationEvidenceService {
       const providerId = text(item.adGroupId);
       if (!providerId) continue;
       legacyByProviderId.set(providerId, [...(legacyByProviderId.get(providerId) || []), item]);
+    }
+    const adAccountsByInternalId = new Map(
+      (adAccounts as any[])
+        .filter((account) => account?._id)
+        .map((account) => [String(account._id), account]),
+    );
+    const legacyMetaByIdentity = new Map<string, any[]>();
+    for (const item of legacyAdGroups as any[]) {
+      if (this.platform(item.platform) !== 'meta_ads') continue;
+      const account = adAccountsByInternalId.get(String(item.adAccountId || ''));
+      const accountId = normalizeProviderAccountId('meta_ads', account?.accountId);
+      const adSetId = text(item.adGroupId);
+      if (!accountId || !adSetId) continue;
+      const identity = `${accountId}:${adSetId}`;
+      legacyMetaByIdentity.set(identity, [
+        ...(legacyMetaByIdentity.get(identity) || []),
+        item,
+      ]);
     }
     const mergedLegacyIds = new Set<string>();
     const candidates = new Map<string, CandidateAdGroup>();
@@ -272,6 +315,48 @@ export class AdsAutomationEvidenceService {
       });
     }
 
+    for (const item of metaAdSets as any[]) {
+      if (!isAttributedAdGroupId(item.adSetId)) continue;
+      const childAccountId = normalizeProviderAccountId('meta_ads', item.adAccountId);
+      if (!childAccountId) continue;
+      const internalLegacy = item.internalAdGroupId
+        ? legacyByInternalId.get(String(item.internalAdGroupId))
+        : undefined;
+      const exactLegacyMatches = legacyMetaByIdentity.get(
+        `${childAccountId}:${String(item.adSetId)}`,
+      ) || [];
+      const legacy = internalLegacy || (
+        exactLegacyMatches.length === 1 ? exactLegacyMatches[0] : undefined
+      );
+      if (legacy?._id) mergedLegacyIds.add(String(legacy._id));
+      const adAccount = (adAccounts as any[]).find((account) =>
+        this.platform(account.accountType) === 'meta_ads'
+        && normalizeProviderAccountId('meta_ads', account.accountId) === childAccountId);
+      candidates.set(`meta:${childAccountId}:${item.adSetId}`, {
+        platform: 'meta_ads',
+        managerAccountId: this.managerAccountIdFor(
+          'meta_ads',
+          childAccountId,
+          adAccount,
+          managerAccounts as any[],
+        ),
+        childAccountId,
+        campaignId: text(item.campaignId),
+        adGroupId: String(item.adSetId),
+        erpAdGroupId: legacy?._id
+          ? String(legacy._id)
+          : text(item.internalAdGroupId),
+        name: item.name || legacy?.name,
+        status: item.status || item.effectiveStatus
+          || legacy?.remoteStatus || legacy?.effectiveStatus,
+        productIds: unique([
+          ...(item.internalProductIds || []).map((value: any) => String(value)),
+          ...(legacy?.selectedProducts || []).map((value: any) => String(value)),
+        ]),
+        lastSyncAt: item.lastReadbackAt || item.updatedAt,
+      });
+    }
+
     for (const item of legacyAdGroups as any[]) {
       if (!isAttributedAdGroupId(item.adGroupId)) continue;
       if (item._id && mergedLegacyIds.has(String(item._id))) continue;
@@ -295,7 +380,7 @@ export class AdsAutomationEvidenceService {
       });
     }
 
-    return [...candidates.values()].slice(0, limit);
+    return fairCandidateSlice([...candidates.values()], limit);
   }
 
   private async loadSharedEvidence(
@@ -312,6 +397,11 @@ export class AdsAutomationEvidenceService {
       .filter((value) => Types.ObjectId.isValid(value));
     const productObjectIds = productIds.map((value) => new Types.ObjectId(value));
     const adGroupIds = unique(candidates.map((candidate) => candidate.adGroupId));
+    const metaAdSetIds = unique(
+      candidates
+        .filter((candidate) => candidate.platform === 'meta_ads')
+        .map((candidate) => candidate.adGroupId),
+    );
     const attributableAdGroupIds = adGroupIds.filter((value) => context.adGroupIdCounts.get(value) === 1);
     const fallbackProductIds = productIds.filter((value) => context.productIdCounts.get(value) === 1);
     const since = new Date(context.now.getTime() - context.lookbackDays * 24 * 60 * 60 * 1000);
@@ -321,7 +411,8 @@ export class AdsAutomationEvidenceService {
       supplierQuotes,
       latestAvailableFund,
       activeBudgetBuckets,
-      actionPlans,
+      googleActionPlans,
+      metaActionPlans,
     ] = await Promise.all([
       productObjectIds.length
         ? queryLimiter.run(() => this.productModel.find({ _id: { $in: productObjectIds } }).lean().exec())
@@ -345,6 +436,11 @@ export class AdsAutomationEvidenceService {
           'items.typedPayload.adGroupId': { $in: adGroupIds },
         }).sort({ createdAt: -1 }).limit(1000).lean().exec())
         : Promise.resolve([]),
+      metaAdSetIds.length
+        ? queryLimiter.run(() => this.metaActionPlanModel.find({
+          'actions.adSetId': { $in: metaAdSetIds },
+        }).sort({ createdAt: -1 }).limit(1000).lean().exec())
+        : Promise.resolve([]),
     ]);
 
     const orderOr: any[] = [];
@@ -365,17 +461,18 @@ export class AdsAutomationEvidenceService {
       : [];
     const spendRows: any[] = attributableAdGroupIds.length
       ? await queryLimiter.run(() => this.advertisingCostModel.aggregate([
+        { $set: { date: { $convert: { input: '$date', to: 'date', onError: null, onNull: null } } } },
         {
           $match: {
-            adGroupId: { $in: attributableAdGroupIds },
-            channel: { $in: unique(candidates.map((candidate) => providerChannel(candidate.platform))) },
-            date: { $gte: startOfMonth(context.now), $lte: context.now },
+            date: { $gte: budgetPeriods(context.now).since, $lte: context.now },
           },
         },
         {
           $group: {
             _id: { adGroupId: '$adGroupId', channel: '$channel', customerId: '$customerId' },
-            monthlySpend: { $sum: '$spentAmount' },
+            monthlySpend: { $sum: { $cond: [{ $gte: ['$date', startOfMonth(context.now)] }, '$spentAmount', 0] } },
+            weeklySpend: { $sum: { $cond: [{ $gte: ['$date', budgetPeriods(context.now).week] }, '$spentAmount', 0] } },
+            estimatedRows: { $sum: { $cond: ['$isEstimated', 1, 0] } },
             dailySpend: {
               $sum: {
                 $cond: [{ $gte: ['$date', startOfDay(context.now)] }, '$spentAmount', 0],
@@ -426,7 +523,7 @@ export class AdsAutomationEvidenceService {
       : [];
 
     const latestReportByCandidateKey = new Map<string, any>();
-    const spendByCandidateKey = new Map<string, { dailySpend: number; monthlySpend: number }>();
+    const spendByCandidateKey = new Map<string, { dailySpend: number; monthlySpend: number; weeklySpend?: number; estimatedRows?: number }>();
     const supplierPayablesByCandidateKey = new Map<string, any[]>();
     const latestActionPlanByCandidateKey = new Map<string, any>();
     const reportsByIdentity = new Map<string, any>();
@@ -461,7 +558,7 @@ export class AdsAutomationEvidenceService {
       }
     }
     const actionPlansByItemIdentity = new Map<string, any>();
-    for (const plan of actionPlans as any[]) {
+    for (const plan of googleActionPlans as any[]) {
       for (const item of plan.items || []) {
         const adGroupId = text(item.typedPayload?.adGroupId);
         if (!adGroupId) continue;
@@ -470,6 +567,21 @@ export class AdsAutomationEvidenceService {
         if (!actionPlansByItemIdentity.has(exactIdentity)) actionPlansByItemIdentity.set(exactIdentity, plan);
         const anyIdentity = `${adGroupId}:*`;
         if (!actionPlansByItemIdentity.has(anyIdentity)) actionPlansByItemIdentity.set(anyIdentity, plan);
+      }
+    }
+    const metaActionPlansByItemIdentity = new Map<string, any>();
+    for (const plan of metaActionPlans as any[]) {
+      for (const action of plan.actions || []) {
+        const adSetId = text(action.adSetId);
+        const adAccountId = normalizeProviderAccountId(
+          'meta_ads',
+          action.adAccountId,
+        );
+        if (!adSetId || !adAccountId) continue;
+        const identity = `${adSetId}:${adAccountId}`;
+        if (!metaActionPlansByItemIdentity.has(identity)) {
+          metaActionPlansByItemIdentity.set(identity, plan);
+        }
       }
     }
     for (const candidate of candidates) {
@@ -484,7 +596,10 @@ export class AdsAutomationEvidenceService {
       ].join(':'));
       spendByCandidateKey.set(key, {
         dailySpend: number(spend?.dailySpend),
+        // Conservative ceiling includes every group, even groups outside this candidate page.
+        weeklySpend: spendRows.reduce((total, row) => total + number(row.weeklySpend), 0),
         monthlySpend: number(spend?.monthlySpend),
+        estimatedRows: number(spend?.estimatedRows),
       });
       const candidateOrders = ordersByCandidateKey.get(key) || [];
       const candidateSupplierIds = new Set(unique([
@@ -502,7 +617,13 @@ export class AdsAutomationEvidenceService {
         for (const payable of payablesByProductId.get(productId) || []) candidatePayables.add(payable);
       }
       supplierPayablesByCandidateKey.set(key, [...candidatePayables]);
-      const plan = actionPlansByItemIdentity.get(`${candidate.adGroupId}:${candidate.childAccountId || '*'}`);
+      const plan = candidate.platform === 'meta_ads'
+        ? metaActionPlansByItemIdentity.get(
+          `${candidate.adGroupId}:${candidate.childAccountId || ''}`,
+        )
+        : actionPlansByItemIdentity.get(
+          `${candidate.adGroupId}:${candidate.childAccountId || '*'}`,
+        );
       if (plan) latestActionPlanByCandidateKey.set(key, plan);
     }
     return {
@@ -617,6 +738,9 @@ export class AdsAutomationEvidenceService {
     const supplierPayables = context.shared.supplierPayablesByCandidateKey?.get(key) || [];
 
     const commerce = this.commerceEvidence(orders as any[], latestReport as any, context.now);
+    if (spend.estimatedRows || latestReport?.adsCostEstimated || orders.some(order => order.advertisingCostEstimated)) {
+      commerce.dataFreshness = 'unknown';
+    }
     const inventory = this.inventoryEvidence(verifiedProductIds, products as any[], inventoryRows as any[], context.now);
     const supplier = this.supplierEvidence(supplierIds, supplierQuotes as any[], supplierPayables as any[], context.now);
     const finance = this.financeEvidence({
@@ -625,6 +749,7 @@ export class AdsAutomationEvidenceService {
       productGroupIds: unique((products as any[]).map((product) => String(product.categoryId || ''))),
       dailySpend: spend.dailySpend,
       monthlySpend: spend.monthlySpend,
+      weeklySpend: spend.weeklySpend,
       netProfitAfterAds: commerce.netProfitAfterAds,
       now: context.now,
     });
@@ -633,6 +758,7 @@ export class AdsAutomationEvidenceService {
       context.killSwitchActive,
       latestActionPlan as any,
       candidate,
+      context.now,
     );
     const evidenceRefs = this.evidenceRefs(candidate, {
       products,
@@ -741,6 +867,7 @@ export class AdsAutomationEvidenceService {
     productGroupIds: string[];
     dailySpend: number;
     monthlySpend: number;
+    weeklySpend?: number;
     netProfitAfterAds: number;
     now: Date;
   }): Partial<AdsAutomationFinanceGate> {
@@ -750,6 +877,7 @@ export class AdsAutomationEvidenceService {
     });
     const dailyCap = strictestPositive(applicableBuckets.map((bucket) => bucket.dailyCap));
     const monthlyCap = strictestPositive(applicableBuckets.map((bucket) => bucket.monthlyCap));
+    const weeklyCap = strictestPositive(applicableBuckets.map((bucket) => bucket.weeklyCap));
     const realizedLoss = Math.max(0, -input.netProfitAfterAds);
     const availableCash = input.latestAvailableFund ? number(input.latestAvailableFund.available) : undefined;
     const lossLimit = optionalEnvNumber('ADS_AUTOMATION_DAILY_LOSS_LIMIT_VND');
@@ -758,6 +886,8 @@ export class AdsAutomationEvidenceService {
       availableCash,
       dailyCap,
       monthlyCap,
+      weeklyCap,
+      currentWeeklySpend: input.weeklySpend,
       currentDailySpend: input.dailySpend,
       currentMonthlySpend: input.monthlySpend,
     });
@@ -766,6 +896,8 @@ export class AdsAutomationEvidenceService {
       availableCash,
       dailyCap: dailyCap || undefined,
       monthlyCap: monthlyCap || undefined,
+      weeklyCap: weeklyCap || undefined,
+      currentWeeklySpend: input.weeklySpend,
       currentDailySpend: input.dailySpend,
       currentMonthlySpend: input.monthlySpend,
       lossLimit,
@@ -780,25 +912,116 @@ export class AdsAutomationEvidenceService {
     killSwitchActive: boolean,
     latestActionPlan: any,
     candidate: CandidateAdGroup,
+    now: Date = new Date(),
   ): Partial<AdsAutomationGateEvidence> {
+    const isMeta = candidate.platform === 'meta_ads';
+    if (isMeta) {
+      const actions = Array.isArray(latestActionPlan?.actions)
+        ? latestActionPlan.actions
+        : [];
+      const matchingActions = actions.filter((action: any) =>
+        text(action.adSetId) === candidate.adGroupId
+        && (!candidate.childAccountId
+          || normalizeProviderAccountId('meta_ads', action.adAccountId)
+            === candidate.childAccountId));
+      const action = matchingActions.length === 1
+        ? matchingActions[0]
+        : undefined;
+      const validationExpiresAt = action?.providerValidationExpiresAt
+        ? new Date(action.providerValidationExpiresAt)
+        : undefined;
+      const hasValidatePassed = action?.providerValidationStatus === 'passed'
+        && Boolean(
+          validationExpiresAt
+          && !Number.isNaN(validationExpiresAt.getTime())
+          && validationExpiresAt.getTime() > now.getTime(),
+        )
+        && Boolean(
+          text(action?.payloadHash)
+          && text(action?.providerValidationPayloadHash) === text(action?.payloadHash),
+        );
+      const hasApproval = ['approved', 'executed'].includes(
+        String(action?.workflowStatus || ''),
+      );
+      const hasIdempotency = Boolean(text(action?.idempotencyKey));
+      const beforeStateSnapshotReady = Boolean(
+        text(action?.providerValidationBeforeStateHash),
+      );
+      const planAuditReady = Boolean(
+        text(latestActionPlan?.planId)
+        && text(latestActionPlan?.createdByUserId)
+        && text(action?.actionId)
+        && text(action?.payloadHash)
+        && text(action?.idempotencyKey),
+      );
+      const automationAuditReady = latestActionPlan?.source !== 'erp_automation'
+        || Boolean(
+          text(latestActionPlan?.evidenceSnapshotId)
+          && /^[a-f0-9]{64}$/.test(
+            String(latestActionPlan?.evidenceSnapshotHash || ''),
+          )
+          && latestActionPlan?.evidenceSnapshotCapturedAt,
+        );
+      const approvalAuditReady = !hasApproval || Boolean(
+        action?.approvedAt && text(action?.approvedByUserId),
+      );
+      return {
+        productionEnabled: safety.metaAdsProductionEnabled,
+        providerExecutionEnabled: safety.providerExecutionEnabled
+          && safety.metaAdsProviderExecutionEnabled,
+        dryRun: safety.dryRun,
+        killSwitchActive,
+        providerValidateOnlyPassed: hasValidatePassed,
+        approved: hasApproval,
+        idempotencyReady: hasIdempotency,
+        beforeStateSnapshotReady,
+        auditReady: planAuditReady && automationAuditReady && approvalAuditReady,
+      };
+    }
+
     const items = Array.isArray(latestActionPlan?.items) ? latestActionPlan.items : [];
     const matchingItems = items.filter((item: any) =>
       text(item.typedPayload?.adGroupId) === candidate.adGroupId
       && (!candidate.childAccountId || text(item.customerId) === candidate.childAccountId));
     const item = matchingItems.length === 1 ? matchingItems[0] : undefined;
-    const hasValidatePassed = item?.providerValidationStatus === 'provider_validate_passed';
+    const validationExpiresAt = item?.providerValidationExpiresAt
+      ? new Date(item.providerValidationExpiresAt)
+      : undefined;
+    const hasValidatePassed = item?.providerValidationStatus === 'provider_validate_passed'
+      && Boolean(
+        validationExpiresAt
+        && !Number.isNaN(validationExpiresAt.getTime())
+        && validationExpiresAt.getTime() > now.getTime(),
+      )
+      && Boolean(text(item?.providerValidationOperationHash));
     const hasApproval = ['approved', 'executed'].includes(String(item?.status || ''));
     const hasIdempotency = Boolean(text(item?.idempotencyKey));
     const beforeStateSnapshotReady = Boolean(item?.evidence?.beforeState || item?.typedPayload?.beforeState);
-    const importAuditReady = Boolean(
+    const commonPlanAuditReady = Boolean(
       text(latestActionPlan?.planId)
       && text(latestActionPlan?.sourceExportId)
-      && text(latestActionPlan?.originalZipSha256)
       && latestActionPlan?.manifest
       && Object.keys(latestActionPlan.manifest).length > 0
       && text(item?.actionId)
       && text(item?.idempotencyKey),
     );
+    const erpNativePlan = ['erp_ui', 'erp_automation'].includes(
+      String(latestActionPlan?.source || ''),
+    );
+    const automationEvidence = latestActionPlan?.manifest?.automationEvidence;
+    const sourceAuditReady = erpNativePlan
+      ? latestActionPlan?.manifest?.generatedBy === 'erp'
+        && String(latestActionPlan?.sourceExportId || '').startsWith('ERP-')
+        && (latestActionPlan?.source !== 'erp_automation'
+          || Boolean(
+            text(automationEvidence?.snapshotId)
+            && /^[a-f0-9]{64}$/.test(
+              String(automationEvidence?.snapshotHash || ''),
+            )
+            && text(automationEvidence?.capturedAt)
+          ))
+      : Boolean(text(latestActionPlan?.originalZipSha256));
+    const importAuditReady = commonPlanAuditReady && sourceAuditReady;
     const approvalAuditReady = !hasApproval || Boolean(
       item?.approvedAt
       && (text(item?.approvedByUserId) || text(item?.approvedBy))
@@ -807,8 +1030,11 @@ export class AdsAutomationEvidenceService {
     );
 
     return {
-      productionEnabled: safety.googleAdsProductionEnabled,
-      providerExecutionEnabled: safety.providerExecutionEnabled,
+      productionEnabled: isMeta
+        ? safety.metaAdsProductionEnabled
+        : safety.googleAdsProductionEnabled,
+      providerExecutionEnabled: safety.providerExecutionEnabled
+        && (!isMeta || safety.metaAdsProviderExecutionEnabled),
       dryRun: safety.dryRun,
       killSwitchActive,
       providerValidateOnlyPassed: hasValidatePassed,
@@ -821,8 +1047,12 @@ export class AdsAutomationEvidenceService {
 
   private evidenceRefs(candidate: CandidateAdGroup, refs: Record<string, any>, now: Date): AdsAutomationEvidenceRef[] {
     const rows: AdsAutomationEvidenceRef[] = [{
-      source: candidate.platform === 'google_ads' ? 'google_ads_ad_groups' : 'ad-group',
-      entityType: 'ad_group',
+      source: candidate.platform === 'google_ads'
+        ? 'google_ads_ad_groups'
+        : candidate.platform === 'meta_ads'
+          ? 'meta_ads_ad_sets'
+          : 'ad-group',
+      entityType: candidate.platform === 'meta_ads' ? 'ad_set' : 'ad_group',
       entityId: candidate.adGroupId,
       observedAt: candidate.lastSyncAt?.toISOString(),
       freshnessStatus: freshnessFromDate(candidate.lastSyncAt, now, 7),
@@ -855,6 +1085,7 @@ export class AdsAutomationEvidenceService {
     if (
       readBooleanEnv('ADS_AUTOMATION_KILL_SWITCH', false)
       || readBooleanEnv('GOOGLE_ADS_KILL_SWITCH', false)
+      || readBooleanEnv('META_ADS_KILL_SWITCH', false)
     ) {
       return true;
     }
@@ -874,11 +1105,19 @@ export class AdsAutomationEvidenceService {
     adGroups: AdsAutomationAdGroupEvidence[],
   ) {
     const blockers = [];
-    if (!safety.googleAdsProductionEnabled) {
+    const hasGoogle = adGroups.some((item) => item.platform === 'google_ads');
+    const hasMeta = adGroups.some((item) => item.platform === 'meta_ads');
+    if (hasGoogle && !safety.googleAdsProductionEnabled) {
       blockers.push({ code: 'GOOGLE_ADS_PRODUCTION_ENABLED_FALSE', severity: 'error' as const, message: 'Production execution is disabled.' });
     }
-    if (!safety.providerExecutionEnabled) {
+    if (hasMeta && !safety.metaAdsProductionEnabled) {
+      blockers.push({ code: 'META_ADS_PRODUCTION_ENABLED_FALSE', severity: 'error' as const, message: 'Meta production execution is disabled.' });
+    }
+    if ((hasGoogle || hasMeta) && !safety.providerExecutionEnabled) {
       blockers.push({ code: 'PROVIDER_EXECUTION_DISABLED', severity: 'error' as const, message: 'Provider execution is disabled.' });
+    }
+    if (hasMeta && !safety.metaAdsProviderExecutionEnabled) {
+      blockers.push({ code: 'META_ADS_PROVIDER_EXECUTION_DISABLED', severity: 'error' as const, message: 'Meta provider execution is disabled.' });
     }
     if (safety.dryRun) {
       blockers.push({ code: 'ADS_DRY_RUN_ENABLED', severity: 'error' as const, message: 'Dry-run is enabled.' });
@@ -886,7 +1125,9 @@ export class AdsAutomationEvidenceService {
     if (killSwitchActive) {
       blockers.push({ code: 'ADS_KILL_SWITCH_ACTIVE', severity: 'error' as const, message: 'Kill switch or emergency budget task is active.' });
     }
-    if (adGroups.some((item) => item.blockers.some((blocker) => blocker.code === 'BUDGET_CAMPAIGN_BUDGET_ID_MISSING'))) {
+    if (adGroups.some((item) =>
+      item.platform === 'google_ads'
+      && item.blockers.some((blocker) => blocker.code === 'BUDGET_CAMPAIGN_BUDGET_ID_MISSING'))) {
       blockers.push({
         code: 'CAMPAIGN_BUDGET_ID_REQUIRED',
         severity: 'error' as const,
@@ -919,11 +1160,11 @@ export class AdsAutomationEvidenceService {
 }
 
 function startOfDay(value: Date): Date {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  return budgetPeriods(value).day;
 }
 
 function startOfMonth(value: Date): Date {
-  return new Date(value.getFullYear(), value.getMonth(), 1);
+  return budgetPeriods(value).month;
 }
 
 function isoDate(value: Date): string {
@@ -964,10 +1205,13 @@ function budgetIncreaseHeadroom(input: {
   availableCash?: number;
   dailyCap?: number;
   monthlyCap?: number;
+  weeklyCap?: number;
+  currentWeeklySpend?: number;
   currentDailySpend: number;
   currentMonthlySpend: number;
 }): number | undefined {
   const constraints: number[] = [];
+  if (input.weeklyCap && input.weeklyCap > 0) constraints.push(input.currentWeeklySpend === undefined ? 0 : Math.max(0, input.weeklyCap - input.currentWeeklySpend));
   if (input.availableCash !== undefined) constraints.push(Math.max(0, input.availableCash));
   if (input.dailyCap !== undefined) {
     constraints.push(Math.max(0, input.dailyCap - input.currentDailySpend));
@@ -985,6 +1229,34 @@ function text(value: unknown): string | undefined {
 
 function unique(values: any[]): string[] {
   return Array.from(new Set(values.map((value) => text(value)).filter(Boolean) as string[]));
+}
+
+function fairCandidateSlice(
+  candidates: CandidateAdGroup[],
+  limit: number,
+): CandidateAdGroup[] {
+  const byPlatform = groupBy(candidates, (candidate) => candidate.platform);
+  const platforms: AdsAutomationPlatform[] = [
+    'google_ads',
+    'meta_ads',
+    'tiktok_ads',
+    'unknown',
+  ];
+  const output: CandidateAdGroup[] = [];
+  let index = 0;
+  while (output.length < limit) {
+    let appended = false;
+    for (const platform of platforms) {
+      const candidate = byPlatform.get(platform)?.[index];
+      if (!candidate) continue;
+      output.push(candidate);
+      appended = true;
+      if (output.length === limit) break;
+    }
+    if (!appended) break;
+    index += 1;
+  }
+  return output;
 }
 
 function uniqueObjects<T>(values: T[], key: (value: T) => string): T[] {

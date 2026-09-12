@@ -57,6 +57,51 @@ const CRITICAL_INDEXES: IndexRequirement[] = [
     keys: { scope: 1 },
     unique: true,
   },
+  {
+    collection: 'meta_ads_action_plans',
+    keys: { planId: 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_action_plans',
+    keys: { 'actions.actionId': 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_action_plans',
+    keys: { 'actions.idempotencyKey': 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_execution_reservations',
+    keys: { idempotencyKey: 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_campaigns',
+    keys: { adAccountId: 1, campaignId: 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_ad_sets',
+    keys: { adAccountId: 1, adSetId: 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_ad_creatives',
+    keys: { adAccountId: 1, creativeId: 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_ads',
+    keys: { adAccountId: 1, adId: 1 },
+    unique: true,
+  },
+  {
+    collection: 'meta_ads_financial_execution_leases',
+    keys: { scope: 1 },
+    unique: true,
+  },
 ];
 
 @Injectable()

@@ -178,11 +178,19 @@ export class AdGroupService {
   async update(id: string, dto: UpdateAdGroupDto): Promise<AdGroup> {
     const existing = await this.adGroupModel
       .findById(id)
-      .select('selectedProducts platform')
+      .select('selectedProducts platform sourceSystem name adGroupId adAccountId campaignBudgetId campaignBudgetResourceName')
       .lean();
     if (!existing) throw new NotFoundException('Khong tim thay nhom quang cao');
 
     const updatePayload: any = { ...dto };
+    if (existing.sourceSystem === 'windsor') {
+      for (const field of ['name', 'adGroupId', 'platform', 'adAccountId', 'campaignBudgetId', 'campaignBudgetResourceName']) {
+        if (field in dto && String((dto as any)[field] ?? '') !== String((existing as any)[field] ?? '')) {
+          throw new BadRequestException('Thông tin định danh nhóm được đồng bộ từ Windsor. Chỉ sửa phần gắn trong ERP.');
+        }
+        delete updatePayload[field];
+      }
+    }
 
     if (dto.selectedProducts !== undefined) {
       const productContext = await this.resolveProductContext(
@@ -190,13 +198,14 @@ export class AdGroupService {
         dto.productCategoryId,
       );
       updatePayload.selectedProducts = productContext.selectedProducts;
-      updatePayload.productCategoryId = productContext.productCategoryId;
+      updatePayload.productCategoryId = productContext.productCategoryId ?? null;
     } else if (dto.productCategoryId !== undefined) {
       delete updatePayload.productCategoryId;
     }
 
     const nextPlatform = (dto.platform as AdGroup['platform']) || existing.platform;
-    const shouldMarkOperatorActivity = nextPlatform === 'tiktok' && (
+    const shouldMarkOperatorActivity = (nextPlatform === 'tiktok' || existing.sourceSystem === 'windsor') && (
+      'selectedProducts' in dto ||
       'assignedEmployeeId' in dto ||
       'adAccountId' in dto ||
       'notes' in dto ||
@@ -224,8 +233,9 @@ export class AdGroupService {
   }
 
   async remove(id: string): Promise<void> {
-    const existing = await this.adGroupModel.findById(id).select('adGroupId').lean();
+    const existing = await this.adGroupModel.findById(id).select('adGroupId sourceSystem').lean();
     if (!existing) throw new NotFoundException('Khong tim thay nhom quang cao');
+    if (existing.sourceSystem === 'windsor') throw new BadRequestException('Nhóm được quản lý từ Windsor; không xóa nhóm và chi phí đã đồng bộ.');
 
     await this.adGroupModel.findByIdAndDelete(id).exec();
 

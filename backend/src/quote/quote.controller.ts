@@ -10,6 +10,7 @@ import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @FeatureModule('quote')
 @Controller('quotes')
@@ -21,14 +22,9 @@ export class QuoteController {
   @Post()
   create(
     @Body(new ValidationPipe({ transform: true, whitelist: true })) createQuoteDto: CreateQuoteDto,
+    @CurrentUser() user?: any,
   ) {
     // Chuẩn hóa validFrom/validUntil từ ISO format
-    if (createQuoteDto.validFrom) {
-      createQuoteDto.validFrom = new Date(createQuoteDto.validFrom).toISOString();
-    }
-    if (createQuoteDto.validUntil) {
-      createQuoteDto.validUntil = new Date(createQuoteDto.validUntil).toISOString();
-    }
     
     // Nếu product hoặc agentName là chuỗi rỗng, bỏ đi để service tự động điền
     ['product', 'agentName'].forEach((k) => {
@@ -37,7 +33,7 @@ export class QuoteController {
         delete (createQuoteDto as any)[k];
       }
     });
-    return this.quoteService.create(createQuoteDto);
+    return this.quoteService.create(createQuoteDto, String(user?.id || user?.sub || user?._id || ''));
   }
 
   @Get()
@@ -80,14 +76,9 @@ export class QuoteController {
   update(
     @Param('id') id: string,
     @Body(new ValidationPipe({ transform: true, whitelist: true })) updateQuoteDto: UpdateQuoteDto,
+    @CurrentUser() user?: any,
   ) {
     // Chuẩn hóa validFrom/validUntil từ ISO format
-    if (updateQuoteDto.validFrom) {
-      (updateQuoteDto as any).validFrom = new Date(updateQuoteDto.validFrom).toISOString();
-    }
-    if (updateQuoteDto.validUntil) {
-      (updateQuoteDto as any).validUntil = new Date(updateQuoteDto.validUntil).toISOString();
-    }
     
     // Bỏ product/agentName nếu là chuỗi rỗng
     ['product', 'agentName'].forEach((k) => {
@@ -96,7 +87,7 @@ export class QuoteController {
         if (!v) delete (updateQuoteDto as any)[k];
       }
     });
-    return this.quoteService.update(id, updateQuoteDto);
+    return this.quoteService.update(id, updateQuoteDto, String(user?.id || user?.sub || user?._id || ''));
   }
 
   @Delete(':id')

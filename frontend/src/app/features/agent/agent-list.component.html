@@ -1,8 +1,8 @@
 <div class="agent-page">
   <div class="page-header">
     <div>
-      <h2>🏢 Đại Lý</h2>
-      <p>Danh sách đại lý nội bộ và đại lý ngoài, quản lý nhanh thông tin liên hệ.</p>
+      <h2>🏢 Công ty và Đại lý</h2>
+      <p>Nhân sự nội bộ thuộc công ty; chỉ tài khoản đại lý ngoài là bên mua đại lý.</p>
     </div>
     <div class="header-actions">
       <button class="btn ghost" (click)="loadAgents()" [disabled]="loading()">
@@ -19,11 +19,11 @@
       <span class="value">{{ summary().total }}</span>
     </div>
     <div class="summary-card">
-      <span class="label">Nội bộ</span>
+      <span class="label">Công ty</span>
       <span class="value">{{ summary().internal }}</span>
     </div>
     <div class="summary-card">
-      <span class="label">Ngoài</span>
+      <span class="label">Đại lý ngoài</span>
       <span class="value">{{ summary().external }}</span>
     </div>
     <div class="summary-card">
@@ -50,7 +50,7 @@
       <label>Loại</label>
       <select [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event)">
         <option value="all">Tất cả</option>
-        <option value="internal">Đại lý nội bộ</option>
+        <option value="internal">Công ty / nội bộ</option>
         <option value="external">Đại lý ngoài</option>
       </select>
     </div>
@@ -71,7 +71,7 @@
     <table *ngIf="!loading() && !error()" class="agent-table">
       <thead>
         <tr>
-          <th>Tên đại lý</th>
+          <th>Tên tài khoản</th>
           <th>Email</th>
           <th>Số điện thoại</th>
           <th>Loại</th>
@@ -100,7 +100,7 @@
           </td>
         </tr>
         <tr *ngIf="filteredAgents().length === 0">
-          <td colspan="6" class="empty">Không có đại lý nào phù hợp.</td>
+          <td colspan="6" class="empty">Không có tài khoản nào phù hợp.</td>
         </tr>
       </tbody>
     </table>

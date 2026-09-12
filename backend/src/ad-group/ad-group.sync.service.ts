@@ -15,7 +15,7 @@ interface FbAdAccountResponse {
   name?: string;
   account_status?: number;
   currency?: string;
-  timezone_id?: string;
+  timezone_name?: string;
   business?: { name?: string };
   spend_cap?: number;
   amount_spent?: number;
@@ -103,9 +103,9 @@ export class AdGroupSyncService {
     try {
       const { data } = await axios.get<FbAdAccountResponse>(url, {
         params: {
-          fields: 'name,account_status,currency,timezone_id,business{name},spend_cap,amount_spent',
-          access_token: token,
+          fields: 'name,account_status,currency,timezone_name,business{name},spend_cap,amount_spent',
         },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       await this.adAccountModel.updateOne(
@@ -115,7 +115,11 @@ export class AdGroupSyncService {
             name: data?.name || acc.name,
             accountStatus: data?.account_status,
             currency: data?.currency,
-            timezoneId: data?.timezone_id?.toString(),
+            // Preserve the provider's raw IANA timezone evidence. The live
+            // execution policy intentionally performs an exact match.
+            timezoneId: typeof data?.timezone_name === 'string'
+              ? data.timezone_name.trim() || undefined
+              : undefined,
             businessName: data?.business?.name,
             spendCap: this.toNumber(data?.spend_cap),
             amountSpent: this.toNumber(data?.amount_spent),
@@ -148,10 +152,15 @@ export class AdGroupSyncService {
     const token = await this.apiTokenService.getRawAccessTokenForAdsManagement(cleanAccountId);
     if (!token) return;
 
-    let next: string | null = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/act_${encodeURIComponent(cleanAccountId)}/adsets?fields=id,name,status,effective_status,daily_budget,bid_amount,campaign_id&limit=50&access_token=${encodeURIComponent(token)}`;
+    let next: string | null = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/act_${encodeURIComponent(cleanAccountId)}/adsets?fields=id,name,status,effective_status,daily_budget,bid_amount,campaign_id&limit=50`;
     while (next) {
       try {
-        const { data } = await axios.get<{ data: FbAdset[]; paging?: { next?: string } }>(next);
+        const requestUrl = new URL(next);
+        requestUrl.searchParams.delete('access_token');
+        const { data } = await axios.get<{ data: FbAdset[]; paging?: { next?: string } }>(
+          requestUrl.toString(),
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
         const adsets = data?.data || [];
         for (const adset of adsets) {
           await this.upsertAdsetMetadata(adset);
@@ -298,11 +307,16 @@ export class AdGroupSyncService {
       .lean();
     const existingById = new Map(existingGroups.map((g: any) => [String(g.adGroupId), g]));
 
-    let next: string | null = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/act_${encodeURIComponent(cleanId)}/adsets?fields=id,name,status,effective_status,daily_budget,campaign_id&limit=100&access_token=${encodeURIComponent(token)}`;
+    let next: string | null = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/act_${encodeURIComponent(cleanId)}/adsets?fields=id,name,status,effective_status,daily_budget,campaign_id&limit=100`;
     
     while (next) {
       try {
-        const { data } = await axios.get<{ data: FbAdset[]; paging?: { next?: string } }>(next);
+        const requestUrl = new URL(next);
+        requestUrl.searchParams.delete('access_token');
+        const { data } = await axios.get<{ data: FbAdset[]; paging?: { next?: string } }>(
+          requestUrl.toString(),
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
         const adsets = data?.data || [];
         
         for (const adset of adsets) {
@@ -373,11 +387,16 @@ export class AdGroupSyncService {
       }
 
       const cleanId = this.normalizeFacebookAccountId(String(acc.accountId));
-      let next: string | null = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/act_${encodeURIComponent(cleanId)}/adsets?fields=id,name,status,effective_status,daily_budget,campaign_id&limit=100&access_token=${encodeURIComponent(token)}`;
+      let next: string | null = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/act_${encodeURIComponent(cleanId)}/adsets?fields=id,name,status,effective_status,daily_budget,campaign_id&limit=100`;
 
       while (next) {
         try {
-          const { data } = await axios.get<{ data: FbAdset[]; paging?: { next?: string } }>(next);
+          const requestUrl = new URL(next);
+          requestUrl.searchParams.delete('access_token');
+          const { data } = await axios.get<{ data: FbAdset[]; paging?: { next?: string } }>(
+            requestUrl.toString(),
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
           const adsets = data?.data || [];
           for (const adset of adsets) {
             const adsetId = String(adset?.id || '');
@@ -479,8 +498,10 @@ export class AdGroupSyncService {
 
       try {
         // Láº¥y thÃ´ng tin tá»« Facebook
-        const url = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/${encodeURIComponent(adGroupId)}?fields=id,name,status,effective_status,daily_budget,campaign_id&access_token=${encodeURIComponent(token)}`;
-        const { data } = await axios.get<FbAdset>(url);
+        const url = `https://graph.facebook.com/${FB_GRAPH_API_VERSION}/${encodeURIComponent(adGroupId)}?fields=id,name,status,effective_status,daily_budget,campaign_id`;
+        const { data } = await axios.get<FbAdset>(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         // Táº¡o ad group má»›i
         await this.adGroupModel.create({

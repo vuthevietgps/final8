@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { TestOrder2, TestOrder2Document } from '../schemas/test-order2.schema';
@@ -46,77 +46,7 @@ export class OrderPaymentService {
     paidAmount?: number;
     note?: string;
     attachments?: string[];
-  }) {
-    const orderObjectIds = dto.orderIds.map(id => new Types.ObjectId(id));
-    const paidAt = new Date(dto.paidDate);
-    const completedStatuses = await this.getCompletedOrderStatuses();
-
-    const existingBatch = await this.model.findOne({ supplierPaymentBatchId: dto.batchId });
-    if (existingBatch) {
-      throw new Error(`Batch ${dto.batchId} đã tồn tại. Vui lòng sử dụng mã khác.`);
-    }
-
-    const payableQuery: FilterQuery<TestOrder2Document> = {
-      _id: { $in: orderObjectIds },
-      orderStatus: { $in: completedStatuses },
-      supplierPaymentStatus: PaymentStatus.PENDING,
-      $or: [
-        { supplierPaymentBatchId: { $exists: false } },
-        { supplierPaymentBatchId: null },
-      ],
-    };
-
-    const orders = await this.model.find(payableQuery);
-
-    if (orders.length === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
-    }
-
-    if (orders.length < dto.orderIds.length) {
-      this.logger.warn(`${dto.orderIds.length - orders.length} đơn hàng bị bỏ qua vì chưa hoàn thành hoặc đã được thanh toán`);
-    }
-
-    const atomicResult = await this.model.updateMany(
-      payableQuery,
-      {
-        $set: {
-          supplierPaymentStatus: PaymentStatus.PAID,
-          supplierPaymentBatchId: dto.batchId,
-          supplierPaidAt: paidAt,
-          supplierPaymentNote: dto.note,
-          supplierPaymentAttachments: dto.attachments || [],
-        },
-      },
-    );
-
-    const updatedCount = atomicResult.modifiedCount;
-    if (updatedCount === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
-    }
-
-    const updatedOrders = await this.model.find({ supplierPaymentBatchId: dto.batchId });
-    for (const order of updatedOrders) {
-      await this.calculationService.calculateRealizedProfitIfReady(order);
-      await order.save();
-    }
-
-    this.logger.log(`Created supplier payment batch ${dto.batchId} with ${updatedCount} orders`);
-
-    const totalAmount = updatedOrders.reduce((sum, o) => sum + this.calculateSupplierUiAmount(o), 0);
-
-    const supplierIds = [...new Set(updatedOrders.map(o => o.supplierId?.toString()).filter(Boolean))] as string[];
-    this.orderSheetSyncService.triggerSyncOnSupplierPayment(supplierIds).catch(err => {
-      this.logger.error('Failed to trigger sheet sync after supplier payment', err);
-    });
-
-    return {
-      batchId: dto.batchId,
-      paidDate: paidAt,
-      orderCount: updatedCount,
-      totalAmount,
-      note: dto.note
-    };
-  }
+  }) : Promise<any> { throw new BadRequestException('Ghi thu/chi thực tế và số tiền phân bổ từng đơn tại Công nợ & tiền thực nhận. Không tất toán hàng loạt từ trạng thái giao hoặc phiếu hoa hồng cũ.'); }
 
   /**
    * Create agent payment batch - mark multiple orders as paid to agent
@@ -128,81 +58,7 @@ export class OrderPaymentService {
     paidDate: string;
     note?: string;
     attachments?: string[];
-  }) {
-    const orderObjectIds = dto.orderIds.map(id => new Types.ObjectId(id));
-    const paidAt = new Date(dto.paidDate);
-    const completedStatuses = await this.getCompletedOrderStatuses();
-
-    const existingBatch = await this.model.findOne({ agentPaymentBatchId: dto.batchId });
-    if (existingBatch) {
-      throw new Error(`Batch ${dto.batchId} đã tồn tại. Vui lòng sử dụng mã khác.`);
-    }
-
-    const externalAgents = await this.model.db.collection('users').find({
-      role: AgentRole.EXTERNAL
-    }).toArray();
-    const externalAgentIds = externalAgents.map(a => a._id);
-
-    const payableQuery: FilterQuery<TestOrder2Document> = {
-      _id: { $in: orderObjectIds },
-      agentId: { $in: externalAgentIds },
-      orderStatus: { $in: completedStatuses },
-      agentPaymentStatus: PaymentStatus.PENDING,
-      $or: [
-        { agentPaymentBatchId: { $exists: false } },
-        { agentPaymentBatchId: null },
-      ],
-    };
-
-    const orders = await this.model.find(payableQuery);
-
-    if (orders.length === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
-    }
-
-    if (orders.length < dto.orderIds.length) {
-      this.logger.warn(`${dto.orderIds.length - orders.length} đơn hàng bị bỏ qua (không phải external agent, chưa hoàn thành, hoặc đã được thanh toán)`);
-    }
-
-    const atomicResult = await this.model.updateMany(
-      payableQuery,
-      {
-        $set: {
-          agentPaymentStatus: PaymentStatus.PAID,
-          agentPaymentBatchId: dto.batchId,
-          agentPaidAt: paidAt,
-          agentPaymentNote: dto.note,
-          agentPaymentAttachments: dto.attachments || [],
-        },
-      },
-    );
-
-    const updatedCount = atomicResult.modifiedCount;
-    if (updatedCount === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
-    }
-
-    const updatedOrders = await this.model.find({ agentPaymentBatchId: dto.batchId });
-    for (const order of updatedOrders) {
-      await this.calculationService.calculateRealizedProfitIfReady(order);
-      await order.save();
-    }
-
-    this.logger.log(`Created agent payment batch ${dto.batchId} with ${updatedCount} orders`);
-
-    const agentIds = [...new Set(updatedOrders.map(o => o.agentId?.toString()).filter(Boolean))] as string[];
-    this.orderSheetSyncService.triggerSyncOnAgentPayment(agentIds).catch(err => {
-      this.logger.error('Failed to trigger sheet sync after agent payment', err);
-    });
-
-    return {
-      batchId: dto.batchId,
-      paidDate: paidAt,
-      orderCount: updatedCount,
-      totalAmount: updatedOrders.reduce((sum, o) => sum + (o.agentPaidAmount || 0), 0),
-      note: dto.note
-    };
-  }
+  }) : Promise<any> { throw new BadRequestException('Ghi thu/chi thực tế và số tiền phân bổ từng đơn tại Công nợ & tiền thực nhận. Không tất toán hàng loạt từ trạng thái giao hoặc phiếu hoa hồng cũ.'); }
 
   // ============ PENDING PAYMENT QUERIES ============
 
@@ -962,40 +818,7 @@ export class OrderPaymentService {
     batchId: string;
     paidAt: Date;
     paymentNote?: string;
-  }): Promise<{ updated: number }> {
-    const { supplierId, periodFrom, periodTo, batchId, paidAt, paymentNote } = params;
-    const completedStatuses = await this.getCompletedOrderStatuses();
-
-    this.logger.log(`Syncing supplier payment from statement: ${batchId}`);
-
-    const orders = await this.model.find({
-      supplierId: new Types.ObjectId(supplierId),
-      orderDate: { $gte: periodFrom, $lte: periodTo },
-      orderStatus: { $in: completedStatuses },
-      supplierPaymentStatus: { $ne: PaymentStatus.PAID },
-    });
-
-    if (orders.length === 0) {
-      this.logger.log('No orders to sync for supplier statement');
-      return { updated: 0 };
-    }
-
-    let updated = 0;
-    for (const order of orders) {
-      order.supplierPaymentStatus = PaymentStatus.PAID;
-      order.supplierPaymentBatchId = batchId;
-      order.supplierPaidAt = paidAt;
-      order.supplierPaymentNote = paymentNote || `Thanh toán theo kỳ đối soát ${batchId}`;
-
-      await this.calculationService.calculateRealizedProfitIfReady(order);
-
-      await order.save();
-      updated++;
-    }
-
-    this.logger.log(`Synced ${updated} orders for supplier statement ${batchId}`);
-    return { updated };
-  }
+  }): Promise<{ updated: number }> { return { updated: 0 }; }
 
   /**
    * Sync agent payment from AgentStatement to TestOrder2
@@ -1008,49 +831,7 @@ export class OrderPaymentService {
     batchId: string;
     paidAt: Date;
     paymentNote?: string;
-  }): Promise<{ updated: number }> {
-    const { agentId, periodFrom, periodTo, batchId, paidAt, paymentNote } = params;
-
-    this.logger.log(`Syncing agent payment from statement: ${batchId}`);
-
-    const agent = await this.model.db.collection('users').findOne({
-      _id: new Types.ObjectId(agentId),
-      role: AgentRole.EXTERNAL,
-    });
-
-    if (!agent) {
-      this.logger.warn(`Agent ${agentId} is not external agent, skipping sync`);
-      return { updated: 0 };
-    }
-
-    const orders = await this.model.find({
-      agentId: new Types.ObjectId(agentId),
-      orderDate: { $gte: periodFrom, $lte: periodTo },
-      orderStatus: { $in: COMPLETED_ORDER_STATUSES },
-      agentPaymentStatus: PaymentStatus.PENDING,
-    });
-
-    if (orders.length === 0) {
-      this.logger.log('No orders to sync for agent statement');
-      return { updated: 0 };
-    }
-
-    let updated = 0;
-    for (const order of orders) {
-      order.agentPaymentStatus = PaymentStatus.PAID;
-      order.agentPaymentBatchId = batchId;
-      order.agentPaidAt = paidAt;
-      order.agentPaymentNote = paymentNote || `Thanh toán hoa hồng theo kỳ ${batchId}`;
-
-      await this.calculationService.calculateRealizedProfitIfReady(order);
-
-      await order.save();
-      updated++;
-    }
-
-    this.logger.log(`Synced ${updated} orders for agent statement ${batchId}`);
-    return { updated };
-  }
+  }): Promise<{ updated: number }> { return { updated: 0 }; }
 
   /**
    * Generate batch ID for statement payment
@@ -1080,142 +861,5 @@ export class OrderPaymentService {
     attachments?: string[];
     confirmOverThreshold?: boolean;
     confirmedBy?: string;
-  }) {
-    const THRESHOLD = 5_000_000;
-    const orderObjectIds = dto.orderIds.map(id => new Types.ObjectId(id));
-    const paidAt = new Date(dto.paidDate);
-
-    // Bước 0: Tính tổng commission trước để check threshold
-    const ordersToCheck = await this.model.find({
-      _id: { $in: orderObjectIds },
-      agentPaymentStatus: PaymentStatus.PENDING
-    });
-
-    let estimatedTotal = 0;
-    for (const order of ordersToCheck) {
-      const codAmount = order.codAmount || 0;
-      const agentQuote = order.agentQuote || 0;
-      const quantity = order.quantity || 1;
-      const shippingFee = order.shippingFee || 0;
-      const returnFee = order.returnFee || 0;
-
-      if (order.orderStatus === OrderStatus.RETURNED) {
-        const commission = 0 - (agentQuote * quantity) - shippingFee - returnFee;
-        estimatedTotal += commission;
-      } else {
-        const commission = codAmount - (agentQuote * quantity) - shippingFee;
-        estimatedTotal += commission;
-      }
-    }
-
-    // CFO Spec v2.0: Validation ngưỡng 5M
-    if (estimatedTotal > THRESHOLD) {
-      if (!dto.confirmOverThreshold) {
-        throw new Error(`Tổng thanh toán ${estimatedTotal.toLocaleString('vi-VN')}đ vượt ngưỡng ${THRESHOLD.toLocaleString('vi-VN')}đ. Vui lòng xác nhận và đính kèm chứng từ.`);
-      }
-      if (!dto.attachments || dto.attachments.length === 0) {
-        throw new Error('Thanh toán vượt ngưỡng 5M bắt buộc phải có chứng từ đính kèm.');
-      }
-      if (!dto.confirmedBy) {
-        throw new Error('Thiếu thông tin người xác nhận cho thanh toán vượt ngưỡng.');
-      }
-    }
-
-    // Bước 1: Check idempotency
-    const existingBatch = await this.model.findOne({ agentPaymentBatchId: dto.batchId });
-    if (existingBatch) {
-      throw new Error(`Batch ${dto.batchId} đã tồn tại. Vui lòng sử dụng mã khác.`);
-    }
-
-    // Bước 2: Tìm external agents
-    const externalAgents = await this.model.db.collection('users').find({
-      role: AgentRole.EXTERNAL
-    }).toArray();
-    const externalAgentIds = externalAgents.map(a => a._id);
-
-    // Bước 3: Atomic find and update
-    const updatePayload: any = {
-      agentPaymentStatus: PaymentStatus.PAID,
-      agentPaymentBatchId: dto.batchId,
-      agentPaidAt: paidAt,
-      agentPaymentNote: dto.note || `Thanh toán hoa hồng batch ${dto.batchId}`,
-      agentPaymentAttachments: dto.attachments || []
-    };
-
-    if (estimatedTotal > THRESHOLD && dto.confirmOverThreshold) {
-      updatePayload.confirmOverThreshold = true;
-      updatePayload.confirmedBy = dto.confirmedBy;
-      updatePayload.confirmedAt = paidAt;
-    }
-
-    const atomicResult = await this.model.updateMany(
-      {
-        _id: { $in: orderObjectIds },
-        agentId: { $in: externalAgentIds },
-        orderStatus: { $in: COMPLETED_ORDER_STATUSES },
-        agentPaymentStatus: PaymentStatus.PENDING,
-        agentPaymentBatchId: { $exists: false }
-      },
-      { $set: updatePayload }
-    );
-
-    const updatedCount = atomicResult.modifiedCount;
-
-    if (updatedCount === 0) {
-      throw new Error('Không tìm thấy đơn hàng hợp lệ hoặc đơn đã được thanh toán trước đó.');
-    }
-
-    // Bước 4: Tính commission cho các đơn đã update
-    const updatedOrders = await this.model.find({ agentPaymentBatchId: dto.batchId });
-
-    let totalPayable = 0;
-    let totalClawback = 0;
-
-    for (const order of updatedOrders) {
-      const codAmount = order.codAmount || 0;
-      const agentQuote = order.agentQuote || 0;
-      const quantity = order.quantity || 1;
-
-      // ✅ Agent Commission = COD - agentQuote×qty  (xác nhận PO 15/03/2026)
-      // Phí vận chuyển do CÔNG TY chịu, không trừ vào hoa hồng đại lý.
-      let commission: number;
-      if (order.orderStatus === OrderStatus.RETURNED) {
-        commission = 0 - (agentQuote * quantity);
-        totalClawback += Math.abs(commission);
-      } else {
-        commission = codAmount - (agentQuote * quantity);
-        if (commission > 0) {
-          totalPayable += commission;
-        } else {
-          totalClawback += Math.abs(commission);
-        }
-      }
-
-      order.agentPaidAmount = commission;
-
-      await this.calculationService.calculateRealizedProfitIfReady(order);
-      await order.save();
-    }
-
-    const netAmount = totalPayable - totalClawback;
-
-    this.logger.log(`Created agent payment batch ${dto.batchId}: ${updatedCount} orders, payable=${totalPayable}, clawback=${totalClawback}, net=${netAmount}`);
-
-    const agentIds = [...new Set(updatedOrders.map(o => o.agentId?.toString()).filter(Boolean))] as string[];
-    this.orderSheetSyncService.triggerSyncOnAgentPayment(agentIds).catch(err => {
-      this.logger.error('Failed to trigger sheet sync after agent payment', err);
-    });
-
-    return {
-      batchId: dto.batchId,
-      paidDate: paidAt,
-      orderCount: updatedCount,
-      skippedCount: dto.orderIds.length - updatedCount,
-      totalPayable,
-      totalClawback,
-      netAmount,
-      note: dto.note,
-      warning: netAmount < 0 ? `⚠️ Tổng hoa hồng âm: ${netAmount.toLocaleString('vi-VN')}đ. Đây là khoản đại lý nợ công ty.` : null
-    };
-  }
+  }) : Promise<any> { throw new BadRequestException('Ghi thu/chi thực tế và số tiền phân bổ từng đơn tại Công nợ & tiền thực nhận. Không tất toán hàng loạt từ trạng thái giao hoặc phiếu hoa hồng cũ.'); }
 }

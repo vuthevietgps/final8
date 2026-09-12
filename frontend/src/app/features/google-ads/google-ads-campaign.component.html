@@ -1,0 +1,985 @@
+<main class="google-campaign-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">ERP-NATIVE · GOOGLE ADS API</p>
+      <h1>Google Search Ads Control</h1>
+      <p class="subtitle">
+        Quản lý campaign, Ad Group, keyword và Responsive Search Ad qua ERP. Trình duyệt không gọi Google Ads
+        và không nhận token, developer token hoặc OAuth secret.
+      </p>
+    </div>
+    <div class="policy-badges" aria-label="Chính sách an toàn">
+      <span>SEARCH only</span>
+      <span>New = PAUSED</span>
+      <span>VND</span>
+      <span [class.ready]="capabilities()?.productionEnabled === true">
+        Live {{ capabilities()?.productionEnabled === true ? 'đã mở' : 'mặc định tắt' }}
+      </span>
+    </div>
+  </header>
+
+  <div *ngIf="configurationWarning()" class="alert warning" role="alert">
+    {{ configurationWarning() }}
+  </div>
+  <div *ngIf="error()" class="alert error" role="alert">{{ error() }}</div>
+  <div *ngIf="message()" class="alert success" role="status">{{ message() }}</div>
+
+  <section class="card draft-card">
+    <div class="section-heading">
+      <div>
+        <h2>1. Cấu hình Google Search Ads trong ERP</h2>
+        <p>Mọi thay đổi bắt đầu ở trạng thái draft; nút lưu không mutate live.</p>
+      </div>
+      <span *ngIf="capabilities()?.apiVersion || capabilities()?.googleAdsApiVersion" class="api-version">
+        Google Ads API {{ capabilities()?.apiVersion || capabilities()?.googleAdsApiVersion }}
+      </span>
+      <button
+        type="button"
+        (click)="materializeAutomatedPauseDrafts()"
+        [disabled]="!canPlan() || !!loadingAction()"
+      >
+        {{ loadingAction() === 'auto-pause-drafts' ? 'Đang đọc evidence…' : 'Tạo pause draft từ evidence ERP' }}
+      </button>
+    </div>
+
+    <nav class="resource-tabs" aria-label="Tầng tài nguyên Google Search">
+      <button type="button" [class.active]="resourceScope() === 'campaign'" (click)="selectResource('campaign')">
+        1. Campaign
+      </button>
+      <button type="button" [class.active]="resourceScope() === 'ad_group'" (click)="selectResource('ad_group')">
+        2. Ad Group
+      </button>
+      <button type="button" [class.active]="resourceScope() === 'keyword'" (click)="selectResource('keyword')">
+        3. Keywords
+      </button>
+      <button type="button" [class.active]="resourceScope() === 'responsive_search_ad'" (click)="selectResource('responsive_search_ad')">
+        4. Responsive Search Ad
+      </button>
+    </nav>
+
+    <div class="staged-note">
+      Mỗi tầng chỉ tham chiếu tài nguyên cha canonical đã sync về ERP. Tạo và xác minh campaign trước,
+      sau đó mới tạo Ad Group, keyword và quảng cáo; ERP không ghép ID tạm qua nhiều plan.
+    </div>
+
+    <nav class="operation-tabs" aria-label="Loại thao tác tài nguyên">
+      <button type="button" [class.active]="operation() === 'create'" (click)="selectOperation('create')">
+        Tạo mới (PAUSED)
+      </button>
+      <button type="button" [class.active]="operation() === 'update'" (click)="selectOperation('update')">
+        Cập nhật
+      </button>
+      <button type="button" [class.active]="operation() === 'pause'" (click)="selectOperation('pause')">
+        Dừng (PAUSED)
+      </button>
+      <button type="button" [class.active]="operation() === 'activate'" (click)="selectOperation('activate')">
+        Kích hoạt có kiểm soát
+      </button>
+    </nav>
+
+    <form (ngSubmit)="createPlan()" novalidate>
+      <div class="form-grid">
+        <label class="field wide">
+          <span>Google Ads customer account *</span>
+          <select
+            name="customerId"
+            [(ngModel)]="form.customerId"
+            (ngModelChange)="onAccountChange()"
+            [disabled]="accountsLoading() || !!loadingAction()"
+          >
+            <option value="">{{ accountsLoading() ? 'Đang tải canonical accounts…' : 'Chọn account từ ERP' }}</option>
+            <option
+              *ngFor="let account of accounts()"
+              [value]="account.customerId"
+              [disabled]="account.eligible === false || account.liveEligible === false"
+            >
+              {{ accountLabel(account) }}
+            </option>
+          </select>
+          <small *ngIf="selectedAccount() && accountBlockers(selectedAccount()!)">
+            {{ accountBlockers(selectedAccount()!) }}
+          </small>
+        </label>
+
+        <label *ngIf="resourceScope() !== 'campaign' || operation() !== 'create'" class="field wide">
+          <span>Search campaign canonical *</span>
+          <select
+            name="campaignId"
+            [(ngModel)]="form.campaignId"
+            (ngModelChange)="onCampaignChange()"
+            [disabled]="!form.customerId || campaignsLoading() || !!loadingAction()"
+          >
+            <option value="">{{ campaignsLoading() ? 'Đang tải campaigns…' : 'Chọn campaign đã sync về ERP' }}</option>
+            <option *ngFor="let campaign of campaigns()" [value]="campaign.campaignId">
+              {{ campaignLabel(campaign) }}
+            </option>
+          </select>
+          <small *ngIf="selectedCampaign()?.lastSyncAt">
+            Canonical sync: {{ selectedCampaign()?.lastSyncAt | date:'dd/MM/yyyy HH:mm' }}
+          </small>
+        </label>
+
+        <ng-container *ngIf="resourceScope() === 'campaign' && operation() === 'create'">
+          <label class="field wide">
+            <span>Tên campaign *</span>
+            <input name="campaignName" [(ngModel)]="form.campaignName" maxlength="128" autocomplete="off" />
+          </label>
+
+          <label class="field wide">
+            <span>Tên campaign budget *</span>
+            <input name="budgetName" [(ngModel)]="form.budgetName" maxlength="128" autocomplete="off" />
+          </label>
+
+          <label class="field">
+            <span>Chiến lược giá thầu *</span>
+            <select name="biddingStrategyType" [(ngModel)]="form.biddingStrategyType">
+              <option
+                *ngFor="let option of biddingStrategyOptions()"
+                [value]="option.value"
+                [disabled]="option.disabled === true"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+            <small>
+              Campaign lifecycle mới bắt đầu bằng MAXIMIZE_CLICKS. Các bước conversion chỉ được tạo draft
+              khi ERP có primary conversion action, biddable goal và canonical metrics hợp lệ.
+            </small>
+          </label>
+
+          <label class="field">
+            <span>Daily budget (VND) *</span>
+            <input
+              name="dailyBudgetVndCreate"
+              type="number"
+              min="1"
+              step="1000"
+              [(ngModel)]="form.dailyBudgetVnd"
+              inputmode="numeric"
+            />
+          </label>
+
+          <label class="field">
+            <span>Ngày bắt đầu *</span>
+            <input name="startDate" type="date" [(ngModel)]="form.startDate" />
+          </label>
+
+          <label class="field">
+            <span>Ngày kết thúc</span>
+            <input name="endDate" type="date" [(ngModel)]="form.endDate" />
+          </label>
+
+          <label class="field">
+            <span>Geo target constant IDs *</span>
+            <input
+              name="geoTargetIds"
+              [ngModel]="geoTargetIdsInput"
+              (ngModelChange)="onGeoTargetIdsInput($event)"
+              placeholder="2704"
+              inputmode="numeric"
+              autocomplete="off"
+            />
+            <small>Danh sách ID số, cách nhau bằng dấu phẩy. ERP/provider sẽ xác minh tồn tại.</small>
+          </label>
+
+          <label class="field">
+            <span>Language constant IDs *</span>
+            <input
+              name="languageIds"
+              [ngModel]="languageIdsInput"
+              (ngModelChange)="onLanguageIdsInput($event)"
+              placeholder="1040"
+              inputmode="numeric"
+              autocomplete="off"
+            />
+            <small>Ví dụ 1040 = tiếng Việt khi capability ERP chọn mặc định.</small>
+          </label>
+
+          <label class="field">
+            <span>Vị trí người dùng *</span>
+            <select name="positiveGeoTargetType" [(ngModel)]="form.positiveGeoTargetType">
+              <option value="PRESENCE">Đang ở hoặc thường xuyên ở vị trí</option>
+              <option value="PRESENCE_OR_INTEREST">Ở vị trí hoặc quan tâm vị trí</option>
+            </select>
+          </label>
+
+          <label class="check-field">
+            <input name="searchPartnersEnabled" type="checkbox" [(ngModel)]="form.searchPartnersEnabled" />
+            <span>Bật Google Search Partners</span>
+            <small>Google Display Network luôn bị ERP khóa tắt trong MVP.</small>
+          </label>
+
+          <label class="check-field wide required-confirmation">
+            <input
+              name="doesNotContainEuPoliticalAdvertising"
+              type="checkbox"
+              [(ngModel)]="form.doesNotContainEuPoliticalAdvertising"
+            />
+            <span>Tôi xác nhận campaign này không chứa quảng cáo chính trị tại Liên minh Châu Âu. *</span>
+          </label>
+        </ng-container>
+
+        <ng-container *ngIf="resourceScope() === 'campaign' && operation() === 'update'">
+          <label class="field">
+            <span>Tên campaign mới</span>
+            <input name="campaignNameUpdate" [(ngModel)]="form.campaignName" maxlength="128" autocomplete="off" />
+          </label>
+
+          <label class="field">
+            <span>Ngày kết thúc mới</span>
+            <input name="endDateUpdate" type="date" [(ngModel)]="form.endDate" />
+            <small>Chỉ được giữ nguyên hoặc rút ngắn ngày kết thúc canonical.</small>
+          </label>
+
+          <label class="field">
+            <span>Daily budget mới (VND)</span>
+            <input
+              name="dailyBudgetVndUpdate"
+              type="number"
+              min="1"
+              step="1000"
+              [(ngModel)]="form.dailyBudgetVnd"
+              inputmode="numeric"
+            />
+            <small>ERP tách budget thành action riêng và lấy campaignBudgetId canonical; không fallback từ campaignId.</small>
+          </label>
+
+          <div class="pause-notice">
+            Chỉ các giá trị khác canonical mới được gửi. Phải đổi ít nhất một trường.
+          </div>
+        </ng-container>
+
+        <div *ngIf="resourceScope() === 'campaign' && operation() === 'pause'" class="pause-notice wide">
+          <strong>Dừng có kiểm soát:</strong> action chỉ đặt campaign về PAUSED. MVP không xóa campaign
+          và không tự động bật lại.
+        </div>
+
+        <div *ngIf="resourceScope() === 'campaign' && operation() === 'activate'" class="activation-notice wide">
+          <strong>{{ activationStageLabel() }}</strong>
+          <span>Chỉ kích hoạt cuối cùng khi cùng một Ad Group đã có RSA policy APPROVED, positive keyword và Ad Group đều ENABLED.</span>
+        </div>
+
+        <ng-container *ngIf="resourceScope() === 'ad_group'">
+          <label *ngIf="operation() !== 'create'" class="field wide">
+            <span>Ad Group canonical *</span>
+            <select
+              name="adGroupIdForUpdate"
+              [(ngModel)]="resourceForm.adGroupId"
+              (ngModelChange)="onAdGroupChange()"
+              [disabled]="!form.campaignId || childResourcesLoading() || !!loadingAction()"
+            >
+              <option value="">{{ childResourcesLoading() ? 'Đang tải Ad Groups…' : 'Chọn Ad Group đã sync về ERP' }}</option>
+              <option *ngFor="let adGroup of adGroups()" [value]="adGroup.adGroupId">
+                {{ adGroupLabel(adGroup) }}
+              </option>
+            </select>
+            <small *ngIf="selectedAdGroup()?.lastSyncAt">
+              Canonical sync: {{ selectedAdGroup()?.lastSyncAt | date:'dd/MM/yyyy HH:mm' }}
+            </small>
+          </label>
+
+          <label *ngIf="operation() === 'create' || operation() === 'update'" class="field">
+            <span>Tên Ad Group {{ operation() === 'create' ? '*' : 'mới' }}</span>
+            <input name="adGroupName" [(ngModel)]="resourceForm.adGroupName" maxlength="255" autocomplete="off" />
+          </label>
+
+          <label *ngIf="operation() === 'create' || operation() === 'update'" class="field">
+            <span>Default CPC bid (VND)</span>
+            <input name="adGroupCpcBid" type="number" min="0" step="100" [(ngModel)]="resourceForm.cpcBidVnd" />
+            <small>Tùy chọn; ERP đổi sang micros ở backend và vẫn tạo Ad Group PAUSED.</small>
+          </label>
+
+          <div *ngIf="operation() === 'pause'" class="pause-notice wide">
+            Chỉ chuyển Ad Group canonical sang PAUSED. Không xóa và không tự bật lại.
+          </div>
+          <div *ngIf="operation() === 'activate'" class="activation-notice wide">
+            <strong>{{ activationStageLabel() }}</strong>
+            <span>Backend chỉ cho ENABLED khi cùng nhóm đã có positive keyword và RSA ENABLED hợp lệ; campaign vẫn phải PAUSED.</span>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="resourceScope() === 'keyword'">
+          <label class="field wide">
+            <span>Ad Group canonical *</span>
+            <select
+              name="adGroupIdForKeyword"
+              [(ngModel)]="resourceForm.adGroupId"
+              (ngModelChange)="onAdGroupChange()"
+              [disabled]="!form.campaignId || childResourcesLoading() || !!loadingAction()"
+            >
+              <option value="">{{ childResourcesLoading() ? 'Đang tải Ad Groups…' : 'Chọn Ad Group đã sync về ERP' }}</option>
+              <option *ngFor="let adGroup of adGroups()" [value]="adGroup.adGroupId">
+                {{ adGroupLabel(adGroup) }}
+              </option>
+            </select>
+          </label>
+
+          <label *ngIf="operation() !== 'create'" class="field wide">
+            <span>Keyword canonical *</span>
+            <select
+              name="criterionId"
+              [(ngModel)]="resourceForm.criterionId"
+              (ngModelChange)="onKeywordChange()"
+              [disabled]="!resourceForm.adGroupId || childResourcesLoading() || !!loadingAction()"
+            >
+              <option value="">{{ childResourcesLoading() ? 'Đang tải keywords…' : 'Chọn keyword đã sync về ERP' }}</option>
+              <option
+                *ngFor="let keyword of keywords()"
+                [value]="keyword.criterionId"
+                [disabled]="keyword.negative === true || keyword.mutable === false"
+              >
+                {{ keywordLabel(keyword) }}
+              </option>
+            </select>
+            <small>Negative keyword chỉ hiển thị read-only và không thể chọn: Google không cho update status, còn ERP cấm delete.</small>
+          </label>
+
+          <ng-container *ngIf="operation() === 'create'">
+            <label class="field wide">
+              <span>Nội dung keyword *</span>
+              <input name="keywordText" [(ngModel)]="resourceForm.keywordText" maxlength="80" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Match type *</span>
+              <select name="keywordMatchType" [(ngModel)]="resourceForm.matchType">
+                <option value="EXACT">Exact</option>
+                <option value="PHRASE">Phrase</option>
+                <option value="BROAD">Broad</option>
+              </select>
+            </label>
+            <div class="pause-notice">
+              Phase an toàn này chỉ tạo positive keyword PAUSED. Tạo negative keyword bị khóa fail-closed vì
+              negative criterion không thể update sau khi tạo, nên một criterion tạo PAUSED sẽ không thể kích hoạt;
+              ERP đồng thời không cho delete.
+            </div>
+          </ng-container>
+
+          <label *ngIf="(operation() === 'create' || operation() === 'update') && !resourceForm.negative" class="field">
+            <span>Keyword CPC bid (VND)</span>
+            <input name="keywordCpcBid" type="number" min="0" step="100" [(ngModel)]="resourceForm.cpcBidVnd" />
+          </label>
+          <label *ngIf="(operation() === 'create' || operation() === 'update') && !resourceForm.negative" class="field">
+            <span>Keyword final URL</span>
+            <input name="keywordFinalUrl" type="url" [(ngModel)]="resourceForm.finalUrl" placeholder="https://…" autocomplete="off" />
+          </label>
+
+          <div *ngIf="operation() === 'pause'" class="pause-notice wide">
+            Chỉ chuyển positive keyword canonical sang PAUSED. Không xóa criterion.
+          </div>
+          <div *ngIf="operation() === 'activate'" class="activation-notice wide">
+            <strong>{{ activationStageLabel() }}</strong>
+            <span>Chỉ positive keyword PAUSED được kích hoạt; cần RSA trong cùng Ad Group đã ENABLED. Negative keyword không thuộc activation flow.</span>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="resourceScope() === 'responsive_search_ad'">
+          <label class="field wide">
+            <span>Ad Group canonical *</span>
+            <select
+              name="adGroupIdForRsa"
+              [(ngModel)]="resourceForm.adGroupId"
+              (ngModelChange)="onAdGroupChange()"
+              [disabled]="!form.campaignId || childResourcesLoading() || !!loadingAction()"
+            >
+              <option value="">{{ childResourcesLoading() ? 'Đang tải Ad Groups…' : 'Chọn Ad Group đã sync về ERP' }}</option>
+              <option *ngFor="let adGroup of adGroups()" [value]="adGroup.adGroupId">
+                {{ adGroupLabel(adGroup) }}
+              </option>
+            </select>
+          </label>
+
+          <label *ngIf="operation() !== 'create'" class="field wide">
+            <span>Responsive Search Ad canonical *</span>
+            <select
+              name="responsiveSearchAdId"
+              [(ngModel)]="resourceForm.adId"
+              (ngModelChange)="onResponsiveSearchAdChange()"
+              [disabled]="!resourceForm.adGroupId || childResourcesLoading() || !!loadingAction()"
+            >
+              <option value="">{{ childResourcesLoading() ? 'Đang tải quảng cáo…' : 'Chọn RSA đã sync về ERP' }}</option>
+              <option *ngFor="let ad of responsiveSearchAds()" [value]="ad.adId">
+                {{ responsiveSearchAdLabel(ad) }}
+              </option>
+            </select>
+            <small *ngIf="selectedResponsiveSearchAd()?.policyApprovalStatus">
+              Policy: {{ selectedResponsiveSearchAd()?.policyApprovalStatus }} · {{ selectedResponsiveSearchAd()?.policyReviewStatus || 'UNKNOWN' }}
+            </small>
+          </label>
+
+          <ng-container *ngIf="operation() === 'create' || operation() === 'update'">
+            <label class="field wide">
+              <span>Final URL {{ operation() === 'create' ? '*' : '' }}</span>
+              <input name="rsaFinalUrl" type="url" [(ngModel)]="resourceForm.finalUrl" placeholder="https://…" autocomplete="off" />
+            </label>
+            <label class="field wide">
+              <span>Headlines {{ operation() === 'create' ? '*' : '' }}</span>
+              <textarea
+                name="rsaHeadlines"
+                [ngModel]="headlinesInput"
+                (ngModelChange)="onHeadlinesInput($event)"
+                rows="6"
+                placeholder="Mỗi dòng một headline; 3–15 dòng, tối đa 30 ký tự/dòng"
+              ></textarea>
+              <small>{{ resourceForm.headlines.length }}/15 headlines</small>
+            </label>
+            <div *ngIf="resourceForm.headlines.length" class="pin-editor wide">
+              <div class="pin-editor-heading">
+                <strong>Headline pinning (tùy chọn)</strong>
+                <small>Không pin để Google tự phối hợp nội dung; pin chỉ khi có yêu cầu pháp lý/brand rõ ràng.</small>
+              </div>
+              <label *ngFor="let headline of resourceForm.headlines; let index = index" class="pin-row">
+                <span>{{ index + 1 }}. {{ headline }}</span>
+                <select [name]="'headlinePin' + index" [(ngModel)]="resourceForm.headlinePinFields[index]">
+                  <option value="">Không pin</option>
+                  <option value="HEADLINE_1">Vị trí headline 1</option>
+                  <option value="HEADLINE_2">Vị trí headline 2</option>
+                  <option value="HEADLINE_3">Vị trí headline 3</option>
+                </select>
+              </label>
+            </div>
+            <label class="field wide">
+              <span>Descriptions {{ operation() === 'create' ? '*' : '' }}</span>
+              <textarea
+                name="rsaDescriptions"
+                [ngModel]="descriptionsInput"
+                (ngModelChange)="onDescriptionsInput($event)"
+                rows="4"
+                placeholder="Mỗi dòng một description; 2–4 dòng, tối đa 90 ký tự/dòng"
+              ></textarea>
+              <small>{{ resourceForm.descriptions.length }}/4 descriptions</small>
+            </label>
+            <div *ngIf="resourceForm.descriptions.length" class="pin-editor wide">
+              <div class="pin-editor-heading">
+                <strong>Description pinning (tùy chọn)</strong>
+                <small>Mỗi nội dung chỉ chọn tối đa một vị trí pin.</small>
+              </div>
+              <label *ngFor="let description of resourceForm.descriptions; let index = index" class="pin-row">
+                <span>{{ index + 1 }}. {{ description }}</span>
+                <select [name]="'descriptionPin' + index" [(ngModel)]="resourceForm.descriptionPinFields[index]">
+                  <option value="">Không pin</option>
+                  <option value="DESCRIPTION_1">Vị trí description 1</option>
+                  <option value="DESCRIPTION_2">Vị trí description 2</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span>Display path 1</span>
+              <input name="rsaPath1" [(ngModel)]="resourceForm.path1" maxlength="15" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Display path 2</span>
+              <input name="rsaPath2" [(ngModel)]="resourceForm.path2" maxlength="15" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Tracking URL template</span>
+              <input
+                name="trackingUrlTemplate"
+                [(ngModel)]="resourceForm.trackingUrlTemplate"
+                placeholder="https://tracker.example.com/click?url={lpurl}"
+                autocomplete="off"
+              />
+              <small>Phải là URL HTTPS có {{ '{lpurl}' }}; ERP backend xác minh hostname thuộc tracking-domain allowlist.</small>
+            </label>
+            <label class="field">
+              <span>Final URL suffix</span>
+              <input name="finalUrlSuffix" [(ngModel)]="resourceForm.finalUrlSuffix" placeholder="utm_source=google&amp;…" autocomplete="off" />
+              <small>Không nhập dấu ? ở đầu.</small>
+            </label>
+          </ng-container>
+
+          <div *ngIf="operation() === 'pause'" class="pause-notice wide">
+            Chỉ chuyển RSA canonical sang PAUSED. ERP không xóa quảng cáo.
+          </div>
+          <div *ngIf="operation() === 'activate'" class="activation-notice wide">
+            <strong>{{ activationStageLabel() }}</strong>
+            <span>RSA phải PAUSED, policyApprovalStatus=APPROVED và URL/tracking thuộc allowlist; campaign và Ad Group vẫn PAUSED ở bước này.</span>
+          </div>
+        </ng-container>
+
+        <aside *ngIf="selectedCampaign()" class="readiness-panel wide" [class.ready]="readinessReady()">
+          <div class="readiness-heading">
+            <div>
+              <strong>Conversion &amp; tracking configuration evidence</strong>
+              <small>Chỉ phản ánh dữ liệu cấu hình read-only; không phải bằng chứng có thể activation/serving và không tự bật tài nguyên.</small>
+            </div>
+            <span>
+              {{ readinessLoading() ? 'Đang tải bằng chứng…' : readinessReady() ? 'ĐỦ DỮ LIỆU CẤU HÌNH' : 'THIẾU DỮ LIỆU CẤU HÌNH' }}
+            </span>
+          </div>
+          <div *ngIf="readiness()" class="readiness-grid">
+            <div>
+              <small>Conversion</small>
+              <strong>{{ readiness()?.conversion?.ready === true || readiness()?.conversionTrackingConfigured === true ? 'Đạt' : 'Chưa đạt' }}</strong>
+              <small>{{ readiness()?.conversion?.status || 'Không có trạng thái' }}</small>
+            </div>
+            <div>
+              <small>Customer data terms</small>
+              <strong>{{ readiness()?.conversion?.acceptedCustomerDataTerms === true ? 'Đã chấp nhận' : 'Chưa xác nhận' }}</strong>
+              <small>Owner: {{ readiness()?.conversion?.ownerCustomer || '—' }}</small>
+            </div>
+            <div>
+              <small>Tracking domains</small>
+              <strong>{{ readiness()?.tracking?.configuredDomainCount ?? 0 }}</strong>
+              <small>HTTPS bắt buộc · template cần {{ '{lpurl}' }}</small>
+            </div>
+            <div>
+              <small>Canonical resource presence</small>
+              <strong>
+                {{ readiness()?.deliveryStack?.adGroups ?? 0 }} nhóm ·
+                {{ readiness()?.deliveryStack?.positiveKeywords ?? 0 }} từ khóa ·
+                {{ readiness()?.deliveryStack?.responsiveSearchAds ?? 0 }} RSA
+              </strong>
+            </div>
+          </div>
+          <ul *ngIf="readinessBlockers().length" class="blockers">
+            <li *ngFor="let blocker of readinessBlockers()">{{ blocker }}</li>
+          </ul>
+        </aside>
+
+        <aside *ngIf="selectedCampaign()" class="activation-panel wide" [class.ready]="activationEvidenceReady()">
+          <div class="readiness-heading">
+            <div>
+              <strong>Activation gate evidence</strong>
+              <small>Tách biệt với conversion configuration evidence; backend kiểm tra lại canonical state trước từng resume action.</small>
+            </div>
+            <span>
+              {{ !activationEvidence() ? 'CHƯA CÓ BẰNG CHỨNG' : activationEvidenceReady() ? 'ĐỦ ĐIỀU KIỆN THEO SNAPSHOT' : 'ĐANG BỊ CHẶN' }}
+            </span>
+          </div>
+          <div class="activation-order" aria-label="Thứ tự kích hoạt bắt buộc">
+            <span>1. RSA</span><span>2. Positive keyword</span><span>3. Ad Group</span><span>4. Campaign</span>
+          </div>
+          <small *ngIf="activationEvidence()?.nextStage">
+            Bước tiếp theo theo canonical snapshot: {{ activationEvidence()?.nextStage }}
+          </small>
+          <ul *ngIf="activationBlockers().length" class="blockers">
+            <li *ngFor="let blocker of activationBlockers()">{{ blocker }}</li>
+          </ul>
+          <small *ngIf="!activationEvidence()">
+            UI không tự suy luận khả năng activation. Cần backend capabilities/readiness trả activation evidence mới nhất.
+          </small>
+        </aside>
+
+        <aside
+          *ngIf="selectedCampaign() && resourceScope() === 'campaign' && operation() !== 'create'"
+          class="readiness-panel wide"
+          [class.ready]="biddingLifecycleLoaded() && !biddingLifecycleBlockers().length"
+        >
+          <div class="readiness-heading">
+            <div>
+              <strong>Auto bidding lifecycle</strong>
+              <small>
+                ERP chỉ tự đánh giá và tạo draft action plan. Mọi transition vẫn phải validateOnly,
+                người khác duyệt, dry-run, live gate và canonical readback.
+              </small>
+            </div>
+            <span>
+              {{ biddingLifecycleLoading() ? 'ĐANG TẢI…' : biddingLifecycleForm.enabled ? 'ĐÃ BẬT · DRAFT ONLY' : 'ĐANG TẮT' }}
+            </span>
+          </div>
+
+          <div class="activation-order" aria-label="Bốn giai đoạn bidding lifecycle">
+            <span>1. Maximize Clicks</span>
+            <span>2. Maximize Clicks + CPC ceiling</span>
+            <span>3. Maximize Conversions</span>
+            <span>4. Maximize Conversions + target CPA</span>
+          </div>
+
+          <label class="check-field wide required-confirmation">
+            <input
+              name="biddingLifecycleEnabled"
+              type="checkbox"
+              [(ngModel)]="biddingLifecycleForm.enabled"
+              [disabled]="!biddingLifecycleLoaded() || !!loadingAction()"
+            />
+            <span>Bật evaluator tự động tạo draft khi canonical metrics đạt ngưỡng</span>
+            <small>Không có chế độ auto execute hoặc auto publish. Policy luôn bị force draftOnly=true.</small>
+          </label>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Ngưỡng lượt nhấp</span>
+              <input
+                name="biddingClickThreshold"
+                type="number"
+                min="1"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.clickThreshold"
+              />
+              <small>Mặc định 50 click canonical.</small>
+            </label>
+
+            <label class="field">
+              <span>Cửa sổ lượt nhấp (ngày)</span>
+              <input
+                name="biddingClickWindowDays"
+                type="number"
+                min="1"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.clickWindowDays"
+              />
+            </label>
+
+            <label class="field">
+              <span>CPC ceiling (VND)</span>
+              <input
+                name="biddingMaxCpcBidCeilingVnd"
+                type="number"
+                min="1"
+                step="100"
+                [(ngModel)]="biddingLifecycleForm.maxCpcBidCeilingVnd"
+              />
+              <small>Áp dụng ở giai đoạn Maximize Clicks + CPC ceiling; đây không phải CPA.</small>
+            </label>
+
+            <label class="field">
+              <span>Conversion để chuyển sang Maximize Conversions</span>
+              <input
+                name="biddingMaximizeConversionsMinConversions"
+                type="number"
+                min="1"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.maximizeConversionsMinConversions"
+              />
+            </label>
+
+            <label class="field">
+              <span>Cửa sổ conversion (ngày)</span>
+              <input
+                name="biddingConversionWindowDays"
+                type="number"
+                min="1"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.conversionWindowDays"
+              />
+              <small>Backend chỉ đếm primary/biddable conversions canonical.</small>
+            </label>
+
+            <label class="field">
+              <span>Conversion để bật target CPA</span>
+              <input
+                name="biddingTargetCpaMinConversions"
+                type="number"
+                min="1"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.targetCpaMinConversions"
+              />
+            </label>
+
+            <label class="field">
+              <span>Target CPA (VND)</span>
+              <input
+                name="biddingTargetCpaVnd"
+                type="number"
+                min="1"
+                step="1000"
+                [(ngModel)]="biddingLifecycleForm.targetCpaVnd"
+              />
+            </label>
+
+            <label class="field">
+              <span>Cooldown sau transition (giờ)</span>
+              <input
+                name="biddingCooldownHours"
+                type="number"
+                min="0"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.cooldownHours"
+              />
+            </label>
+
+            <label class="field">
+              <span>Thời gian tối thiểu ở mỗi stage (giờ)</span>
+              <input
+                name="biddingMinimumStageDwellHours"
+                type="number"
+                min="0"
+                step="1"
+                [(ngModel)]="biddingLifecycleForm.minimumStageDwellHours"
+              />
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button
+              type="button"
+              class="primary"
+              (click)="saveBiddingLifecycle()"
+              [disabled]="!canPlan() || !biddingLifecycleLoaded() || capabilities()?.biddingLifecycle?.supported !== true || capabilities()?.biddingLifecycle?.draftOnly !== true || !!loadingAction()"
+            >
+              {{ loadingAction() === 'save-bidding-lifecycle' ? 'Đang lưu…' : 'Lưu policy draft-only' }}
+            </button>
+            <button
+              type="button"
+              (click)="evaluateBiddingLifecycle()"
+              [disabled]="!canPlan() || !biddingLifecycleLoaded() || capabilities()?.biddingLifecycle?.supported !== true || capabilities()?.biddingLifecycle?.draftOnly !== true || !biddingLifecycleForm.enabled || !!loadingAction()"
+            >
+              {{ loadingAction() === 'evaluate-bidding-lifecycle' ? 'Đang đánh giá…' : 'Đánh giá và tạo draft nếu đạt ngưỡng' }}
+            </button>
+          </div>
+
+          <div *ngIf="biddingLifecycleState()" class="readiness-grid">
+            <div>
+              <small>Stage canonical</small>
+              <strong>{{ biddingLifecycleStageLabel(biddingLifecycleState()?.currentStage) }}</strong>
+              <small>{{ biddingLifecycleState()?.canonicalBiddingStrategyType || selectedCampaign()?.biddingStrategyType || 'UNKNOWN' }}</small>
+              <small>
+                Quyết định: {{ biddingLifecycleState()?.lastDecision || 'NOT_EVALUATED' }}
+                <span *ngIf="biddingLifecycleState()?.lastDecisionReason">
+                  · {{ biddingLifecycleState()?.lastDecisionReason }}
+                </span>
+              </small>
+            </div>
+            <div>
+              <small>Metrics canonical</small>
+              <strong>
+                {{ biddingLifecycleState()?.observedClicks ?? 0 }} click ·
+                {{ biddingLifecycleState()?.observedConversions ?? 0 }} conversion
+              </strong>
+              <small>
+                {{ biddingLifecycleState()?.metricsFrom || '—' }} → {{ biddingLifecycleState()?.metricsTo || '—' }}
+              </small>
+            </div>
+            <div>
+              <small>CPA quan sát</small>
+              <strong>{{ formatVnd(biddingLifecycleState()?.observedCpaVnd) }}</strong>
+              <small>Đánh giá: {{ biddingLifecycleState()?.lastEvaluatedAt ? (biddingLifecycleState()?.lastEvaluatedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</small>
+            </div>
+            <div>
+              <small>Cooldown / dwell</small>
+              <strong>
+                {{ biddingLifecycleState()?.nextEligibleAt ? (biddingLifecycleState()?.nextEligibleAt | date:'dd/MM/yyyy HH:mm') : 'Sẵn sàng theo policy' }}
+              </strong>
+              <small>Transition gần nhất: {{ biddingLifecycleState()?.lastTransitionAt ? (biddingLifecycleState()?.lastTransitionAt | date:'dd/MM/yyyy HH:mm') : '—' }}</small>
+            </div>
+          </div>
+
+          <div *ngIf="biddingLifecycleState()?.pendingDraft" class="pause-notice">
+            <strong>Pending transition draft:</strong>
+            {{ biddingLifecycleState()?.pendingDraft?.fromStage || '—' }} →
+            {{ biddingLifecycleState()?.pendingDraft?.toStage || '—' }} ·
+            {{ biddingLifecycleState()?.pendingDraft?.status || 'pending' }} ·
+            {{ biddingLifecyclePendingDraftPlanId() }}
+            <button type="button" (click)="openBiddingLifecycleDraft()" [disabled]="!!loadingAction()">
+              Mở draft trong approval workflow
+            </button>
+          </div>
+
+          <ul *ngIf="biddingLifecycleBlockers().length" class="blockers">
+            <li *ngFor="let blocker of biddingLifecycleBlockers()">{{ blocker }}</li>
+          </ul>
+          <small *ngIf="biddingLifecycleWarning()">{{ biddingLifecycleWarning() }}</small>
+        </aside>
+
+        <label class="field wide">
+          <span>Lý do kinh doanh / bằng chứng *</span>
+          <textarea
+            name="reason"
+            [(ngModel)]="form.reason"
+            rows="3"
+            maxlength="1000"
+            placeholder="Nêu mục tiêu, phê duyệt ngân sách hoặc lý do cần dừng…"
+          ></textarea>
+        </label>
+      </div>
+
+      <div class="forced-policy">
+        <strong>ERP force:</strong> chỉ Google Search; campaign, Ad Group, positive keyword và RSA mới đều PAUSED;
+        negative keyword create bị khóa; không delete/auto-publish. Resume chỉ có qua activation flow 4 bước được duyệt.
+      </div>
+
+      <div class="button-row">
+        <button class="primary" type="submit" [disabled]="!canPlan() || !!loadingAction()">
+          {{ loadingAction() === 'create' ? 'Đang lưu…' : 'Lưu draft action plan' }}
+        </button>
+        <small *ngIf="!canPlan()">Bạn không có quyền google-ads.plan.</small>
+      </div>
+    </form>
+  </section>
+
+  <section class="card plan-card">
+    <div class="section-heading">
+      <div>
+        <h2>2. Kiểm soát và thực thi</h2>
+        <p>Luồng bắt buộc: draft → validateOnly → người khác duyệt → dry-run → người khác execute live.</p>
+      </div>
+      <div class="plan-lookup">
+        <input name="lookupPlanId" [(ngModel)]="lookupPlanId" placeholder="GOOGLE-PLAN-…" />
+        <button type="button" (click)="loadPlan()" [disabled]="!lookupPlanId.trim() || !!loadingAction()">
+          Tải plan
+        </button>
+      </div>
+    </div>
+
+    <ng-container *ngIf="plan(); else noPlan">
+      <div class="plan-summary">
+        <div><small>Plan ID</small><strong>{{ planId() }}</strong></div>
+        <div><small>Trạng thái</small><strong>{{ plan()?.status }}</strong></div>
+        <div><small>Nguồn</small><strong>{{ plan()?.source || 'erp_ui' }}</strong></div>
+        <div><small>Validate</small><strong>{{ plan()?.providerValidationStatus || 'pending' }}</strong></div>
+      </div>
+
+      <div class="timeline" aria-label="Tiến trình action plan">
+        <div class="done"><span>1</span><strong>Draft</strong><small>Chỉ lưu ERP</small></div>
+        <div [class.done]="providerValidated()"><span>2</span><strong>Validate</strong><small>Provider validateOnly</small></div>
+        <div [class.done]="allItemsApproved()"><span>3</span><strong>Duyệt</strong><small>Separation of duties</small></div>
+        <div [class.done]="dryRunPassed()"><span>4</span><strong>Dry-run</strong><small>Không mutate live</small></div>
+        <div [class.done]="liveExecuted()"><span>5</span><strong>Live</strong><small>ERP gọi Google Ads</small></div>
+      </div>
+
+      <div *ngIf="creatorConflict()" class="alert warning">
+        Bạn là người tạo plan nên UI khóa duyệt/từ chối. Hãy chuyển cho một người có quyền duyệt khác.
+      </div>
+      <div *ngIf="approverConflict()" class="alert warning">
+        Bạn đã duyệt action trong plan nên UI khóa thực thi live.
+      </div>
+
+      <div class="validation-row">
+        <div>
+          <strong>Google Ads provider validation</strong>
+          <small>ERP gửi cùng mutate operations với validateOnly=true; không tạo thay đổi live.</small>
+        </div>
+        <button
+          type="button"
+          (click)="validatePlan()"
+          [disabled]="!canValidate() || !!loadingAction() || !items().length"
+        >
+          {{ loadingAction() === 'validate' ? 'Đang validate…' : 'Chạy provider validateOnly' }}
+        </button>
+      </div>
+
+      <article *ngFor="let item of items()" class="action-card">
+        <div class="action-heading">
+          <div>
+            <strong>{{ actionLabel(item.actionType) }}</strong>
+            <small>{{ item.actionId }} · customer {{ item.customerId }}</small>
+          </div>
+          <span class="status">{{ item.status }}</span>
+        </div>
+
+        <dl class="payload-summary">
+          <ng-container *ngIf="itemPayload(item)['campaignName']">
+            <dt>Campaign</dt><dd>{{ itemPayload(item)['campaignName'] }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['dailyBudgetVnd'] || itemPayload(item)['dailyBudget']">
+            <dt>Daily budget</dt>
+            <dd>{{ formatVnd(itemPayload(item)['dailyBudgetVnd'] || itemPayload(item)['dailyBudget']) }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['biddingStrategyType']">
+            <dt>Bidding</dt><dd>{{ itemPayload(item)['biddingStrategyType'] }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['biddingLifecycleStage']">
+            <dt>Lifecycle stage</dt>
+            <dd>{{ biddingLifecycleStageLabel($any(itemPayload(item)['biddingLifecycleStage'])) }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['maxCpcBidCeilingVnd']">
+            <dt>CPC ceiling</dt><dd>{{ formatVnd(itemPayload(item)['maxCpcBidCeilingVnd']) }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['targetCpaVnd']">
+            <dt>Target CPA</dt><dd>{{ formatVnd(itemPayload(item)['targetCpaVnd']) }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['campaignId'] || item.campaignId">
+            <dt>Campaign ID</dt><dd>{{ itemPayload(item)['campaignId'] || item.campaignId }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['adGroupName']">
+            <dt>Ad Group</dt><dd>{{ itemPayload(item)['adGroupName'] }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['adGroupId'] || item.adGroupId">
+            <dt>Ad Group ID</dt><dd>{{ itemPayload(item)['adGroupId'] || item.adGroupId }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['keywordText']">
+            <dt>Keyword</dt>
+            <dd>{{ itemPayload(item)['keywordText'] }} · {{ itemPayload(item)['matchType'] }}{{ itemPayload(item)['negative'] ? ' · NEGATIVE' : '' }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['headlines']">
+            <dt>RSA headlines</dt><dd>{{ itemPayload(item)['headlines'] }}</dd>
+          </ng-container>
+          <ng-container *ngIf="itemPayload(item)['finalUrl']">
+            <dt>Final URL</dt><dd>{{ itemPayload(item)['finalUrl'] }}</dd>
+          </ng-container>
+          <dt>Provider validate</dt><dd>{{ item.providerValidationStatus || 'pending' }}</dd>
+          <dt>Lý do</dt><dd>{{ item.reason || '—' }}</dd>
+        </dl>
+
+        <ul *ngIf="item.providerValidationErrors?.length" class="validation-errors">
+          <li *ngFor="let validationError of item.providerValidationErrors">
+            {{ validationError.fieldPath ? validationError.fieldPath + ': ' : '' }}{{ validationError.message }}
+          </li>
+        </ul>
+
+        <div class="decision-row">
+          <button
+            class="primary"
+            type="button"
+            (click)="approve(item)"
+            [disabled]="!canApproveItem(item) || !!loadingAction()"
+          >
+            Duyệt
+          </button>
+          <input
+            name="rejectionReason"
+            [(ngModel)]="rejectionReason"
+            placeholder="Lý do từ chối"
+            [disabled]="!canApprove() || creatorConflict()"
+          />
+          <button
+            type="button"
+            (click)="reject(item)"
+            [disabled]="!canApprove() || creatorConflict() || rejectionReason.trim().length < 5 || !!loadingAction()"
+          >
+            Từ chối
+          </button>
+        </div>
+      </article>
+
+      <div class="execution-panel">
+        <div class="button-row">
+          <button
+            type="button"
+            (click)="execute(true)"
+            [disabled]="!canExecute() || !providerValidated() || !allItemsApproved() || !!loadingAction()"
+          >
+            {{ loadingAction() === 'dry-run' ? 'Đang dry-run…' : 'Chạy dry-run' }}
+          </button>
+        </div>
+
+        <div class="live-confirmation">
+          <label class="field">
+            <span>Nhập plan ID để xác nhận live</span>
+            <input name="liveConfirmation" [(ngModel)]="liveConfirmation" [placeholder]="planId()" autocomplete="off" />
+          </label>
+          <button
+            class="danger"
+            type="button"
+            (click)="execute(false)"
+            [disabled]="!canExecute() || liveConfirmation.trim() !== planId() || liveBlockers().length > 0 || !!loadingAction()"
+          >
+            {{ loadingAction() === 'live' ? 'Đang gửi ERP…' : 'Thực thi live qua ERP' }}
+          </button>
+        </div>
+
+        <ul *ngIf="liveBlockers().length" class="blockers">
+          <li *ngFor="let blocker of liveBlockers()">{{ blocker }}</li>
+        </ul>
+      </div>
+
+      <details *ngIf="executions().length" class="execution-history">
+        <summary>Execution log ({{ executions().length }})</summary>
+        <div *ngFor="let execution of executions()" class="execution-row">
+          <strong>{{ execution.dryRun ? 'DRY-RUN' : 'LIVE' }}</strong>
+          <span>
+            {{ execution.status }}
+            <small *ngIf="execution.reconciliationRequired" class="reconciliation-warning">
+              Cần đối soát với Google Ads trước khi thử lại{{ execution.reconciliationReason ? ': ' + execution.reconciliationReason : '' }}
+            </small>
+          </span>
+          <small>{{ execution.createdAt | date:'dd/MM/yyyy HH:mm:ss' }}</small>
+        </div>
+      </details>
+    </ng-container>
+
+    <ng-template #noPlan>
+      <div class="empty-state">Tạo draft mới hoặc nhập plan ID để bắt đầu workflow.</div>
+    </ng-template>
+  </section>
+</main>

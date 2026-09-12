@@ -37,6 +37,7 @@ describe('SupplierQuoteService approval workflow', () => {
 
   const createService = () => {
     const model = {
+      db: { collection: jest.fn(() => ({ findOne: jest.fn().mockResolvedValue(null) })) },
       create: jest.fn(),
       findById: jest.fn(),
       findOne: jest.fn(),
@@ -179,6 +180,43 @@ describe('SupplierQuoteService approval workflow', () => {
     await expect(service.reject(quoteId, director, 'Independent review')).rejects.toMatchObject({ status: 403 });
     expect(selfOwned.save).not.toHaveBeenCalled();
     expect(selfEdited.save).not.toHaveBeenCalled();
+  });
+
+  it('allows an active database-verified director to approve their own zero-price quote and audits the exception', async () => {
+    const { service, model } = createService();
+    const doc = quoteDocument({ createdBy: new Types.ObjectId(directorId), price: 0 });
+    const lookup = jest.fn().mockResolvedValue({ _id: new Types.ObjectId(directorId) });
+    model.db.collection.mockReturnValue({ findOne: lookup });
+    model.findById.mockResolvedValue(doc);
+    await service.approve(quoteId, director);
+    expect(lookup).toHaveBeenCalledWith(
+      { _id: new Types.ObjectId(directorId), role: 'director', isActive: true },
+      { projection: { _id: 1 } },
+    );
+    expect(doc.approvalStatus).toBe('approved');
+    expect(String(doc.createdBy)).toBe(directorId);
+    expect(String(doc.lastCommercialEditedBy)).toBe(makerId);
+    expect(doc.approvalHistory[0]).toEqual(expect.objectContaining({
+      decision: 'approved', priceSnapshot: 0,
+      reason: 'Director approval of own quote; active director role verified from database.',
+    }));
+  });
+
+  it('does not trust a supplied director role without an active director record', async () => {
+    const { service, model } = createService();
+    const doc = quoteDocument({ lastCommercialEditedBy: new Types.ObjectId(directorId) });
+    model.findById.mockResolvedValue(doc);
+    await expect(service.approve(quoteId, { ...director, role: 'director' })).rejects.toMatchObject({ status: 403 });
+    expect(doc.save).not.toHaveBeenCalled();
+  });
+
+  it('still requires complete provenance for director self-approval', async () => {
+    const { service, model } = createService();
+    const doc = quoteDocument({ createdBy: new Types.ObjectId(directorId), lastCommercialEditedBy: undefined });
+    model.db.collection.mockReturnValue({ findOne: jest.fn().mockResolvedValue({ _id: directorId }) });
+    model.findById.mockResolvedValue(doc);
+    await expect(service.approve(quoteId, director)).rejects.toMatchObject({ status: 409 });
+    expect(doc.save).not.toHaveBeenCalled();
   });
 
   it('fails closed for legacy provenance, then allows claim plus independent approval', async () => {

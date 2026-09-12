@@ -52,6 +52,8 @@ export class QuoteComponent implements OnInit {
       productId: ['', Validators.required],
       agentId: [''], // Sẽ được validate động
       applyToAllAgents: [false],
+      shippingFee: [null, Validators.min(0)],
+      returnFee: [null, Validators.min(0)],
       unitPrice: [0, [Validators.required, Validators.min(0)]],
       status: ['Chờ duyệt', Validators.required],
       validFrom: ['', Validators.required],
@@ -157,14 +159,16 @@ export class QuoteComponent implements OnInit {
     this.isEditMode.set(true);
     this.currentQuoteId.set(quote._id || null);
     
-    const validFrom = quote.validFrom ? new Date(quote.validFrom).toISOString().split('T')[0] : '';
-    const validUntil = quote.validUntil ? new Date(quote.validUntil).toISOString().split('T')[0] : '';
+    const validFrom = quote.validFrom ? new Date(quote.validFrom).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }) : '';
+    const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }) : '';
     
     this.quoteForm.patchValue({
       productId: typeof quote.productId === 'string' ? quote.productId : quote.productId._id,
       agentId: typeof quote.agentId === 'string' ? quote.agentId : quote.agentId._id,
       applyToAllAgents: false, // Edit mode không áp dụng bulk
       unitPrice: quote.unitPrice,
+      shippingFee: quote.shippingFee ?? null,
+      returnFee: quote.returnFee ?? null,
       status: quote.status,
       validFrom: validFrom,
       validUntil: validUntil,

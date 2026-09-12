@@ -1,8 +1,8 @@
 <div class="ad-account-manager">
   <div class="header-section">
     <div class="title-area">
-      <h1>Tai Khoan Quang Cao</h1>
-      <p class="subtitle">Quan ly Facebook BM, Google MCC va TikTok BC trong mot man hinh.</p>
+      <h1>Tài Khoản Quảng Cáo</h1>
+      <p class="subtitle">Tài khoản Google Ads từ Windsor tự xuất hiện sau đồng bộ. Chọn người phụ trách; tên và ID sẽ được cập nhật từ nguồn.</p>
     </div>
 
     <div class="header-actions">
@@ -115,11 +115,13 @@
                 <input
                   type="text"
                   [value]="account.name"
+                  [readOnly]="account.sourceSystem === 'windsor'"
                   (blur)="updateField(account, 'name', $any($event.target).value)"
                   (keyup.enter)="updateField(account, 'name', $any($event.target).value)"
                   class="inline-input font-medium"
                   placeholder="Ten tai khoan" />
                 <small>{{ getAccountTypeLabel(account.accountType) }}</small>
+                <small *ngIf="account.sourceSystem === 'windsor'">Windsor · tự đồng bộ</small>
               </div>
             </td>
 
@@ -127,6 +129,7 @@
               <input
                 type="text"
                 [value]="account.accountId"
+                [readOnly]="account.sourceSystem === 'windsor'"
                 (blur)="updateField(account, 'accountId', $any($event.target).value)"
                 (keyup.enter)="updateField(account, 'accountId', $any($event.target).value)"
                 class="inline-input code-text"
@@ -240,7 +243,7 @@
                 <button class="btn-action btn-cancel" (click)="cancelAdd(account._id)" title="Huy">Huy</button>
               </div>
               <ng-template #existingRowActions>
-                <button class="btn-action btn-danger" (click)="deleteAccount(account)" title="Xoa">Xoa</button>
+                <button *ngIf="account.sourceSystem !== 'windsor'" class="btn-action btn-danger" (click)="deleteAccount(account)" title="Xoa">Xoa</button>
               </ng-template>
             </td>
           </tr>

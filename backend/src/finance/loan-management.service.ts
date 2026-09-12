@@ -10,6 +10,7 @@
 
 import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { postTreasuryJournal } from '../business-ledger/treasury-journal';
 import { Model, Types } from 'mongoose';
 import { LoanContract, LoanContractDocument } from './schemas/loan-contract.schema';
 import { LoanRepayment, LoanRepaymentDocument } from './schemas/loan-repayment.schema';
@@ -392,11 +393,17 @@ export class LoanManagementService {
       amount: dto.amount,
       sourceType: 'loan',
       description: `Thanh toán khoản vay: ${loan.name} (${loan.lenderName})`,
-      date: new Date(),
+      date: payment.paymentDate,
       referenceId: String(payment._id),
       category: 'loan_payment',
     });
     await cashflow.save({ session });
+    await postTreasuryJournal(this.cashflowModel.db, session, {
+      referenceId: String(payment._id), category: 'loan_payment', amount: dto.amount,
+      direction: 'out', occurredAt: payment.paymentDate, actorId,
+      accountId: dto.source === PaymentSource.BANK_BALANCE ? dto.sourceAccountId : undefined,
+      interest: amountToInterest, ownerFund: dto.source === PaymentSource.OWNER_FUND,
+    });
 
     // 8. Deduct from source
     if (dto.source === PaymentSource.OWNER_FUND && dto.sourceAccountId) {
@@ -435,6 +442,7 @@ export class LoanManagementService {
     }
 
     this.financialControlService.invalidateCache(`loan-payment:create:${payment._id}`);
+    await this.financeService.invalidateMasterBankBalanceCache(`loan-payment:create:${payment._id}`);
 
     // 9. Calculate savings
     const interestRate = loan.interestRate || 0;

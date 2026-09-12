@@ -8,15 +8,33 @@ import { Model, Types } from 'mongoose';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 import { ProductCategory, ProductCategoryDocument } from './schemas/product-category.schema';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 
 @Injectable()
 export class ProductCategoryService {
   constructor(
     @InjectModel(ProductCategory.name) 
     private productCategoryModel: Model<ProductCategoryDocument>,
+    private readonly events?: EventEmitter2,
   ) {}
 
+  private async attachActualProductCounts(categories: ProductCategoryDocument[]): Promise<ProductCategoryDocument[]> {
+    if (!categories.length) return categories;
+    const ids = categories.map(category => category._id);
+    const counts = await this.productCategoryModel.db.collection('products').aggregate([
+      { $match: { categoryId: { $in: ids } } },
+      { $group: { _id: '$categoryId', count: { $sum: 1 } } },
+    ]).toArray();
+    const byCategory = new Map(counts.map(row => [String(row._id), Number(row.count || 0)]));
+    for (const category of categories) {
+      category.productCount = byCategory.get(String(category._id)) || 0;
+    }
+    return categories;
+  }
+
   async create(createProductCategoryDto: CreateProductCategoryDto): Promise<ProductCategory> {
+    createProductCategoryDto.productCount = 0;
     // Tự động set order nếu không được cung cấp
     if (!createProductCategoryDto.order) {
       const count = await this.productCategoryModel.countDocuments();
@@ -48,10 +66,11 @@ export class ProductCategoryService {
   }
 
   async findAll(): Promise<ProductCategory[]> {
-    return this.productCategoryModel
+    const categories = await this.productCategoryModel
       .find()
       .sort({ order: 1, createdAt: -1 })
       .exec();
+    return this.attachActualProductCounts(categories);
   }
 
   async findOne(id: string): Promise<ProductCategory> {
@@ -59,16 +78,27 @@ export class ProductCategoryService {
     if (!category) {
       throw new NotFoundException(`Product Category with ID ${id} not found`);
     }
+    category.productCount = await this.productCategoryModel.db
+      .collection('products')
+      .countDocuments({ categoryId: category._id });
     return category;
   }
 
   async update(id: string, updateProductCategoryDto: UpdateProductCategoryDto): Promise<ProductCategory> {
+    const update = { ...updateProductCategoryDto };
+    delete update.productCount;
     const updatedCategory = await this.productCategoryModel
-      .findByIdAndUpdate(id, updateProductCategoryDto, { new: true })
+      .findByIdAndUpdate(id, update, { new: true })
       .exec();
     
     if (!updatedCategory) {
       throw new NotFoundException(`Product Category with ID ${id} not found`);
+    }
+    updatedCategory.productCount = await this.productCategoryModel.db.collection('products')
+      .countDocuments({ categoryId: updatedCategory._id });
+    if (this.events) {
+      const products = await this.productCategoryModel.db.collection('products').find({ categoryId: { $in: [id, updatedCategory._id] } }, { projection: { _id: 1 } }).toArray();
+      await this.events.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: products.map(product => String(product._id)) });
     }
     return updatedCategory;
   }
@@ -89,16 +119,19 @@ export class ProductCategoryService {
 
   // Lấy các nhóm sản phẩm đang hoạt động
   async getActiveCategories(): Promise<ProductCategory[]> {
-    return this.productCategoryModel
+    const categories = await this.productCategoryModel
       .find({ isActive: true })
       .sort({ order: 1 })
       .exec();
+    return this.attachActualProductCounts(categories);
   }
 
   // Cập nhật số lượng sản phẩm trong nhóm
-  async updateProductCount(id: string, count: number): Promise<ProductCategory> {
+  async updateProductCount(id: string, _count: number): Promise<ProductCategory> {
+    const actualCount = await this.productCategoryModel.db.collection('products')
+      .countDocuments({ categoryId: new Types.ObjectId(id) });
     const updatedCategory = await this.productCategoryModel
-      .findByIdAndUpdate(id, { productCount: count }, { new: true })
+      .findByIdAndUpdate(id, { productCount: actualCount }, { new: true })
       .exec();
     
     if (!updatedCategory) {
@@ -135,8 +168,7 @@ export class ProductCategoryService {
   }
 
   private async getTotalProductCount(): Promise<number> {
-    const categories = await this.productCategoryModel.find({ productCount: { $exists: true, $ne: null } });
-    return categories.reduce((acc, category) => acc + (category.productCount || 0), 0);
+    return this.productCategoryModel.db.collection('products').countDocuments({});
   }
 
   // Method để seed dữ liệu mẫu với encoding UTF-8 đúng

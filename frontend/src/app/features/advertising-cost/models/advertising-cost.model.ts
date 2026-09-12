@@ -2,6 +2,8 @@ export type AdChannel = 'facebook' | 'google' | 'tiktok' | 'zalo' | 'other';
 export type ManagementMode = 'direct' | 'bm' | 'mcc' | 'bc';
 
 export interface AdvertisingCost {
+  isEstimated?: boolean;
+  estimationSampleDays?: string[];
   _id?: string;
   date: string;
   channel?: AdChannel;

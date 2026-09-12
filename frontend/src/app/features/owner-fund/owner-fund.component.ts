@@ -1,6 +1,7 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TreasuryAccountSelectorComponent } from '../../shared/treasury-account-selector.component';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { OwnerFundService } from './owner-fund.service';
@@ -19,7 +20,7 @@ import {
 @Component({
   selector: 'app-owner-fund',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TreasuryAccountSelectorComponent],
   templateUrl: './owner-fund.component.html',
   styleUrls: ['./owner-fund.component.css']
 })
@@ -39,6 +40,7 @@ export class OwnerFundComponent implements OnInit {
   showWithdrawalForm = false;
   showTransactionForm = false;
   showTransferModal = false;
+  ledgerAccountId = '';
   showWithdrawModal = false;
   editingOwner: Owner | null = null;
 
@@ -362,7 +364,7 @@ export class OwnerFundComponent implements OnInit {
       return;
     }
 
-    this.ownerFundService.transferToOwnerFund(this.transferForm).subscribe({
+    this.ownerFundService.transferToOwnerFund({ ...this.transferForm, ledgerAccountId: this.ledgerAccountId || undefined }).subscribe({
       next: (result) => {
         alert(result.message || 'Chuyển tiền thành công!');
         this.closeTransferModal();
@@ -426,7 +428,7 @@ export class OwnerFundComponent implements OnInit {
 
     const description = prompt('Mô tả (tùy chọn):') || '';
 
-    this.ownerFundService.transferFromOwnerFund({ amount: amountNum, description }).subscribe({
+    this.ownerFundService.transferFromOwnerFund({ amount: amountNum, description, ledgerAccountId: this.ledgerAccountId || undefined }).subscribe({
       next: (result) => {
         alert(result.message || 'Chuyển tiền về Quỹ Công Ty thành công!');
         this.loadFundAccount();

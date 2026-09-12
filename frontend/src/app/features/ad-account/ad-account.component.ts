@@ -287,7 +287,7 @@ export class AdAccountComponent implements OnInit {
 
   private normalizeFieldValue(field: keyof AdAccount, value: any) {
     if (field === 'adsManagerUserId') {
-      return value || undefined;
+      return value || null;
     }
     if (typeof value === 'string') {
       return value.trim() || undefined;

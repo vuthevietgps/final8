@@ -1,15 +1,16 @@
+import { OrderOperationsComponent } from './order-operations.component';
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, computed, ElementRef, HostListener, OnInit, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
-import { AdGroupService } from '../ad-group/ad-group.service';
 import { DeliveryStatusService } from '../delivery-status/delivery-status.service';
 import { ProductService } from '../product/product.service';
 import { ProductionStatusService } from '../production-status/production-status.service';
 import { UserService } from '../user/user.service';
 import { Supplier } from '../supplier/supplier.service';
 import { SupplierQuoteApi } from '../supplier-quote/supplier-quote.service';
-import { CreateTestOrder2, NamedItem, ProductWithSuppliers, TestOrder2 } from './models';
+import { AdsAttributionOption, CreateTestOrder2, NamedItem, ProductWithSuppliers, TestOrder2 } from './models';
 import { TestOrder2Service } from './test-order2.service';
 import { buildProductStyle, buildStatusStyle, getContrastTextColor, normalizeHex } from './style-utils';
 import { buildCsvFromObjects, downloadCsv } from './csv-utils';
@@ -24,7 +25,7 @@ const SUPPLIER_EDITABLE_FIELDS = new Set([
 @Component({
   selector: 'app-test-order2',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink, OrderOperationsComponent],
   templateUrl: './test-order2.component.html',
   styleUrls: ['./test-order2.component.css']
 })
@@ -33,10 +34,15 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
   private static readonly EMPTY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [];
   // P2 FIX: Math for template
   Math = Math;
+  operationsOrderId = '';
   orders = signal<TestOrder2[]>([]);
   products = signal<ProductWithSuppliers[]>([]);
   agents = signal<NamedItem[]>([]);
-  adGroups = signal<NamedItem[]>([]);
+  adGroups = signal<AdsAttributionOption[]>([]);
+  adsOptionsSyncedAt = signal<string | undefined>(undefined);
+  newOrderDialogOpen = signal(false);
+  newCustomerAcquisitionSource = signal<'ads' | 'non_ads'>('ads');
+  newAdAttributionSelectionKey = signal('');
   suppliers = signal<Supplier[]>([]);
   productionStatuses = signal<string[]>([]);
   orderStatuses = signal<string[]>([]);
@@ -89,6 +95,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
   // Role-based visibility
   currentUserRole = computed(() => this.authService.userRole());
+  isDirector = computed(() => this.currentUserRole() === 'director');
   isSupplier = computed(() => {
     const role = this.currentUserRole();
     return role === 'internal_supplier' || role === 'external_supplier';
@@ -108,12 +115,15 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     return this.authService.hasPermission('orders.confirm-business');
   }
 
+  canManageLedger(): boolean {
+    return this.authService.hasPermission('finance') && this.authService.hasPermission('finance.cashflow.manage');
+  }
+
   constructor(
     private authService: AuthService,
     private service: TestOrder2Service,
     private productService: ProductService,
     private userService: UserService,
-    private adGroupService: AdGroupService,
     private productionStatusService: ProductionStatusService,
     private deliveryStatusService: DeliveryStatusService,
     private supplierQuoteApi: SupplierQuoteApi,
@@ -226,14 +236,16 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     this.loadProducts();
     this.loadSuppliers();
     this.userService.getAgents().subscribe({
-      next: (items: any) => this.agents.set(items.map((u: any) => ({ _id: u._id, name: u.fullName || u.email }))),
+      next: (items: any) => this.agents.set(items
+        .filter((u: any) => u.role === 'external_agent')
+        .map((u: any) => ({ _id: u._id, name: u.fullName || u.email, role: u.role }))),
       error: (e: any) => console.error(e)
     });
-    this.adGroupService.getAll().subscribe({
-      next: (items) => this.adGroups.set([
-        { _id: '', name: 'Không có nhóm quảng cáo' },
-        ...items.map((g: any) => ({ _id: g.adGroupId, name: g.adGroupId }))
-      ]),
+    this.service.getAdAttributionOptions().subscribe({
+      next: (response) => {
+        this.adGroups.set(response.items || []);
+        this.adsOptionsSyncedAt.set(response.syncedAt);
+      },
       error: (e) => console.error(e)
     });
     this.productionStatusService.getProductionStatuses(true).subscribe({
@@ -323,14 +335,35 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       this.error.set('Đại lý chỉ có quyền xem đơn hàng của mình');
       return;
     }
+    this.newCustomerAcquisitionSource.set('ads');
+    this.newAdAttributionSelectionKey.set('');
+    this.newOrderDialogOpen.set(true);
+  }
+
+  cancelAddNew(): void {
+    this.newOrderDialogOpen.set(false);
+    this.newAdAttributionSelectionKey.set('');
+  }
+
+  createNewOrder(): void {
+    const acquisitionSource = this.newCustomerAcquisitionSource();
+    const option = this.adGroups().find((item) => item.selectionKey === this.newAdAttributionSelectionKey());
+    if (acquisitionSource === 'ads' && !option) {
+      this.error.set('Đơn từ quảng cáo bắt buộc phải chọn đúng nhóm quảng cáo.');
+      return;
+    }
     const data: CreateTestOrder2 = {
       productId: typeof this.products()[0]?._id === 'string' ? this.products()[0]._id : '',
       productSource: 'supplier',
       supplierId: this.suppliers()[0]?._id || undefined,
+      customerAcquisitionSource: acquisitionSource,
       customerName: 'Khách hàng mới',
       quantity: 1,
-      agentId: typeof this.agents()[0]?._id === 'string' ? this.agents()[0]._id : '',
-      adGroupId: '',
+      agentId: '',
+      adGroupId: option?.adGroupId || '',
+      adsProvider: option?.provider,
+      adAccountProviderId: option?.accountId,
+      adCampaignId: option?.campaignId,
       isActive: true,
       serviceDetails: '',
       productionStatus: 'Chưa làm',
@@ -346,7 +379,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       this.service.create(data).subscribe({
         next: (created) => {
           this.orders.update(list => [created, ...list]);
-          this.fetchAndApplyLatestQuote(created as any);
+          this.newOrderDialogOpen.set(false);
+          this.newAdAttributionSelectionKey.set('');
         },
       error: (e) => { this.error.set('Không thể tạo đơn'); console.error(e); }
     });
@@ -364,8 +398,11 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
         case 'depositAmount':
         case 'codAmount':
         case 'manualPayment':
+        case 'shippingFee':
+        case 'returnFee':
           return typeof v === 'number' ? v : (parseFloat(String(v)) || 0);
         case 'isActive':
+        case 'dealerShippingIncludedInPrice':
           if (typeof v === 'boolean') return v;
           if (v === 'true' || v === '1') return true;
           if (v === 'false' || v === '0') return false;
@@ -432,8 +469,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
         supplierId: order.supplierId,
         productSource: order.productSource,
       }).subscribe({
-        next: () => {
-          this.fetchAndApplyLatestQuote(order);
+        next: (updated) => {
+          this.orders.update(rows => rows.map(r => r._id === order._id ? updated : r));
         },
         error: (e) => { this.error.set('Không thể cập nhật'); console.error(e); }
       });
@@ -453,7 +490,7 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
             orderStatus: updated.orderStatus || 'Chưa có mã vận đơn',
           } as TestOrder2;
           this.orders.update(rows => rows.map(r => r._id === order._id ? normalized : r));
-          if (order.supplierId) this.fetchAndApplyLatestQuote(normalized);
+
         },
         error: (e) => { console.error(e); }
       });
@@ -475,8 +512,8 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
       supplierId: order.supplierId,
       supplierAppliedPrice: order.supplierAppliedPrice,
     }).subscribe({
-      next: () => {
-        this.fetchAndApplyLatestQuote(order);
+      next: (updated) => {
+        this.orders.update(rows => rows.map(r => r._id === order._id ? updated : r));
       },
       error: (e) => { this.error.set('Không thể cập nhật'); console.error(e); }
     });
@@ -493,33 +530,36 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
     return '';
   }
 
-  private fetchAndApplyLatestQuote(order: TestOrder2): void {
-    const productId = this.getId(order.productId);
-    const supplierId = this.getId(order.supplierId);
-    if (!productId || !supplierId) return;
-    this.supplierQuoteApi.latest(productId, supplierId).subscribe({
-      next: (quote) => {
-        order.supplierAppliedPrice = quote.price;
-        this.service.update(order._id, { supplierAppliedPrice: quote.price }).subscribe({
-          next: () => {
-            this.orders.update(rows => rows.map(r => r._id === order._id ? { ...r, supplierAppliedPrice: quote.price } : r));
-          },
-          error: (e) => console.error(e)
-        });
-      },
-      error: () => { /* silently ignore if chưa có báo giá */ }
-    });
+  adAttributionSelectionKey(order: TestOrder2): string {
+    const exact = this.adGroups().find((option) =>
+      option.adGroupId === order.adGroupId
+      && (!order.adsProvider || option.provider === order.adsProvider)
+      && (!order.adAccountProviderId || option.accountId === order.adAccountProviderId)
+      && (!order.adCampaignId || option.campaignId === order.adCampaignId),
+    );
+    return exact?.selectionKey || (order.adGroupId ? `legacy:${order.adGroupId}` : '');
   }
 
-  // Autocomplete (datalist) support for adGroupId input
-  onAdGroupIdBlur(order: TestOrder2, event: Event): void {
-    const target = event.target as HTMLInputElement;
-    let value = (target.value || '').trim();
-    if (value === '0') value = '';
-    // Optimistic UI update so value sticks immediately
-    const newVal = value;
-    this.orders.update(rows => rows.map(r => r._id === order._id ? { ...r, adGroupId: newVal } : r));
-    this.onBlurUpdate(order, 'adGroupId', newVal);
+  onAdAttributionSelect(order: TestOrder2, event: Event): void {
+    if (!this.canEditField('adGroupId')) return;
+    const selectionKey = (event.target as HTMLSelectElement).value;
+    const option = this.adGroups().find((item) => item.selectionKey === selectionKey);
+    const payload: any = option
+      ? {
+          customerAcquisitionSource: 'ads',
+          adGroupId: option.adGroupId,
+          adsProvider: option.provider,
+          adAccountProviderId: option.accountId ?? null,
+          adCampaignId: option.campaignId ?? null,
+        }
+      : { customerAcquisitionSource: 'non_ads', adGroupId: '', adsProvider: null, adAccountProviderId: null, adCampaignId: null };
+    this.service.update(order._id, payload).subscribe({
+      next: (updated) => this.orders.update((rows) => rows.map((row) => row._id === order._id ? updated : row)),
+      error: (e) => {
+        this.error.set(e?.error?.message || 'Không thể cập nhật nguồn quảng cáo');
+        console.error(e);
+      },
+    });
   }
 
   businessConfirmationAuditTitle(order: TestOrder2): string {
@@ -565,10 +605,10 @@ export class TestOrder2Component implements OnInit, AfterViewInit {
 
     const target = event.target as HTMLInputElement | HTMLTextAreaElement;
     let value: any = target.value;
-    if (['quantity', 'depositAmount', 'codAmount'].includes(field as string)) {
+    if (['quantity', 'retailSaleAmount', 'depositAmount', 'codAmount', 'shippingFee', 'returnFee'].includes(field as string)) {
       value = parseFloat(value) || 0;
     }
-    if (field === 'isActive') {
+    if (field === 'isActive' || field === 'dealerShippingIncludedInPrice') {
       value = target instanceof HTMLInputElement ? target.checked : !!value;
     }
     this.onBlurUpdate(order, field, value);

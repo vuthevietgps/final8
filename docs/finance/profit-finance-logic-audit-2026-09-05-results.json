@@ -1,0 +1,180 @@
+{
+  "checkedAt": "2026-09-05T15:01:30.666Z",
+  "scope": "real_services_with_in_memory_persistence",
+  "databaseConnections": 0,
+  "providerCalls": 0,
+  "checks": 14,
+  "passed": 14,
+  "mismatches": 0,
+  "findings": [
+    {
+      "id": "A01",
+      "description": "Group profit must deduct all source spend, including days with no orders",
+      "expected": -400000,
+      "actual": -400000,
+      "passed": true,
+      "evidence": {
+        "spend": 600000,
+        "classification": "loss"
+      }
+    },
+    {
+      "id": "A02",
+      "description": "Product profit must retain incurred costs on pending orders in the same cohort",
+      "expected": 80000,
+      "actual": 80000,
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "A03",
+      "description": "The returned business date must match the requested date",
+      "expected": {
+        "from": "2026-08-03",
+        "to": "2026-08-03"
+      },
+      "actual": {
+        "from": "2026-08-03",
+        "to": "2026-08-03"
+      },
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "A04",
+      "description": "CFO bank balance must include confirmed payments from the new ledger",
+      "expected": 800000,
+      "actual": 800000,
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "A05",
+      "description": "Reversed receipts restore collection exposure without changing ad profit assessment",
+      "expected": {
+        "balance": 0,
+        "receivable": 900000,
+        "cashConversion": 0,
+        "status": "profitable",
+        "canProposeScale": true
+      },
+      "actual": {
+        "balance": 0,
+        "receivable": 900000,
+        "cashConversion": 0,
+        "status": "profitable",
+        "canProposeScale": true
+      },
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "A06",
+      "description": "Invalid advertising cost must be surfaced as a group data issue",
+      "expected": "data_issue",
+      "actual": "data_issue",
+      "passed": true,
+      "evidence": {
+        "invalidAds": 1,
+        "spendUsed": 0,
+        "canProposeScale": false
+      }
+    },
+    {
+      "id": "A07",
+      "description": "Operating costs on a day without orders must remain as unallocated expenses",
+      "expected": -100000,
+      "actual": -100000,
+      "passed": true,
+      "evidence": {
+        "collectionsRead": [
+          "advertisingcosts",
+          "laborcost1",
+          "othercosts",
+          "purchaseorders",
+          "users",
+          "adgroups"
+        ]
+      }
+    },
+    {
+      "id": "A08",
+      "description": "A product referenced by orders must not be hard-deleted",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "evidence": {
+        "hardDeleteCalled": false
+      }
+    },
+    {
+      "id": "A09",
+      "description": "The original price of a partially recognized retail sale must be immutable",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "evidence": {
+        "rejected": true,
+        "error": "Giá bán đã ghi nhận; cần chứng từ điều chỉnh thay vì sửa giá gốc.",
+        "revenueBefore": 300000,
+        "revenueAfter": 300000
+      }
+    },
+    {
+      "id": "C01",
+      "description": "Ledger retains all advertising source spend",
+      "expected": 600000,
+      "actual": 600000,
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "C02",
+      "description": "Order, product, category and ad group totals reconcile within one ledger report",
+      "expected": [
+        80000,
+        80000,
+        80000,
+        80000
+      ],
+      "actual": [
+        80000,
+        80000,
+        80000,
+        80000
+      ],
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "C03",
+      "description": "A receipt and its reversal restore bank balance and debt correctly",
+      "expected": {
+        "balance": 0,
+        "receivable": 900000
+      },
+      "actual": {
+        "balance": 0,
+        "receivable": 900000
+      },
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "C04",
+      "description": "Integer VND allocations conserve the source amount",
+      "expected": 7,
+      "actual": 7,
+      "passed": true,
+      "evidence": {}
+    },
+    {
+      "id": "C05",
+      "description": "Retail profit uses the agreed full sale price and excludes an unincurred return fee",
+      "expected": 180000,
+      "actual": 180000,
+      "passed": true,
+      "evidence": {}
+    }
+  ]
+}

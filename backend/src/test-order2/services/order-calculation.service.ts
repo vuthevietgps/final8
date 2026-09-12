@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { businessDayRange } from '../../common/business-day';
+import { allocateVnd } from '../../common/allocate-vnd';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ORDER_COST_ALLOCATED } from '../../advertising-cost/advertising-cost-refresh.module';
+import { saleModeForAgentRole } from '../order-sale-mode';
+import { dealerSaleAmounts } from '../dealer-sale';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { InjectModel } from '@nestjs/mongoose';
@@ -45,6 +51,7 @@ export class OrderCalculationService {
     private readonly deliveryStatusService: DeliveryStatusService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
+    private readonly events?: EventEmitter2,
   ) {}
 
   private normalizeAdGroupKey(adGroupId: unknown): string | null {
@@ -58,6 +65,11 @@ export class OrderCalculationService {
     }
 
     return value;
+  }
+
+  clearStatusCaches(): void {
+    this.paymentTriggerStatusesCache = null;
+    this.returnStatusesCache = null;
   }
 
   private async resolveEstimatedAdvertisingCost(adGroupId: unknown): Promise<number> {
@@ -201,6 +213,27 @@ export class OrderCalculationService {
     return typeof agent?.role === 'string' ? agent.role : undefined;
   }
 
+  async classifySaleMode(order: OrderCalculationContext): Promise<'retail' | 'dealer'> {
+    if (!order.agentId) {
+      order.saleMode = 'retail';
+      order.agentRoleSnapshot = undefined;
+      return 'retail';
+    }
+    if (order.saleMode && order.agentRoleSnapshot) return order.saleMode;
+    // Small isolated unit tests and old compiled callers may not provide a
+    // Mongoose connection. Production paths must resolve a real agent role.
+    const canResolveRole = Boolean((this.model as any)?.db?.collection);
+    const role = canResolveRole ? await this.resolveAgentRole(order.agentId) : undefined;
+    if (canResolveRole && role !== AgentRole.INTERNAL && role !== AgentRole.EXTERNAL) {
+      throw new BadRequestException('Đơn chỉ được gắn nhân sự nội bộ hoặc đại lý ngoài hợp lệ.');
+    }
+    if (role === AgentRole.INTERNAL || role === AgentRole.EXTERNAL) {
+      order.agentRoleSnapshot = role;
+    }
+    order.saleMode = saleModeForAgentRole(order.agentId, role);
+    return order.saleMode;
+  }
+
   private syncRealizedProfitSnapshot(order: TestOrder2Document): void {
     const supplierPaid = order.supplierPaymentStatus === PaymentStatus.PAID;
     const agentPaidOrNA =
@@ -225,108 +258,47 @@ export class OrderCalculationService {
 
   private calculateGrossProfitWithResolvedState(
     order: TestOrder2Document,
-    isPaymentTrigger: boolean,
+    isCompleted: boolean,
     isReturn: boolean,
-    agentRole?: string,
   ): number {
-    if (!isPaymentTrigger) {
-      return 0;
-    }
-
     const quantity = order.quantity || 1;
     const shippingFee = order.shippingFee || 0;
-    const returnFee = order.returnFee || 0;
-    const supplierQuote = order.supplierQuote || 0;
-    const agentQuote = order.agentQuote || 0;
-    const isReturnable = order.supplierIsReturnableSnapshot ?? true;
-    const supplierCost = (isReturn && isReturnable) ? 0 : (supplierQuote * quantity);
-    const isExternalAgent = agentRole === AgentRole.EXTERNAL;
-    const effectiveCod = isReturn ? 0 : (order.codAmount || 0);
-
-    let agentCommission = 0;
-    if (isExternalAgent) {
-      agentCommission = order.agentCommissionAmount ?? (effectiveCod - (agentQuote * quantity));
+    const returnFee = order.shipments?.length ? (order.returnFee || 0) : isReturn ? (order.returnFee || 0) : 0;
+    const stockSource = ['inventory', 'dealer_custody'].includes(order.productSource || '');
+    const supplierPrice = stockSource ? Number(order.inventoryUnitCostSnapshot || 0) : (order.supplierQuoteId || order.supplierQuoteSnapshotAt)
+      ? (order.supplierAppliedPrice ?? order.supplierQuote ?? 0) : (order.supplierQuote ?? 0);
+    // The company owes the supplier the goods price even on a failed retail delivery.
+    const supplierCost = Math.round(supplierPrice * quantity);
+    order.supplierContractAmount = (stockSource || order.productionStatus !== 'Đã trả kết quả' ? 0 : supplierCost)
+      + Number(order.supplierFreightObligation ?? (stockSource || !order.trackingNumber ? 0 : shippingFee + returnFee));
+    if (!isCompleted) {
+      order.recognizedRevenue = 0;
+      order.recognizedGoodsCost = 0;
+      order.retailProfitState = 'awaiting_delivery';
+      // Dispatch incurs freight/packaging before the retail sale is recognized.
+      // Quoted fees on an unshipped draft are not incurred expenses.
+      const dispatched = order.shipments?.some(s => s.status !== 'preparing');
+      return dispatched ? -shippingFee - returnFee - (order.packagingCostSnapshot || 0) * quantity : 0;
     }
-
-    return effectiveCod - supplierCost - shippingFee - returnFee - agentCommission;
+    const deliveredQuantity = order.deliveredQuantity ?? (isReturn ? 0 : quantity);
+    order.recognizedRevenue = Math.round((order.retailSaleAmount ?? 0) * deliveredQuantity / quantity);
+    // A confirmed receipt of company-owned stock recovers an asset, not the supplier debt.
+    const recovery = Math.min(supplierCost, Number(order.recoveredInventoryValue || 0));
+    order.recognizedGoodsCost = Math.round(supplierCost - recovery);
+    // A completed legacy delivery also proves that the supplier fulfilled the goods.
+    order.supplierContractAmount = (stockSource ? 0 : supplierCost)
+      + Number(order.supplierFreightObligation ?? (stockSource ? 0 : shippingFee + returnFee));
+    order.retailProfitState = !(stockSource ? order.inventoryUnitCostSnapshot != null : order.supplierQuoteId)
+      ? 'missing_quotes' : !isReturn && order.retailSaleAmount == null ? 'missing_sale_price' : 'recognized';
+    return order.recognizedRevenue - order.recognizedGoodsCost - shippingFee - returnFee
+      - (order.packagingCostSnapshot || 0) * quantity;
   }
 
   async applyCompletedStatusFinancials(order: TestOrder2Document): Promise<void> {
-    const currentStatus = order.orderStatus;
-    const isPaymentTrigger = await this.isPaymentTriggerStatus(currentStatus);
-    if (!isPaymentTrigger) {
-      return;
-    }
-
-    const isReturn = await this.isReturnStatus(currentStatus);
-
-    if (isReturn) {
-      order.codCollectedBySupplier = 0;
-    } else {
-      const currentCollected = Number(order.codCollectedBySupplier);
-      if (!Number.isFinite(currentCollected) || currentCollected <= 0) {
-        order.codCollectedBySupplier = Number(order.codAmount || DEFAULT_VALUES.COD_AMOUNT);
-      }
-    }
-
-    if (order.supplierId) {
-      const codAmount = order.codAmount || 0;
-      const supplierQuote = order.supplierQuote || 0;
-      const quantity = order.quantity || 1;
-      const shippingFee = order.shippingFee || 0;
-      const returnFee = order.returnFee || 0;
-      const isReturnable = order.supplierIsReturnableSnapshot ?? true;
-
-      if (isReturn) {
-        const supplierCostOnReturn = isReturnable ? 0 : (supplierQuote * quantity);
-        order.supplierPaidAmount = 0 - supplierCostOnReturn - shippingFee - returnFee;
-      } else {
-        order.supplierPaidAmount = codAmount - (supplierQuote * quantity) - shippingFee;
-      }
-
-      if (order.supplierPaymentStatus !== PaymentStatus.PAID) {
-        order.supplierPaymentStatus = PaymentStatus.PENDING;
-      }
-    }
-
-    const agentRole = order.agentId ? await this.resolveAgentRole(order.agentId) : undefined;
-
-    if (order.agentId) {
-      const isExternalAgent = agentRole === AgentRole.EXTERNAL;
-
-      if (isExternalAgent) {
-        const codAmount = order.codAmount || 0;
-        const agentQuote = order.agentQuote || 0;
-        const quantity = order.quantity || 1;
-        const commission = isReturn
-          ? 0 - (agentQuote * quantity)
-          : codAmount - (agentQuote * quantity);
-
-        order.agentCommissionAmount = commission;
-        order.agentPaidAmount = commission;
-
-        if (order.agentPaymentStatus !== PaymentStatus.PAID) {
-          order.agentPaymentStatus = PaymentStatus.PENDING;
-        }
-
-        if (!order.agentEligibleAt) {
-          order.agentEligibleAt = new Date();
-          order.agentCommissionFinal = order.agentPaidAmount;
-        }
-      } else {
-        order.agentCommissionAmount = 0;
-        order.agentPaidAmount = 0;
-        order.agentPaymentStatus = PaymentStatus.NOT_APPLICABLE;
-      }
-    } else {
-      order.agentCommissionAmount = 0;
-      order.agentPaidAmount = 0;
-      order.agentPaymentStatus = PaymentStatus.NOT_APPLICABLE;
-    }
-
-    order.grossProfit = this.calculateGrossProfitWithResolvedState(order, isPaymentTrigger, isReturn, agentRole);
-    order.netProfit = order.grossProfit - (order.advertisingCost || 0) - (order.laborCostAllocation || 0) - (order.otherCostAllocation || 0);
-    this.syncRealizedProfitSnapshot(order);
+    // Operational events calculate obligations/profit only. Receipts and payments
+    // remain immutable evidence in the business ledger, regardless of delivery.
+    order.grossProfit = await this.calculateGrossProfit(order);
+    await this.calculateCostAllocations(order);
   }
 
   // ============ QUOTE CALCULATION METHODS ============
@@ -353,6 +325,7 @@ export class OrderCalculationService {
         orderId: doc._id,
         error: error.message
       });
+      throw error;
     }
   }
 
@@ -363,12 +336,18 @@ export class OrderCalculationService {
     if (!doc.productId) return;
 
     const product = await this.productModel.findById(doc.productId)
-      .populate('categoryId', 'name')
+      .populate('categoryId', 'name code')
       .lean<ProductWithCategory>();
 
-    if (product?.categoryId?.name) {
-      doc.productType = product.categoryId.name;
-    }
+    const category = product?.categoryId;
+    if (!doc.productCategoryIdSnapshot && category?._id)
+      doc.productCategoryIdSnapshot = category._id;
+    if (!doc.productCategoryNameSnapshot && category?.name)
+      doc.productCategoryNameSnapshot = category.name;
+    if (!doc.productCategoryCodeSnapshot && category?.code)
+      doc.productCategoryCodeSnapshot = category.code;
+    if (doc.productCategoryNameSnapshot)
+      doc.productType = doc.productCategoryNameSnapshot;
   }
 
   /**
@@ -382,60 +361,49 @@ export class OrderCalculationService {
    *
    * Priority: supplierQuoteId (snapshot) > supplierAppliedPrice > SupplierQuote DB > Product.importPrice
    */
+  private quoteReference(value: unknown): { $in: unknown[] } {
+    const id = String(value);
+    return { $in: Types.ObjectId.isValid(id) ? [id, new Types.ObjectId(id)] : [id] };
+  }
+
   private async calculateSupplierQuote(doc: OrderCalculationContext): Promise<void> {
-    // RULE 1: ÄÃ£ cÃ³ snapshot â†’ KHÃ”NG tÃ­nh láº¡i
-    if (doc.supplierQuoteId) {
-      if (doc.supplierAppliedPrice && doc.supplierAppliedPrice > 0) {
-        doc.supplierQuote = doc.supplierAppliedPrice;
-      }
-      this.logger.debug(`Order has existing quote snapshot ${doc.supplierQuoteId} - keeping price ${doc.supplierAppliedPrice}`);
+    if (doc.productSource === 'inventory' || doc.productSource === 'dealer_custody') {
+      doc.supplierQuote = doc.inventoryUnitCostSnapshot ?? 0;
+      doc.supplierPriceSource = 'inventory';
       return;
     }
-
-    // RULE 2: CÃ³ giÃ¡ manual (khÃ´ng qua quote) â†’ giá»¯ nguyÃªn
-    if (doc.supplierAppliedPrice && doc.supplierAppliedPrice > 0 && !doc.supplierId) {
-      doc.supplierQuote = doc.supplierAppliedPrice;
+    // A timestamp also identifies a product-cost snapshot without a quote ID.
+    const committed = Boolean(doc.realizedAt || (doc as any).trackingNumber || (doc as any).shipments?.length)
+      || await this.isPaymentTriggerStatus(doc.orderStatus) || await this.isReturnStatus(doc.orderStatus);
+    if (doc.supplierQuoteId || (doc.supplierQuoteSnapshotAt && (doc.supplierPriceSource !== 'product_fallback' || committed))) {
+      doc.supplierQuote = doc.supplierAppliedPrice ?? doc.supplierQuote ?? 0;
       return;
     }
-
     if (!doc.productId) return;
-
-    // RULE 3: ChÆ°a cÃ³ snapshot â†’ Fetch tá»« SupplierQuote
-    if (doc.supplierId) {
-      const orderDate = doc.orderDate || new Date();
-
-      const supplierQuote = await this.supplierQuoteModel.findOne({
-        productId: doc.productId,
-        supplierId: doc.supplierId,
-        approvalStatus: 'approved',
-        $or: [
-          { effectiveAt: { $lte: orderDate } },
-          { effectiveAt: { $exists: false } },
-        ],
-      }).sort({ effectiveAt: -1, createdAt: -1 }).lean<SupplierQuoteResult>();
-
-      if (supplierQuote) {
-        // LÆ°u snapshot - SAU ÄÃ“ KHÃ”NG BAO GIá»œ THAY Äá»”I
-        doc.supplierQuoteId = supplierQuote._id;
-        doc.supplierAppliedPrice = supplierQuote.price || 0;
-        doc.supplierQuoteSnapshotAt = new Date();
-        doc.supplierShippingFeeSnapshot = supplierQuote.shippingFee;
-        doc.supplierReturnFeeSnapshot = supplierQuote.returnFee;
-        // Snapshot chÃ­nh sÃ¡ch hoÃ n: Æ°u tiÃªn isReturnableOverride tá»« quote NCC, fallback true
-        doc.supplierIsReturnableSnapshot = supplierQuote.isReturnableOverride ?? true;
-        doc.supplierQuote = doc.supplierAppliedPrice;
-
-        this.logger.log(`SNAPSHOT: Order applied SupplierQuote ${supplierQuote._id} with price ${doc.supplierAppliedPrice} at ${doc.supplierQuoteSnapshotAt}`);
-        return;
-      }
-    }
-
-    // RULE 4: Fallback tá»« Product (khÃ´ng cÃ³ quote)
     const product = await this.productModel.findById(doc.productId).lean<ProductWithCategory>();
-    if (product) {
-      doc.supplierQuote = (product.importPrice || 0) + (product.shippingCost || 0);
-      this.logger.debug(`Fallback to Product importPrice: ${doc.supplierQuote}`);
+    const at = doc.orderDate || new Date();
+    const quote = doc.supplierId ? await this.supplierQuoteModel.findOne({
+      productId: this.quoteReference(doc.productId),
+      supplierId: this.quoteReference(doc.supplierId),
+      approvalStatus: 'approved',
+      $or: [{ effectiveAt: { $lte: at } }, { effectiveAt: { $exists: false }, createdAt: { $lte: at } }],
+    }).sort({ effectiveAt: -1, createdAt: -1, _id: -1 }).lean<SupplierQuoteResult>() : null;
+    if (quote && (quote.currency || 'VND').toUpperCase() !== 'VND') {
+      throw new BadRequestException('Supplier quote currency must be VND before applying to this order');
     }
+    if (!quote && !product) return;
+    doc.supplierQuoteId = quote?._id;
+    doc.supplierAppliedPrice = quote ? (quote.price ?? 0) : (product?.importPrice ?? 0);
+    doc.supplierQuote = doc.supplierAppliedPrice;
+    doc.supplierQuoteSnapshotAt = new Date();
+    doc.supplierQuoteEffectiveAt = quote?.effectiveAt;
+    doc.supplierPriceSource = quote ? 'supplier_quote' : 'product_fallback';
+    doc.supplierShippingFeeSnapshot = quote?.shippingFee ?? product?.shippingCost ?? 0;
+    // Packaging is not a return fee. Keep its own unit-cost snapshot.
+    doc.packagingCostSnapshot = product?.packagingCost ?? 0;
+    doc.resalePolicySnapshot = product?.resalePolicy || 'inspect';
+    doc.supplierReturnFeeSnapshot = quote?.returnFee ?? 0;
+    doc.supplierIsReturnableSnapshot = quote?.isReturnableOverride ?? product?.isReturnable ?? true;
   }
 
   /**
@@ -443,61 +411,9 @@ export class OrderCalculationService {
    * Priority: Snapshot tá»« supplierQuote > SupplierQuote DB > Product costs
    */
   private async calculateShippingAndReturnFees(doc: OrderCalculationContext): Promise<void> {
-    if (!doc.productId) return;
-
-    // Æ¯u tiÃªn 1: DÃ¹ng snapshot tá»« supplierQuote náº¿u Ä‘Ã£ cÃ³
-    if (doc.supplierShippingFeeSnapshot !== undefined && (!doc.shippingFee || doc.shippingFee === 0)) {
-      doc.shippingFee = doc.supplierShippingFeeSnapshot || DEFAULT_VALUES.SHIPPING_FEE;
-    }
-    if (doc.supplierReturnFeeSnapshot !== undefined && (!doc.returnFee || doc.returnFee === 0)) {
-      doc.returnFee = doc.supplierReturnFeeSnapshot || DEFAULT_VALUES.RETURN_FEE;
-    }
-
-    // Æ¯u tiÃªn 2: Fetch tá»« SupplierQuote náº¿u chÆ°a cÃ³ snapshot
-    if ((!doc.shippingFee || doc.shippingFee === 0) && doc.supplierId && !doc.supplierQuoteId) {
-      const orderDate = doc.orderDate || new Date();
-      const supplierQuote = await this.supplierQuoteModel.findOne({
-        productId: doc.productId,
-        supplierId: doc.supplierId,
-        approvalStatus: 'approved',
-        $or: [
-          { effectiveAt: { $lte: orderDate } },
-          { effectiveAt: { $exists: false } },
-        ],
-      }).sort({ effectiveAt: -1, createdAt: -1 }).lean<SupplierQuoteResult>();
-
-      if (supplierQuote) {
-        if (!doc.supplierQuoteId) {
-          doc.supplierQuoteId = supplierQuote._id;
-          doc.supplierQuoteSnapshotAt = new Date();
-        }
-        if (!doc.shippingFee || doc.shippingFee === 0) {
-          doc.shippingFee = supplierQuote.shippingFee || DEFAULT_VALUES.SHIPPING_FEE;
-          doc.supplierShippingFeeSnapshot = doc.shippingFee;
-        }
-        if (!doc.returnFee || doc.returnFee === 0) {
-          doc.returnFee = supplierQuote.returnFee || DEFAULT_VALUES.RETURN_FEE;
-          doc.supplierReturnFeeSnapshot = doc.returnFee;
-        }
-      }
-    }
-
-    // Æ¯u tiÃªn 3: Fallback to Product costs if still not set
-    if (!doc.shippingFee || !doc.returnFee || doc.supplierIsReturnableSnapshot === undefined) {
-      const product = await this.productModel.findById(doc.productId).lean<ProductWithCategory>();
-      if (product) {
-        if (!doc.shippingFee || doc.shippingFee === 0) {
-          doc.shippingFee = product.shippingCost || DEFAULT_VALUES.SHIPPING_FEE;
-        }
-        if (!doc.returnFee || doc.returnFee === 0) {
-          doc.returnFee = product.packagingCost || DEFAULT_VALUES.RETURN_FEE;
-        }
-        // Fallback chÃ­nh sÃ¡ch hoÃ n tá»« sáº£n pháº©m náº¿u chÆ°a Ä‘Æ°á»£c set tá»« supplierQuote
-        if (doc.supplierIsReturnableSnapshot === undefined) {
-          doc.supplierIsReturnableSnapshot = product.isReturnable ?? true;
-        }
-      }
-    }
+    // Zero is an explicit amount, never a signal to consult a newer price list.
+    doc.shippingFee ??= doc.supplierShippingFeeSnapshot ?? 0;
+    doc.returnFee ??= doc.supplierReturnFeeSnapshot ?? 0;
   }
 
   /**
@@ -510,8 +426,9 @@ export class OrderCalculationService {
    * Priority: agentQuoteId (snapshot) > agentAppliedPrice > Quote DB
    */
   private async calculateAgentQuote(doc: OrderCalculationContext): Promise<void> {
+    if ((await this.classifySaleMode(doc)) !== 'dealer') return;
     // RULE 1: ÄÃ£ cÃ³ snapshot â†’ KHÃ”NG tÃ­nh láº¡i
-    if (doc.agentQuoteId && doc.agentAppliedPrice && doc.agentAppliedPrice > 0) {
+    if ((doc.agentQuoteId || doc.agentQuoteSnapshotAt) && doc.agentAppliedPrice != null) {
       doc.agentQuote = doc.agentAppliedPrice;
       this.logger.debug(`Order has existing agent quote snapshot ${doc.agentQuoteId} - keeping price ${doc.agentAppliedPrice}`);
       return;
@@ -532,34 +449,25 @@ export class OrderCalculationService {
 
     const quote = await this.quoteModel
       .findOne({
-        productId,
-        agentId,
+        productId: this.quoteReference(productId),
+        agentId: this.quoteReference(agentId),
         // Quote module stores Vietnamese approval states, not an English "active" flag.
         status: QuoteStatus.APPROVED,
         validFrom: { $lte: orderDate },
         validUntil: { $gte: orderDate },
         isActive: { $ne: false },
       })
-      .sort({ createdAt: -1 })
+      .sort({ validFrom: -1, createdAt: -1, _id: -1 })
       .lean<AgentQuoteResult>();
 
-    const fallbackQuote = quote || await this.quoteModel
-      .findOne({
-        productId,
-        agentId,
-        // If the current date window misses by a small margin, use the latest active approved quote.
-        status: QuoteStatus.APPROVED,
-        isActive: { $ne: false },
-      })
-      .sort({ validFrom: -1, createdAt: -1 })
-      .lean<AgentQuoteResult>();
-
-    if (fallbackQuote?.unitPrice) {
-      // LÆ°u snapshot - SAU ÄÃ“ KHÃ”NG BAO GIá»œ THAY Äá»”I
-      doc.agentQuoteId = fallbackQuote._id?.toString();
-      doc.agentAppliedPrice = fallbackQuote.unitPrice;
+    if (quote && quote.unitPrice != null) {
+      doc.agentQuoteId = quote._id?.toString();
+      doc.agentAppliedPrice = quote.unitPrice;
       doc.agentQuoteSnapshotAt = new Date();
-      doc.agentQuote = fallbackQuote.unitPrice;
+      doc.agentQuoteEffectiveAt = quote.validFrom;
+      doc.agentQuote = quote.unitPrice;
+      doc.dealerShippingFeeSnapshot = quote.shippingFee;
+      doc.dealerReturnFeeSnapshot = quote.returnFee;
 
       // P1 FIX: BIWEEKLY PAYMENT DUE DATE
       const payDays = [1, 15];
@@ -617,99 +525,54 @@ export class OrderCalculationService {
    * 4. Net Profit = Gross Profit - Advertising Cost - Labor Cost - Other Cost
    */
   async calculateCostAllocations(doc: OrderCalculationContext): Promise<void> {
-    try {
-      // âš ï¸ LÆ¯U Ã NGHIá»†P Vá»¤:
-      // Trong ngÃ y (real-time), KHÃ”NG cháº¡y aggregate chi phÃ­ phÃ¢n bá»• Ä‘á»ƒ trÃ¡nh sáº­p DB khi Bulk Update.
-      // Chi phÃ­ phÃ¢n bá»• thá»±c táº¿ sáº½ Ä‘Æ°á»£c update ngáº§m qua Cronjob lÃºc 1:00 AM
-      // (hÃ m recalculateOrdersForDate) báº±ng cÆ¡ cháº¿ BulkWrite.
-
-      // Táº¡m tÃ­nh trong ngÃ y: ads cost láº¥y tá»« CPR cache cá»§a ngÃ y trÆ°á»›c Ä‘Ã³.
-      const estimatedAdsCost = await this.resolveEstimatedAdvertisingCost(doc.adGroupId);
-      doc.advertisingCost = estimatedAdsCost;
-      doc.laborCostAllocation = 0;
-      doc.otherCostAllocation = 0;
-
-      // netProfit táº¡m thá»i dÃ¹ng ads estimate; labor/other sáº½ Ä‘Æ°á»£c batch hÃ´m sau ghi Ä‘Ã¨.
-      const grossProfit = Number(doc.grossProfit || 0);
-      doc.netProfit = grossProfit - estimatedAdsCost;
-
-      this.logger.debug(
-        `Calculated real-time cost allocations for order ${doc._id}: ` +
-        `Ad=${estimatedAdsCost.toFixed(0)}, Labor=0, Other=0, Net=${doc.netProfit.toFixed(0)} (estimated until batch finalize).`,
-      );
-
-    } catch (error) {
-      this.logger.error('Failed to calculate cost allocations', {
-        orderId: doc._id,
-        error: error.message
-      });
-      doc.advertisingCost = OrderCalculationService.DEFAULT_ESTIMATED_ADS_COST;
-      doc.laborCostAllocation = 0;
-      doc.otherCostAllocation = 0;
-      doc.netProfit = Number(doc.grossProfit || 0) - doc.advertisingCost;
-    }
+    // Ordinary edits retain the latest allocation already recorded on the order.
+    // Only the dated allocation service may replace it from source cost records.
+    doc.advertisingCost ??= await this.resolveEstimatedAdvertisingCost(doc.adGroupId);
+    doc.laborCostAllocation ??= 0;
+    doc.otherCostAllocation ??= 0;
+    doc.netProfit = Number(doc.grossProfit || 0) - doc.advertisingCost
+      - doc.laborCostAllocation - doc.otherCostAllocation;
   }
 
   // ============ PROFIT CALCULATION METHODS ============
 
-/**
-   * Calculate gross profit for an order
-   *
-   * âœ… CÃ´ng thá»©c Ä‘Ã£ Ä‘Æ°á»£c Product Owner xÃ¡c nháº­n (15/03/2026):
-   *
-   * Äáº¡i lÃ½ ngoÃ i (External Agent) â€” MÃ´ hÃ¬nh dropship:
-   *   Doanh thu cÃ´ng ty = agentQuote Ã— SL (khÃ´ng pháº£i COD)
-   *   Gross Profit = (agentQuote Ã— SL) - (supplierQuote Ã— SL) - PhÃ­ ship - PhÃ­ hoÃ n
-   *   Hoa há»“ng Ä‘áº¡i lÃ½ (tÃ¡ch biá»‡t) = COD - (agentQuote Ã— SL)  [xem calculateAgentCommission()]
-   *   HÃ ng hoÃ n: Doanh thu = 0 (Ä‘Æ¡n khÃ´ng thÃ nh cÃ´ng)
-   *
-   * Äáº¡i lÃ½ ná»™i bá»™ (Internal Agent) / KhÃ´ng cÃ³ Ä‘áº¡i lÃ½:
-   *   Gross Profit = COD - (supplierQuote Ã— SL) - PhÃ­ ship - PhÃ­ hoÃ n
-   *
-   * (Chá»‰ tÃ­nh khi orderStatus lÃ  payment trigger, cÃ²n láº¡i = 0)
-   */
+  /** Retail follows delivery; dealer sales persist after dispatch and customer return. */
   async calculateGrossProfit(order: TestOrder2Document): Promise<number> {
-    const isCompleted = await this.isPaymentTriggerStatus(order.orderStatus);
-    if (!isCompleted) {
-      return 0;
+    if ((await this.classifySaleMode(order)) === 'dealer') {
+      const isReturn = await this.isReturnStatus(order.orderStatus);
+      order.retailProfitState = undefined;
+      const amounts = dealerSaleAmounts(order, isReturn);
+      if (amounts.dispatched) order.dealerSaleRecognizedAt ??= new Date();
+      if (amounts.dispatched && isReturn) order.dealerReturnedAt ??= new Date();
+      order.dealerProfitState = amounts.state;
+      order.agentCommissionAmount = 0;
+      order.goodsOwner = amounts.dispatched ? 'dealer' : undefined;
+      order.returnDisposition = amounts.dispatched && isReturn ? 'dealer_custody' : undefined;
+      order.recognizedRevenue = amounts.revenue;
+      order.recognizedGoodsCost = amounts.goodsCost;
+      order.dealerRecoverableFees = amounts.recoverableFees;
+      order.dealerReturnFeeReceivable = amounts.returnFeeReceivable;
+      order.dealerContractAmount = amounts.contractAmount;
+      order.supplierContractAmount = amounts.supplierContractAmount;
+      return amounts.grossProfit;
     }
 
+    order.dealerProfitState = undefined;
+    order.goodsOwner = undefined;
+    order.returnDisposition = undefined;
+    order.dealerRecoverableFees = undefined;
+    order.dealerReturnFeeReceivable = undefined;
+    order.dealerContractAmount = undefined;
+
     const isReturn = await this.isReturnStatus(order.orderStatus);
-    const agentRole = order.agentId ? await this.resolveAgentRole(order.agentId) : undefined;
-    return this.calculateGrossProfitWithResolvedState(order, isCompleted, isReturn, agentRole);
+    const isCompleted = isReturn || order.orderStatus === OrderStatus.DELIVERED || order.orderStatus === 'Giao một phần';
+    return this.calculateGrossProfitWithResolvedState(order, isCompleted, isReturn);
   }
 
-  /**
-   * TÃ­nh hoa há»“ng cá»§a Äáº¡i lÃ½ NgoÃ i (Agent Commission)
-   *
-   * âœ… CÃ´ng thá»©c Ä‘Ã£ Ä‘Æ°á»£c Product Owner xÃ¡c nháº­n (15/03/2026):
-   *   Agent Commission = COD - (agentQuote Ã— SL)
-   *
-   * ÄÃ¢y lÃ  sá»‘ tiá»n cÃ´ng ty TRáº¢ CHO Äáº I LÃ (cash outflow).
-   * HÃ ng hoÃ n: commission Ã¢m = Ä‘áº¡i lÃ½ Ná»¢ Láº I cÃ´ng ty (clawback).
-   * Äáº¡i lÃ½ ná»™i bá»™: khÃ´ng cÃ³ hoa há»“ng theo cÃ´ng thá»©c nÃ y â†’ tráº£ vá» 0.
-   */
+  /** Dealers buy goods from us; their resale margin is not a commission expense. */
   async calculateAgentCommission(order: TestOrder2Document): Promise<number> {
-    if (!order.agentId) return 0;
-
-    const agent = await this.model.db.collection('users').findOne(
-      { _id: order.agentId },
-      { projection: { role: 1 } },
-    );
-    const isExternalAgent = agent?.role === AgentRole.EXTERNAL;
-    if (!isExternalAgent) return 0;
-
-    const isReturn = await this.isReturnStatus(order.orderStatus);
-    const codAmount = order.codAmount || 0;
-    const agentQuote = order.agentQuote || 0;
-    const quantity = order.quantity || 1;
-
-    if (isReturn) {
-      // ÄÆ¡n hoÃ n: Ä‘áº¡i lÃ½ khÃ´ng thu Ä‘Æ°á»£c COD â†’ hoa há»“ng Ã¢m (ná»£ láº¡i)
-      return 0 - (agentQuote * quantity);
-    } else {
-      return codAmount - (agentQuote * quantity);
-    }
+    // Dealer resale margin belongs to the dealer; it is not our commission cost.
+    return 0;
   }
 
   /**
@@ -728,26 +591,9 @@ export class OrderCalculationService {
   /**
    * Calculate realized profit when both supplier and agent payments are confirmed
    */
-  async calculateRealizedProfitIfReady(order: TestOrder2Document): Promise<void> {
-    const supplierPaid = order.supplierPaymentStatus === PaymentStatus.PAID;
-    const agentPaidOrNA = order.agentPaymentStatus === PaymentStatus.PAID || order.agentPaymentStatus === PaymentStatus.NOT_APPLICABLE;
-
-    if (supplierPaid && agentPaidOrNA && !order.realizedAt) {
-      const supplierPaidAmount = order.supplierPaidAmount || 0;
-      const agentPaidAmount = order.agentPaidAmount || 0;
-      const advertisingCost = order.advertisingCost || 0;
-      const laborCost = order.laborCostAllocation || 0;
-      const otherCost = order.otherCostAllocation || 0;
-
-      // realizedGrossProfit báº£n cháº¥t chÃ­nh lÃ :
-      // (COD - supplierCost - ship - returnFee) - agentCommission
-      // Do Ä‘Ã³ nÃ³ giá» Ä‘Ã¢y Ä‘Ã£ khá»›p 100% vá»›i grossProfit.
-      order.realizedGrossProfit = supplierPaidAmount - agentPaidAmount;
-      order.realizedNetProfit = order.realizedGrossProfit - advertisingCost - laborCost - otherCost;
-      order.realizedAt = new Date();
-
-      this.logger.log(`Order ${order._id} realized profit calculated: Gross=${order.realizedGrossProfit}, Net=${order.realizedNetProfit}`);
-    }
+  async calculateRealizedProfitIfReady(_order: TestOrder2Document): Promise<void> {
+    // Legacy paid flags cannot establish cash or realized profit. Confirmed
+    // account transactions are reported by the business ledger.
   }
 
   // ============ RECALCULATION METHODS ============
@@ -759,22 +605,17 @@ export class OrderCalculationService {
   private async executeRecalculateOrdersForDate(orderDate: Date | string): Promise<{ date: string; updated: number }> {
     try {
       const dateObj = typeof orderDate === 'string' ? new Date(orderDate) : orderDate;
-      const startOfDay = new Date(dateObj);
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(dateObj);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const dateStr = dateObj.toISOString().split('T')[0];
+      const { start: startOfDay, end: endOfDay, day: dateStr } = businessDayRange(dateObj);
 
       // Chá»‰ láº¥y cÃ¡c field cáº§n thiáº¿t, dÃ¹ng lean() Ä‘á»ƒ giáº£m memory (khÃ´ng cáº§n .save())
       const orders = await this.model
-        .find({ orderDate: { $gte: startOfDay, $lte: endOfDay } })
-        .select('_id quantity adGroupId grossProfit')
+        .find({ orderDate: { $gte: startOfDay, $lte: endOfDay }, isActive: { $ne: false } })
+        .select('_id quantity adGroupId grossProfit realizedGrossProfit realizedNetProfit')
         .lean();
 
       if (orders.length === 0) {
         this.logger.log(`No orders to recalculate for date ${dateStr}`);
+        await this.events?.emitAsync(ORDER_COST_ALLOCATED, { day: dateStr });
         return { date: dateStr, updated: 0 };
       }
 
@@ -806,7 +647,8 @@ export class OrderCalculationService {
           .collection('laborcost1')
           .aggregate([
             { $match: { date: { $gte: startOfDay, $lte: endOfDay } } },
-            { $group: { _id: null, totalCost: { $sum: '$cost' } } },
+            // Match the ledger: round each nonnegative source row to VND before summing.
+            { $group: { _id: null, totalCost: { $sum: { $floor: { $add: ['$cost', 0.5] } } } } },
           ])
           .toArray();
         dailyLaborCostPerItem =
@@ -816,7 +658,7 @@ export class OrderCalculationService {
           .collection('othercosts')
           .aggregate([
             { $match: { date: { $gte: startOfDay, $lte: endOfDay } } },
-            { $group: { _id: null, totalCost: { $sum: '$amount' } } },
+            { $group: { _id: null, totalCost: { $sum: { $floor: { $add: ['$amount', 0.5] } } } } },
           ])
           .toArray();
         dailyOtherCostPerItem =
@@ -830,12 +672,19 @@ export class OrderCalculationService {
         .collection('advertisingcosts')
         .aggregate([
           { $match: { date: { $gte: startOfDay, $lte: endOfDay } } },
-          { $group: { _id: '$adGroupId', totalCost: { $sum: '$spentAmount' } } },
+          { $group: { _id: '$adGroupId', totalCost: { $sum: '$spentAmount' },
+            estimatedRows: { $sum: { $cond: ['$isEstimated', 1, 0] } },
+            identities: { $addToSet: { channel: '$channel', customerId: '$customerId' } },
+          } },
         ])
         .toArray();
       const adCostMap = new Map<string, number>(
         adCostsResult.map((item) => [String(item._id), item.totalCost]),
       );
+      if (adCostsResult.some(item => item.identities?.length > 1)) {
+        throw new BadRequestException('Trùng adGroupId giữa nhiều tài khoản; cần chuẩn hóa trước khi phân bổ.');
+      }
+      const estimatedGroups = new Set(adCostsResult.filter(item => item.estimatedRows > 0).map(item => String(item._id)));
 
       const adGroupQuantityResult = await this.model
         .aggregate([
@@ -855,15 +704,17 @@ export class OrderCalculationService {
       // =====================================================
       // BÆ¯á»šC 4: PhÃ¢n bá»• chi phÃ­ & BulkWrite 1 láº§n duy nháº¥t
       // =====================================================
-      const totalOrphanAdsCost = Array.from(adCostMap.entries()).reduce((sum, [adGroupId, totalCost]) => {
-        const totalAdGroupQty = adGroupQuantityMap.get(adGroupId) || 0;
-        return totalAdGroupQty > 0 ? sum : sum + totalCost;
-      }, 0);
-
-      const orphanOrdersCount = orders.filter(
-        (order) => this.normalizeAdGroupKey(order.adGroupId) === null,
-      ).length;
-      const orphanCostPerOrder = orphanOrdersCount > 0 ? totalOrphanAdsCost / orphanOrdersCount : 0;
+      orders.sort((a,b) => String(a._id).localeCompare(String(b._id)));
+      const laborAmounts = allocateVnd(Math.round(dailyLaborCostPerItem * totalDailyQuantity), orders.map(o => Number(o.quantity || 0)));
+      const otherAmounts = allocateVnd(Math.round(dailyOtherCostPerItem * totalDailyQuantity), orders.map(o => Number(o.quantity || 0)));
+      const advertisingAmounts = new Map<string, number>();
+      for (const [key, cost] of adCostMap) {
+        const targets = orders.filter(o => this.normalizeAdGroupKey(o.adGroupId) === key);
+        const amounts = allocateVnd(Math.round(cost), targets.map(o => Number(o.quantity || 0)));
+        targets.forEach((o,i) => advertisingAmounts.set(String(o._id), amounts[i]));
+      }
+      // Spend without matching orders remains visible on the ad group; never charge unrelated orders.
+      const orphanCostPerOrder = 0;
 
       const bulkOps: any[] = [];
       const groupCprStats = new Map<string, { totalCost: number; orderCount: number }>();
@@ -872,20 +723,11 @@ export class OrderCalculationService {
       for (const order of orders) {
         const quantity = Number(order.quantity || 0);
 
-        let advertisingCost = 0;
+        const advertisingCost = advertisingAmounts.get(String(order._id)) || 0;
         const adGroupKey = this.normalizeAdGroupKey(order.adGroupId);
-        if (adGroupKey) {
-          const totalAdCost = adCostMap.get(adGroupKey) || 0;
-          const totalAdGroupQty = adGroupQuantityMap.get(adGroupKey) || 0;
-          if (totalAdGroupQty > 0) {
-            advertisingCost = (totalAdCost / totalAdGroupQty) * quantity;
-          }
-        } else if (orphanCostPerOrder > 0) {
-          advertisingCost = orphanCostPerOrder;
-        }
-
-        const laborCostAllocation = dailyLaborCostPerItem * quantity;
-        const otherCostAllocation = dailyOtherCostPerItem * quantity;
+        const index = orders.indexOf(order);
+        const laborCostAllocation = laborAmounts[index];
+        const otherCostAllocation = otherAmounts[index];
         const grossProfit = Number(order.grossProfit || 0);
         const netProfit = grossProfit - advertisingCost - laborCostAllocation - otherCostAllocation;
 
@@ -904,7 +746,12 @@ export class OrderCalculationService {
         bulkOps.push({
           updateOne: {
             filter: { _id: order._id },
-            update: { $set: { advertisingCost, laborCostAllocation, otherCostAllocation, netProfit } },
+            update: { $set: { advertisingCost, laborCostAllocation, otherCostAllocation, netProfit,
+              advertisingCostEstimated: estimatedGroups.has(String(order.adGroupId)),
+              ...(typeof order.realizedGrossProfit === 'number' ? {
+                realizedNetProfit: order.realizedGrossProfit - advertisingCost - laborCostAllocation - otherCostAllocation,
+              } : {}),
+              costAllocatedAt: new Date(), costAllocationDate: startOfDay } },
           },
         });
       }
@@ -915,6 +762,7 @@ export class OrderCalculationService {
       }
 
       const updated = bulkOps.length;
+      await this.events?.emitAsync(ORDER_COST_ALLOCATED, { day: dateStr });
       this.logger.log(
         `âœ… Bulk updated ${updated} orders for date ${dateStr}` +
         ` (Labor/item=${dailyLaborCostPerItem.toFixed(0)}, Other/item=${dailyOtherCostPerItem.toFixed(0)}, Orphan/order=${orphanCostPerOrder.toFixed(0)})`,
@@ -925,8 +773,7 @@ export class OrderCalculationService {
         date: orderDate,
         error: error.message
       });
-      const dateStr = typeof orderDate === 'string' ? orderDate : orderDate.toISOString().split('T')[0];
-      return { date: dateStr, updated: 0 };
+      throw error;
     }
   }
 

@@ -59,6 +59,8 @@ export interface GoogleAdsRuntimeConfig {
   apiVersion: string;
   configSource: ConfigSource;
   refreshTokenSource: ConfigSource;
+  /** Opaque server-side reference only. Never contains credential material. */
+  credentialReferenceId?: string;
 }
 
 export interface TikTokRuntimeConfig {
@@ -81,18 +83,33 @@ export interface TikTokRuntimeConfig {
   configSource: ConfigSource;
 }
 
+/** Internal-only credential shape for the canonical Meta Ads execution lane. */
+export interface MetaAdsExecutionCredential {
+  accessToken: string;
+  credentialReferenceId: string;
+  adAccountId: string;
+  lastCheckedAt: Date;
+}
+
 class FacebookValidator implements ProviderValidator {
   async validate(rawToken: string): Promise<TokenValidationResult> {
     try {
       // Validate token by calling Facebook Graph API
-      const response = await fetch(`https://graph.facebook.com/me?fields=id,name&access_token=${encodeURIComponent(rawToken)}`);
+      const authorization = { Authorization: `Bearer ${rawToken}` };
+      const response = await fetch(
+        'https://graph.facebook.com/me?fields=id,name',
+        { headers: authorization },
+      );
       const data = await response.json();
       
       if (response.ok && data.id) {
         // Token is valid, get permissions
         let scopes: string[] = [];
         try {
-          const permResponse = await fetch(`https://graph.facebook.com/me/permissions?access_token=${encodeURIComponent(rawToken)}`);
+          const permResponse = await fetch(
+            'https://graph.facebook.com/me/permissions',
+            { headers: authorization },
+          );
           const permData = await permResponse.json();
           scopes = permResponse.ok && permData.data ? 
             permData.data.filter((p: any) => p.status === 'granted').map((p: any) => p.permission) : [];
@@ -103,7 +120,10 @@ class FacebookValidator implements ProviderValidator {
         const appToken = process.env.FB_APP_ACCESS_TOKEN || process.env.FACEBOOK_APP_TOKEN;
         if (appToken) {
           try {
-            const dbg = await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(rawToken)}&access_token=${encodeURIComponent(appToken)}`)
+            const dbg = await fetch(
+              `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(rawToken)}`,
+              { headers: { Authorization: `Bearer ${appToken}` } },
+            )
               .then(r => r.json());
             const ts = dbg?.data?.expires_at;
             if (ts && Number.isFinite(ts)) {
@@ -761,8 +781,18 @@ export class ApiTokenService implements OnModuleInit {
       token.lastCheckMessage = `${token.lastCheckMessage||''} [DEGRADED after ${token.consecutiveFail} fails]`.trim();
     }
   // Random 27-30 minutes for next check
-  const minMs = 60 * 60 * 1000; // 60 phút
-    const maxMs = 90 * 60 * 1000; // 90 phút
+    const configuredFacebookRevalidateMinutes = Number(
+      process.env.FB_TOKEN_REVALIDATE_INTERVAL_MINUTES,
+    );
+    const facebookRevalidateMinutes = Number.isFinite(configuredFacebookRevalidateMinutes)
+      ? Math.min(20, Math.max(5, configuredFacebookRevalidateMinutes))
+      : 10;
+    const minMs = token.provider === 'facebook'
+      ? facebookRevalidateMinutes * 60 * 1000
+      : 60 * 60 * 1000;
+    const maxMs = token.provider === 'facebook'
+      ? minMs
+      : 90 * 60 * 1000;
     const delta = Math.floor(minMs + Math.random() * (maxMs - minMs));
     token.nextCheckAt = new Date(Date.now() + delta);
     await token.save();
@@ -839,7 +869,6 @@ export class ApiTokenService implements OnModuleInit {
   private async subscribeFanpageWebhook(pageId: string, accessToken: string): Promise<{ success: boolean; error?: string }> {
     const payload = new URLSearchParams({
       subscribed_fields: 'messages,messaging_postbacks',
-      access_token: accessToken,
     });
 
     try {
@@ -848,6 +877,7 @@ export class ApiTokenService implements OnModuleInit {
         {
           method: 'POST',
           headers: {
+            Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: payload,
@@ -896,9 +926,21 @@ export class ApiTokenService implements OnModuleInit {
       throw new BadRequestException('Chua cau hinh Facebook System User Token');
     }
 
+    const syncAdAccounts = opts?.syncAdAccounts ?? true;
+    const businessId = this.sanitizeNumericId(opts?.businessId || process.env.FB_BUSINESS_ID);
+    if (syncAdAccounts && !businessId) {
+      throw new BadRequestException(
+        'FB_BUSINESS_ID is required when Facebook ad-account sync is enabled',
+      );
+    }
+
     const fetchJson = async (url: string) => {
       try {
-        const response = await fetch(url);
+        const requestUrl = new URL(url);
+        requestUrl.searchParams.delete('access_token');
+        const response = await fetch(requestUrl.toString(), {
+          headers: { Authorization: `Bearer ${systemToken}` },
+        });
         const body = await response.json();
         if (!response.ok || body?.error) {
           throw new BadRequestException(
@@ -925,7 +967,7 @@ export class ApiTokenService implements OnModuleInit {
       return items;
     };
 
-    const pageUrl = `https://graph.facebook.com/${this.facebookGraphApiVersion}/me/accounts?fields=id,name,access_token,picture{url}&limit=200&access_token=${encodeURIComponent(systemToken)}`;
+    const pageUrl = `https://graph.facebook.com/${this.facebookGraphApiVersion}/me/accounts?fields=id,name,access_token,picture{url}&limit=200`;
     const pages = await fetchAllGraphItems(pageUrl);
 
     let created = 0;
@@ -1011,13 +1053,12 @@ export class ApiTokenService implements OnModuleInit {
     let adAccountsTotal = 0;
     let adAccountsCreated = 0;
     let adAccountsUpdated = 0;
-    const businessId = this.sanitizeNumericId(opts?.businessId || process.env.FB_BUSINESS_ID);
-    if ((opts?.syncAdAccounts ?? true) && businessId) {
+    if (syncAdAccounts && businessId) {
       const adAccountEdges = ['owned_ad_accounts', 'client_ad_accounts'];
       const accountMap = new Map<string, any>();
 
       for (const edge of adAccountEdges) {
-        const url = `https://graph.facebook.com/${this.facebookGraphApiVersion}/${businessId}/${edge}?fields=id,account_id,name,account_status,currency,timezone_name,business&limit=200&access_token=${encodeURIComponent(systemToken)}`;
+        const url = `https://graph.facebook.com/${this.facebookGraphApiVersion}/${businessId}/${edge}?fields=id,account_id,name,account_status,currency,timezone_name,business&limit=200`;
         try {
           const items = await fetchAllGraphItems(url);
           for (const item of items) {
@@ -1040,7 +1081,11 @@ export class ApiTokenService implements OnModuleInit {
           isActive: item?.account_status !== 101,
           businessName: item?.business?.name || undefined,
           currency: item?.currency || undefined,
-          timezoneId: item?.timezone_name || undefined,
+          // Canonical account gates use the raw provider IANA name. Do not
+          // rewrite same-offset aliases into Asia/Ho_Chi_Minh.
+          timezoneId: typeof item?.timezone_name === 'string'
+            ? item.timezone_name.trim() || undefined
+            : undefined,
           accountStatus: Number(item?.account_status || 0),
           tokenSource: 'system' as const,
           lastSyncAt: new Date(),
@@ -1186,6 +1231,59 @@ export class ApiTokenService implements OnModuleInit {
     return undefined;
   }
 
+  /**
+   * INTERNAL, LIVE EXECUTION ONLY: resolve one recently verified encrypted credential
+   * bound to the exact Meta ad account. This intentionally has no account, provider or
+   * legacy-plaintext fallback.
+   */
+  async getMetaAdsExecutionCredential(
+    adAccountId: string,
+  ): Promise<MetaAdsExecutionCredential | undefined> {
+    const match = String(adAccountId || '').trim().match(/^(?:act_)?(\d+)$/i);
+    if (!match) return undefined;
+
+    const numericAccountId = match[1];
+    const maxAgeMs = Number(process.env.META_ADS_CREDENTIAL_MAX_AGE_MS || 30 * 60 * 1000);
+    const safeMaxAgeMs = Number.isFinite(maxAgeMs) && maxAgeMs >= 60_000
+      ? Math.min(maxAgeMs, 24 * 60 * 60 * 1000)
+      : 30 * 60 * 1000;
+    const checkedAfter = new Date(Date.now() - safeMaxAgeMs);
+    const now = new Date();
+
+    const credential = await this.model.findOne({
+      provider: 'facebook',
+      status: 'active',
+      tokenEnc: { $type: 'string', $ne: '' },
+      degraded: { $ne: true },
+      lastCheckStatus: 'valid',
+      lastCheckedAt: { $gte: checkedAfter },
+      scopes: { $in: ['ads_management'] },
+      adAccountId: { $in: [numericAccountId, `act_${numericAccountId}`] },
+      $or: [
+        { expireAt: { $exists: false } },
+        { expireAt: null },
+        { expireAt: { $gt: now } },
+      ],
+    })
+      .select('_id tokenEnc adAccountId lastCheckedAt')
+      .sort({ isPrimary: -1, lastCheckedAt: -1, updatedAt: -1 })
+      .lean();
+
+    if (!credential?.tokenEnc || !credential.lastCheckedAt) return undefined;
+    try {
+      const accessToken = decryptToken(credential.tokenEnc);
+      if (!accessToken) return undefined;
+      return {
+        accessToken,
+        credentialReferenceId: String(credential._id),
+        adAccountId: numericAccountId,
+        lastCheckedAt: new Date(credential.lastCheckedAt),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Ki?m tra token có truy c?p du?c tài kho?n qu?ng cáo Facebook không */
   async testAdAccountAccess(id: string, adAccountId: string) {
     const tokenDoc = await this.model.findById(id).select('+token');
@@ -1198,9 +1296,10 @@ export class ApiTokenService implements OnModuleInit {
     const url = `https://graph.facebook.com/${this.facebookGraphApiVersion}/${encodeURIComponent(node)}`;
     const params = new URLSearchParams({
       fields: 'id,name,account_status,owner,business,spend_cap,age,capabilities',
-      access_token: raw
     });
-    const res = await fetch(`${url}?${params.toString()}`);
+    const res = await fetch(`${url}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${raw}` },
+    });
     const data = await res.json();
     if(res.ok && data?.id){
       const scopeOk = Array.isArray((tokenDoc as any).scopes) ? (tokenDoc as any).scopes.includes('ads_management') : false;
@@ -1239,8 +1338,9 @@ export class ApiTokenService implements OnModuleInit {
     const requestedLoginCustomerId = this.sanitizeNumericId(params?.loginCustomerId) || undefined;
 
     const credentialReferenceId = String(params?.credentialReferenceId || '').trim();
+    const envReferenceRequested = credentialReferenceId === 'env';
     const candidates: Array<Partial<ApiToken> | null> = [];
-    if (credentialReferenceId) {
+    if (credentialReferenceId && !envReferenceRequested) {
       candidates.push(Types.ObjectId.isValid(credentialReferenceId)
         ? await this.model.findOne({
           _id: credentialReferenceId,
@@ -1248,7 +1348,7 @@ export class ApiTokenService implements OnModuleInit {
           status: 'active',
         }).select('+token').lean()
         : null);
-    } else if (customerId) {
+    } else if (!credentialReferenceId && customerId) {
       candidates.push(await this.model.findOne({
         provider: 'google',
         status: 'active',
@@ -1264,6 +1364,9 @@ export class ApiTokenService implements OnModuleInit {
     }
 
     const tokenDoc = candidates.find(Boolean) || null;
+    if (credentialReferenceId && !envReferenceRequested && !tokenDoc) {
+      throw new BadRequestException('Referenced Google Ads credential is missing or inactive.');
+    }
     const storedConfig = this.normalizeGoogleStoredSettings(
       this.readStoredConfig<GoogleStoredSettings>(tokenDoc),
     );
@@ -1279,17 +1382,39 @@ export class ApiTokenService implements OnModuleInit {
       envClientId || envClientSecret || envRefreshToken || envDeveloperToken || envLoginCustomerId || envApiVersion,
     );
     const hasDbConfig = Boolean(tokenDoc);
+    const hasCompleteEnvConfig = Boolean(
+      envClientId && envClientSecret && envRefreshToken && envDeveloperToken,
+    );
+    const selectedSource: ConfigSource = envReferenceRequested
+      ? 'env'
+      : credentialReferenceId
+        ? 'database'
+        : hasCompleteEnvConfig
+          ? 'env'
+          : hasDbConfig
+            ? 'database'
+            : hasEnvConfig
+              ? 'env'
+              : 'none';
+    const useEnv = selectedSource === 'env';
 
     return {
-      clientId: envClientId || storedConfig.clientId,
-      clientSecret: envClientSecret || storedConfig.clientSecret,
-      refreshToken: envRefreshToken || this.getRawToken(tokenDoc),
-      developerToken: envDeveloperToken || storedConfig.developerToken,
+      clientId: useEnv ? envClientId : storedConfig.clientId,
+      clientSecret: useEnv ? envClientSecret : storedConfig.clientSecret,
+      refreshToken: useEnv ? envRefreshToken : this.getRawToken(tokenDoc),
+      developerToken: useEnv ? envDeveloperToken : storedConfig.developerToken,
       customerId,
-      loginCustomerId: requestedLoginCustomerId || envLoginCustomerId || storedConfig.loginCustomerId,
-      apiVersion: envApiVersion || storedConfig.apiVersion || getGoogleAdsApiVersion(),
-      configSource: hasEnvConfig ? 'env' : hasDbConfig ? 'database' : 'none',
-      refreshTokenSource: envRefreshToken ? 'env' : tokenDoc ? 'database' : 'none',
+      loginCustomerId: requestedLoginCustomerId
+        || (useEnv ? envLoginCustomerId : storedConfig.loginCustomerId),
+      apiVersion: (useEnv ? envApiVersion : storedConfig.apiVersion)
+        || getGoogleAdsApiVersion(),
+      configSource: selectedSource,
+      refreshTokenSource: useEnv
+        ? (envRefreshToken ? 'env' : 'none')
+        : tokenDoc ? 'database' : 'none',
+      credentialReferenceId: useEnv
+        ? 'env'
+        : (tokenDoc as any)?._id ? String((tokenDoc as any)._id) : undefined,
     };
   }
 
@@ -1408,6 +1533,7 @@ export class ApiTokenService implements OnModuleInit {
     refreshToken: string;
     developerToken: string;
     customerId: string;
+    loginCustomerId?: string;
     apiVersion?: string;
   }): Promise<{ ok: boolean; message: string; account?: any; error?: string }> {
     try {
@@ -1427,14 +1553,18 @@ export class ApiTokenService implements OnModuleInit {
 
       // Test API call
       const customerId = params.customerId.replace(/[^0-9]/g, '');
+      const loginCustomerId = String(params.loginCustomerId || '').replace(/[^0-9]/g, '');
       const apiVersion = params.apiVersion || getGoogleAdsApiVersion();
       const url = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}`;
       
-      const response = await fetch(url, {
-        headers: {
+      const headers: Record<string, string> = {
           'Authorization': `Bearer ${tokenRes.token}`,
           'developer-token': params.developerToken,
-        }
+      };
+      if (loginCustomerId) headers['login-customer-id'] = loginCustomerId;
+      const response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(this.googleAdsConnectionTestTimeoutMs()),
       });
 
       if (response.ok) {
@@ -1464,6 +1594,12 @@ export class ApiTokenService implements OnModuleInit {
         error: redactSecretString(err?.message || 'Unknown error')
       };
     }
+  }
+
+  private googleAdsConnectionTestTimeoutMs() {
+    const configured = Number(process.env.GOOGLE_ADS_CONNECTION_TEST_TIMEOUT_MS);
+    if (!Number.isFinite(configured)) return 30_000;
+    return Math.min(120_000, Math.max(5_000, Math.floor(configured)));
   }
 
   /**

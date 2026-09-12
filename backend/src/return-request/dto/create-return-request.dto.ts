@@ -16,6 +16,7 @@ class ReturnItemDto {
 }
 
 export class CreateReturnRequestDto {
+  @IsOptional() @IsMongoId() shipmentId?: string;
   @IsMongoId()
   orderId!: string;
 

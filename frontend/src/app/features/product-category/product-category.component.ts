@@ -73,7 +73,7 @@ import {
               <input class="form-control input-inline" [value]="cat.description || ''" (blur)="updateField(cat, 'description', $any($event.target).value)" placeholder="Mô tả">
             </td>
             <td>
-              <input type="number" class="form-control input-inline input-number" [value]="cat.productCount || 0" (blur)="updateField(cat, 'productCount', +$any($event.target).value)" min="0">
+              <strong>{{ cat.productCount || 0 }}</strong>
             </td>
             <td>
               <input type="number" class="form-control input-inline input-number" [value]="cat.order || 0" (blur)="updateField(cat, 'order', +$any($event.target).value)" min="0">
@@ -152,7 +152,6 @@ export class ProductCategoryComponent implements OnInit {
       icon: '📦',
       isActive: true,
       order: this.categories().length + 1,
-      productCount: 0,
       code: '',
       notes: ''
     };

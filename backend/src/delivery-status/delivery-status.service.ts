@@ -6,6 +6,8 @@ import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { DeliveryStatus, DeliveryStatusDocument } from './schemas/delivery-status.schema';
 import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-order2.schema';
 import { OrderStatus } from '../test-order2/constants/test-order2.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 
 type DeliveryStatusSeed = Record<string, any>;
 
@@ -18,6 +20,7 @@ export class DeliveryStatusService implements OnModuleInit {
     private deliveryStatusModel: Model<DeliveryStatusDocument>,
     @InjectModel(TestOrder2.name)
     private testOrder2Model: Model<TestOrder2Document>,
+    private readonly events?: EventEmitter2,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -70,6 +73,7 @@ export class DeliveryStatusService implements OnModuleInit {
       .findByIdAndUpdate(id, updateDeliveryStatusDto, { new: true })
       .exec();
 
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { statuses: [existing.name, deliveryStatus!.name] });
     return deliveryStatus!;
   }
 

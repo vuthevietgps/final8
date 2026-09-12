@@ -8,6 +8,7 @@ import { Connection, Model } from 'mongoose';
 import { join, resolve } from 'path';
 import { getAdsSafetyConfig } from '../common/ads-safety-config';
 import { redactSecretString } from '../common/utils/secret-redaction.util';
+import { GOOGLE_ADS_ERP_ACTION_TYPES } from './google-ads-action-types';
 import { GoogleAdsExport, GoogleAdsExportDocument } from './schemas/google-ads-export.schema';
 
 export const GOOGLE_ADS_EXPORT_REQUIRED_FILES = [
@@ -185,7 +186,10 @@ export class GoogleAdsExportService {
       }),
       this.find('google_ads_campaigns', {}, {
         customerId: 1, campaignId: 1, resourceName: 1, campaignName: 1, status: 1,
-        advertisingChannelType: 1, biddingStrategyType: 1, campaignBudgetId: 1,
+        advertisingChannelType: 1, biddingStrategyType: 1,
+        biddingStrategySystemStatus: 1, biddingStrategyResourceName: 1,
+        targetSpendCpcBidCeilingMicros: 1, maximizeConversionsTargetCpaMicros: 1,
+        campaignBudgetId: 1,
         campaignBudgetResourceName: 1, startDate: 1, endDate: 1, internalProductId: 1, lastSyncAt: 1,
       }),
       this.find('google_ads_campaign_budgets', {}, {
@@ -292,7 +296,7 @@ export class GoogleAdsExportService {
           status: row.accountStatus ?? (row.isActive === false ? 'INACTIVE' : 'ACTIVE'), lastSyncAt: row.lastSyncAt,
         })),
       },
-      campaigns: { headers: ['customerId','campaignId','resourceName','campaignName','status','advertisingChannelType','biddingStrategyType','campaignBudgetId','campaignBudgetResourceName','startDate','endDate','internalProductId','lastSyncAt'], rows: data.campaigns },
+      campaigns: { headers: ['customerId','campaignId','resourceName','campaignName','status','advertisingChannelType','biddingStrategyType','biddingStrategySystemStatus','biddingStrategyResourceName','targetSpendCpcBidCeilingMicros','maximizeConversionsTargetCpaMicros','campaignBudgetId','campaignBudgetResourceName','startDate','endDate','internalProductId','lastSyncAt'], rows: data.campaigns },
       campaign_budgets: { headers: ['customerId','campaignBudgetId','resourceName','name','amountMicros','amountVnd','deliveryMethod','explicitlyShared','status','lastSyncAt'], rows: data.budgets },
       ad_groups: { headers: ['customerId','campaignId','adGroupId','resourceName','adGroupName','status','type','cpcBidMicros','internalAdGroupId','internalProductIds','lastSyncAt'], rows: data.adGroups },
       keywords: { headers: ['customerId','campaignId','adGroupId','criterionId','resourceName','keywordText','matchType','negative','status','qualityScore','lastSyncAt'], rows: data.keywords },
@@ -566,7 +570,7 @@ export class GoogleAdsExportService {
       googleAdsProductionEnabled: safety.googleAdsProductionEnabled,
       maxBudgetIncreasePercentPerAction: Number(process.env.GOOGLE_ADS_MAX_BUDGET_INCREASE_PERCENT || 20),
       maxDailyBudgetPerCampaign: Number(process.env.GOOGLE_ADS_MAX_DAILY_BUDGET_VND || 5_000_000),
-      allowedActions: ['create_search_campaign','create_ad_group','create_keyword','create_responsive_search_ad','update_campaign_budget','pause_campaign','resume_campaign','pause_ad_group','resume_ad_group','monitor_only'],
+      allowedActions: [...GOOGLE_ADS_ERP_ACTION_TYPES, 'monitor_only'],
       blockedActions: ['delete_campaign','delete_ad_group','delete_ad','create_performance_max','create_shopping_campaign','create_display_campaign','auto_publish_without_approval'],
     };
   }

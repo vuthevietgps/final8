@@ -7,7 +7,7 @@
  * for DSO/DPO calculations instead of querying models directly.
  * This ensures business logic changes in those modules are reflected here.
  */
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { FundingSource, FundingSourceDocument } from './schemas/funding-source.schema';
@@ -20,6 +20,7 @@ import { TestOrder2, TestOrder2Document } from '../test-order2/schemas/test-orde
 import { AgentReceivableService } from '../agent-receivable/agent-receivable.service';
 import { SupplierPayableService } from '../supplier-payable/supplier-payable.service';
 import { FinanceAlertEvent, FinanceAlertEventDocument } from './schemas/finance-alert-event.schema';
+import { FinanceService } from './finance.service';
 
 export interface CSIResult {
   CSI: number;
@@ -163,6 +164,7 @@ export class CashflowSafetyService {
     private readonly agentService: AgentReceivableService,
     @Inject(forwardRef(() => SupplierPayableService))
     private readonly supplierService: SupplierPayableService,
+    private readonly financeService: FinanceService,
   ) {}
 
   /**
@@ -171,23 +173,9 @@ export class CashflowSafetyService {
    */
   async calculateCSI(): Promise<CSIResult> {
     try {
-      // 1. Get available cash from active funding sources.
-      // The schema uses status instead of isActive and does not define bank_account.
-      const cashAccounts = await this.fundingSourceModel.find({
-        status: 'active'
-      });
-      const totalCash = cashAccounts.reduce((sum, a) => sum + (a.availableBalance || 0), 0);
-
-      const creditLines = await this.loanContractModel.find({
-        status: 'active',
-        type: 'credit_line'
-      });
-      const availableCredit = creditLines.reduce(
-        (sum, l) => sum + ((l.principal || 0) - ((l.principal || 0) - (l.principalRemaining || 0))),
-        0
-      );
-
-      const availableCash = totalCash + availableCredit;
+      // Cash means reconciled money already held in registered accounts. Undrawn
+      // credit and editable funding-source balances are financing capacity, not cash.
+      const availableCash = await this.financeService.calculateMasterBankBalance();
 
       // 2. Get avg daily ads cost (last 30 days), falling back to advertising-cost records.
       const avgDailyAdsCost = await this.getAverageDailyAdsCost(30);
@@ -246,12 +234,10 @@ export class CashflowSafetyService {
       let totalReceivable = 0;
       try {
         const agentSummary = await this.agentService.getCashflowSummary(14);
-        totalReceivable = agentSummary.totalAgentUnpaid || 0;
+        if(!Number.isSafeInteger(agentSummary.companyReceivable)||agentSummary.needsReviewCount)throw new Error('Chưa có công nợ đại lý chuẩn đã đối chiếu.');
+        totalReceivable = agentSummary.companyReceivable;
       } catch (err) {
-        // Fallback to direct query if service unavailable
-        this.logger.warn('DSO: Agent service unavailable, falling back to direct query');
-        const receivables = await this.agentStatementModel.find({ status: 'open' });
-        totalReceivable = receivables.reduce((sum, r) => sum + (r.closingBalance || 0), 0);
+        throw new ServiceUnavailableException('Không đủ dữ liệu công nợ đại lý chuẩn để tính DSO.');
       }
 
       // Get avg daily sales (30 days)
@@ -317,14 +303,10 @@ export class CashflowSafetyService {
       let totalPayables = 0;
       try {
         const supplierSummary = await this.supplierService.getCashflowSummary();
-        totalPayables = supplierSummary.unreceived || 0;
+        if(!Number.isSafeInteger(supplierSummary.companyPayable)||supplierSummary.needsReviewCount)throw new Error('Chưa có công nợ NCC chuẩn đã đối chiếu.');
+        totalPayables = supplierSummary.companyPayable;
       } catch (err) {
-        // Fallback to direct query if service unavailable
-        this.logger.warn('DPO: Supplier service unavailable, falling back to direct query');
-        const payables = await this.supplierPayableModel.find({
-          status: { $in: ['pending', 'partial'] }
-        });
-        totalPayables = payables.reduce((sum, p) => sum + (p.totalAmount || 0) - (p.amountPaid || 0), 0);
+        throw new ServiceUnavailableException('Không đủ dữ liệu công nợ NCC chuẩn để tính DPO.');
       }
 
       // Get avg daily COGS (từ orders)
@@ -340,11 +322,7 @@ export class CashflowSafetyService {
       };
     } catch (error) {
       this.logger.error(`Error calculating DPO: ${error.message}`);
-      return {
-        DPO: 0,
-        totalPayables: 0,
-        avgDailyCOGS: 0
-      };
+      throw new ServiceUnavailableException('Không thể xác định DPO; không coi dữ liệu thiếu là 0.');
     }
   }
 

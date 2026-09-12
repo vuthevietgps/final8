@@ -20,7 +20,7 @@ export enum UserRole {
   DIRECTOR = 'director',                   // Giám đốc - quyền cao nhất
   MANAGER = 'manager',                     // Quản lý - quản lý nhóm/phòng ban
   EMPLOYEE = 'employee',                   // Nhân viên - nhân viên thông thường
-  INTERNAL_AGENT = 'internal_agent',       // Đại lý nội bộ
+  INTERNAL_AGENT = 'internal_agent',       // Nhân sự/kênh bán của công ty
   EXTERNAL_AGENT = 'external_agent',       // Đại lý bên ngoài
   INTERNAL_SUPPLIER = 'internal_supplier', // Nhà cung cấp nội bộ
   EXTERNAL_SUPPLIER = 'external_supplier', // Nhà cung cấp bên ngoài

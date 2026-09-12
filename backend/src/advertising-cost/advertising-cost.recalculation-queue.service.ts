@@ -1,3 +1,5 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from './advertising-cost-refresh.module';
 import { Injectable, Inject, Logger, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { TestOrder2Service } from '../test-order2/test-order2.service';
 
@@ -11,6 +13,7 @@ export class AdvertisingCostRecalculationQueueService implements OnModuleDestroy
   constructor(
     @Inject(forwardRef(() => TestOrder2Service))
     private readonly testOrder2Service: TestOrder2Service,
+    private readonly events?: EventEmitter2,
   ) {
     const configured = Number(process.env.ADS_RECALCULATE_DEBOUNCE_MS || 20 * 60 * 1000);
     this.debounceMs = Number.isFinite(configured) && configured > 0 ? configured : 20 * 60 * 1000;
@@ -61,6 +64,10 @@ export class AdvertisingCostRecalculationQueueService implements OnModuleDestroy
     this.pendingReasons.delete(dayISO);
 
     try {
+      if (this.events) {
+        await this.events.emitAsync(FINANCIAL_INPUT_CHANGED, { dates: [dayISO], revalue: false });
+        return;
+      }
       const res = await this.testOrder2Service.recalculateOrdersForDate(dayISO);
       this.logger.log(
         `Recalculated orders for ${dayISO}: ${res.updated} updated (queued from: ${reasons.join(', ') || 'unknown'}).`,

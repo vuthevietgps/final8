@@ -14,11 +14,15 @@ import {
   IsNumber,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Types } from 'mongoose';
+import { DEALER_RETURN_POLICIES, DealerReturnPolicy } from '../../common/dealer-return-policy';
 
 export class CreateProductDto {
+  @IsOptional() @IsIn(['not_resellable', 'resellable', 'inspect'])
+  resalePolicy?: string;
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -46,6 +50,19 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isReturnable?: boolean;
+
+  @IsOptional()
+  @IsIn(['unconfigured', 'recoverable', 'production_committed'])
+  ledgerReturnPolicy?: string;
+
+  @IsOptional()
+  @IsIn(DEALER_RETURN_POLICIES)
+  dealerReturnPolicy?: DealerReturnPolicy;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  dealerReturnTerms?: string;
 
   @IsOptional()
   @IsNumber()

@@ -374,8 +374,11 @@ export class MessengerWebhookService {
         ? await this.apiTokenService.getRawAccessTokenForFanpage(String(fanpage._id), 'facebook')
         : undefined);
     if (!token) return undefined;
-    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(adId)}?fields=adset_id,adset{name},campaign_id&access_token=${encodeURIComponent(token)}`;
-    const res = await fetch(url, { method: 'GET' });
+    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(adId)}?fields=adset_id,adset{name},campaign_id`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const data: any = await res.json();
     if (!res.ok) {
       const msg = data?.error?.message || JSON.stringify(data);
@@ -935,10 +938,13 @@ export class MessengerWebhookService {
             };
 
             const textRes = await fetch(
-              `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(pageAccessToken)}`,
+              `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages`,
               {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  Authorization: `Bearer ${pageAccessToken}`,
+                  'Content-Type': 'application/json',
+                },
                 body: JSON.stringify(payload),
               },
             )
@@ -970,10 +976,13 @@ export class MessengerWebhookService {
             const imgPayloads = images.map((url) => ensureAbsolute(url)).filter((url) => /^https?:\/\//i.test(url));
             for (const imgUrl of imgPayloads) {
               const imgRes = await fetch(
-                `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages?access_token=${encodeURIComponent(pageAccessToken)}`,
+                `https://graph.facebook.com/${getMetaGraphApiVersion()}/me/messages`,
                 {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: {
+                    Authorization: `Bearer ${pageAccessToken}`,
+                    'Content-Type': 'application/json',
+                  },
                   body: JSON.stringify({
                     recipient: { id: senderPsid },
                     messaging_type: 'RESPONSE',

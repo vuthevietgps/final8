@@ -23,11 +23,14 @@ export interface PendingStats {
 }
 
 export interface DailyProfitReport {
+  estimatedAdsRows?: number;
+  estimatedAdsSpend?: number;
   date: string;
   estimated: ProfitStats;
   realized: ProfitStats;
   pending: PendingStats;
-  cashAvailable: number;
+  cashAvailable: number | null;
+  cashAvailableStatus?: string;
 }
 
 @Injectable({

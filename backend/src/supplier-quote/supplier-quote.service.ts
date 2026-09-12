@@ -10,6 +10,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateSupplierQuoteDto } from './dto/create-supplier-quote.dto';
 import { UpdateSupplierQuoteDto } from './dto/update-supplier-quote.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 import {
   SupplierQuote,
   SupplierQuoteApprovalStatus,
@@ -21,7 +23,7 @@ import {
 export class SupplierQuoteService {
   private readonly logger = new Logger(SupplierQuoteService.name);
 
-  constructor(@InjectModel(SupplierQuote.name) private model: Model<SupplierQuoteDocument>) {}
+  constructor(@InjectModel(SupplierQuote.name) private model: Model<SupplierQuoteDocument>, private readonly events?: EventEmitter2) {}
 
   async create(dto: CreateSupplierQuoteDto, currentUser: any) {
     const actor = this.actor(currentUser);
@@ -59,11 +61,13 @@ export class SupplierQuoteService {
     });
 
     this.logger.log(`Created pending SupplierQuote ${String(doc._id)}`);
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(doc.productId)] });
     return this.normalizeQuote(doc.toObject());
   }
 
   async update(id: string, dto: UpdateSupplierQuoteDto, currentUser: any) {
     const doc = await this.loadQuote(id);
+    const previousProductId = String(doc.productId);
     const approvalRelevantChanged =
       (dto.productId !== undefined && String(dto.productId) !== String(doc.productId))
       || (dto.supplierId !== undefined && String(dto.supplierId) !== String(doc.supplierId))
@@ -108,13 +112,22 @@ export class SupplierQuoteService {
 
     await this.saveWithConcurrency(doc);
     this.logger.log(`Updated SupplierQuote ${String(doc._id)}${approvalRelevantChanged ? ' and reset approval to pending' : ''}`);
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [previousProductId, String(doc.productId)] });
     return this.normalizeQuote(doc.toObject());
   }
 
   async approve(id: string, currentUser: any) {
     const doc = await this.loadQuote(id);
     const actor = this.actor(currentUser);
-    this.assertIndependentDecisionActor(doc, actor);
+    const selfApproval = String(actor.id) === String(doc.createdBy)
+      || String(actor.id) === String(doc.lastCommercialEditedBy);
+    // Director approval is an explicit business-policy exception. Resolve the
+    // current role from the database; never accept a role supplied in a body.
+    const directorApproval = selfApproval && !!await this.model.db.collection('users').findOne(
+      { _id: actor.id, role: 'director', isActive: true },
+      { projection: { _id: 1 } },
+    );
+    this.assertIndependentDecisionActor(doc, actor, directorApproval);
     if (this.normalizedStatus(doc.approvalStatus) === 'approved') {
       return this.normalizeQuote(doc.toObject());
     }
@@ -131,10 +144,12 @@ export class SupplierQuoteService {
       actorId: actor.id,
       actorLabel: actor.label,
       at,
+      ...(directorApproval ? { reason: 'Director approval of own quote; active director role verified from database.' } : {}),
       priceSnapshot: Number(doc.price),
     });
     await this.saveWithConcurrency(doc);
     this.logger.log(`Approved SupplierQuote ${String(doc._id)} by user ${String(actor.id)}`);
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(doc.productId)] });
     return this.normalizeQuote(doc.toObject());
   }
 
@@ -162,6 +177,7 @@ export class SupplierQuoteService {
     });
     await this.saveWithConcurrency(doc);
     this.logger.log(`Rejected SupplierQuote ${String(doc._id)} by user ${String(actor.id)}`);
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(doc.productId)] });
     return this.normalizeQuote(doc.toObject());
   }
 
@@ -192,6 +208,7 @@ export class SupplierQuoteService {
     });
     await this.saveWithConcurrency(doc);
     this.logger.log(`Claimed SupplierQuote provenance ${String(doc._id)} by user ${String(actor.id)}`);
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [String(doc.productId)] });
     return this.normalizeQuote(doc.toObject());
   }
 
@@ -254,7 +271,7 @@ export class SupplierQuoteService {
         approvalStatus: 'approved',
         $or: [
           { effectiveAt: { $lte: targetDate } },
-          { effectiveAt: { $exists: false } },
+          { effectiveAt: { $exists: false }, createdAt: { $lte: targetDate } },
         ],
       })
       .sort({ effectiveAt: -1, createdAt: -1 })
@@ -405,6 +422,7 @@ export class SupplierQuoteService {
   private assertIndependentDecisionActor(
     doc: SupplierQuoteDocument,
     actor: { id: Types.ObjectId },
+    directorApproval = false,
   ): void {
     if (!this.validActorId(doc.createdBy) || !this.validActorId(doc.lastCommercialEditedBy)) {
       throw new ConflictException(
@@ -412,7 +430,7 @@ export class SupplierQuoteService {
       );
     }
     const actorId = String(actor.id);
-    if (actorId === String(doc.createdBy) || actorId === String(doc.lastCommercialEditedBy)) {
+    if (!directorApproval && (actorId === String(doc.createdBy) || actorId === String(doc.lastCommercialEditedBy))) {
       throw new ForbiddenException(
         'Separation of duties requires a different user to approve or reject this quote',
       );

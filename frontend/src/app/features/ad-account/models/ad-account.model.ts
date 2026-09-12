@@ -14,6 +14,8 @@ export interface AdsOperatorRef {
 }
 
 export interface AdAccount {
+  sourceSystem?: 'windsor';
+  sourceLastSeenAt?: string;
   _id: string;
   name: string;
   accountId: string;

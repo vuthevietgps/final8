@@ -9,6 +9,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
+import { BusinessLedgerService } from '../business-ledger/business-ledger.service';
+import { businessDay } from '../common/business-day';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import { User, UserDocument } from '../user/user.schema';
 import { AdGroupDailyReport, AdGroupDailyReportDocument } from '../finance/schemas/ad-group-daily-report.schema';
@@ -111,6 +113,7 @@ export class EmployeeAdsKpiService {
     private readonly reportModel: Model<AdGroupDailyReportDocument>,
     @InjectModel(DailyBudgetAdjustment.name)
     private readonly adjustmentModel: Model<DailyBudgetAdjustmentDocument>,
+    private readonly ledger: BusinessLedgerService,
   ) {}
 
   /**
@@ -140,10 +143,7 @@ export class EmployeeAdsKpiService {
 
     // Lấy performance data từ daily reports
     const adGroupIds = adGroups.map(ag => ag.adGroupId);
-    const reports = await this.reportModel.find({
-      adGroupId: { $in: adGroupIds },
-      date: { $gte: periodStart, $lte: periodEnd }
-    });
+    const reports = await this.canonicalPerformance(adGroupIds, periodStart, periodEnd);
 
     // Tính toán performance cho từng ad group
     const adGroupPerformances = await this.calculateAdGroupPerformances(adGroups, reports);
@@ -241,10 +241,7 @@ export class EmployeeAdsKpiService {
     }).populate('productCategoryId');
 
     const adGroupIds = adGroups.map(ag => ag.adGroupId);
-    const reports = await this.reportModel.find({
-      adGroupId: { $in: adGroupIds },
-      date: { $gte: periodStart, $lte: periodEnd }
-    });
+    const reports = await this.canonicalPerformance(adGroupIds, periodStart, periodEnd);
 
     return this.calculateAdGroupPerformances(adGroups, reports);
   }
@@ -356,6 +353,14 @@ export class EmployeeAdsKpiService {
   // PRIVATE HELPER METHODS
   // =============================================
 
+  private async canonicalPerformance(ids: string[], from: Date, to: Date): Promise<any[]> {
+    const report = await this.ledger.report(businessDay(from), businessDay(to));
+    return report.adGroups.filter(row => ids.includes(row.key)).map(row => ({
+      adGroupId: row.key, adsCost: row.advertisingCost, netProfit: row.recordedNetProfit,
+      revenue: row.revenue, orders: row.orders,
+    }));
+  }
+
   private calculateAdGroupPerformances(
     adGroups: AdGroupDocument[],
     reports: AdGroupDailyReportDocument[]
@@ -375,12 +380,11 @@ export class EmployeeAdsKpiService {
       const spend = adGroupReports.reduce((sum, r) => sum + (r.adsCost || 0), 0);
       const profit = adGroupReports.reduce((sum, r) => sum + (r.netProfit || 0), 0);
       
-      // Revenue = spend + profit (since profit = revenue - spend)
-      const revenue = spend + profit;
+      const revenue = adGroupReports.reduce((sum, r: any) => sum + (r.revenue || 0), 0);
       
       // Note: orders tracking is not available in AdGroupDailyReport schema
       // Set default values for now
-      const orders = 0;
+      const orders = adGroupReports.reduce((sum, r: any) => sum + (r.orders || 0), 0);
       const successOrders = 0;
       const returnOrders = 0;
       
@@ -430,6 +434,7 @@ export class EmployeeAdsKpiService {
       
       const totalSpend = perfs.reduce((sum, p) => sum + p.spend, 0);
       const totalRevenue = perfs.reduce((sum, p) => sum + p.revenue, 0);
+      const totalProfit = perfs.reduce((sum, p) => sum + p.profit, 0);
       
       breakdowns.push({
         platform: platform as 'facebook' | 'google' | 'tiktok',
@@ -445,9 +450,9 @@ export class EmployeeAdsKpiService {
         
         totalSpend,
         totalRevenue,
-        totalProfit: totalRevenue - totalSpend,
+        totalProfit,
         // ROI = (Profit / Spend) * 100 (not ROAS)
-        avgROI: totalSpend > 0 ? ((totalRevenue - totalSpend) / totalSpend) * 100 : 0
+        avgROI: totalSpend > 0 ? (totalProfit / totalSpend) * 100 : 0
       });
     }
 

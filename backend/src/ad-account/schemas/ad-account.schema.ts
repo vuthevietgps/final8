@@ -9,6 +9,9 @@ export type AdAccountDocument = AdAccount & Document;
 
 @Schema({ timestamps: true })
 export class AdAccount {
+  @Prop({ enum: ['windsor'] }) sourceSystem?: string;
+  @Prop({ type: Types.ObjectId, ref: 'ProviderConnection' }) sourceConnectionId?: Types.ObjectId;
+  @Prop({ type: Date }) sourceLastSeenAt?: Date;
   @Prop({ required: true, trim: true })
   name: string; // Tên tài khoản quảng cáo
 
@@ -66,6 +69,18 @@ export class AdAccount {
 
   // Google Ads: login customer ID (manager) để thực thi API
   @Prop({ trim: true }) loginCustomerId?: string;
+
+  @Prop({ trim: true }) conversionTrackingStatus?: string;
+
+  @Prop({ trim: true }) googleAdsConversionCustomer?: string;
+
+  @Prop({ trim: true }) conversionTrackingId?: string;
+
+  @Prop({ trim: true }) crossAccountConversionTrackingId?: string;
+
+  @Prop({ type: Boolean }) acceptedCustomerDataTerms?: boolean;
+
+  @Prop({ type: Boolean }) enhancedConversionsForLeadsEnabled?: boolean;
 
   @Prop({ enum: ['system', 'account', 'manual'], default: 'system' })
   tokenSource?: 'system' | 'account' | 'manual';

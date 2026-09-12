@@ -52,6 +52,19 @@ export class CashflowSnapshotService {
   }
 
   // ─── Write ─────────────────────────────────────────────────────────────────
+  /** Persist dirty state before calculating; an older worker cannot clear a newer update. */
+  async refresh(domain: SnapshotDomain, windowDays: number, producer: () => Promise<any>): Promise<void> {
+    const marked = await this.model.findOneAndUpdate({ domain, windowDays }, {
+      $inc: { revision: 1 }, $set: { pending: true },
+      $setOnInsert: { data: {}, updatedAt: new Date(0) },
+    }, { upsert: true, new: true }).lean();
+    if (!marked) throw new Error('Cannot persist financial refresh');
+    const data = await producer();
+    await this.model.updateOne({ domain, windowDays, revision: marked.revision }, {
+      $set: { data, updatedAt: new Date(), pending: false },
+    });
+    try { await this.cacheManager.del(this.cacheKey(domain, windowDays)); } catch { /* Reads check Mongo. */ }
+  }
 
   /**
    * Lưu snapshot mới. Vừa cập nhật MongoDB vừa xoá cache cũ để force re-read.
@@ -143,6 +156,12 @@ export class CashflowSnapshotService {
    */
   async read<T = Record<string, unknown>>(domain: SnapshotDomain, windowDays: number): Promise<T | null> {
     const key = this.cacheKey(domain, windowDays);
+    if (domain !== 'tax') {
+      try {
+        const current = await this.model.findOne({ domain, windowDays }).lean();
+        return current && !current.pending ? current.data as T : null;
+      } catch { return null; }
+    }
 
     // 1. Cache
     try {
@@ -177,8 +196,8 @@ export class CashflowSnapshotService {
    */
   async getStaleness(domain: SnapshotDomain, windowDays: number): Promise<number> {
     try {
-      const doc = await this.model.findOne({ domain, windowDays }, { updatedAt: 1 }).lean();
-      if (!doc?.updatedAt) return Infinity;
+      const doc = await this.model.findOne({ domain, windowDays }, { updatedAt: 1, pending: 1 }).lean();
+      if (!doc?.updatedAt || doc.pending) return Infinity;
       return Date.now() - new Date(doc.updatedAt).getTime();
     } catch {
       return Infinity;

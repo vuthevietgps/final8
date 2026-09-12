@@ -94,6 +94,7 @@ function evidencePayload(overrides: Record<string, any> = {}) {
       localOnly: true,
       providerApiCalled: false,
       googleAdsApiCalled: false,
+      metaAdsApiCalled: false,
       liveExecutionUsed: false,
       secretsRedacted: true,
       campaignBudgetIdNoFallback: true,

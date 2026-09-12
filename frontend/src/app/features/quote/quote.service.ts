@@ -79,7 +79,9 @@ export class QuoteService {
     // Use lightweight agents endpoint to avoid needing 'users' permission
     return this.userService.getAgents()
       .pipe(
-        map((users: any[]) => users.map(user => ({
+        map((users: any[]) => users
+          .filter(user => user.role === 'external_agent')
+          .map(user => ({
           _id: user._id,
           fullName: user.fullName,
           email: user.email,

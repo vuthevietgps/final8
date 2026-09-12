@@ -20,6 +20,9 @@ export class AdGroupDailyReport {
   @Prop({ required: true, type: Number, default: 0 })
   adsCost: number; // Chi phí quảng cáo của nhóm QC
 
+  @Prop({ type: Boolean, default: false })
+  adsCostEstimated?: boolean;
+
   @Prop({ required: true, type: Number, default: 0 })
   netProfit: number; // Lợi nhuận thuần (tổng từ các đơn hàng)
 

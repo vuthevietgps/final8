@@ -8,6 +8,7 @@ import { AuthGuard } from './core/guards/auth.guard';
 import { GuestGuard } from './core/guards/guest.guard';
 
 export const routes: Routes = [
+  { path: 'tracking-crm', loadComponent: () => import('./features/tracking-crm/tracking-crm.component').then(m => m.TrackingCrmComponent), canActivate: [AuthGuard], data: { permissions: ['orders-test2'], featureModule: 'test-order2' } },
   // Trailing-slash redirects to avoid dev-proxy collisions with /media/
   { path: 'media/', redirectTo: 'media', pathMatch: 'full' },
   { path: 'media-report/', redirectTo: 'media-report', pathMatch: 'full' },
@@ -43,6 +44,9 @@ export const routes: Routes = [
     data: { permissions: ['finance'] },
     children: [
       { path: 'financial-control', loadComponent: () => import('./features/finance/financial-control/financial-control.component').then(m => m.FinancialControlComponent) },
+      { path: 'business-ledger', canActivate: [AuthGuard], data: { permissions: ['finance', 'finance.cashflow.manage'] }, loadComponent: () => import('./features/business-ledger/business-ledger.component').then(m => m.BusinessLedgerComponent) },
+      { path: 'bank-reconciliation', canActivate: [AuthGuard], data: { permissions: ['finance', 'finance.cashflow.manage'] }, loadComponent: () => import('./features/business-ledger/bank-reconciliation.component').then(m => m.BankReconciliationComponent) },
+      { path: 'counterparties', canActivate: [AuthGuard], data: { permissions: ['finance', 'finance.cashflow.manage'] }, loadComponent: () => import('./features/business-ledger/counterparty.component').then(m => m.CounterpartyComponent) },
       { path: 'available-funds', loadComponent: () => import('./features/finance/available-funds.component').then(m => m.AvailableFundsComponent) },
       { path: 'budget-allocation', loadComponent: () => import('./features/finance/budget-allocation.component').then(m => m.BudgetAllocationComponent) },
       {
@@ -54,6 +58,7 @@ export const routes: Routes = [
       { path: 'capital-allocation', loadComponent: () => import('./features/finance/capital-allocation.component').then(m => m.CapitalAllocationComponent) },
       { path: 'capital-flow', loadComponent: () => import('./features/finance/capital-flow.component').then(m => m.CapitalFlowComponent) },
       { path: 'ad-group-daily-report', loadComponent: () => import('./features/finance/ad-group-daily-report.component').then(m => m.AdGroupDailyReportComponent) },
+      { path: 'ad-group-management', canActivate: [AuthGuard], data: { permissions: ['finance', 'finance.cashflow.manage'] }, loadComponent: () => import('./features/finance/ad-group-management.component').then(m => m.AdGroupManagementComponent) },
       { path: '', redirectTo: 'financial-control', pathMatch: 'full' },
     ]
   },
@@ -62,7 +67,7 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     data: { permissions: ['purchase-costs'] },
     children: [
-      { path: 'payables', loadComponent: () => import('./features/supplier-payable/supplier-payable.component').then(m => m.SupplierPayableComponent) },
+      { path: 'payables', canActivate: [AuthGuard], data: { permissions: ['finance', 'finance.cashflow.manage'], counterpartyKind: 'supplier' }, loadComponent: () => import('./features/business-ledger/counterparty.component').then(m => m.CounterpartyComponent) },
       { path: '', redirectTo: 'payables', pathMatch: 'full' }
     ]
   },
@@ -72,15 +77,15 @@ export const routes: Routes = [
     children: [
       {
         path: 'supplier',
-        loadComponent: () => import('./features/payment-management/supplier-payment.component').then(m => m.SupplierPaymentComponent),
+        loadComponent: () => import('./features/business-ledger/counterparty.component').then(m => m.CounterpartyComponent),
         canActivate: [AuthGuard],
-        data: { permissions: ['purchase-costs'] }
+        data: { permissions: ['finance', 'finance.cashflow.manage'], counterpartyKind: 'supplier' }
       },
       {
         path: 'agent',
-        loadComponent: () => import('./features/payment-management/agent-payment.component').then(m => m.AgentPaymentComponent),
+        loadComponent: () => import('./features/business-ledger/counterparty.component').then(m => m.CounterpartyComponent),
         canActivate: [AuthGuard],
-        data: { permissions: ['quotes'] }
+        data: { permissions: ['finance', 'finance.cashflow.manage'], counterpartyKind: 'agent' }
       },
       { path: '', redirectTo: 'supplier', pathMatch: 'full' }
     ]
@@ -128,6 +133,18 @@ export const routes: Routes = [
     data: { permissions: ['google-ads.read'], featureModule: 'ai-marketing' }
   },
   {
+    path: 'meta-ads/campaigns',
+    loadComponent: () => import('./features/meta-ads/meta-ads-campaign.component').then(m => m.MetaAdsCampaignComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['meta-ads.read'], featureModule: 'ai-marketing' }
+  },
+  {
+    path: 'google-ads/campaigns',
+    loadComponent: () => import('./features/google-ads/google-ads-campaign.component').then(m => m.GoogleAdsCampaignComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['google-ads.read'], featureModule: 'ai-marketing' }
+  },
+  {
     path: 'ai/ads-approval-evidence-reviewer',
     loadComponent: () => import('./features/ads-approval-evidence-reviewer/ads-approval-evidence-reviewer.component').then(m => m.AdsApprovalEvidenceReviewerComponent),
     canActivate: [AuthGuard],
@@ -150,6 +167,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/api-token/api-token.component').then(m => m.ApiTokenComponent),
     canActivate: [AuthGuard],
     data: { permissions: ['google-ads.credentials.read'] }
+  },
+  {
+    path: 'provider-connections',
+    loadComponent: () => import('./features/provider-connections/provider-connections.component').then(m => m.ProviderConnectionsComponent),
+    canActivate: [AuthGuard],
+    data: { permissions: ['google-ads.credentials.read', 'meta-ads.credentials.read'] }
   },
   {
     path: 'ads-settings',
@@ -325,9 +348,9 @@ export const routes: Routes = [
   },
   {
     path: 'agents/receivables',
-    loadComponent: () => import('./features/agent-receivable/agent-receivable.component').then(m => m.AgentReceivableComponent),
+    loadComponent: () => import('./features/business-ledger/counterparty.component').then(m => m.CounterpartyComponent),
     canActivate: [AuthGuard],
-    data: { permissions: ['quotes'] }
+    data: { permissions: ['finance', 'finance.cashflow.manage'], counterpartyKind: 'agent' }
   },
   {
     path: 'customers',

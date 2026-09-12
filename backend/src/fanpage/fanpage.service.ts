@@ -30,9 +30,11 @@ export class FanpageService {
     const systemToken = await this.apiTokenService.getRawSystemUserToken();
     if (!systemToken?.trim()) return {};
 
-    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(pageId)}?fields=id,name,access_token,picture{url}&access_token=${encodeURIComponent(systemToken.trim())}`;
+    const url = `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(pageId)}?fields=id,name,access_token,picture{url}`;
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${systemToken.trim()}` },
+      });
       const result: any = await response.json();
       if (!response.ok || result?.error) return {};
 
@@ -298,7 +300,9 @@ export class FanpageService {
     }
 
     try {
-      const response = await fetch(`https://graph.facebook.com/${getMetaGraphApiVersion()}/me?access_token=${encodeURIComponent(accessToken)}`);
+      const response = await fetch(`https://graph.facebook.com/${getMetaGraphApiVersion()}/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       const result = await response.json();
 
       if (result.error) {
@@ -334,7 +338,9 @@ export class FanpageService {
 
     // Validate token má»›i trÆ°á»›c khi lÆ°u
     try {
-      const response = await fetch(`https://graph.facebook.com/${getMetaGraphApiVersion()}/me?access_token=${encodeURIComponent(newAccessToken)}`);
+      const response = await fetch(`https://graph.facebook.com/${getMetaGraphApiVersion()}/me`, {
+        headers: { Authorization: `Bearer ${newAccessToken}` },
+      });
       const result = await response.json();
 
       if (result.error) {

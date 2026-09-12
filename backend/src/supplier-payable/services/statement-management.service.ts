@@ -33,77 +33,7 @@ export class StatementManagementService {
   ) {}
 
   async upsertStatement(params: CreateStatementDto) {
-    const supplierObjId = new Types.ObjectId(params.supplierId);
-    const from = new Date(params.from);
-    const to = new Date(params.to);
-    to.setHours(23, 59, 59, 999);
-
-    const payableBeforeMatch: any = { supplierId: supplierObjId, createdAt: { $lt: from } };
-    const payablePeriodMatch: any = { supplierId: supplierObjId, createdAt: buildPeriodFilter(from, to) };
-
-    const [payablesBefore, payablesInPeriod, paymentsBefore, paymentsInPeriod, codInPeriod] = await Promise.all([
-      this.payableModel.aggregate([
-        { $match: payableBeforeMatch },
-        { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-      ]),
-      this.payableModel.aggregate([
-        { $match: payablePeriodMatch },
-        { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-      ]),
-      this.payableModel.aggregate([
-        { $match: { supplierId: supplierObjId } },
-        { $unwind: '$payments' },
-        { $match: { 'payments.paidAt': { $lt: from } } },
-        { $group: { _id: null, total: { $sum: '$payments.amount' } } },
-      ]),
-      this.payableModel.aggregate([
-        { $match: { supplierId: supplierObjId } },
-        { $unwind: '$payments' },
-        { $match: { 'payments.paidAt': buildPeriodFilter(from, to) } },
-        { $group: { _id: null, total: { $sum: '$payments.amount' } } },
-      ]),
-      this.orderModel.aggregate([
-        { $match: { supplierId: supplierObjId, orderStatus: 'Giao thành công', updatedAt: buildPeriodFilter(from, to) } },
-        { $project: {
-          codCollected: {
-            $cond: [ { $gt: ['$codCollectedBySupplier', 0] }, '$codCollectedBySupplier', '$codAmount' ],
-          },
-        } },
-        { $group: { _id: null, total: { $sum: '$codCollected' } } },
-      ]),
-    ]);
-
-    const openingBalance = Number(payablesBefore?.[0]?.total || 0) - Number(paymentsBefore?.[0]?.total || 0);
-    const periodPayables = Number(payablesInPeriod?.[0]?.total || 0);
-    const periodPayments = Number(paymentsInPeriod?.[0]?.total || 0);
-    const periodCodCollected = Number(codInPeriod?.[0]?.total || 0);
-
-    let doc = await this.statementModel.findOne({ supplierId: supplierObjId, periodFrom: from, periodTo: to });
-    if (!doc) {
-      doc = new this.statementModel({
-        supplierId: supplierObjId,
-        periodFrom: from,
-        periodTo: to,
-        status: 'open',
-        openingBalance,
-        periodPayables,
-        periodPayments,
-        periodCodCollected,
-        payments: [],
-        statementPaymentTotal: 0,
-      } as any);
-    } else {
-      if (doc.status === 'closed') throw new BadRequestException('Kỳ đã chốt, không thể cập nhật');
-      doc.openingBalance = openingBalance;
-      doc.periodPayables = periodPayables;
-      doc.periodPayments = periodPayments;
-      doc.periodCodCollected = periodCodCollected;
-      if (params.notes !== undefined) doc.notes = params.notes;
-    }
-
-    recalcStatementTotals(doc);
-    await doc.save();
-    return doc.toObject();
+    throw new BadRequestException('Lập bảng đối soát mới tại Công nợ đối tác. Kỳ cũ chỉ dùng tra cứu lịch sử.');
   }
 
   async listStatements(params: { supplierId?: string; from?: string; to?: string; status?: string }) {
@@ -118,53 +48,17 @@ export class StatementManagementService {
       query.periodTo.$lte = to;
     }
     const docs = await this.statementModel.find(query).sort({ periodFrom: -1 }).lean();
-    return docs;
+    return docs.map(doc=>({...doc,accountingBasis:'legacy_supplier_cod_statement',settlementEligible:false}));
   }
 
   async getStatementById(id: string) {
     const doc = await this.statementModel.findById(id).lean();
     if (!doc) throw new NotFoundException('Không tìm thấy đối soát');
-    return doc;
+    return {...doc,accountingBasis:'legacy_supplier_cod_statement',settlementEligible:false};
   }
 
   async addPaymentToStatement(statementId: string, payment: { amount: number; method?: string; reference?: string; notes?: string; paidAt?: string }) {
-    const doc = await this.statementModel.findById(statementId);
-    if (!doc) throw new NotFoundException('Không tìm thấy kỳ đối soát');
-    if (doc.status === 'closed') throw new BadRequestException('Kỳ đã chốt, không thể thêm thanh toán');
-
-    const paidAt = payment.paidAt ? new Date(payment.paidAt) : new Date();
-    const paymentRecord = {
-      amount: Number(payment.amount || 0),
-      method: payment.method,
-      reference: payment.reference,
-      notes: payment.notes,
-      paidAt,
-    };
-
-    if (!doc.payments) doc.payments = [];
-    doc.payments.push(paymentRecord as any);
-    
-    recalcStatementTotals(doc);
-    await doc.save();
-
-    // ============ SYNC TO TESTORDER2 (Option B) ============
-    // Generate batch ID for this statement payment
-    const batchId = this.generateStatementBatchId(statementId);
-    const paymentNote = payment.notes || `Thanh toán theo kỳ đối soát ${batchId}`;
-
-    // Sync payment to orders in this period
-    const syncResult = await this.syncSupplierPaymentToOrders({
-      supplierId: doc.supplierId.toString(),
-      periodFrom: doc.periodFrom,
-      periodTo: doc.periodTo,
-      batchId,
-      paidAt,
-      paymentNote,
-    });
-
-    this.logger.log(`Statement ${statementId}: Payment added and synced ${syncResult.updated} orders`);
-
-    return doc.toObject();
+    throw new BadRequestException('Ghi thanh toán và phân bổ theo từng đơn tại Công nợ đối tác; không tất toán cả kỳ cũ.');
   }
 
   /**
@@ -269,11 +163,7 @@ export class StatementManagementService {
   }
 
   async closeStatement(id: string) {
-    const doc = await this.statementModel.findById(id);
-    if (!doc) throw new NotFoundException('Không tìm thấy đối soát');
-    doc.status = 'closed';
-    await doc.save();
-    return doc.toObject();
+    throw new BadRequestException('Chốt bảng đối soát mới tại Công nợ đối tác; không dùng kỳ cũ để tất toán.');
   }
 
   /**
@@ -281,11 +171,6 @@ export class StatementManagementService {
    * Cho phép Giám đốc mở lại kỳ đã chốt để điều chỉnh
    */
   async reopenStatement(id: string) {
-    const doc = await this.statementModel.findById(id);
-    if (!doc) throw new NotFoundException('Không tìm thấy đối soát');
-    if (doc.status !== 'closed') throw new BadRequestException('Kỳ chưa chốt, không cần mở lại');
-    doc.status = 'open';
-    await doc.save();
-    return doc.toObject();
+    throw new BadRequestException('Kỳ cũ giữ nguyên lịch sử; điều chỉnh bằng chứng từ Sổ kinh doanh.');
   }
 }

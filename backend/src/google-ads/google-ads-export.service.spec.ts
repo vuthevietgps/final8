@@ -1,6 +1,7 @@
 import AdmZip = require('adm-zip');
 import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
+import { GOOGLE_ADS_ERP_ACTION_TYPES } from './google-ads-action-types';
 import { GOOGLE_ADS_EXPORT_REQUIRED_FILES, GoogleAdsExportService } from './google-ads-export.service';
 
 describe('GoogleAdsExportService', () => {
@@ -76,11 +77,16 @@ describe('GoogleAdsExportService', () => {
     const names = zip.getEntries().map((entry) => entry.entryName);
     const orderCsv = zip.readAsText('order_profit_attribution.csv');
     const manifest = JSON.parse(zip.readAsText('manifest.json'));
+    const decisionRules = JSON.parse(zip.readAsText('decision_rules.json'));
 
     expect(names).toEqual(expect.arrayContaining([...GOOGLE_ADS_EXPORT_REQUIRED_FILES]));
     expect(names).toHaveLength(GOOGLE_ADS_EXPORT_REQUIRED_FILES.length);
     expect(zip.readAsText('expert_analysis_prompt.md')).toContain('senior Google Search Ads performance analyst');
     expect(manifest.exportId).toBe(result.exportId);
+    expect(decisionRules.allowedActions).toEqual([
+      ...GOOGLE_ADS_ERP_ACTION_TYPES,
+      'monitor_only',
+    ]);
     expect(verify).toEqual(expect.objectContaining({
       success: true,
       requiredFilesPresent: true,

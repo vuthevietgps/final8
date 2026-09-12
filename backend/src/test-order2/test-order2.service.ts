@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
+import { businessDay } from '../common/business-day';
+import { BadRequestException, Injectable, Logger, ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -19,11 +21,14 @@ import {
   SUPPLIER_PAYABLE_AUTO_NOTE,
 } from './constants/test-order2.constants';
 import { FinanceEvents } from '../finance/events/finance-events.constants';
+import { InventoryService } from '../inventory/inventory.service';
+import { profitAssessment } from './profit-assessment';
 import {
   businessConfirmationAudit,
   BusinessConfirmationSource,
   stripBusinessConfirmationAuditFields,
 } from './business-confirmation.util';
+import { AdsAttributionOptionsService } from './services/ads-attribution-options.service';
 
 /** Fields that suppliers are allowed to update on their own orders */
 const SUPPLIER_EDITABLE_FIELDS = new Set([
@@ -39,12 +44,19 @@ const AGENT_ROLES = new Set(['internal_agent', 'external_agent']);
 export class TestOrder2Service {
   private readonly logger = new Logger(TestOrder2Service.name);
   private readonly profitImpactFields = new Set([
+    'retailSaleAmount', 'productSource', 'inventoryBatchId',
+    'depositAmount', 'manualPayment', 'supplierPaidAmount', 'agentPaidAmount',
+    'supplierPaymentStatus', 'agentPaymentStatus', 'dealerShippingCharges', 'dealerReturnCharges',
+    'adsProvider', 'adAccountProviderId', 'adCampaignId',
     'productId',
     'quantity',
     'agentId',
     'adGroupId',
     'isActive',
     'orderStatus',
+    'productionStatus',
+    'trackingNumber',
+    'dealerShippingIncludedInPrice',
     'orderDate',
     'supplierId',
     'supplierAppliedPrice',
@@ -74,6 +86,8 @@ export class TestOrder2Service {
     private readonly supplierPayableService: SupplierPayableService,
     private readonly orderSheetSyncService: OrderSheetSyncService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly adsAttributionOptions: AdsAttributionOptionsService,
+    private readonly inventory?: InventoryService,
   ) {}
 
   private normalizeUsageDurationMonths(value: unknown): number | undefined {
@@ -86,6 +100,20 @@ export class TestOrder2Service {
   private normalizeAdGroupId(value: unknown): string | undefined {
     const normalized = String(value ?? '').trim();
     return normalized && normalized !== '0' ? normalized : undefined;
+  }
+
+  private assertAcquisitionAttribution(source: unknown, adGroupId: unknown): 'ads' | 'non_ads' {
+    if (source !== 'ads' && source !== 'non_ads') {
+      throw new BadRequestException('Phải chọn nguồn khách hàng: quảng cáo hoặc không từ quảng cáo.');
+    }
+    const normalizedAdGroupId = this.normalizeAdGroupId(adGroupId);
+    if (source === 'ads' && !normalizedAdGroupId) {
+      throw new BadRequestException('Đơn từ quảng cáo bắt buộc phải gắn ID nhóm quảng cáo.');
+    }
+    if (source === 'non_ads' && normalizedAdGroupId) {
+      throw new BadRequestException('Đơn không từ quảng cáo không được gắn ID nhóm quảng cáo.');
+    }
+    return source;
   }
 
   private foldOrderStatus(value: string): string {
@@ -181,7 +209,7 @@ export class TestOrder2Service {
     if (!value) return undefined;
     const date = value instanceof Date ? new Date(value) : new Date(value);
     if (Number.isNaN(date.getTime())) return undefined;
-    return date.toISOString().split('T')[0];
+    return businessDay(date);
   }
 
   private async refreshOrderAllocationsForDates(
@@ -195,8 +223,10 @@ export class TestOrder2Service {
       ),
     );
 
-    for (const dateKey of uniqueDates) {
-      await this.calculationService.recalculateOrdersForDate(dateKey);
+    if (this.eventEmitter?.emitAsync) {
+      await this.eventEmitter.emitAsync(FINANCIAL_INPUT_CHANGED, { dates: uniqueDates, revalue: false });
+    } else {
+      for (const dateKey of uniqueDates) await this.calculationService.recalculateOrdersForDate(dateKey);
     }
   }
 
@@ -209,170 +239,39 @@ export class TestOrder2Service {
   /**
    * Create supplier payable when order production status becomes DONE
    */
-  private async createSupplierPayableIfEligible(order: TestOrder2Document, prevProductionStatus: string | undefined | null) {
-    const nowStatus = order.productionStatus;
-    if (nowStatus !== ProductionStatus.DONE) return;
-    if (prevProductionStatus === ProductionStatus.DONE) return;
-
-    const supplierId = (order as any)?.supplierId ? String((order as any).supplierId) : '';
-    const price = Number((order as any)?.supplierAppliedPrice || 0);
-    const qty = Number(order.quantity || DEFAULT_VALUES.QUANTITY);
-    if (!supplierId || price <= 0 || qty <= 0) return;
-
-    const productId = (order as any)?.productId ? String((order as any).productId) : undefined;
-    const cogs = price * qty;
-    const codAmount = Number((order as any)?.codAmount || 0);
-    const shippingFee = Number((order as any)?.shippingFee || 0);
-
-    // Fix #1: totalAmount = commission (COD - COGS - shipping), not just COGS
-    // This is the amount the supplier owes the user after deducting their costs
-    const commission = codAmount - cogs - shippingFee;
-
-    try {
-      await this.supplierPayableService.upsertForOrder({
-        orderId: String(order._id),
-        supplierId,
-        items: [{ productId, quantity: qty, unitPrice: price, amount: cogs }],
-        totalAmount: Math.max(0, commission),
-        currency: 'VND',
-        notes: SUPPLIER_PAYABLE_AUTO_NOTE,
-      });
-    } catch (error) {
-      this.logger.error(`Failed to create supplier payable for order ${order._id}`, {
-        orderId: order._id,
-        supplierId,
-        totalAmount: commission,
-        error: error.message
-      });
-    }
+  private async createSupplierPayableIfEligible(order: TestOrder2Document, _previous: string | undefined | null) {
+    // Legacy SupplierPayable means remittance of COD margin. New purchase debts
+    // are projected from supplierContractAmount in the business ledger instead.
+    if (order.financialModelVersion === 2) return;
+    if (order.productionStatus !== ProductionStatus.DONE || order.productSource === 'inventory'
+        || order.productSource === 'dealer_custody' || !order.supplierId || !order.supplierQuoteId) return;
+    const quantity = Number(order.quantity || 1);
+    const price = Number(order.supplierAppliedPrice ?? 0);
+    const returned = await this.calculationService.isReturnStatus(order.orderStatus);
+    await this.supplierPayableService.upsertForOrder({
+      orderId: String(order._id), supplierId: String(order.supplierId),
+      items: [{ productId: order.productId ? String(order.productId) : undefined, quantity, unitPrice: price, amount: price * quantity }],
+      totalAmount: price * quantity + Number(order.supplierFreightObligation
+        ?? (order.trackingNumber ? Number(order.shippingFee || 0) + (returned ? Number(order.returnFee || 0) : 0) : 0)),
+      currency: 'VND', notes: 'Nghĩa vụ mua hàng và phí NCC; không phải tiền NCC đã thu hộ.',
+    });
   }
 
   /**
    * Ensure COD collected amount is filled when order is delivered
    */
-  private ensureCodCollectedIfDelivered(doc: TestOrder2Document, prevOrderStatus: string | undefined | null) {
-    const nowStatus = doc.orderStatus;
-    if (nowStatus !== OrderStatus.DELIVERED) return;
-    if (prevOrderStatus === OrderStatus.DELIVERED && doc.codCollectedBySupplier !== undefined) return;
-
-    const current = Number((doc as any).codCollectedBySupplier);
-    if (Number.isFinite(current) && current > 0) return;
-
-    const fallback = Number(doc.codAmount || DEFAULT_VALUES.COD_AMOUNT);
-    (doc as any).codCollectedBySupplier = Number.isFinite(current) && current >= 0 ? current : fallback;
+  private ensureCodCollectedIfDelivered(_doc: TestOrder2Document, _previous: string | undefined | null) {
+    // Delivery is not evidence of collection by any party.
   }
 
   /**
    * Auto-trigger payment status when orderStatus changes to completed states
    */
-  private async handleOrderStatusChange(doc: TestOrder2Document, prevOrderStatus: string | undefined | null) {
-    const currentStatus = doc.orderStatus;
-
-    if (currentStatus === prevOrderStatus) return;
-
-    const isPaymentTrigger = await this.calculationService.isPaymentTriggerStatus(currentStatus);
-    const isReturn = await this.calculationService.isReturnStatus(currentStatus);
-
-    if (isPaymentTrigger) {
-      this.logger.log(`Order ${doc._id} status changed to '${currentStatus}' (isPaymentTrigger=true, isReturn=${isReturn}) - triggering payment calculations`);
-      await this.calculationService.applyCompletedStatusFinancials(doc);
-      this.logger.log(`  â†’ Supplier payment amount calculated: ${doc.supplierPaidAmount}`);
-      this.logger.log(`  â†’ Agent payment amount calculated: ${doc.agentPaidAmount}`);
-      this.logger.log(`  â†’ Estimated gross profit: ${doc.grossProfit}`);
-      return;
-
-      // 1. Tính số tiền NCC trả công ty (supplierPaidAmount)
-      if (doc.supplierId) {
-        const codAmount = doc.codAmount || 0;
-        const supplierQuote = doc.supplierQuote || 0;
-        const quantity = doc.quantity || 1;
-        const shippingFee = doc.shippingFee || 0;
-        const returnFee = doc.returnFee || 0;
-        // isReturnable=true: NCC nhận lại hàng & hoàn tiền hàng → không trừ giá hàng
-        // isReturnable=false: NCC không nhận lại → công ty mất giá hàng
-        const isReturnable = doc.supplierIsReturnableSnapshot ?? true;
-
-        if (isReturn) {
-          const supplierCostOnReturn = isReturnable ? 0 : (supplierQuote * quantity);
-          doc.supplierPaidAmount = 0 - supplierCostOnReturn - shippingFee - returnFee;
-        } else {
-          doc.supplierPaidAmount = codAmount - (supplierQuote * quantity) - shippingFee;
-        }
-
-        if (doc.supplierPaymentStatus !== PaymentStatus.PAID) {
-          doc.supplierPaymentStatus = PaymentStatus.PENDING;
-        }
-        this.logger.log(`  → Supplier payment amount calculated: ${doc.supplierPaidAmount}`);
-      }
-
-      // 2. Tính số tiền công ty trả đại lý (agentPaidAmount)
-      if (doc.agentId) {
-        const agentIdStr = doc.agentId.toString();
-        let agentRole = this.agentRoleCache.get(agentIdStr);
-
-        // Chỉ query DB nếu chưa có trong cache
-        if (!agentRole) {
-          const agent = await this.model.db.collection('users').findOne(
-            { _id: doc.agentId },
-            { projection: { role: 1 } }
-          );
-          agentRole = agent?.role || 'unknown';
-          this.agentRoleCache.set(agentIdStr, agentRole);
-        }
-
-        const isExternalAgent = agentRole === AgentRole.EXTERNAL;
-
-        if (isExternalAgent) {
-          const codAmount = doc.codAmount || 0;
-          const agentQuote = doc.agentQuote || 0;
-          const quantity = doc.quantity || 1;
-
-          // ✅ Agent Commission = COD - agentQuote×qty  (xác nhận PO 15/03/2026)
-          // Phí vận chuyển do CÔNG TY chịu (không trừ vào hoa hồng đại lý).
-          // Hàng hoàn: commission âm = đại lý nợ lại công ty (clawback).
-          let commission = 0;
-          if (isReturn) {
-            commission = 0 - (agentQuote * quantity);
-          } else {
-            commission = codAmount - (agentQuote * quantity);
-          }
-
-          doc.agentCommissionAmount = commission; // Ghi nhận chi phí hoa hồng (Accrual basis)
-          doc.agentPaidAmount = commission; // Ghi nhận dòng tiền thanh toán
-
-          if (doc.agentPaymentStatus !== PaymentStatus.PAID) {
-            doc.agentPaymentStatus = PaymentStatus.PENDING;
-          }
-
-          // CFO Spec v2.0: Set agentEligibleAt và agentCommissionFinal khi lần đầu chuyển sang COMPLETED
-          if (!doc.agentEligibleAt) {
-            doc.agentEligibleAt = new Date();
-            doc.agentCommissionFinal = doc.agentPaidAmount;
-            this.logger.log(`  → Agent eligible date set: ${doc.agentEligibleAt.toISOString()}`);
-            this.logger.log(`  → Agent commission final snapshot: ${doc.agentCommissionFinal}`);
-          }
-
-          this.logger.log(`  → Agent payment amount calculated: ${doc.agentPaidAmount}`);
-        } else {
-          doc.agentPaidAmount = 0;
-          doc.agentPaymentStatus = PaymentStatus.NOT_APPLICABLE;
-          this.logger.log(`  → Agent payment status set to 'n/a' (internal agent)`);
-        }
-      } else {
-        doc.agentPaidAmount = 0;
-        doc.agentPaymentStatus = PaymentStatus.NOT_APPLICABLE;
-      }
-
-      // 3. Tính lợi nhuận ước tính (grossProfit) - dùng cùng công thức với recalculate
-      doc.grossProfit = await this.calculationService.calculateGrossProfit(doc);
-
-      this.logger.log(`  → Estimated gross profit: ${doc.grossProfit}`);
-    }
+  private async handleOrderStatusChange(doc: TestOrder2Document, _previous: string | undefined | null) {
+    await this.calculationService.applyCompletedStatusFinancials(doc);
   }
 
-  // ============ CRUD OPERATIONS ============
-
-  async create(dto: CreateTestOrder2Dto, currentUser?: any) {
+  async create(dto: CreateTestOrder2Dto, currentUser?: any, trackingLeadId?: string) {
     if (currentUser && SUPPLIER_ROLES.has(currentUser.role)) {
       throw new ForbiddenException('Nhà cung cấp không được phép tạo đơn hàng');
     }
@@ -381,13 +280,31 @@ export class TestOrder2Service {
       throw new ForbiddenException('Agent users can only view their own orders');
     }
 
+    if (trackingLeadId) {
+      const existing = await this.model.findOne({ trackingLeadId: new Types.ObjectId(trackingLeadId) });
+      if (existing) return existing;
+    }
+
+    const customerAcquisitionSource = this.assertAcquisitionAttribution(dto.customerAcquisitionSource, dto.adGroupId);
+    const attribution = await this.adsAttributionOptions.resolve({
+      adGroupId: dto.adGroupId,
+      adsProvider: dto.adsProvider,
+      adAccountProviderId: dto.adAccountProviderId,
+      adCampaignId: dto.adCampaignId,
+    });
     const doc: Partial<TestOrder2> = {
+      ...(trackingLeadId ? { trackingLeadId: new Types.ObjectId(trackingLeadId) } : {}),
+      financialModelVersion: 2,
+      productSource: dto.productSource || 'supplier',
+      inventoryBatchId: dto.inventoryBatchId ? new Types.ObjectId(dto.inventoryBatchId) : undefined,
+      retailSaleAmount: dto.retailSaleAmount,
       productId: dto.productId ? new Types.ObjectId(dto.productId) : undefined,
       productUsageDurationMonths: this.normalizeUsageDurationMonths(dto.productUsageDurationMonths),
       customerName: dto.customerName,
       quantity: dto.quantity ?? 1,
       agentId: dto.agentId ? new Types.ObjectId(dto.agentId) : undefined,
-      adGroupId: this.normalizeAdGroupId(dto.adGroupId),
+      customerAcquisitionSource,
+      ...attribution,
       isActive: dto.isActive ?? true,
       productionStatus: dto.productionStatus ?? 'Chưa làm',
       orderStatus: dto.orderStatus ?? 'Chưa có mã vận đơn',
@@ -397,8 +314,8 @@ export class TestOrder2Service {
       depositAmount: dto.depositAmount ?? 0,
       codAmount: dto.codAmount ?? 0,
       manualPayment: dto.manualPayment ?? 0,
-      shippingFee: dto.shippingFee ?? 0,
-      returnFee: dto.returnFee ?? 0,
+      shippingFee: dto.shippingFee,
+      returnFee: dto.returnFee,
       codCollectedBySupplier: dto.codCollectedBySupplier ?? 0,
       receiverName: dto.receiverName,
       receiverPhone: dto.receiverPhone,
@@ -406,12 +323,6 @@ export class TestOrder2Service {
       orderDate: dto.orderDate ? new Date(dto.orderDate) : new Date(),
       supplierId: dto.supplierId ? new Types.ObjectId(dto.supplierId) : undefined,
       supplierPriceLevel: dto.supplierPriceLevel,
-      supplierAppliedPrice: dto.supplierAppliedPrice,
-      supplierQuote: dto.supplierQuote,
-      agentQuoteId: dto.agentQuoteId,
-      agentAppliedPrice: dto.agentAppliedPrice,
-      agentQuote: dto.agentQuote,
-      productType: dto.productType,
     };
 
     if (typeof doc.orderStatus === 'string') {
@@ -423,10 +334,18 @@ export class TestOrder2Service {
     }
 
     const created = new this.model(doc);
-    await this.calculationService.autoCalculateQuoteFields(created);
-    this.ensureCodCollectedIfDelivered(created as any, null);
-    await this.handleOrderStatusChange(created as any, null);
-    const saved = await created.save();
+    if (created.trackingNumber) {
+      throw new BadRequestException('Lưu đơn và chọn lô trước; xuất kho bằng chức năng lần giao.');
+    }
+    let saved: TestOrder2Document;
+    try {
+      await this.inventory?.prepareOrderSource(created);
+      await this.calculationService.autoCalculateQuoteFields(created);
+      this.ensureCodCollectedIfDelivered(created as any, null);
+      await this.handleOrderStatusChange(created as any, null);
+      saved = await created.save();
+    }
+    catch (error) { await this.inventory?.releaseOrderReservation(created.inventoryBatchId, String(created._id)); throw error; }
     await this.createSupplierPayableIfEligible(saved, null);
     await this.refreshOrderAllocationsForDates([saved.orderDate]);
 
@@ -482,15 +401,18 @@ export class TestOrder2Service {
         throw new ForbiddenException('Bạn chỉ được phép xem đơn hàng của mình');
       }
     }
-    return doc;
+    return doc ? { ...doc, profitAssessment: profitAssessment(doc) } : null;
   }
 
-  async update(id: string, payload: Partial<TestOrder2>, currentUser?: any) {
+  async update(id: string, payload: Partial<TestOrder2>, currentUser?: any, expectedVersion?: number) {
     // Defense in depth: DTO validation rejects these fields at the HTTP boundary,
     // and the service also removes them so internal callers cannot spoof provenance.
     payload = stripBusinessConfirmationAuditFields(payload as any) as Partial<TestOrder2>;
     const doc = await this.model.findById(id);
     if (!doc) return null;
+    if (expectedVersion !== undefined && doc.__v !== expectedVersion) {
+      throw new ConflictException('Đơn vừa thay đổi. Hãy tải lại và đối chiếu trước khi cập nhật.');
+    }
 
     // --- Supplier access control ---
     if (currentUser && SUPPLIER_ROLES.has(currentUser.role)) {
@@ -522,18 +444,72 @@ export class TestOrder2Service {
     const prevAgentId = doc.agentId?.toString();
 
     const updates: any = { ...payload };
+    // Prices/provenance are resolved by the server, never copied from a table UI.
+    for (const key of [
+      'supplierQuoteId', 'supplierAppliedPrice', 'supplierQuote', 'supplierQuoteSnapshotAt',
+      'supplierQuoteEffectiveAt', 'supplierPriceSource', 'supplierShippingFeeSnapshot',
+      'supplierReturnFeeSnapshot', 'supplierIsReturnableSnapshot', 'packagingCostSnapshot',
+      'agentQuoteId', 'agentAppliedPrice', 'agentQuote', 'agentQuoteSnapshotAt',
+      'agentQuoteEffectiveAt', 'agentPaymentDueDate', 'costAllocatedAt', 'costAllocationDate',
+      'dealerSaleRecognizedAt', 'dealerReturnedAt', 'dealerProfitState', 'goodsOwner', 'returnDisposition',
+      'recognizedRevenue', 'recognizedGoodsCost', 'dealerRecoverableFees',
+      'dealerReturnFeeReceivable', 'dealerContractAmount', 'supplierContractAmount', 'retailProfitState',
+      'dealerShippingIncludedInPrice',
+      'saleMode', 'agentRoleSnapshot',
+      'shipments', 'financialModelVersion', 'deliveredQuantity', 'receivedReturnQuantity',
+      'dealerShippingCharges', 'dealerReturnCharges', 'supplierFreightObligation', 'originalOrderId',
+      'recoveredInventoryValue', 'inventoryUnitCostSnapshot', 'resalePolicySnapshot',
+      'dealerShippingFeeSnapshot', 'dealerReturnFeeSnapshot',
+      'productType', 'productCategoryIdSnapshot', 'productCategoryNameSnapshot',
+      'productCategoryCodeSnapshot',
+    ]) delete updates[key];
+    if (doc.shipments?.length && ['trackingNumber', 'orderStatus', 'shippingFee', 'returnFee', 'productSource', 'inventoryBatchId']
+      .some(key => key in updates && String(updates[key] ?? '') !== String((doc as any)[key] ?? ''))) {
+      throw new BadRequestException('Cập nhật giao nhận và phí trong từng lần giao, không ghi đè lịch sử trên dòng đơn.');
+    }
+    if (doc.retailSaleAmount != null && Number(doc.recognizedRevenue || 0) > 0 && 'retailSaleAmount' in updates
+        && updates.retailSaleAmount !== doc.retailSaleAmount) {
+      throw new BadRequestException('Giá bán đã ghi nhận; cần chứng từ điều chỉnh thay vì sửa giá gốc.');
+    }
+
     if (Object.prototype.hasOwnProperty.call(updates, 'adGroupId')) {
       updates.adGroupId = this.normalizeAdGroupId(updates.adGroupId);
     }
+    const attributionIdentityFields = ['adGroupId', 'adsProvider', 'adAccountProviderId', 'adCampaignId'];
+    const attributionIdentityChanged = attributionIdentityFields.some((key) => Object.prototype.hasOwnProperty.call(updates, key));
+    if (attributionIdentityChanged || Object.prototype.hasOwnProperty.call(updates, 'customerAcquisitionSource')) {
+      const resultingAdGroupId = Object.prototype.hasOwnProperty.call(updates, 'adGroupId') ? updates.adGroupId : doc.adGroupId;
+      const resultingSource = updates.customerAcquisitionSource
+        ?? doc.customerAcquisitionSource
+        ?? (this.normalizeAdGroupId(resultingAdGroupId) ? 'ads' : 'non_ads');
+      updates.customerAcquisitionSource = this.assertAcquisitionAttribution(resultingSource, resultingAdGroupId);
+    }
+    if (attributionIdentityChanged) {
+      const explicitComposite = ['adsProvider', 'adAccountProviderId', 'adCampaignId']
+        .some((key) => Object.prototype.hasOwnProperty.call(updates, key));
+      Object.assign(updates, await this.adsAttributionOptions.resolve({
+        adGroupId: Object.prototype.hasOwnProperty.call(updates, 'adGroupId') ? updates.adGroupId : doc.adGroupId,
+        adsProvider: explicitComposite ? updates.adsProvider : undefined,
+        adAccountProviderId: explicitComposite ? updates.adAccountProviderId : undefined,
+        adCampaignId: explicitComposite ? updates.adCampaignId : undefined,
+      }));
+    }
+    if (doc.dealerSaleRecognizedAt || doc.shipments?.length || doc.orderStatus === OrderStatus.DELIVERED || (doc.productSource !== 'supplier' && doc.trackingNumber)) {
+      for (const key of ['agentId', 'productId', 'supplierId', 'quantity', 'productSource', 'inventoryBatchId', 'productionStatus', 'isActive']) {
+        if (key in updates && String(updates[key] ?? '') !== String((doc as any)[key] ?? '')) {
+          throw new BadRequestException('Đơn đã xuất cho đại lý; không đổi người mua, sản phẩm, NCC hoặc số lượng của giao dịch đã chốt.');
+        }
+      }
+    }
     if (typeof updates.productId === 'string') updates.productId = new Types.ObjectId(updates.productId);
-    if (typeof updates.agentId === 'string') updates.agentId = new Types.ObjectId(updates.agentId);
+    if (typeof updates.agentId === 'string') updates.agentId = updates.agentId ? new Types.ObjectId(updates.agentId) : undefined;
     if (typeof updates.supplierId === 'string') updates.supplierId = new Types.ObjectId(updates.supplierId);
     if (typeof updates.orderDate === 'string') updates.orderDate = new Date(updates.orderDate);
     if (typeof updates.isActive === 'string') updates.isActive = updates.isActive === 'true' || updates.isActive === '1';
     if (updates.productUsageDurationMonths !== undefined) {
       updates.productUsageDurationMonths = this.normalizeUsageDurationMonths(updates.productUsageDurationMonths);
     }
-    ['quantity', 'depositAmount', 'codAmount', 'manualPayment', 'shippingFee', 'returnFee'].forEach((k) => {
+    ['quantity', 'retailSaleAmount', 'depositAmount', 'codAmount', 'manualPayment', 'shippingFee', 'returnFee'].forEach((k) => {
       const key = k as keyof TestOrder2;
       const v: any = (updates as any)[key];
       if (typeof v === 'string') (updates as any)[key] = parseFloat(v) || 0;
@@ -549,16 +525,28 @@ export class TestOrder2Service {
     // ============ SUPPLIER QUOTE SNAPSHOT IMMUTABILITY ============
     const newSupplierId = updates.supplierId?.toString();
     const newProductId = updates.productId?.toString();
-    const supplierChanged = !!newSupplierId && newSupplierId !== prevSupplierId;
+    const supplierChanged = 'supplierId' in updates && (newSupplierId || '') !== (prevSupplierId || '');
     const productChanged = !!newProductId && newProductId !== prevProductId;
 
-    if (supplierChanged || productChanged) {
+    if (supplierChanged || productChanged || ('productSource' in updates && updates.productSource !== doc.productSource)) {
       updates.supplierQuoteId = undefined;
       updates.supplierAppliedPrice = undefined;
       updates.supplierQuoteSnapshotAt = undefined;
       updates.supplierShippingFeeSnapshot = undefined;
       updates.supplierReturnFeeSnapshot = undefined;
       updates.supplierQuote = undefined;
+      updates.supplierQuoteEffectiveAt = undefined;
+      updates.supplierPriceSource = undefined;
+      updates.supplierIsReturnableSnapshot = undefined;
+      updates.packagingCostSnapshot = undefined;
+      if (productChanged) {
+        updates.productType = undefined;
+        updates.productCategoryIdSnapshot = undefined;
+        updates.productCategoryNameSnapshot = undefined;
+        updates.productCategoryCodeSnapshot = undefined;
+      }
+      updates.shippingFee = payload.shippingFee;
+      updates.returnFee = payload.returnFee;
 
       this.logger.log(`Supplier/Product changed for order ${id} - clearing supplier quote snapshot. Old: ${prevSupplierId}/${prevProductId}, New: ${newSupplierId}/${newProductId}`);
     }
@@ -572,23 +560,28 @@ export class TestOrder2Service {
 
     // ============ AGENT QUOTE SNAPSHOT IMMUTABILITY ============
     const newAgentId = updates.agentId?.toString();
-    const agentChanged = !!newAgentId && newAgentId !== prevAgentId;
+    const agentChanged = 'agentId' in updates && (newAgentId || '') !== (prevAgentId || '');
 
     if (agentChanged || productChanged) {
+      updates.dealerShippingFeeSnapshot = undefined;
+      updates.dealerReturnFeeSnapshot = undefined;
       updates.agentQuoteId = undefined;
       updates.agentAppliedPrice = undefined;
       updates.agentQuoteSnapshotAt = undefined;
       updates.agentPaymentDueDate = undefined;
       updates.agentQuote = undefined;
+      updates.agentQuoteEffectiveAt = undefined;
+      if (agentChanged) {
+        updates.saleMode = undefined;
+        updates.agentRoleSnapshot = undefined;
+      }
 
       this.logger.log(`Agent/Product changed for order ${id} - clearing agent quote snapshot. Old: ${prevAgentId}/${prevProductId}, New: ${newAgentId}/${newProductId}`);
     }
 
     // ============ ORDERDATE CHANGE DETECTION ============
-    const prevOrderDate = doc.orderDate?.toISOString?.().split('T')[0];
-    const newOrderDate = updates.orderDate instanceof Date
-      ? updates.orderDate.toISOString().split('T')[0]
-      : (typeof updates.orderDate === 'string' ? updates.orderDate.split('T')[0] : undefined);
+    const prevOrderDate = this.getOrderDateKey(doc.orderDate);
+    const newOrderDate = this.getOrderDateKey(updates.orderDate);
 
     if (newOrderDate && prevOrderDate && newOrderDate !== prevOrderDate) {
       if (doc.supplierQuoteId || doc.agentQuoteId) {
@@ -600,13 +593,40 @@ export class TestOrder2Service {
       }
     }
 
+    if (agentChanged && !updates.agentId) {
+      for (const key of ['dealerProfitState', 'goodsOwner', 'returnDisposition', 'recognizedRevenue',
+        'recognizedGoodsCost', 'dealerRecoverableFees', 'dealerReturnFeeReceivable', 'dealerContractAmount']) {
+        updates[key] = undefined;
+      }
+    }
+    const stockSourceChanged = ['inventoryBatchId', 'productSource', 'quantity', 'productId', 'agentId']
+      .some(key => key in updates && String(updates[key] ?? '') !== String((doc as any)[key] ?? ''));
+    if (!doc.shipments?.length && (doc.financialModelVersion === 2 || (updates.productSource || doc.productSource) !== 'supplier')
+      && (updates.trackingNumber || doc.trackingNumber)) {
+      throw new BadRequestException('Xuất hàng đang có bằng chức năng lần giao để ghi nhận kho và nơi gửi.');
+    }
+    if ('productSource' in updates && !['supplier', 'inventory', 'dealer_custody'].includes(updates.productSource)) {
+      throw new BadRequestException('Nguồn hàng không hợp lệ.');
+    }
+    const previousStock = doc.toObject();
+    if (stockSourceChanged) await this.inventory?.releaseOrderReservation(doc.inventoryBatchId, String(doc._id));
     Object.assign(doc, updates);
-    await this.calculationService.autoCalculateQuoteFields(doc);
-    this.ensureCodCollectedIfDelivered(doc as any, prevOrderStatus);
-
-    await this.handleOrderStatusChange(doc, prevOrderStatus);
-
-    const saved = await doc.save();
+    let saved: TestOrder2Document;
+    try {
+      if (!doc.shipments?.length) await this.inventory?.prepareOrderSource(doc);
+      await this.calculationService.autoCalculateQuoteFields(doc);
+      this.ensureCodCollectedIfDelivered(doc as any, prevOrderStatus);
+      await this.handleOrderStatusChange(doc, prevOrderStatus);
+      saved = await doc.save();
+    } catch (error) {
+      if (stockSourceChanged) {
+        await this.inventory?.releaseOrderReservation(doc.inventoryBatchId, String(doc._id));
+        // Best-effort restoration after a failed edit; reservations cannot exceed available stock.
+        try { await this.inventory?.prepareOrderSource(previousStock); }
+        catch { this.logger.warn(`Cần giữ lại lô cho đơn ${doc._id} sau thay đổi thất bại.`); }
+      }
+      throw error;
+    }
     await this.createSupplierPayableIfEligible(saved as any, prevProductionStatus);
 
     const shouldRefreshAllocations =
@@ -681,6 +701,10 @@ export class TestOrder2Service {
 
     const order = await this.model.findById(id);
 
+    if (order?.dealerSaleRecognizedAt || order?.shipments?.length || order?.productionStatus === ProductionStatus.DONE) {
+      throw new BadRequestException('Đơn đã xuất cho đại lý; giữ hồ sơ sở hữu hàng và nghĩa vụ thanh toán.');
+    }
+    await this.inventory?.releaseOrderReservation(order?.inventoryBatchId, String(order?._id));
     await this.model.findByIdAndDelete(id);
 
     if (order?.orderDate) {
@@ -700,6 +724,8 @@ export class TestOrder2Service {
     const docs: Partial<TestOrder2>[] = [];
     for (let i = 0; i < count; i++) {
       docs.push({
+        financialModelVersion: 2,
+        saleMode: 'retail',
         customerName: `Khách hàng #${i + 1}`,
         quantity: 1 + (i % 3),
         adGroupId: i % 2 === 0 ? undefined : `ADG_${1000 + i}`,
@@ -829,7 +855,7 @@ export class TestOrder2Service {
     ]);
 
     return {
-      data: items,
+      data: items.map(item => ({ ...item.toObject(), profitAssessment: profitAssessment(item) })),
       pagination: {
         page,
         limit,
@@ -861,22 +887,12 @@ export class TestOrder2Service {
     const prevSupplierQuoteId = order.supplierQuoteId?.toString();
     const prevAgentQuoteId = order.agentQuoteId;
 
-    // Clear all quote snapshots
-    order.supplierQuoteId = undefined;
-    order.supplierAppliedPrice = undefined;
-    order.supplierQuoteSnapshotAt = undefined;
-    order.supplierShippingFeeSnapshot = undefined;
-    order.supplierReturnFeeSnapshot = undefined;
-    order.supplierQuote = undefined;
-
-    order.agentQuoteId = undefined;
-    order.agentAppliedPrice = undefined;
-    order.agentQuoteSnapshotAt = undefined;
-    order.agentPaymentDueDate = undefined;
-    order.agentQuote = undefined;
-
+    // Re-running calculation must preserve existing commercial snapshots.
+    // A different product/supplier/dealer is handled by the explicit update path.
     await this.calculationService.autoCalculateQuoteFields(order);
     await order.save();
+    await this.refreshOrderAllocationsForDates([order.orderDate]);
+    this.emitOrderProfitImpactEvent(order);
 
     this.logger.log(
       `Recalculated quotes for order ${orderId}: ` +
@@ -894,7 +910,7 @@ export class TestOrder2Service {
       agentAppliedPrice: order.agentAppliedPrice,
       agentQuoteSnapshotAt: order.agentQuoteSnapshotAt,
       agentPaymentDueDate: order.agentPaymentDueDate,
-      message: 'Quotes recalculated successfully'
+      message: 'Quote snapshots preserved; missing snapshots resolved for the order date'
     };
   }
 

@@ -18,6 +18,10 @@ import {
   GoogleAdsFinancialControlDiagnostic,
 } from './google-ads-execution-policy.service';
 import { GoogleAdsFinancialExecutionLeaseService } from './google-ads-financial-execution-lease.service';
+import {
+  googleAdsCredentialBindingHash,
+  googleAdsOperationHash,
+} from './google-ads-integrity.util';
 import { GoogleAdsPostExecutionService } from './google-ads-post-execution.service';
 import {
   GoogleAdsActionExecutionLog,
@@ -100,10 +104,17 @@ export class GoogleAdsExecutionService implements OnModuleInit {
 
     const plan: any = await this.actionPlanModel.findOne({ planId: this.requiredText(planId, 'planId') });
     if (!plan) throw new NotFoundException('Google Ads action plan not found.');
+    const expectedSource = ['erp_ui', 'erp_automation'].includes(String(plan.source))
+      ? 'erp_ui'
+      : 'codex_operator';
+    if (body?.source !== undefined && body.source !== expectedSource) {
+      throw new BadRequestException(`Execution source must match the action plan source (${expectedSource}).`);
+    }
     if (['executing', 'executed', 'failed', 'rejected'].includes(plan.status)) {
       throw new BadRequestException(`Action plan cannot execute when status is ${plan.status}.`);
     }
     const actions = this.selectActions(plan.items, body.actionIds!);
+    if (!dryRun) this.assertLiveActionFlags(actions);
     await this.assertNotExecuted(actions);
     const separationOfDuties = this.evaluateSeparationOfDuties(currentUser, actions);
     if (!dryRun && !separationOfDuties.allowed) {
@@ -223,8 +234,16 @@ export class GoogleAdsExecutionService implements OnModuleInit {
           throw error;
         }
         const providerErrors = this.providerErrors(error);
-        log.status = 'failed';
-        log.idempotencyReserved = false;
+        const ambiguous = this.isAmbiguousProviderFailure(error);
+        log.status = ambiguous ? 'reconciliation_required' : 'failed';
+        // A timeout, connection loss or provider 5xx may happen after Google
+        // committed the mutate. Keep the reservation so a retry cannot create
+        // a duplicate campaign while the outcome is being reconciled.
+        log.idempotencyReserved = ambiguous;
+        log.reconciliationRequired = ambiguous;
+        log.reconciliationReason = ambiguous
+          ? 'Provider outcome is unknown; targeted readback is required before retry.'
+          : undefined;
         log.providerRequestId = this.requestId(error?.response?.headers, error?.response?.data?.error?.details);
         log.providerErrors = providerErrors;
         log.executedAt = new Date();
@@ -240,14 +259,16 @@ export class GoogleAdsExecutionService implements OnModuleInit {
     plan.markModified('items');
     await plan.save();
 
-    const failed = logs.filter((log) => log.status === 'failed').length;
+    const failed = logs.filter((log) => ['failed', 'reconciliation_required'].includes(log.status)).length;
+    const reconciliationRequired = logs.filter((log) => log.reconciliationRequired === true).length;
     return {
-      success: failed === 0,
+      success: failed === 0 && reconciliationRequired === 0,
       dryRun: false,
       planId: plan.planId,
       planStatus: plan.status,
       executed: logs.length - failed,
       failed,
+      reconciliationRequired,
       logs,
     };
   }
@@ -289,11 +310,17 @@ export class GoogleAdsExecutionService implements OnModuleInit {
         executionLog: log,
       });
       log.postExecutionErrors = [];
+      if (log.syncedRemoteState?.readbackVerification?.verified !== true) {
+        log.reconciliationRequired = true;
+        log.reconciliationReason = 'Provider mutation succeeded but canonical readback did not verify the expected state.';
+      }
     } catch (error: any) {
       log.postExecutionErrors = [{
         step: 'post_execution',
         message: redactSecretString(error?.message || String(error)),
       }];
+      log.reconciliationRequired = true;
+      log.reconciliationReason = 'Provider mutation succeeded but post-execution readback failed.';
       this.logger.warn(`Google Ads post-execution processing failed for action ${action.actionId}: ${log.postExecutionErrors[0].message}`);
     }
     try {
@@ -307,7 +334,9 @@ export class GoogleAdsExecutionService implements OnModuleInit {
     const config = await this.apiTokenService.getGoogleAdsRuntimeConfig({
       customerId: action.customerId,
       loginCustomerId: action.loginCustomerId,
+      credentialReferenceId: (action as any).providerValidationCredentialReferenceId,
     });
+    this.assertProviderValidationBinding(action, operations, config);
     if (!config.developerToken) throw new BadRequestException('Missing Google Ads developer token.');
     if (!config.refreshToken) throw new BadRequestException('Missing Google Ads refresh token.');
     const accessToken = await this.apiTokenService.getGoogleAdsAccessToken(config);
@@ -339,8 +368,8 @@ export class GoogleAdsExecutionService implements OnModuleInit {
   }
 
   private assertRequest(body: ExecuteBody, dryRun: boolean) {
-    if (body?.source !== undefined && body.source !== 'codex_operator') {
-      throw new BadRequestException('Execution source must be codex_operator.');
+    if (body?.source !== undefined && !['codex_operator', 'erp_ui'].includes(body.source)) {
+      throw new BadRequestException('Execution source must be codex_operator or erp_ui.');
     }
     if (body?.validateOnly === true) {
       throw new BadRequestException('Use the provider validation endpoint for validateOnly requests.');
@@ -365,6 +394,51 @@ export class GoogleAdsExecutionService implements OnModuleInit {
     }
     if (safety.dryRun) {
       throw new BadRequestException('Live execution is disabled while AI_MARKETING_DRY_RUN=true.');
+    }
+  }
+
+  private assertLiveActionFlags(actions: GoogleAdsActionPlanItem[]) {
+    for (const action of actions) {
+      const flag = action.actionType === 'create_search_campaign'
+        ? 'GOOGLE_ADS_CAMPAIGN_CREATE_ENABLED'
+        : action.actionType === 'update_campaign_bidding_strategy'
+          ? 'GOOGLE_ADS_CAMPAIGN_BIDDING_UPDATE_ENABLED'
+        : ['update_search_campaign', 'update_campaign_budget'].includes(action.actionType)
+          ? 'GOOGLE_ADS_CAMPAIGN_UPDATE_ENABLED'
+          : action.actionType === 'pause_campaign'
+            ? 'GOOGLE_ADS_CAMPAIGN_PAUSE_ENABLED'
+            : action.actionType === 'resume_campaign'
+              ? 'GOOGLE_ADS_CAMPAIGN_RESUME_ENABLED'
+            : action.actionType === 'create_ad_group'
+              ? 'GOOGLE_ADS_AD_GROUP_CREATE_ENABLED'
+              : action.actionType === 'update_ad_group'
+                ? 'GOOGLE_ADS_AD_GROUP_UPDATE_ENABLED'
+                : action.actionType === 'pause_ad_group'
+                  ? 'GOOGLE_ADS_AD_GROUP_PAUSE_ENABLED'
+                  : action.actionType === 'resume_ad_group'
+                    ? 'GOOGLE_ADS_AD_GROUP_RESUME_ENABLED'
+                  : action.actionType === 'create_keyword'
+                    ? 'GOOGLE_ADS_KEYWORD_CREATE_ENABLED'
+                    : action.actionType === 'update_keyword'
+                      ? 'GOOGLE_ADS_KEYWORD_UPDATE_ENABLED'
+                      : action.actionType === 'pause_keyword'
+                        ? 'GOOGLE_ADS_KEYWORD_PAUSE_ENABLED'
+                        : action.actionType === 'resume_keyword'
+                          ? 'GOOGLE_ADS_KEYWORD_RESUME_ENABLED'
+                        : action.actionType === 'create_responsive_search_ad'
+                          ? 'GOOGLE_ADS_RSA_CREATE_ENABLED'
+                          : action.actionType === 'update_responsive_search_ad'
+                            ? 'GOOGLE_ADS_RSA_UPDATE_ENABLED'
+                            : action.actionType === 'pause_responsive_search_ad'
+                              ? 'GOOGLE_ADS_RSA_PAUSE_ENABLED'
+                              : action.actionType === 'resume_responsive_search_ad'
+                                ? 'GOOGLE_ADS_RSA_RESUME_ENABLED'
+                              : undefined;
+      if (!flag || String(process.env[flag] || '').trim().toLowerCase() !== 'true') {
+        throw new BadRequestException(
+          `${action.actionType} live execution is disabled by ${flag || 'the Google Ads action allowlist'}.`,
+        );
+      }
     }
   }
 
@@ -412,6 +486,14 @@ export class GoogleAdsExecutionService implements OnModuleInit {
       code: provider?.code ? String(provider.code) : undefined,
       message: redactSecretString(String(provider?.message || error?.message || 'Provider execution failed.')),
     }];
+  }
+
+  private isAmbiguousProviderFailure(error: any) {
+    const status = Number(error?.response?.status);
+    if (Number.isFinite(status)) return status >= 500;
+    // Axios only has a definitive provider rejection when an HTTP response was
+    // received. Missing responses include timeouts and connection resets.
+    return !error?.response;
   }
 
   private requestId(headers: any, details?: any[]) {
@@ -478,5 +560,41 @@ export class GoogleAdsExecutionService implements OnModuleInit {
     const configured = Number(process.env.GOOGLE_ADS_MUTATION_TIMEOUT_MS);
     if (!Number.isFinite(configured)) return 30_000;
     return Math.min(120_000, Math.max(5_000, Math.floor(configured)));
+  }
+
+  private assertProviderValidationBinding(
+    action: GoogleAdsActionPlanItem,
+    operations: Array<Record<string, any>>,
+    config: any,
+  ) {
+    const expectedOperationHash = String((action as any).providerValidationOperationHash || '');
+    const expectedApiVersion = String((action as any).providerValidationApiVersion || '');
+    const expectedCredentialHash = String((action as any).providerValidationCredentialBindingHash || '');
+    const expectedCredentialReferenceId = String((action as any).providerValidationCredentialReferenceId || '');
+    if (!expectedOperationHash || !expectedApiVersion || !expectedCredentialHash || !expectedCredentialReferenceId) {
+      throw new BadRequestException(
+        `Action ${action.actionId} is missing bound provider validateOnly evidence; validate it again.`,
+      );
+    }
+    if (googleAdsOperationHash(operations) !== expectedOperationHash) {
+      throw new BadRequestException(
+        `Action ${action.actionId} operations changed after provider validateOnly; validate it again.`,
+      );
+    }
+    if (String(config?.apiVersion || '') !== expectedApiVersion) {
+      throw new BadRequestException(
+        `Action ${action.actionId} Google Ads API version changed after provider validateOnly; validate it again.`,
+      );
+    }
+    if (googleAdsCredentialBindingHash(config) !== expectedCredentialHash) {
+      throw new BadRequestException(
+        `Action ${action.actionId} Google Ads credential binding changed after provider validateOnly; validate it again.`,
+      );
+    }
+    if (String(config?.credentialReferenceId || '') !== expectedCredentialReferenceId) {
+      throw new BadRequestException(
+        `Action ${action.actionId} Google Ads credential reference changed after provider validateOnly; validate it again.`,
+      );
+    }
   }
 }

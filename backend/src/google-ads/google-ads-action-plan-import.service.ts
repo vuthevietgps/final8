@@ -237,9 +237,11 @@ export class GoogleAdsActionPlanImportService {
       let url: URL;
       try { url = new URL(raw); } catch { throw new BadRequestException(`Invalid landing page URL in action ${action.actionId}.`); }
       const host = url.hostname.toLowerCase();
-      if (url.protocol !== 'https:' || !allowlist.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+      if (url.protocol !== 'https:' || url.username || url.password
+        || !allowlist.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
         throw new BadRequestException(`Landing page is not allowlisted for action ${action.actionId}.`);
       }
+      this.rejectSecretLikeUrl(url.toString(), action.actionId);
     }
   }
 
@@ -300,6 +302,15 @@ export class GoogleAdsActionPlanImportService {
       return Object.entries(value).flatMap(([childKey, child]) => this.collectUrls(child, childKey));
     }
     return [];
+  }
+
+  private rejectSecretLikeUrl(value: string, actionId: string) {
+    let decoded = value;
+    try { decoded = decodeURIComponent(value); } catch { /* keep raw value */ }
+    if (/(access_?token|refresh_?token|api_?key|client_?secret|password|authorization)/i
+      .test(decoded)) {
+      throw new BadRequestException(`Landing page contains secret-like data for action ${actionId}.`);
+    }
   }
 
   private rejectRawExecutionPayload(action: ImportAction) {

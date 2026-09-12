@@ -18,6 +18,13 @@ import { Quote, QuoteSchema } from '../quote/schemas/quote.schema';
 import { SupplierQuote, SupplierQuoteSchema } from '../supplier-quote/schemas/supplier-quote.schema';
 import { OrderSheetSyncModule } from '../order-sheet-sync/order-sheet-sync.module';
 import { DeliveryStatusModule } from '../delivery-status/delivery-status.module';
+import { OrderShipmentService } from './services/order-shipment.service';
+import { OrderShipmentController } from './order-shipment.controller';
+import { BusinessLedgerModule } from '../business-ledger/business-ledger.module';
+import { WindsorAdsResource, WindsorAdsResourceSchema } from '../provider-connections/schemas/windsor-ads-resource.schema';
+import { ProviderConnection, ProviderConnectionSchema } from '../provider-connections/provider-connection.schema';
+import { AdGroup, AdGroupSchema } from '../ad-group/schemas/ad-group.schema';
+import { AdsAttributionOptionsService } from './services/ads-attribution-options.service';
 
 @Module({
   imports: [
@@ -26,14 +33,19 @@ import { DeliveryStatusModule } from '../delivery-status/delivery-status.module'
       { name: Product.name, schema: ProductSchema },
       { name: Quote.name, schema: QuoteSchema },
       { name: SupplierQuote.name, schema: SupplierQuoteSchema },
+      { name: WindsorAdsResource.name, schema: WindsorAdsResourceSchema },
+      { name: ProviderConnection.name, schema: ProviderConnectionSchema },
+      { name: AdGroup.name, schema: AdGroupSchema },
     ]),
     GoogleSyncModule,
     InventoryModule,
     SupplierPayableModule,
     OrderSheetSyncModule,
     DeliveryStatusModule,
+    BusinessLedgerModule,
   ],
   providers: [
+    OrderShipmentService,
     OrderCalculationService,
     OrderPaymentService,
     OrderReportService,
@@ -42,9 +54,11 @@ import { DeliveryStatusModule } from '../delivery-status/delivery-status.module'
     TestOrder2ExportService,
     TestOrder2ExportJsonService,
     TestOrder2ImportService,
+    AdsAttributionOptionsService,
   ],
-  controllers: [TestOrder2Controller],
+  controllers: [TestOrder2Controller, OrderShipmentController],
   exports: [
+    AdsAttributionOptionsService,
     TestOrder2Service,
     OrderCalculationService,
     OrderPaymentService,

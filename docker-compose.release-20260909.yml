@@ -1,0 +1,24 @@
+# Apply after the database migration and secret provisioning pass preflight.
+# Merge after BOTH existing server compose files to retain database, media and LAN bindings.
+services:
+  backend:
+    image: htxbachgia/backend:20260909-deploy
+    environment:
+      API_TOKEN_SECRET: ${API_TOKEN_SECRET:?Provision the production encryption secret securely}
+      AI_MARKETING_REQUIRE_APPROVAL: 'true'
+      AI_MARKETING_DRY_RUN: 'true'
+      AI_MARKETING_PROVIDER_EXECUTION_ENABLED: 'false'
+      GOOGLE_ADS_PRODUCTION_ENABLED: 'false'
+      META_ADS_PRODUCTION_ENABLED: 'false'
+      META_ADS_PROVIDER_EXECUTION_ENABLED: 'false'
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:3000/health/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+  frontend:
+    image: htxbachgia/frontend:20260909-deploy
+    depends_on:
+      backend:
+        condition: service_healthy

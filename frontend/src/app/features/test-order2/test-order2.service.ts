@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { CreateTestOrder2, TestOrder2, UpdateTestOrder2 } from './models';
+import { AdsAttributionOptionsResponse, CreateTestOrder2, TestOrder2, UpdateTestOrder2 } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class TestOrder2Service {
@@ -41,6 +41,10 @@ export class TestOrder2Service {
         isDefault?: boolean;
       }>;
     }>>(`${this.baseUrl}/products`);
+  }
+
+  getAdAttributionOptions(): Observable<AdsAttributionOptionsResponse> {
+    return this.http.get<AdsAttributionOptionsResponse>(`${this.baseUrl}/ad-attribution-options`);
   }
 
   getAll(params?: { 

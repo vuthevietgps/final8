@@ -2,7 +2,10 @@ import {
   IsOptional,
   IsString,
   IsNumber,
+  IsInt,
   IsBoolean,
+  IsIn,
+  IsMongoId,
   IsDateString,
   Min,
   Validate,
@@ -11,25 +14,32 @@ import {
   ValidationArguments,
 } from 'class-validator';
 
-@ValidatorConstraint({ name: 'marketingAdGroupRequired', async: false })
-class MarketingAdGroupRequiredConstraint implements ValidatorConstraintInterface {
+@ValidatorConstraint({ name: 'acquisitionAdGroupConsistent', async: false })
+class AcquisitionAdGroupConsistentConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
     const dto = args.object as CreateTestOrder2Dto;
-    const productSource = String(dto.productSource || '').trim().toLowerCase();
+    const acquisitionSource = String(dto.customerAcquisitionSource || '').trim().toLowerCase();
+    const adGroupId = typeof value === 'string' ? value.trim() : '';
 
-    if (productSource !== 'marketing') {
-      return value === undefined || value === null || typeof value === 'string';
-    }
-
-    return typeof value === 'string' && value.trim().length > 0 && value.trim() !== '0';
+    if (acquisitionSource === 'ads') return Boolean(adGroupId && adGroupId !== '0');
+    if (acquisitionSource === 'non_ads') return !adGroupId || adGroupId === '0';
+    return false;
   }
 
-  defaultMessage(): string {
-    return 'adGroupId is required when productSource is marketing';
+  defaultMessage(args: ValidationArguments): string {
+    const source = (args.object as CreateTestOrder2Dto).customerAcquisitionSource;
+    return source === 'non_ads'
+      ? 'adGroupId must be empty when customerAcquisitionSource is non_ads'
+      : 'adGroupId is required when customerAcquisitionSource is ads';
   }
 }
 
 export class CreateTestOrder2Dto {
+  @IsOptional() @IsInt() @Min(0)
+  retailSaleAmount?: number;
+
+  @IsOptional() @IsMongoId()
+  inventoryBatchId?: string;
   @IsOptional()
   @IsString()
   productId?: string;
@@ -43,15 +53,30 @@ export class CreateTestOrder2Dto {
   customerName: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt() @Min(1)
   quantity?: number;
 
   @IsOptional()
   @IsString()
   agentId?: string;
 
-  @Validate(MarketingAdGroupRequiredConstraint)
+  @Validate(AcquisitionAdGroupConsistentConstraint)
   adGroupId?: string;
+
+  @IsIn(['ads', 'non_ads'])
+  customerAcquisitionSource: 'ads' | 'non_ads';
+
+  @IsOptional()
+  @IsIn(['google', 'facebook', 'tiktok'])
+  adsProvider?: 'google' | 'facebook' | 'tiktok';
+
+  @IsOptional()
+  @IsString()
+  adAccountProviderId?: string;
+
+  @IsOptional()
+  @IsString()
+  adCampaignId?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -111,11 +136,17 @@ export class CreateTestOrder2Dto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   shippingFee?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   returnFee?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  dealerShippingIncludedInPrice?: boolean;
 
   @IsOptional()
   @IsNumber()
@@ -138,8 +169,8 @@ export class CreateTestOrder2Dto {
   orderDate?: string;
 
   @IsOptional()
-  @IsString()
-  productSource?: string; // inventory|supplier
+  @IsIn(['supplier', 'inventory', 'dealer_custody'])
+  productSource?: string;
 
   @IsOptional()
   @IsString()

@@ -83,6 +83,7 @@
       <div class="form-group">
         <label>Số tiền giải ngân</label>
         <input type="number" [(ngModel)]="disbursementForm.amount" min="0">
+        <app-treasury-account-selector [(value)]="ledgerAccountId" />
         <span class="hint">Còn lại chưa giải ngân: {{ formatCurrency((loan()?.principal || 0) - (loan()?.disbursedAmount || 0)) }} đ</span>
       </div>
       <div class="form-group">

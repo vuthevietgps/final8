@@ -51,7 +51,10 @@ export class ApiTokenScheduler {
   }
 
   private async trySystemUserFanpageSync(): Promise<void> {
-    const everyMinutes = Math.max(5, Number(process.env.FB_SYSTEM_USER_SYNC_INTERVAL_MINUTES || 30));
+    const configuredMinutes = Number(process.env.FB_SYSTEM_USER_SYNC_INTERVAL_MINUTES);
+    const everyMinutes = Number.isFinite(configuredMinutes)
+      ? Math.max(5, configuredMinutes)
+      : 10;
     const intervalMs = everyMinutes * 60 * 1000;
     if (Date.now() - this.lastSystemSyncAt < intervalMs) return;
     this.lastSystemSyncAt = Date.now();

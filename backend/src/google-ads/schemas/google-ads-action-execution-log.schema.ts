@@ -17,11 +17,17 @@ export class GoogleAdsActionExecutionLog {
   @Prop({ required: true, trim: true, index: true })
   actionType: string;
 
-  @Prop({ required: true, enum: ['executing', 'success', 'failed', 'skipped', 'dry_run'], index: true })
-  status: 'executing' | 'success' | 'failed' | 'skipped' | 'dry_run';
+  @Prop({ required: true, enum: ['executing', 'success', 'failed', 'reconciliation_required', 'skipped', 'dry_run'], index: true })
+  status: 'executing' | 'success' | 'failed' | 'reconciliation_required' | 'skipped' | 'dry_run';
 
   @Prop({ type: Boolean, default: false, index: true })
   idempotencyReserved: boolean;
+
+  @Prop({ type: Boolean, default: false, index: true })
+  reconciliationRequired?: boolean;
+
+  @Prop({ trim: true })
+  reconciliationReason?: string;
 
   @Prop({ trim: true })
   approvedBy?: string;

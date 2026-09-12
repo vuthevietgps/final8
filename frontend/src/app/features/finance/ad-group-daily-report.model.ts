@@ -5,6 +5,8 @@ export interface AdGroupDailyReport {
   platform: string;
   adsCost: number;
   netProfit: number;
+  adsCostEstimated?: boolean;
+  needsReview?: boolean;
   // Chi phí gợi ý dựa trên thuật toán lợi nhuận biên giảm dần
   suggestedSpend: number | null;
   suggestionReason: string | null;

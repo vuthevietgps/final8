@@ -22,16 +22,19 @@
   }
 
   @if (report()) {
+    @if (report()!.estimatedAdsRows) {
+      <div class="error-message">Chi phí ads có {{ report()!.estimatedAdsRows }} dòng tạm tính từ lịch sử,
+        tổng {{ formatCurrency(report()!.estimatedAdsSpend || 0) }}. Lợi nhuận sẽ được cập nhật khi có chi phí thực tế.</div>
+    }
     <div class="report-content">
       <!-- Summary Cards -->
       <div class="summary-cards">
         <div class="card cash-available">
           <div class="card-icon">💰</div>
           <div class="card-content">
-            <div class="card-label">Tiền Chắc Ăn (Có thể phân bổ)</div>
-            <div class="card-value" [class.negative]="report()!.cashAvailable < 0">
-              {{ formatCurrency(report()!.cashAvailable) }}
-            </div>
+            <div class="card-label">Số dư tiền công ty</div>
+            <div class="card-value">Cần đối soát tài khoản</div>
+            <a href="/finance/business-ledger">Xem công nợ & tiền thực nhận</a>
           </div>
         </div>
 
@@ -161,7 +164,7 @@
         <ul>
           <li><strong>Ước tính:</strong> Tất cả đơn hàng đã kết thúc (Giao thành công / Hàng hoàn)</li>
           <li><strong>Thực tế:</strong> Chỉ đơn đã thanh toán xong CẢ NHÀ CUNG CẤP VÀ ĐẠI LÝ</li>
-          <li><strong>Tiền chắc ăn:</strong> Số tiền thực tế có thể phân bổ (= Lợi nhuận thuần thực tế)</li>
+          <li><strong>Số dư tiền:</strong> Lợi nhuận của đơn không phải số dư tài khoản. Xem sổ thu/chi đã xác nhận để biết tiền còn lại.</li>
         </ul>
       </div>
     </div>

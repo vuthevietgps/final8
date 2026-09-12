@@ -1,5 +1,7 @@
 # BA MASTER — Director AI Data Pack cho ERP dropshipping nội địa / đại lý cấp 1
 
+> Cập nhật nghiệp vụ 2026-09-04 từ chủ hệ thống: công ty kết hợp bán lẻ, bán đại lý, giao thẳng từ NCC và xuất kho; NCC/công ty/đại lý đều có thể thu toàn bộ hoặc một phần tiền. Các giả định `commission_only` và `cash_collection_party=supplier` bên dưới chỉ mô tả một nhánh, không còn áp dụng mặc định toàn hệ thống. Xem [sổ công nợ và tiền thực nhận — giai đoạn 1](../finance/business-ledger-phase1.md) cho phạm vi đã triển khai và giới hạn chuyển đổi.
+
 **Ngày lập:** 2026-06-12  
 **Phiên bản:** BA Master v1.0  
 **Mục tiêu:** Chốt yêu cầu nghiệp vụ trước khi giao Codex code tiếp.  

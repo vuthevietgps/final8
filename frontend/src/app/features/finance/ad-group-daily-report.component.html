@@ -7,6 +7,8 @@
   </div>
 
   <!-- Tab Navigation -->
+  <p>Số liệu đọc từ Sổ kinh doanh: đơn theo ngày đặt, kết quả cập nhật mới nhất. Lợi nhuận không phải tiền đã thu. Chi phí chưa gắn nhóm nằm ở “unallocated”.</p>
+  <p>Ngân sách tối ưu là gợi ý từ lịch sử; cần kiểm tra dữ liệu ước tính, công nợ và hạn mức trước khi duyệt.</p>
   <div class="tab-nav">
     <button class="tab-btn" [class.active]="activeTab() === 'daily'" (click)="setTab('daily')">
       📋 Chi Tiết Theo Ngày
@@ -100,6 +102,7 @@
                 <th>Tên Nhóm QC</th>
                 <th>Nền Tảng</th>
                 <th>Chi Phí QC</th>
+                <th>Lợi Nhuận</th>
                 <th>Chi Phí Gợi Ý</th>
                 <th>% Chênh Lệch</th>
               </tr>
@@ -112,6 +115,11 @@
                   <td>{{ item.adGroupName || '-' }}</td>
                   <td>{{ item.platform }}</td>
                   <td class="number">{{ formatCurrency(item.adsCost) }}</td>
+                  <td class="number">
+                    {{ formatCurrency(item.netProfit) }}
+                    @if (item.adsCostEstimated) { <small> · Ads tạm tính</small> }
+                    @if (item.needsReview) { <small> · Cần kiểm tra dữ liệu</small> }
+                  </td>
                   <td class="number suggestion" [title]="item.suggestionReason || ''">
                     @if (item.suggestedSpend !== null) {
                       <span [class.increase]="item.suggestedSpend > item.adsCost"
@@ -144,7 +152,7 @@
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="7" class="empty-message">Không có dữ liệu</td>
+                  <td colspan="8" class="empty-message">Không có dữ liệu</td>
                 </tr>
               }
             </tbody>

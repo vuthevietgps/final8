@@ -167,6 +167,10 @@ describe('LoanManagementService Financial Control safety', () => {
       getFundAccountById: jest.fn().mockResolvedValue({ balance: 100 }),
       deductFromAccount: jest.fn().mockRejectedValue(new Error('deduction failed')),
     };
+    cashflowModel.db = { collection: jest.fn(() => ({
+      updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+      insertOne: jest.fn().mockResolvedValue({ insertedId: 'test' }),
+    })) };
     const service = new LoanManagementService(
       loanModel as any,
       repaymentModel as any,

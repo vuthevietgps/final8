@@ -155,7 +155,7 @@ export class OwnerFundService {
   /**
    * Chuyển tiền từ Bank Balance vào Quỹ Owner
    */
-  transferToOwnerFund(data: { amount: number; description?: string; idempotencyKey?: string }): Observable<any> {
+  transferToOwnerFund(data: { amount: number; description?: string; idempotencyKey?: string; ledgerAccountId?: string }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/fund-account/transfer-in`, {
       ...data,
       idempotencyKey: data.idempotencyKey || this.createIdempotencyKey('owner-transfer-in'),
@@ -165,7 +165,7 @@ export class OwnerFundService {
   /**
    * Chuyển tiền từ Quỹ Owner về Bank Balance (trả lại công ty)
    */
-  transferFromOwnerFund(data: { amount: number; description?: string; idempotencyKey?: string }): Observable<any> {
+  transferFromOwnerFund(data: { amount: number; description?: string; idempotencyKey?: string; ledgerAccountId?: string }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/fund-account/transfer-out`, {
       ...data,
       idempotencyKey: data.idempotencyKey || this.createIdempotencyKey('owner-transfer-out'),

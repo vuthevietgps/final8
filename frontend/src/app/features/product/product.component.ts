@@ -10,6 +10,7 @@ import { ProductCategoryService } from '../product-category/product-category.ser
 import { Product, CreateProductDto, UpdateProductDto, ProductStats } from './models/product.interface';
 import { ProductCategory } from '../product-category/models/product-category.interface';
 import { SupplierService, Supplier } from '../supplier/supplier.service';
+import { DEALER_RETURN_POLICY_OPTIONS } from '../../shared/dealer-return-policy';
 
 @Component({
   selector: 'app-product',
@@ -19,6 +20,7 @@ import { SupplierService, Supplier } from '../supplier/supplier.service';
   styleUrls: ['./product.component.css']
 })
 export class ProductComponent implements OnInit {
+  readonly dealerReturnPolicyOptions = DEALER_RETURN_POLICY_OPTIONS;
   // Signals for reactive state management
   products = signal<Product[]>([]);
   categories = signal<ProductCategory[]>([]);
@@ -49,6 +51,10 @@ export class ProductComponent implements OnInit {
     color: '#3B82F6',
     usageDurationMonths: 12,
     assumedReturnRatePercent: 20,
+    ledgerReturnPolicy: 'unconfigured',
+    resalePolicy: 'inspect',
+    dealerReturnPolicy: 'full_sale_price',
+    dealerReturnTerms: '',
     importPrice: 0,
     shippingCost: 0,
     packagingCost: 0,
@@ -157,6 +163,10 @@ export class ProductComponent implements OnInit {
       color: '#3B82F6',
       usageDurationMonths: 12,
       assumedReturnRatePercent: 20,
+      ledgerReturnPolicy: 'unconfigured',
+    resalePolicy: 'inspect',
+      dealerReturnPolicy: 'full_sale_price',
+      dealerReturnTerms: '',
       importPrice: 0,
       shippingCost: 0,
       packagingCost: 0,
@@ -182,6 +192,10 @@ export class ProductComponent implements OnInit {
       color: product.color || '#3B82F6',
       usageDurationMonths: product.usageDurationMonths || 12,
       assumedReturnRatePercent: product.assumedReturnRatePercent ?? 20,
+      ledgerReturnPolicy: product.ledgerReturnPolicy || 'unconfigured',
+      resalePolicy: product.resalePolicy || 'inspect',
+      dealerReturnPolicy: product.dealerReturnPolicy || 'unconfigured',
+      dealerReturnTerms: product.dealerReturnTerms || '',
       importPrice: product.importPrice ?? 0,
       shippingCost: product.shippingCost ?? 0,
       packagingCost: product.packagingCost ?? 0,

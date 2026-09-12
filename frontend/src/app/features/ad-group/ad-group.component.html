@@ -1,14 +1,16 @@
 <div class="header-section">
   <div class="page-title">
-    <h2>Quan Ly Nhom Quang Cao</h2>
-    <p class="subtitle">Quan ly nhom quang cao, san pham, tai khoan ads va nhan su phu trach.</p>
+    <h2>Nhóm Quảng Cáo</h2>
+    <p class="subtitle">Nhóm Google Ads từ Windsor tự xuất hiện sau đồng bộ. Chọn “Gắn sản phẩm / người phụ trách”; các lần đồng bộ sau giữ nguyên phần đã gắn.</p>
   </div>
   <div class="header-actions">
     <button type="button" class="btn btn-primary" (click)="openModal()">Them Nhom</button>
-    <button type="button" class="btn btn-secondary" (click)="loadRecommendationsAI()" [disabled]="loadingRecommend()">Tinh AI</button>
-    <button type="button" class="btn btn-success" (click)="applyAutoAI()" [disabled]="applyingAuto()">Ap dung AI</button>
+    <button type="button" class="btn btn-secondary" (click)="loadRecommendationsAI()" [disabled]="loadingRecommend()">Tính đề xuất +10%</button>
+    <button type="button" class="btn btn-success" (click)="applyAutoAI()" [disabled]="applyingAuto()">Lưu ngân sách vào ERP</button>
   </div>
 </div>
+
+<p class="alert alert-info">Đề xuất hiện dùng quy tắc tăng 10%, chưa đánh giá hiệu suất hay lợi nhuận. Nút lưu chỉ cập nhật ngân sách trong ERP; không thay đổi ngân sách trên Google, Meta hoặc TikTok.</p>
 
 <div *ngIf="error()" class="alert alert-danger">{{ error() }}</div>
 <div *ngIf="isLoading()" class="loading-spinner">
@@ -63,8 +65,8 @@
         <th>Nguoi phu trach ads</th>
         <th>ERP touch</th>
         <th>Budget hien tai</th>
-        <th>De xuat AI</th>
-        <th>Auto AI</th>
+        <th>Đề xuất +10%</th>
+        <th>Chọn để lưu</th>
         <th class="actions-col">Hanh dong</th>
       </tr>
     </thead>
@@ -74,6 +76,7 @@
           <div class="cell-content">
             <div class="cell-main">{{ group.name }}</div>
             <div class="cell-sub">{{ group.adGroupId }}</div>
+            <div class="cell-sub" *ngIf="group.sourceSystem === 'windsor'">Windsor · {{ group.remoteStatus || 'Chưa rõ trạng thái nguồn' }}</div>
           </div>
         </td>
         <td>{{ getFanpageName(group.fanpageId) }}</td>
@@ -103,8 +106,8 @@
           </label>
         </td>
         <td class="actions-cell">
-          <button class="action-btn edit" (click)="editItem(group)" title="Chinh sua">Sua</button>
-          <button class="action-btn delete" (click)="deleteItem(group)" title="Xoa">Xoa</button>
+          <button class="action-btn edit" (click)="editItem(group)">{{ group.sourceSystem === 'windsor' ? 'Gắn sản phẩm / người phụ trách' : 'Sửa' }}</button>
+          <button *ngIf="group.sourceSystem !== 'windsor'" class="action-btn delete" (click)="deleteItem(group)" title="Xoa">Xoa</button>
         </td>
       </tr>
       <tr *ngIf="adGroups().length === 0">
@@ -124,12 +127,15 @@
 <div *ngIf="showModal()" class="modal-backdrop" (click)="closeModalIfOutside($event)">
   <div class="modal-container" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h3>{{ isEditing() ? 'Chinh Sua Nhom Quang Cao' : 'Them Nhom Quang Cao Moi' }}</h3>
+      <h3>{{ editingWindsor() ? 'Gắn sản phẩm / người phụ trách' : isEditing() ? 'Chỉnh sửa nhóm quảng cáo' : 'Thêm nhóm quảng cáo mới' }}</h3>
       <button class="close-btn" (click)="closeModal()">X</button>
     </div>
 
     <form [formGroup]="adGroupForm" (ngSubmit)="saveItem()" class="modal-form">
       <div class="modal-body">
+        <div *ngIf="error()" class="alert alert-danger" role="alert">{{ error() }}</div>
+        <p *ngIf="editingWindsor()" class="alert alert-info">{{ adGroupForm.get('name')?.value }} · {{ adGroupForm.get('adGroupId')?.value }}<br>Tên, ID và tài khoản được cập nhật từ Windsor. Chọn thông tin nội bộ bên dưới rồi lưu.</p>
+        <ng-container *ngIf="!editingWindsor()">
         <div class="form-section">
           <h4 class="section-title">Thong Tin Co Ban</h4>
           <div class="form-row">
@@ -143,11 +149,12 @@
             </div>
           </div>
         </div>
+        </ng-container>
 
         <div class="form-section">
-          <h4 class="section-title">Fanpage va metadata tuy chon</h4>
+          <h4 class="section-title">Thông tin quản lý trong ERP</h4>
           <div class="form-row">
-            <div class="form-group">
+            <div class="form-group" *ngIf="!editingWindsor()">
               <label for="fanpageId">Fanpage *</label>
               <select id="fanpageId" formControlName="fanpageId" class="form-control">
                 <option value="">-- Chon fanpage --</option>
@@ -155,9 +162,9 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="selectedProductId">San pham (tuy chon)</label>
+              <label for="selectedProductId">Sản phẩm</label>
               <select id="selectedProductId" formControlName="selectedProductId" class="form-control">
-                <option value="">-- Khong gan san pham --</option>
+                <option value="">-- Chưa gắn sản phẩm --</option>
                 <option *ngFor="let product of availableProducts()" [value]="product._id">
                   {{ product.name }}{{ ($any(product).categoryId?.name ? ' - ' + $any(product).categoryId?.name : '') }}
                 </option>
@@ -166,7 +173,7 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group">
+            <div class="form-group" *ngIf="!editingWindsor()">
               <label for="agentId">Dai ly / owner lead *</label>
               <select id="agentId" class="form-control" formControlName="agentId">
                 <option value="">-- Chon dai ly --</option>
@@ -174,7 +181,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="assignedEmployeeId">Nhan su ads noi bo</label>
+              <label for="assignedEmployeeId">Người phụ trách nhóm quảng cáo</label>
               <select id="assignedEmployeeId" class="form-control" formControlName="assignedEmployeeId">
                 <option value="">-- Chon nhan su ads --</option>
                 <option *ngFor="let u of adsOperators()" [value]="u._id">{{ u.fullName || u.email }}</option>
@@ -182,7 +189,7 @@
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-row" *ngIf="!editingWindsor()">
             <div class="form-group">
               <label for="adAccountId">Tai khoan quang cao *</label>
               <select id="adAccountId" class="form-control" formControlName="adAccountId">

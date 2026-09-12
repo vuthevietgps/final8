@@ -12,6 +12,7 @@ import { TestOrder2ExportJsonService } from './test-order2-export-json.service';
 import { TestOrder2ImportService } from './test-order2-import.service';
 import { Response } from 'express';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { AdsAttributionOptionsService } from './services/ads-attribution-options.service';
 
 @FeatureModule('test-order2')
 @Controller('test-order2')
@@ -23,6 +24,7 @@ export class TestOrder2Controller {
     private readonly exportService: TestOrder2ExportService,
     private readonly exportJsonService: TestOrder2ExportJsonService,
     private readonly importService: TestOrder2ImportService,
+    private readonly adsAttributionOptions: AdsAttributionOptionsService,
   ) {}
 
   @Get()
@@ -80,6 +82,11 @@ export class TestOrder2Controller {
   @Get('products')
   async listProductsForOrderModule() {
     return this.service.listProductsForOrderModule();
+  }
+
+  @Get('ad-attribution-options')
+  async listAdAttributionOptions() {
+    return this.adsAttributionOptions.list();
   }
 
   // ============ DAILY PROFIT REPORT ============

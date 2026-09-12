@@ -7,6 +7,8 @@ describe('ads safety config', () => {
       dryRun: true,
       providerExecutionEnabled: false,
       googleAdsProductionEnabled: false,
+      metaAdsProductionEnabled: false,
+      metaAdsProviderExecutionEnabled: false,
     });
   });
 

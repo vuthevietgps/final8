@@ -99,7 +99,7 @@ export class AgentListComponent implements OnInit {
       [UserRole.DIRECTOR]: 'Giám Đốc',
       [UserRole.MANAGER]: 'Quản Lý',
       [UserRole.EMPLOYEE]: 'Nhân Viên',
-      [UserRole.INTERNAL_AGENT]: 'Đại Lý Nội Bộ',
+      [UserRole.INTERNAL_AGENT]: 'Công Ty / Nội Bộ',
       [UserRole.EXTERNAL_AGENT]: 'Đại Lý Ngoài',
       [UserRole.INTERNAL_SUPPLIER]: 'NCC Nội Bộ',
       [UserRole.EXTERNAL_SUPPLIER]: 'NCC Ngoài',

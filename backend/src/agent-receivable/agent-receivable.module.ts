@@ -5,9 +5,11 @@ import { AgentPayablesController } from './agent-payables.controller';
 import { AgentReceivableService } from './agent-receivable.service';
 import { AgentStatement, AgentStatementSchema } from './schemas/agent-statement.schema';
 import { TestOrder2, TestOrder2Schema } from '../test-order2/schemas/test-order2.schema';
+import { BusinessLedgerModule } from '../business-ledger/business-ledger.module';
 
 @Module({
   imports: [
+    BusinessLedgerModule,
     MongooseModule.forFeature([
       { name: AgentStatement.name, schema: AgentStatementSchema },
       { name: TestOrder2.name, schema: TestOrder2Schema },

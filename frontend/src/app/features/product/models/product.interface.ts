@@ -2,6 +2,7 @@
  * File: features/product/models/product.interface.ts
  * Mục đích: Định nghĩa interface cho Sản phẩm ở frontend.
  */
+import { DealerReturnPolicy } from '../../../shared/dealer-return-policy';
 export interface Product {
   _id: string;
   name: string;
@@ -10,6 +11,10 @@ export interface Product {
   color: string;
   usageDurationMonths?: number;
   assumedReturnRatePercent?: number;
+  resalePolicy?: 'not_resellable' | 'resellable' | 'inspect';
+  ledgerReturnPolicy?: 'unconfigured' | 'recoverable' | 'production_committed';
+  dealerReturnPolicy?: DealerReturnPolicy;
+  dealerReturnTerms?: string;
   importPrice?: number;
   shippingCost?: number;
   packagingCost?: number;
@@ -39,6 +44,10 @@ export interface CreateProductDto {
   color?: string;
   usageDurationMonths?: number;
   assumedReturnRatePercent?: number;
+  resalePolicy?: 'not_resellable' | 'resellable' | 'inspect';
+  ledgerReturnPolicy?: 'unconfigured' | 'recoverable' | 'production_committed';
+  dealerReturnPolicy?: DealerReturnPolicy;
+  dealerReturnTerms?: string;
   importPrice?: number;
   shippingCost?: number;
   packagingCost?: number;

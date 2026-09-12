@@ -19,6 +19,11 @@ const action = (overrides: Record<string, any> = {}) => ({
   },
   status: 'pending',
   providerValidationStatus: 'pending',
+  providerValidationExpiresAt: new Date(Date.now() + 60_000),
+  providerValidationOperationHash: 'a'.repeat(64),
+  providerValidationApiVersion: 'v24',
+  providerValidationCredentialBindingHash: 'b'.repeat(64),
+  providerValidationCredentialReferenceId: 'credential-ref-1',
   ...overrides,
 });
 
@@ -39,6 +44,9 @@ describe('GoogleAdsProviderValidationService', () => {
       refreshToken: 'refresh-secret',
       loginCustomerId: '4345552613',
       apiVersion: 'v20',
+      configSource: 'database',
+      refreshTokenSource: 'database',
+      credentialReferenceId: '507f1f77bcf86cd799439011',
     }),
     getGoogleAdsAccessToken: jest.fn().mockResolvedValue('access-secret'),
   };
@@ -56,6 +64,9 @@ describe('GoogleAdsProviderValidationService', () => {
       refreshToken: 'refresh-secret',
       loginCustomerId: '4345552613',
       apiVersion: 'v20',
+      configSource: 'database',
+      refreshTokenSource: 'database',
+      credentialReferenceId: '507f1f77bcf86cd799439011',
     });
     apiTokenService.getGoogleAdsAccessToken.mockResolvedValue('access-secret');
   });
@@ -75,7 +86,11 @@ describe('GoogleAdsProviderValidationService', () => {
       partialFailure: false,
       mutateOperations: expect.any(Array),
     }));
+    expect(mockedAxios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 30_000 }));
     expect(document.items[0].providerValidationStatus).toBe('provider_validate_passed');
+    expect(document.items[0].providerValidationOperationHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(document.items[0].providerValidationExpiresAt).toBeInstanceOf(Date);
+    expect(document.items[0].providerValidationCredentialReferenceId).toBe('507f1f77bcf86cd799439011');
     expect(document.items[0].status).toBe('pending');
     expect(document.providerValidationStatus).toBe('passed');
     expect(result).toEqual(expect.objectContaining({ success: true, actionsPassed: 1, actionsFailed: 0 }));
@@ -151,6 +166,11 @@ describe('GoogleAdsActionApprovalPolicyService', () => {
   it('allows approval policy check only after provider validateOnly passed', () => {
     expect(() => policy.assertCanApprove(action({
       providerValidationStatus: 'provider_validate_passed',
+      providerValidationExpiresAt: new Date(Date.now() + 60_000),
+      providerValidationOperationHash: 'a'.repeat(64),
+      providerValidationApiVersion: 'v24',
+      providerValidationCredentialBindingHash: 'b'.repeat(64),
+      providerValidationCredentialReferenceId: 'credential-ref-1',
     }) as any)).not.toThrow();
   });
 });

@@ -216,6 +216,9 @@
           </div>
 
           <!-- Owner Fund -->
+          @if (source() === 'bank_balance') {
+            <app-treasury-account-selector [(value)]="ledgerAccountId" />
+          }
           <div 
             class="source-option" 
             [class.selected]="source() === 'owner_fund'"

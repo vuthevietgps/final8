@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface InventorySummaryRow {
+  ownerKind?: string; ownerName?: string; holderName?: string; available?: number; reserved?: number;
   productId: string;
   productName?: string;
   onHand: number;

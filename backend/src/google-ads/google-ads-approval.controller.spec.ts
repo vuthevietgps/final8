@@ -10,6 +10,10 @@ import { GoogleAdsExportService } from './google-ads-export.service';
 import { GoogleAdsExecutionService } from './google-ads-execution.service';
 import { GoogleAdsProviderValidationService } from './google-ads-provider-validation.service';
 import { GoogleAdsReadonlySyncService } from './google-ads-readonly-sync.service';
+import { GoogleAdsCapabilitiesService } from './google-ads-capabilities.service';
+import { GoogleAdsErpActionPlanService } from './google-ads-erp-action-plan.service';
+import { GoogleAdsLookupService } from './google-ads-lookup.service';
+import { GoogleAdsBiddingLifecycleService } from './google-ads-bidding-lifecycle.service';
 
 describe('GoogleAdsController approval RBAC', () => {
   let app: INestApplication;
@@ -35,6 +39,10 @@ describe('GoogleAdsController approval RBAC', () => {
         { provide: GoogleAdsProviderValidationService, useValue: {} },
         { provide: GoogleAdsActionPlanService, useValue: actionPlanService },
         { provide: GoogleAdsExecutionService, useValue: executionService },
+        { provide: GoogleAdsErpActionPlanService, useValue: {} },
+        { provide: GoogleAdsCapabilitiesService, useValue: {} },
+        { provide: GoogleAdsLookupService, useValue: {} },
+        { provide: GoogleAdsBiddingLifecycleService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -55,7 +63,7 @@ describe('GoogleAdsController approval RBAC', () => {
     await app.init();
   });
 
-  afterAll(async () => app.close());
+  afterAll(async () => app?.close());
 
   beforeEach(() => jest.clearAllMocks());
 

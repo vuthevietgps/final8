@@ -2,7 +2,7 @@
  * File: advertising-cost/advertising-cost.controller.ts
  * Purpose: Expose REST APIs for advertising cost CRUD and sync.
  */
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AdvertisingCostService } from './advertising-cost.service';
 import { CreateAdvertisingCostDto } from './dto/create-advertising-cost.dto';
@@ -13,6 +13,7 @@ import { AdvertisingCostFacebookSyncService } from './advertising-cost.facebook-
 import { AdvertisingCostGoogleSyncService } from './advertising-cost.google-sync.service';
 import { AdvertisingCostTiktokSyncService } from './advertising-cost.tiktok-sync.service';
 import { FeatureModule } from '../plan/feature-module.decorator';
+import { configuredGoogleAdsCostSource } from '../provider-connections/windsor-ads-cost-sync.service';
 
 @FeatureModule('advertising-cost')
 @Controller('advertising-cost')
@@ -144,6 +145,9 @@ export class AdvertisingCostController {
     @Query('days') days?: string,
     @Query('customerIds') customerIds?: string,
   ) {
+    if (configuredGoogleAdsCostSource() === 'windsor') {
+      throw new BadRequestException('Windsor đang là nguồn chi phí Google Ads chính. Đồng bộ tại trang Kết nối Windsor.');
+    }
     const n = days ? parseInt(days, 10) : undefined;
     const ids = customerIds
       ? String(customerIds)

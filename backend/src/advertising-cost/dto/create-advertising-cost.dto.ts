@@ -1,7 +1,7 @@
 /**
  * DTO for creating advertising cost records.
  */
-import { IsDateString, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateAdvertisingCostDto {
   @IsOptional()
@@ -33,14 +33,20 @@ export class CreateAdvertisingCostDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(1_000_000_000_000)
   spentAmount?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(1_000_000_000_000)
   cpm?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(1_000_000_000_000)
   cpc?: number;
 
   @IsOptional()

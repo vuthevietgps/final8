@@ -60,6 +60,12 @@ describe('AdsAutomationEvidenceService attribution identity', () => {
       models.googleCampaign || {},
       models.googleBudget || {},
       models.actionPlan || {},
+      models.metaActionPlan || {
+        find: jest.fn(() => sortedLeanQuery([])),
+      },
+      models.metaAdSet || {
+        find: jest.fn(() => sortedLeanQuery([])),
+      },
       models.product || {},
       models.order || {},
       models.report || {},
@@ -128,6 +134,63 @@ describe('AdsAutomationEvidenceService attribution identity', () => {
       expect.objectContaining({ platform: 'meta_ads', erpAdGroupId: '64b64b64b64b64b64b64b64e' }),
     ]));
     expect(candidates.some((item: any) => item.adGroupId === '0')).toBe(false);
+  });
+
+  it('uses canonical Meta Ad Sets and merges the exact legacy ERP mapping once', async () => {
+    const subject = service({
+      googleAdGroup: { find: jest.fn(() => sortedLeanQuery([])) },
+      metaAdSet: {
+        find: jest.fn(() => sortedLeanQuery([{
+          adAccountId: '123',
+          campaignId: '456',
+          adSetId: '789',
+          name: 'Canonical Meta Ad Set',
+          status: 'ACTIVE',
+          internalAdGroupId: legacyId,
+          internalProductIds: [productId],
+          lastReadbackAt: new Date(),
+        }])),
+      },
+      adGroup: {
+        find: jest.fn(() => sortedLeanQuery([{
+          _id: legacyId,
+          adGroupId: '789',
+          platform: 'facebook',
+          adAccountId: 'account-meta',
+          selectedProducts: [productId],
+        }])),
+      },
+      adAccount: {
+        find: jest.fn(() => leanQuery([{
+          _id: 'account-meta',
+          accountId: 'act_123',
+          accountType: 'facebook',
+          businessCenterId: '999',
+        }])),
+      },
+      managerAccount: {
+        find: jest.fn(() => leanQuery([{
+          provider: 'facebook',
+          managerAccountId: '999',
+          childAccountIds: ['123'],
+        }])),
+      },
+    });
+
+    const candidates = await (subject as any).loadCandidates(20);
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toEqual(expect.objectContaining({
+      platform: 'meta_ads',
+      managerAccountId: '999',
+      childAccountId: '123',
+      campaignId: '456',
+      adGroupId: '789',
+      erpAdGroupId: legacyId,
+      productIds: [productId],
+      status: 'ACTIVE',
+    }));
+    expect(candidates[0].campaignBudgetId).toBeUndefined();
   });
 
   it('uses product fallback only for unattributed orders and verifies product existence', async () => {
@@ -260,6 +323,8 @@ describe('AdsAutomationEvidenceService attribution identity', () => {
       ...plan.items[0],
       status: 'approved',
       providerValidationStatus: 'provider_validate_passed',
+      providerValidationExpiresAt: new Date(Date.now() + 60_000),
+      providerValidationOperationHash: 'f'.repeat(64),
       approvedAt: new Date(),
       approvedBy: 'Director',
       approvalHistory: [{ decision: 'approved', at: new Date() }],
@@ -279,6 +344,147 @@ describe('AdsAutomationEvidenceService attribution identity', () => {
       beforeStateSnapshotReady: true,
       auditReady: true,
     }));
+
+    delete plan.originalZipSha256;
+    plan.source = 'erp_automation';
+    plan.sourceExportId = `ERP-${plan.planId}`;
+    plan.manifest = {
+      generatedBy: 'erp',
+      automationEvidence: {
+        snapshotId: 'ads-evidence-1',
+        snapshotHash: 'a'.repeat(64),
+        capturedAt: new Date().toISOString(),
+      },
+    };
+    const erpNativeGate = (subject as any).adsGateEvidence(
+      safety,
+      false,
+      plan,
+      candidate,
+    );
+    expect(erpNativeGate.auditReady).toBe(true);
+  });
+
+  it('evaluates Meta validation, approval and audit from the Meta plan envelope', () => {
+    const subject = service();
+    const safety = {
+      googleAdsProductionEnabled: false,
+      metaAdsProductionEnabled: true,
+      providerExecutionEnabled: true,
+      metaAdsProviderExecutionEnabled: true,
+      dryRun: false,
+    };
+    const candidate = {
+      platform: 'meta_ads',
+      childAccountId: '123',
+      campaignId: '456',
+      adGroupId: '789',
+      productIds: [productId],
+    };
+    const plan = {
+      planId: 'META-PLAN-1',
+      createdByUserId: 'automation',
+      source: 'erp_automation',
+      evidenceSnapshotId: 'ads-evidence-1',
+      evidenceSnapshotHash: 'c'.repeat(64),
+      evidenceSnapshotCapturedAt: new Date(),
+      actions: [{
+        actionId: 'META-ACT-1',
+        actionType: 'pause_ad_set',
+        adAccountId: '123',
+        campaignId: '456',
+        adSetId: '789',
+        idempotencyKey: 'meta:pause:123:789',
+        payloadHash: 'a'.repeat(64),
+        workflowStatus: 'approved',
+        providerValidationStatus: 'passed',
+        providerValidationExpiresAt: new Date(Date.now() + 60_000),
+        providerValidationPayloadHash: 'a'.repeat(64),
+        providerValidationBeforeStateHash: 'b'.repeat(64),
+        approvedAt: new Date(),
+        approvedByUserId: 'approver-1',
+      }],
+    };
+
+    expect((subject as any).adsGateEvidence(
+      safety,
+      false,
+      plan,
+      candidate,
+    )).toEqual(expect.objectContaining({
+      productionEnabled: true,
+      providerExecutionEnabled: true,
+      providerValidateOnlyPassed: true,
+      approved: true,
+      idempotencyReady: true,
+      beforeStateSnapshotReady: true,
+      auditReady: true,
+    }));
+  });
+
+  it('does not report Meta validation as passed when it expired or is not payload-bound', () => {
+    const subject = service();
+    const safety = {
+      googleAdsProductionEnabled: false,
+      metaAdsProductionEnabled: true,
+      providerExecutionEnabled: true,
+      metaAdsProviderExecutionEnabled: true,
+      dryRun: false,
+    };
+    const candidate = {
+      platform: 'meta_ads',
+      childAccountId: '123',
+      campaignId: '456',
+      adGroupId: '789',
+    };
+    const action = {
+      actionId: 'META-ACT-1',
+      actionType: 'pause_ad_set',
+      adAccountId: '123',
+      campaignId: '456',
+      adSetId: '789',
+      idempotencyKey: 'meta:pause:123:789',
+      payloadHash: 'a'.repeat(64),
+      workflowStatus: 'approved',
+      providerValidationStatus: 'passed',
+      providerValidationExpiresAt: new Date(Date.now() - 1),
+      providerValidationPayloadHash: 'a'.repeat(64),
+      providerValidationBeforeStateHash: 'b'.repeat(64),
+      approvedAt: new Date(),
+      approvedByUserId: 'approver-1',
+    };
+    const plan = {
+      planId: 'META-PLAN-1',
+      createdByUserId: 'automation',
+      actions: [action],
+    };
+
+    expect((subject as any).adsGateEvidence(
+      safety,
+      false,
+      plan,
+      candidate,
+    ).providerValidateOnlyPassed).toBe(false);
+
+    action.providerValidationExpiresAt = new Date(Date.now() + 60_000);
+    action.providerValidationPayloadHash = 'c'.repeat(64);
+    expect((subject as any).adsGateEvidence(
+      safety,
+      false,
+      plan,
+      candidate,
+    ).providerValidateOnlyPassed).toBe(false);
+
+    action.providerValidationPayloadHash = action.payloadHash;
+    plan.actions.push({ ...action, actionId: 'META-ACT-2' });
+    const ambiguous = (subject as any).adsGateEvidence(
+      safety,
+      false,
+      plan,
+      candidate,
+    );
+    expect(ambiguous.providerValidateOnlyPassed).toBe(false);
+    expect(ambiguous.auditReady).toBe(false);
   });
 
   it('reports localOnly from the actual environment and includes execution summary counts', async () => {

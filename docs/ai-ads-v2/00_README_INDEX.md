@@ -47,8 +47,17 @@ ERP ghi log, sync lại, đánh giá sau 3/7 ngày
 | `13_ADS_AUTOMATION_PRIORITY_AXIS.md` | Owner/BA/Developer | Forced priority axis for ads automation decision foundation |
 | `14_ADS_AUTOMATION_CONTROL_CENTER_PLAN.md` | Owner/BA/Frontend/Backend | BA plan to upgrade `/ads-settings` into the Ads Automation Control Center |
 | `15_ERP_EVIDENCE_FINANCE_ADS_GATE_AXIS.md` | Owner/BA/Codex/Runner | BA và trục chuẩn cho mapping dữ liệu, control tài chính, ads gate |
+| `16_META_ADS_CAMPAIGN_EXECUTION.md` | Backend/Frontend/DevOps/Ads operator | Safe create/update/pause campaign-level configuration through ERP, resource boundary, and activation checklist |
+| `17_GOOGLE_SEARCH_CAMPAIGN_CONTROL.md` | Backend/Frontend/DevOps/Ads operator | ERP-native Google Search campaign create/update/pause, safety gates, fields and staged resource boundary |
+| `18_GOOGLE_SEARCH_DELIVERY_STACK_CONTROL.md` | Backend/Frontend/DevOps/Ads operator | ERP-native Search Campaign, Ad Group, positive Keyword và RSA create/update/pause, mapping dữ liệu, readback và giới hạn activation |
+| `19_GOOGLE_SEARCH_ACTIVATION_AND_RSA_PINNING.md` | Backend/Frontend/DevOps/Ads operator | RSA headline/description pinning và ERP-native staged activation RSA → positive Keyword → Ad Group → Search Campaign |
+| `20_GOOGLE_SEARCH_BIDDING_LIFECYCLE.md` | Backend/Frontend/DevOps/Ads operator | Draft-only bidding automation: Maximize Clicks → CPC ceiling → Maximize Conversions → target CPA |
+| `21_META_ADS_DELIVERY_STACK_CONTROL.md` | Backend/Frontend/DevOps/Ads operator | ERP-native staged Meta Campaign, Ad Set, Creative and Ad create control, exact readback, safety gates and activation boundary |
+| `22_ERP_AUTOMATED_PAUSE_DRAFTS.md` | Owner/Backend/Frontend/DevOps/Ads operator | Compile immutable ERP business evidence into deduplicated Google Ad Group and Meta Ad Set pause drafts; no auto-approval or provider execution |
 
 ## Forced priority override - 2026-07-04
+
+Tài liệu bổ sung: [Cập nhật lợi nhuận xuyên suốt và chi phí Windsor tạm tính](25_FINANCIAL_PROPAGATION_AND_TEMPORARY_ADS_COST.md).
 
 Before expanding secondary AI Ads V2 work, prioritize the decision foundation in `13_ADS_AUTOMATION_PRIORITY_AXIS.md`:
 
@@ -112,7 +121,7 @@ This override keeps `/ads-settings` as the control center, but the first deliver
 2. ChatGPT Web không gọi ERP hoặc Google Ads API.
 3. ERP là cổng kiểm soát duy nhất: validate, approve, execute, log.
 4. Google Ads API chỉ nhận lệnh từ ERP backend/worker.
-5. `action_plan.json` là nguồn dữ liệu chuẩn duy nhất để ERP import.
+5. `action_plan.json` là nguồn chuẩn cho luồng ChatGPT Web import; ERP UI chỉ được tạo typed plan vào cùng action-plan control plane, không tạo executor riêng.
 6. Không execute raw payload do ChatGPT Web tạo.
 7. Campaign mới luôn tạo ở trạng thái `PAUSED`.
 8. Mọi create/update/pause/resume phải `approvalRequired=true`.

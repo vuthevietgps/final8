@@ -169,7 +169,7 @@ export class ReturnReportService {
                 ],
               },
             },
-            revenue: { $sum: { $ifNull: ['$paidToCompanyAmount', 0] } },
+            revenue: { $sum: { $ifNull: ['$recognizedRevenue', 0] } },
             returnRevenue: {
               $sum: {
                 $cond: [
@@ -185,12 +185,12 @@ export class ReturnReportService {
                       },
                     ],
                   },
-                  { $ifNull: ['$paidToCompanyAmount', 0] },
+                  { $ifNull: ['$recognizedRevenue', 0] },
                   0,
                 ],
               },
             },
-            cost: { $sum: { $ifNull: ['$productCostTotal', 0] } },
+            cost: { $sum: { $ifNull: ['$recognizedGoodsCost', 0] } },
             returnCost: {
               $sum: {
                 $cond: [
@@ -206,7 +206,7 @@ export class ReturnReportService {
                       },
                     ],
                   },
-                  { $ifNull: ['$productCostTotal', 0] },
+                  { $ifNull: ['$recognizedGoodsCost', 0] },
                   0,
                 ],
               },

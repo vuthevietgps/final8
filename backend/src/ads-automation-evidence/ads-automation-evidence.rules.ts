@@ -60,7 +60,10 @@ export function evaluateAdGroupEvidence(input: AdsAutomationEvaluationInput): Ad
     ));
   }
 
-  if (!text(input.campaignBudgetId)) {
+  // campaignBudgetId is a Google Ads resource identity. Meta owns budget at
+  // Campaign (CBO) or Ad Set (ABO), so applying this invariant to Meta creates
+  // a permanent false blocker and can never be satisfied by provider data.
+  if (input.platform === 'google_ads' && !text(input.campaignBudgetId)) {
     decisionBlockers.push(error(
       'BUDGET_CAMPAIGN_BUDGET_ID_MISSING',
       'Budget scale is blocked because campaignBudgetId is missing. campaignId/adGroupId are not fallbacks.',
@@ -259,16 +262,24 @@ function financeGate(
   const availableCash = optionalNumber(input.availableCash);
   const dailyCap = optionalNumber(input.dailyCap);
   const monthlyCap = optionalNumber(input.monthlyCap);
+  const weeklyCap = optionalNumber(input.weeklyCap);
+  const currentWeeklySpend = optionalNumber(input.currentWeeklySpend);
   const lossLimit = optionalNumber(input.lossLimit);
   const realizedLoss = number(input.realizedLoss);
   const dataFreshness = input.dataFreshness || (availableCash === undefined ? 'missing' : 'unknown');
-  const cappedBudgetIncrease = input.cappedBudgetIncrease ?? budgetIncreaseHeadroom({
+  const calculatedHeadroom = budgetIncreaseHeadroom({
     availableCash,
     dailyCap,
     monthlyCap,
+    weeklyCap,
+    currentWeeklySpend,
     currentDailySpend,
     currentMonthlySpend,
   });
+  const suppliedHeadroom = optionalNumber(input.cappedBudgetIncrease);
+  const cappedBudgetIncrease = suppliedHeadroom === undefined ? calculatedHeadroom
+    : calculatedHeadroom === undefined ? Math.max(0, suppliedHeadroom)
+      : Math.min(Math.max(0, suppliedHeadroom), calculatedHeadroom);
 
   let status = input.status || 'hold';
   if (availableCash === undefined) {
@@ -293,6 +304,10 @@ function financeGate(
     blockers.push(error('FINANCE_MONTHLY_CAP_REACHED', 'Monthly ads budget cap has been reached.', 'finance', 'finance.monthlyCap'));
     status = 'block';
   }
+  if (weeklyCap !== undefined && weeklyCap > 0 && (currentWeeklySpend === undefined || currentWeeklySpend >= weeklyCap)) {
+    blockers.push(error('FINANCE_WEEKLY_CAP_REACHED_OR_UNKNOWN', 'Weekly budget exhausted or weekly spend unavailable.', 'finance', 'finance.weeklyCap'));
+    status = 'block';
+  }
 
   if (dataFreshness !== 'fresh') {
     blockers.push(warning(
@@ -313,6 +328,8 @@ function financeGate(
     availableCash,
     dailyCap,
     monthlyCap,
+    weeklyCap,
+    currentWeeklySpend,
     currentDailySpend,
     currentMonthlySpend,
     lossLimit,
@@ -341,7 +358,12 @@ function gateEvidence(
     blockers.push(error('ADS_KILL_SWITCH_ACTIVE', 'Kill switch is active.', 'ads-gate', 'adsGate.killSwitchActive'));
   }
   if (!productionEnabled) {
-    blockers.push(error('ADS_PRODUCTION_DISABLED', 'GOOGLE_ADS_PRODUCTION_ENABLED is false or absent.', 'ads-gate', 'adsGate.productionEnabled'));
+    blockers.push(error(
+      'ADS_PRODUCTION_DISABLED',
+      'The platform production execution flag is false or absent.',
+      'ads-gate',
+      'adsGate.productionEnabled',
+    ));
   }
   if (!providerExecutionEnabled) {
     blockers.push(error('ADS_PROVIDER_EXECUTION_DISABLED', 'Provider execution is disabled.', 'ads-gate', 'adsGate.providerExecutionEnabled'));
@@ -500,10 +522,13 @@ function budgetIncreaseHeadroom(input: {
   availableCash?: number;
   dailyCap?: number;
   monthlyCap?: number;
+  weeklyCap?: number;
+  currentWeeklySpend?: number;
   currentDailySpend: number;
   currentMonthlySpend: number;
 }): number | undefined {
   const constraints: number[] = [];
+  if (input.weeklyCap && input.weeklyCap > 0) constraints.push(input.currentWeeklySpend === undefined ? 0 : Math.max(0, input.weeklyCap - input.currentWeeklySpend));
   if (input.availableCash !== undefined) constraints.push(Math.max(0, input.availableCash));
   if (input.dailyCap !== undefined && input.dailyCap > 0) {
     constraints.push(Math.max(0, input.dailyCap - input.currentDailySpend));

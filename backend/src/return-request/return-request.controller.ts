@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards/auth.guard';
 import { RequirePermissions } from '../auth/decorators/auth.decorator';
 import { CreateReturnRequestDto } from './dto/create-return-request.dto';
@@ -11,6 +11,10 @@ import { FeatureModule } from '../plan/feature-module.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReturnRequestController {
   constructor(private readonly service: ReturnRequestService) {}
+
+  @Get()
+  @RequirePermissions('purchase-costs')
+  list(@Query('orderId') orderId: string) { return this.service.listForOrder(orderId); }
 
   @Post()
   @RequirePermissions('purchase-costs')

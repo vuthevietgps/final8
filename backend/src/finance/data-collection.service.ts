@@ -5,6 +5,10 @@ import { AdvertisingCostGoogleSyncService } from '../advertising-cost/advertisin
 import { AdvertisingCostTiktokSyncService } from '../advertising-cost/advertising-cost.tiktok-sync.service';
 import { OrderCalculationService } from '../test-order2/services/order-calculation.service';
 import { AdGroupDailyReportService } from './ad-group-daily-report.service';
+import { previousBusinessDay } from '../common/business-day';
+import { configuredGoogleAdsCostSource, WindsorAdsCostSyncService } from '../provider-connections/windsor-ads-cost-sync.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 
 /**
  * Data Collection Service
@@ -50,6 +54,8 @@ export class DataCollectionService {
     private readonly tiktokSyncService: AdvertisingCostTiktokSyncService,
     private readonly orderCalculationService: OrderCalculationService,
     private readonly adGroupDailyReportService: AdGroupDailyReportService,
+    private readonly windsorGoogleSyncService: WindsorAdsCostSyncService,
+    private readonly events?: EventEmitter2,
   ) {}
 
   /**
@@ -71,17 +77,16 @@ export class DataCollectionService {
       // 1. Chờ toàn bộ nền tảng sync xong trước khi tính phí.
       await this.syncAdsData(yesterdayStr);
 
-      // 2. Chỉ phân bổ chi phí sau khi bước sync nền tảng đã hoàn tất.
-      const recalculationResult = await this.orderCalculationService.recalculateOrdersForDate(yesterdayStr);
-      this.logger.log(
-        `✅ Bulk updated ${recalculationResult.updated} orders for ${recalculationResult.date} after ads sync.`,
-      );
-
-      // 3. Chốt báo cáo ad group daily sau khi order đã có advertisingCost chính xác.
-      const reportResult = await this.adGroupDailyReportService.syncFromOrderTest2(yesterdayStr);
-      this.logger.log(
-        `✅ Ad group daily report synced for ${reportResult.date}: ${reportResult.recordsProcessed} records processed.`,
-      );
+      // Production uses the same durable, serialized refresh as manual edits.
+      if (this.events) {
+        await this.events.emitAsync(FINANCIAL_INPUT_CHANGED, { dates: [yesterdayStr], revalue: false });
+      } else {
+        // Standalone callers without the application event bus.
+        const recalculationResult = await this.orderCalculationService.recalculateOrdersForDate(yesterdayStr);
+        this.logger.log(`✅ Bulk updated ${recalculationResult.updated} orders for ${recalculationResult.date} after ads sync.`);
+        const reportResult = await this.adGroupDailyReportService.syncFromOrderTest2(yesterdayStr);
+        this.logger.log(`✅ Ad group daily report synced for ${reportResult.date}: ${reportResult.recordsProcessed} records processed.`);
+      }
 
       // 4. Sync receivables
       await this.syncReceivables();
@@ -100,9 +105,7 @@ export class DataCollectionService {
   }
 
   private getYesterdayIso(): string {
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() - 1);
-    return targetDate.toISOString().split('T')[0];
+    return previousBusinessDay();
   }
 
   /**
@@ -155,18 +158,24 @@ export class DataCollectionService {
   private async syncAdsData(dateStr: string) {
     this.logger.log('📊 Syncing ads data from platforms...');
 
+    const googleSource = configuredGoogleAdsCostSource();
     const results = await Promise.allSettled([
       this.facebookSyncService.syncForDate(dateStr),
-      this.googleSyncService.syncForDate(dateStr),
+      googleSource === 'windsor'
+        ? this.windsorGoogleSyncService.syncConfiguredForDate(dateStr)
+        : this.googleSyncService.syncForDate(dateStr),
       this.tiktokSyncService.syncForDate(dateStr),
     ]);
 
-    const platforms = ['Facebook', 'Google', 'TikTok'];
+    const platforms = ['Facebook', `Google (${googleSource === 'windsor' ? 'Windsor' : 'native API'})`, 'TikTok'];
     results.forEach((result, idx) => {
       if (result.status === 'fulfilled') {
-        this.logger.log(
-          `   ✅ ${platforms[idx]} sync: ${result.value.updated} ad groups updated for ${dateStr}`,
-        );
+        const value: any = result.value;
+        if (['partial', 'failed', 'not_configured'].includes(String(value?.status))) {
+          this.logger.warn(`   ⚠️ ${platforms[idx]} sync status=${value.status}; ${value.updated || 0} ad groups updated for ${dateStr}`);
+        } else {
+          this.logger.log(`   ✅ ${platforms[idx]} sync: ${value.updated} ad groups updated for ${dateStr}`);
+        }
       } else {
         this.logger.error(
           `   ❌ ${platforms[idx]} sync failed: ${result.reason?.message}`,

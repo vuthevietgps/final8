@@ -5,6 +5,16 @@ import { InventorySummary, InventorySummaryDocument } from './schemas/inventory-
 import { InventoryTransaction, InventoryTransactionDocument } from './schemas/inventory-transaction.schema';
 import { InventoryBatch, InventoryBatchDocument } from './schemas/inventory-batch.schema';
 
+export interface ReturnStockContext {
+  orderId: string;
+  receiptId: string;
+  ownerKind: 'company' | 'dealer';
+  ownerId?: string;
+  holderKind: 'company' | 'supplier' | 'agent';
+  holderId?: string;
+  holderAddress?: string;
+}
+
 @Injectable()
 export class InventoryService {
   constructor(
@@ -12,6 +22,79 @@ export class InventoryService {
     @InjectModel(InventoryTransaction.name) private txModel: Model<InventoryTransactionDocument>,
     @InjectModel(InventoryBatch.name) private batchModel: Model<InventoryBatchDocument>,
   ) {}
+
+  async availableBatches(productId?: string, orderId?: string) {
+    const match: any = { condition: 'resellable', ownerKind: { $in: ['company', 'dealer'] },
+      $expr: { $gt: [{ $subtract: ['$quantityRemaining', { $ifNull: ['$quantityReserved', 0] }] }, 0] } };
+    if (productId) match.productId = new Types.ObjectId(productId);
+    if (orderId) {
+      match.$or = [{ $expr: match.$expr }, { reservations: { $elemMatch: { orderId, state: 'reserved' } } }];
+      delete match.$expr;
+    }
+    return this.batchModel.find(match).sort({ receivedAt: 1 }).lean();
+  }
+
+  /** Reserve one exact batch, atomically. Its owner and old cost follow the order. */
+  async prepareOrderSource(order: any) {
+    if (!['inventory', 'dealer_custody'].includes(order.productSource)) return;
+    if (!order.inventoryBatchId) throw new BadRequestException('Chọn lô hàng đang có để xuất.');
+    const batch = await this.batchModel.findById(order.inventoryBatchId).lean();
+    const quantity = Number(order.quantity);
+    if (!batch || !Number.isInteger(quantity) || quantity <= 0 || String(batch.productId) !== String(order.productId)
+      || batch.condition !== 'resellable') throw new BadRequestException('Lô hàng/số lượng không hợp lệ.');
+    if (order.productSource === 'inventory' ? batch.ownerKind !== 'company'
+      : batch.ownerKind !== 'dealer' || !order.agentId || batch.ownerId !== String(order.agentId)) {
+      throw new BadRequestException('Hàng không thuộc chủ sở hữu của giao dịch này.');
+    }
+    const orderId = String(order._id);
+    const prior = batch.reservations?.find(r => r.orderId === orderId && r.state !== 'released');
+    if (prior && prior.quantity !== quantity) throw new BadRequestException('Lô đã giữ cho số lượng khác; giải phóng trước khi đổi.');
+    if (!prior) {
+      const reserved = await this.batchModel.findOneAndUpdate({ _id: batch._id,
+        reservations: { $not: { $elemMatch: { orderId, state: { $ne: 'released' } } } },
+        $expr: { $gte: [{ $subtract: ['$quantityRemaining', { $ifNull: ['$quantityReserved', 0] }] }, quantity] },
+      }, { $inc: { quantityReserved: quantity }, $push: { reservations: { orderId, quantity, state: 'reserved' } } });
+      if (!reserved) throw new BadRequestException('Hàng đã được giữ cho đơn khác hoặc không đủ số lượng.');
+    }
+    order.inventoryUnitCostSnapshot = batch.unitCost;
+    order.originalOrderId = batch.originalOrderId;
+    order.senderKind = batch.holderKind;
+    order.senderId = batch.holderId;
+    order.senderAddress = batch.holderAddress;
+    order.resalePolicySnapshot = 'resellable';
+  }
+
+  async commitOrderStock(order: any) {
+    if (!['inventory', 'dealer_custody'].includes(order.productSource)) return;
+    if (!(order.productionStatus === 'Đã trả kết quả' && String(order.trackingNumber || '').trim())) return;
+    const orderId = String(order._id);
+    const batch = await this.batchModel.findOneAndUpdate({ _id: order.inventoryBatchId,
+      reservations: { $elemMatch: { orderId, state: 'reserved', quantity: order.quantity } },
+      quantityRemaining: { $gte: order.quantity },
+    }, { $inc: { quantityRemaining: -order.quantity, quantityReserved: -order.quantity },
+      $set: { 'reservations.$.state': 'dispatched' } }, { new: true });
+    if (!batch) {
+      const already = await this.batchModel.exists({ _id: order.inventoryBatchId,
+        reservations: { $elemMatch: { orderId, state: 'dispatched', quantity: order.quantity } } });
+      if (!already) throw new BadRequestException('Không có hàng đã giữ để xuất cho đơn.');
+    }
+    await this.txModel.updateOne({ businessKey: `order-stock:${orderId}` }, { $setOnInsert: {
+      productId: order.productId, orderId, batchId: order.inventoryBatchId, type: 'sale',
+      quantity: -order.quantity, unitCost: order.inventoryUnitCostSnapshot,
+      ownerKind: order.productSource === 'dealer_custody' ? 'dealer' : 'company',
+      ownerId: order.productSource === 'dealer_custody' ? String(order.agentId) : undefined,
+      occurredAt: new Date(), notes: 'Xuất hàng đang có; không mua NCC thêm.',
+    } }, { upsert: true });
+  }
+
+  async releaseOrderReservation(batchId: unknown, orderId: string) {
+    if (!batchId) return;
+    const batch = await this.batchModel.findById(batchId).lean();
+    const reservation = batch?.reservations?.find(r => r.orderId === orderId && r.state === 'reserved');
+    if (!reservation) return;
+    await this.batchModel.updateOne({ _id: batchId, reservations: { $elemMatch: { orderId, state: 'reserved' } } },
+      { $inc: { quantityReserved: -reservation.quantity }, $set: { 'reservations.$.state': 'released' } });
+  }
 
   /** Record receive transactions from a PO, create batches and update WAC (supports session). */
   async recordReceiveFromPO(
@@ -32,6 +115,7 @@ export class InventoryService {
       if (qty <= 0) continue;
 
       batchDocs.push({
+        ownerKind: 'company', holderKind: 'company',
         productId: pid,
         source: 'purchase',
         supplierId: supplierId ? new Types.ObjectId(supplierId) : undefined,
@@ -77,71 +161,10 @@ export class InventoryService {
   }
 
   /** Adjustment: can be positive or negative. If positive and unitCost provided, update WAC */
-  async adjustStock(productId: string, quantity: number, unitCost?: number, notes?: string) {
-    const pid = new Types.ObjectId(productId);
-    const sum = await this.summaryModel.findOne({ productId: pid });
-    const onHand = sum?.onHand || 0;
-    let avg = sum?.avgCost || 0;
-    const qty = Number(quantity || 0);
-    if (qty === 0) return sum?.toObject();
-    const newOnHand = onHand + qty;
-    if (qty > 0 && unitCost !== undefined) {
-      avg = newOnHand > 0 ? ((onHand * avg) + (qty * unitCost)) / newOnHand : 0;
-    }
-    if (sum) {
-      sum.onHand = newOnHand;
-      sum.avgCost = avg;
-      await sum.save();
-    } else {
-      await this.summaryModel.create({ productId: pid, onHand: newOnHand, avgCost: qty > 0 ? (unitCost || 0) : 0 });
-    }
-    await this.txModel.create({ productId: pid, type: 'adjust', quantity: qty, unitCost, occurredAt: new Date(), notes });
-    return this.summaryModel.findOne({ productId: pid }).lean();
-  }
+  async adjustStock(productId: string, quantity: number, unitCost?: number, notes?: string) : Promise<any> { throw new BadRequestException('Cần chứng từ theo lô và chủ hàng. Nhập bằng PO/phiếu nhận hoàn, xuất bằng lần giao của đơn; không đổi tồn tổng theo sản phẩm.'); }
 
   /** Issue (outbound) stock with FIFO batches; blocks nếu không đủ tồn. */
-  async issueStock(productId: string, quantity: number, notes?: string, session?: ClientSession) {
-    const qty = Number(quantity || 0);
-    if (qty <= 0) return this.summaryModel.findOne({ productId: new Types.ObjectId(productId) }).lean();
-    const pid = new Types.ObjectId(productId);
-
-    const sum = await this.summaryModel.findOne({ productId: pid }).session(session || null);
-    const onHand = sum?.onHand || 0;
-    if (!sum || onHand < qty - 1e-6) {
-      throw new BadRequestException('Tồn kho không đủ để xuất');
-    }
-
-    let remaining = qty;
-    const txs: any[] = [];
-    const batches = await this.batchModel.find({ productId: pid, quantityRemaining: { $gt: 0 } }).sort({ receivedAt: 1, _id: 1 }).session(session || null);
-    for (const b of batches) {
-      if (remaining <= 0) break;
-      const take = Math.min(remaining, Number(b.quantityRemaining));
-      if (take > 0) {
-        b.quantityRemaining = Number(b.quantityRemaining) - take;
-        await b.save({ session });
-        remaining -= take;
-        txs.push({
-          productId: pid,
-          type: 'sale',
-          quantity: -take,
-          unitCost: b.unitCost,
-          batchId: b._id,
-          occurredAt: new Date(),
-          notes,
-        });
-      }
-    }
-
-    if (remaining > 0) {
-      throw new BadRequestException('Tồn kho không đủ theo FIFO');
-    }
-
-    sum.onHand = onHand - qty;
-    await sum.save({ session });
-    if (txs.length) await this.txModel.insertMany(txs, { session });
-    return this.summaryModel.findOne({ productId: pid }).lean();
-  }
+  async issueStock(productId: string, quantity: number, notes?: string, session?: ClientSession) : Promise<any> { throw new BadRequestException('Cần chứng từ theo lô và chủ hàng. Nhập bằng PO/phiếu nhận hoàn, xuất bằng lần giao của đơn; không đổi tồn tổng theo sản phẩm.'); }
 
   async listSummary(params: { page?: number; limit?: number; q?: string }) {
     const page = Math.max(1, Number(params.page || 1));
@@ -150,6 +173,17 @@ export class InventoryService {
     const q = params.q?.trim();
     // Basic join with product name via aggregation for convenience
     const pipeline: any[] = [
+      { $group: { _id: { productId: '$productId', ownerKind: '$ownerKind', ownerId: '$ownerId',
+        holderKind: '$holderKind', holderId: '$holderId' }, onHand: { $sum: '$quantityRemaining' },
+        reserved: { $sum: '$quantityReserved' }, value: { $sum: { $multiply: ['$quantityRemaining', '$unitCost'] } },
+        updatedAt: { $max: '$updatedAt' } } },
+      { $set: { productId: '$_id.productId', ownerKind: '$_id.ownerKind', ownerId: '$_id.ownerId',
+        holderKind: '$_id.holderKind', holderId: '$_id.holderId',
+        avgCost: { $cond: [{ $gt: ['$onHand', 0] }, { $divide: ['$value', '$onHand'] }, 0] } } },
+      { $lookup: { from: 'users', let: { owner: { $convert: { input: '$ownerId', to: 'objectId', onError: null, onNull: null } } },
+        pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$owner'] } } }, { $project: { fullName: 1 } }], as: 'ownerUser' } },
+      { $lookup: { from: 'users', let: { holder: { $convert: { input: '$holderId', to: 'objectId', onError: null, onNull: null } } },
+        pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$holder'] } } }, { $project: { fullName: 1 } }], as: 'holderUser' } },
       { $lookup: { from: 'products', localField: 'productId', foreignField: '_id', as: 'product' } },
       { $unwind: '$product' },
     ];
@@ -161,12 +195,18 @@ export class InventoryService {
       { $facet: { data: [{ $skip: skip }, { $limit: limit }], total: [{ $count: 'c' }] } },
       { $project: { data: 1, total: { $ifNull: [{ $arrayElemAt: ['$total.c', 0] }, 0] } } },
     );
-    const agg = await this.summaryModel.aggregate(pipeline);
+    const agg = await this.batchModel.aggregate(pipeline);
     const total = agg?.[0]?.total || 0;
     const data = (agg?.[0]?.data || []).map((row: any) => ({
       productId: row.productId,
       productName: row.product?.name,
       onHand: row.onHand,
+      reserved: row.reserved || 0,
+      available: row.onHand - (row.reserved || 0),
+      ownerKind: row.ownerKind || 'unreviewed', ownerId: row.ownerId,
+      ownerName: row.ownerKind === 'company' ? 'Công ty' : row.ownerUser?.[0]?.fullName || 'Chưa xác định chủ hàng',
+      holderKind: row.holderKind, holderId: row.holderId,
+      holderName: row.holderKind === 'company' ? 'Công ty' : row.holderUser?.[0]?.fullName || 'Chưa xác định nơi giữ',
       avgCost: row.avgCost,
       updatedAt: row.updatedAt,
     }));
@@ -190,7 +230,9 @@ export class InventoryService {
     items: Array<{ productId: string; quantity: number; recoveryUnitCost: number }>,
     notes?: string,
     session?: ClientSession,
+    context?: ReturnStockContext,
   ) {
+    if (!context) throw new BadRequestException('Cần chủ sở hữu và nơi nhận hàng hoàn.');
     const txs: any[] = [];
     const batchDocs: any[] = [];
     const summaryUpdates = new Map<string, { productId: Types.ObjectId; quantity: number; totalCost: number }>();
@@ -203,6 +245,9 @@ export class InventoryService {
       if (qty <= 0) continue;
 
       batchDocs.push({
+        ownerKind: context.ownerKind, ownerId: context.ownerId,
+        holderKind: context.holderKind, holderId: context.holderId, holderAddress: context.holderAddress,
+        originalOrderId: context.orderId, receiptKey: `${context.receiptId}:${batchDocs.length}`,
         productId: pid,
         source: 'return',
         quantityRemaining: qty,
@@ -225,7 +270,7 @@ export class InventoryService {
       }
     }
 
-    for (const update of summaryUpdates.values()) {
+    for (const update of context.ownerKind === 'company' ? summaryUpdates.values() : []) {
       const updateOptions = session ? { upsert: true, session } : { upsert: true };
       await this.summaryModel.updateOne(
         { productId: update.productId },
@@ -285,6 +330,7 @@ export class InventoryService {
         quantity: b.quantityRemaining,
         unitCost: b.unitCost,
         batchId: b._id,
+        orderId: context.orderId, ownerKind: context.ownerKind, ownerId: context.ownerId,
         occurredAt: b.receivedAt,
         notes: b.notes,
       });

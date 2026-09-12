@@ -14,9 +14,11 @@ import { User, UserSchema } from '../user/user.schema';
 import { RolesGuard } from './guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { SystemSettings, SystemSettingsSchema } from '../finance/schemas/system-settings.schema';
+import { BusinessLedgerModule } from '../business-ledger/business-ledger.module';
 
 @Module({
   imports: [
+    BusinessLedgerModule,
     MongooseModule.forFeature([
       { name: SupplierPayable.name, schema: SupplierPayableSchema },
       { name: SupplierStatement.name, schema: SupplierStatementSchema },

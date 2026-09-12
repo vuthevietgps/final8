@@ -31,6 +31,8 @@ export class CashflowSummarySnapshot {
    */
   @Prop({ required: true, default: -1 })
   windowDays: number;
+  @Prop({ default: false }) pending?: boolean;
+  @Prop({ default: 0 }) revision?: number;
 
   /**
    * Dữ liệu tổng hợp (JSON tự do, tương ứng với return type của getCashflowSummary).

@@ -223,6 +223,7 @@
           </div>
 
           <!-- Action Buttons -->
+          <app-treasury-account-selector [(value)]="ledgerAccountId" />
           <div class="fund-actions">
             <button class="btn btn-success btn-lg" (click)="openTransferModal()" [disabled]="info.ownerWithdrawable <= 0">
               <span>💰</span> Chuyển Tiền Từ Bank Balance
@@ -701,6 +702,7 @@
     <div class="modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>💰 Chuyển Tiền Từ Bank Balance</h2>
+        <app-treasury-account-selector [(value)]="ledgerAccountId" />
         <button class="close-btn" (click)="closeTransferModal()">&times;</button>
       </div>
       <div class="modal-body">

@@ -89,11 +89,13 @@ export class AdAccountTimezoneCheckService {
     const node = /^act_/i.test(accountId) ? accountId : `act_${accountId}`;
     const url =
       `https://graph.facebook.com/${getMetaGraphApiVersion()}/${encodeURIComponent(node)}` +
-      `?fields=timezone_name&access_token=${encodeURIComponent(token)}`;
+      '?fields=timezone_name';
 
     let timezone: string | undefined;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (data?.error) {
         this.handleUnavailableTimezoneValidation(

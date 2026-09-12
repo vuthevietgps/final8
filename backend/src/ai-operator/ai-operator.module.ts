@@ -23,6 +23,11 @@ import { SupplierPayable, SupplierPayableSchema } from '../supplier-payable/sche
 import { TestOrder2, TestOrder2Schema } from '../test-order2/schemas/test-order2.schema';
 import { AiOperatorController } from './ai-operator.controller';
 import { AiOperatorService } from './ai-operator.service';
+import { AiOperatorSessionService } from './ai-operator.session.service';
+import { AiOperatorOperationsReader } from './ai-operator.operations-reader';
+import { AiOperatorBusinessReader } from './ai-operator.business-reader';
+import { AiOperatorAdsReader } from './ai-operator.ads-reader';
+import { AiOperatorFinanceReader } from './ai-operator.finance-reader';
 import { AiOperatorMessage, AiOperatorMessageSchema } from './schemas/ai-operator-message.schema';
 import { AiOperatorSession, AiOperatorSessionSchema } from './schemas/ai-operator-session.schema';
 
@@ -55,7 +60,14 @@ import { AiOperatorSession, AiOperatorSessionSchema } from './schemas/ai-operato
     OpenAIConfigModule,
   ],
   controllers: [AiOperatorController],
-  providers: [AiOperatorService],
+  providers: [
+    AiOperatorService,
+    AiOperatorSessionService,
+    AiOperatorOperationsReader,
+    AiOperatorBusinessReader,
+    AiOperatorAdsReader,
+    AiOperatorFinanceReader,
+  ],
   exports: [AiOperatorService],
 })
 export class AiOperatorModule {}

@@ -1,14 +1,30 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AdAccount, AdAccountDocument } from '../ad-account/schemas/ad-account.schema';
+import {
+  AdsManagerAccount,
+  AdsManagerAccountDocument,
+} from '../ads-manager-account/schemas/ads-manager-account.schema';
 import { AdGroup, AdGroupDocument } from '../ad-group/schemas/ad-group.schema';
 import {
   GOOGLE_ADS_FINANCIAL_CONTROL,
   GoogleAdsFinancialControlReadModel,
 } from './google-ads-financial-control.port';
 import { GoogleAdsOperationBuilderService } from './google-ads-operation-builder.service';
+import { GoogleAdsConversionReadinessService } from './google-ads-conversion-readiness.service';
+import { googleAdsOperationHash } from './google-ads-integrity.util';
+import {
+  googleAdsManagerByLoginCustomerId,
+  googleAdsMccReadinessBlockers,
+} from './google-ads-mcc-readiness.util';
 import { GoogleAdsAdGroup, GoogleAdsAdGroupDocument } from './schemas/google-ads-ad-group.schema';
+import { GoogleAdsKeyword, GoogleAdsKeywordDocument } from './schemas/google-ads-keyword.schema';
+import { GoogleAdsAd, GoogleAdsAdDocument } from './schemas/google-ads-ad.schema';
+import {
+  GoogleAdsCampaignCriterion,
+  GoogleAdsCampaignCriterionDocument,
+} from './schemas/google-ads-campaign-criterion.schema';
 import { GoogleAdsActionPlan, GoogleAdsActionPlanItem } from './schemas/google-ads-action-plan.schema';
 import {
   GoogleAdsActionExecutionLog,
@@ -58,15 +74,25 @@ export type GoogleAdsFinancialControlDiagnostic = {
 type AuthoritativeSyncState = Map<string, Date>;
 
 const PORTFOLIO_STATE_MUTATIONS = [
+  'update_campaign_bidding_strategy',
   'update_campaign_budget',
   'resume_campaign',
 ];
 
 const SUPPORTED_EXECUTION_ACTIONS = new Set([
   'create_search_campaign',
+  'update_search_campaign',
+  'update_campaign_bidding_strategy',
   'create_ad_group',
+  'update_ad_group',
   'create_keyword',
+  'update_keyword',
+  'pause_keyword',
+  'resume_keyword',
   'create_responsive_search_ad',
+  'update_responsive_search_ad',
+  'pause_responsive_search_ad',
+  'resume_responsive_search_ad',
   'update_campaign_budget',
   'pause_campaign',
   'resume_campaign',
@@ -91,9 +117,22 @@ export class GoogleAdsExecutionPolicyService {
     private readonly syncRunModel: Model<GoogleAdsSyncRunDocument>,
     @InjectModel(GoogleAdsActionExecutionLog.name)
     private readonly executionLogModel: Model<GoogleAdsActionExecutionLogDocument>,
+    @InjectModel(AdsManagerAccount.name)
+    private readonly managerAccountModel: Model<AdsManagerAccountDocument>,
     private readonly operationBuilder: GoogleAdsOperationBuilderService,
     @Inject(GOOGLE_ADS_FINANCIAL_CONTROL)
     private readonly financialControlService: GoogleAdsFinancialControlReadModel,
+    @Optional()
+    @InjectModel(GoogleAdsKeyword.name)
+    private readonly keywordModel?: Model<GoogleAdsKeywordDocument>,
+    @Optional()
+    @InjectModel(GoogleAdsAd.name)
+    private readonly adModel?: Model<GoogleAdsAdDocument>,
+    @Optional()
+    @InjectModel(GoogleAdsCampaignCriterion.name)
+    private readonly campaignCriterionModel?: Model<GoogleAdsCampaignCriterionDocument>,
+    @Optional()
+    private readonly conversionReadinessService?: GoogleAdsConversionReadinessService,
   ) {}
 
   async preflight(
@@ -107,16 +146,21 @@ export class GoogleAdsExecutionPolicyService {
     }
 
     const accounts = new Map<string, any>();
+    const managers = new Map<string, any>();
     const results: GoogleAdsExecutionPreflight[] = [];
     for (const action of actions) {
       this.assertActionState(action);
       this.rejectRawExecutionPayload(action.typedPayload);
       this.validateTypedPayload(action);
-      await this.validateAccount(action, accounts);
+      await this.validateAccount(action, accounts, managers);
       await this.validateBudgetPolicy(action);
       const beforeState = await this.loadAndValidateBeforeState(action);
+      if (beforeState) this.assertCanonicalFreshness(beforeState, action.actionId);
+      await this.assertActivationPolicy(action, beforeState);
+      await this.validateBidPolicy(action, beforeState);
       const operations = this.operationBuilder.build(action);
       if (!operations.length) throw new BadRequestException(`No executable operation for action ${action.actionId}.`);
+      this.assertValidatedOperations(action, operations);
       results.push({ action, operations, beforeState });
     }
     if (options.enforceFinancialControl !== false) {
@@ -189,6 +233,89 @@ export class GoogleAdsExecutionPolicyService {
         throw new BadRequestException(`New campaign action ${action.actionId} must be a PAUSED Search campaign.`);
       }
     }
+    if (action.actionType === 'update_search_campaign') {
+      if (!/^\d+$/.test(String(payload.campaignId || ''))) {
+        throw new BadRequestException(`campaignId is required for action ${action.actionId}.`);
+      }
+      if (payload.campaignName === undefined && payload.endDate === undefined) {
+        throw new BadRequestException(
+          `update_search_campaign requires campaignName and/or endDate for action ${action.actionId}.`,
+        );
+      }
+      const forbidden = Object.keys(payload).filter((key) => ![
+        'campaignId',
+        'campaignResourceName',
+        'campaignName',
+        'endDate',
+      ].includes(key));
+      if (forbidden.length) {
+        throw new BadRequestException(
+          `update_search_campaign contains unsupported fields for action ${action.actionId}.`,
+        );
+      }
+    }
+    if (action.actionType === 'update_campaign_bidding_strategy') {
+      if (!/^\d+$/.test(String(payload.campaignId || ''))) {
+        throw new BadRequestException(`campaignId is required for action ${action.actionId}.`);
+      }
+      if (!['MAXIMIZE_CLICKS', 'MAXIMIZE_CONVERSIONS']
+        .includes(String(payload.biddingStrategyType || '').toUpperCase())) {
+        throw new BadRequestException(
+          `Unsupported bidding strategy for action ${action.actionId}.`,
+        );
+      }
+      const allowed = [
+        'campaignId',
+        'campaignResourceName',
+        'biddingStrategyType',
+        'biddingLifecycleStage',
+        'maxCpcBidCeilingVnd',
+        'maxCpcBidCeilingMicros',
+        'targetCpaVnd',
+        'targetCpaMicros',
+      ];
+      if (Object.keys(payload).some((key) => !allowed.includes(key))) {
+        throw new BadRequestException(
+          `update_campaign_bidding_strategy contains unsupported fields for action ${action.actionId}.`,
+        );
+      }
+      if (payload.biddingStrategyType === 'MAXIMIZE_CLICKS'
+        && payload.targetCpaMicros !== undefined) {
+        throw new BadRequestException(`targetCpaMicros is invalid for action ${action.actionId}.`);
+      }
+      if (payload.biddingStrategyType === 'MAXIMIZE_CONVERSIONS'
+        && payload.maxCpcBidCeilingMicros !== undefined) {
+        throw new BadRequestException(
+          `maxCpcBidCeilingMicros is invalid for action ${action.actionId}.`,
+        );
+      }
+      if (payload.maxCpcBidCeilingVnd !== undefined
+        && Number(payload.maxCpcBidCeilingVnd) * 1_000_000
+          !== Number(payload.maxCpcBidCeilingMicros)) {
+        throw new BadRequestException(
+          `CPC ceiling VND/micros mismatch for action ${action.actionId}.`,
+        );
+      }
+      if (payload.targetCpaVnd !== undefined
+        && Number(payload.targetCpaVnd) * 1_000_000
+          !== Number(payload.targetCpaMicros)) {
+        throw new BadRequestException(
+          `Target CPA VND/micros mismatch for action ${action.actionId}.`,
+        );
+      }
+      const expectedStage = payload.biddingStrategyType === 'MAXIMIZE_CLICKS'
+        ? (payload.maxCpcBidCeilingMicros === undefined
+          ? 'MAXIMIZE_CLICKS'
+          : 'MAXIMIZE_CLICKS_CPC_CEILING')
+        : (payload.targetCpaMicros === undefined
+          ? 'MAXIMIZE_CONVERSIONS'
+          : 'MAXIMIZE_CONVERSIONS_TARGET_CPA');
+      if (payload.biddingLifecycleStage !== expectedStage) {
+        throw new BadRequestException(
+          `Bidding lifecycle stage mismatch for action ${action.actionId}.`,
+        );
+      }
+    }
     if (action.actionType === 'update_campaign_budget') {
       const validId = /^\d+$/.test(String(payload.campaignBudgetId || ''));
       const validResource = new RegExp(`^customers/${action.customerId}/campaignBudgets/\\d+$`)
@@ -204,6 +331,18 @@ export class GoogleAdsExecutionPolicyService {
       if (!String(payload.keywordText || '').trim()) {
         throw new BadRequestException(`Keyword text is required for action ${action.actionId}.`);
       }
+      if (payload.status !== 'PAUSED') {
+        throw new BadRequestException(`New keyword ${action.actionId} must be PAUSED.`);
+      }
+      if (payload.negative === true) {
+        throw new BadRequestException(
+          `Negative keyword creation is disabled for action ${action.actionId}.`,
+        );
+      }
+      if (payload.negative === true
+        && (payload.cpcBidMicros !== undefined || payload.finalUrl !== undefined)) {
+        throw new BadRequestException(`Negative keyword ${action.actionId} cannot configure bids or URLs.`);
+      }
     }
     if (action.actionType === 'create_responsive_search_ad') {
       if (!Array.isArray(payload.headlines) || payload.headlines.length < 3) {
@@ -215,11 +354,87 @@ export class GoogleAdsExecutionPolicyService {
       if (!String(payload.finalUrl || '').trim()) {
         throw new BadRequestException(`RSA finalUrl is required for action ${action.actionId}.`);
       }
+      if (payload.status !== 'PAUSED') {
+        throw new BadRequestException(`New RSA ${action.actionId} must be PAUSED.`);
+      }
+    }
+    if (action.actionType === 'create_ad_group') {
+      if (payload.status !== 'PAUSED' || payload.type !== 'SEARCH_STANDARD') {
+        throw new BadRequestException(`New ad group ${action.actionId} must be PAUSED SEARCH_STANDARD.`);
+      }
+    }
+    if (action.actionType === 'update_ad_group'
+      && payload.adGroupName === undefined
+      && payload.cpcBidMicros === undefined) {
+      throw new BadRequestException(`update_ad_group requires a mutable field for action ${action.actionId}.`);
+    }
+    if (action.actionType === 'update_keyword'
+      && payload.cpcBidMicros === undefined
+      && payload.finalUrl === undefined) {
+      throw new BadRequestException(`update_keyword requires a mutable field for action ${action.actionId}.`);
+    }
+    if (action.actionType === 'update_responsive_search_ad') {
+      const mutable = [
+        'finalUrl', 'headlines', 'descriptions', 'path1', 'path2',
+        'trackingUrlTemplate', 'finalUrlSuffix',
+      ];
+      if (!mutable.some((field) => payload[field] !== undefined)) {
+        throw new BadRequestException(
+          `update_responsive_search_ad requires a mutable field for action ${action.actionId}.`,
+        );
+      }
+      if (payload.headlines !== undefined && payload.headlinePins === undefined) {
+        throw new BadRequestException(
+          `RSA headline replacement requires explicit headlinePins for action ${action.actionId}.`,
+        );
+      }
+      if (payload.descriptions !== undefined && payload.descriptionPins === undefined) {
+        throw new BadRequestException(
+          `RSA description replacement requires explicit descriptionPins for action ${action.actionId}.`,
+        );
+      }
+    }
+    if ([
+      'resume_campaign',
+      'resume_ad_group',
+      'resume_keyword',
+      'resume_responsive_search_ad',
+    ].includes(action.actionType)) {
+      const allowedKeys: Record<string, string[]> = {
+        resume_campaign: ['campaignId', 'campaignResourceName'],
+        resume_ad_group: ['campaignId', 'adGroupId', 'adGroupResourceName'],
+        resume_keyword: [
+          'campaignId', 'adGroupId', 'criterionId', 'criterionResourceName',
+        ],
+        resume_responsive_search_ad: [
+          'campaignId', 'adGroupId', 'adId', 'adGroupAdResourceName',
+        ],
+      };
+      if (Object.keys(payload).some((key) => !allowedKeys[action.actionType].includes(key))) {
+        throw new BadRequestException(`Resume action ${action.actionId} contains unsupported fields.`);
+      }
+    }
+    if (payload.trackingUrlTemplate !== undefined) {
+      this.assertTrackingTemplate(payload.trackingUrlTemplate, action.actionId);
+    }
+    if (payload.finalUrlSuffix !== undefined) {
+      const suffix = String(payload.finalUrlSuffix);
+      if (!suffix || suffix.length > 2048 || /^[?#]/.test(suffix)
+        || suffix.includes('://') || suffix.includes('#')
+        || suffix.split('&').some((part) => !part || !part.includes('='))
+        || /[\u0000-\u001F\u007F]/.test(suffix)) {
+        throw new BadRequestException(`Invalid finalUrlSuffix for action ${action.actionId}.`);
+      }
+      this.rejectSecretLikeData(suffix, 'finalUrlSuffix', action.actionId);
     }
     this.validateLandingPages(action);
   }
 
-  private async validateAccount(action: GoogleAdsActionPlanItem, cache: Map<string, any>) {
+  private async validateAccount(
+    action: GoogleAdsActionPlanItem,
+    cache: Map<string, any>,
+    managerCache: Map<string, any>,
+  ) {
     let account = cache.get(action.customerId);
     if (account === undefined) {
       account = await this.adAccountModel.findOne({
@@ -229,19 +444,40 @@ export class GoogleAdsExecutionPolicyService {
       }).lean();
       cache.set(action.customerId, account || null);
     }
-    const envAllowlist = this.csvEnv('GOOGLE_ADS_CUSTOMER_ID_ALLOWLIST').map((value) => this.digits(value));
-    if (!account && !envAllowlist.includes(action.customerId)) {
+    if (!account) {
       throw new BadRequestException(`customerId is not allowlisted for action ${action.actionId}.`);
     }
-    if (account?.currency && account.currency !== 'VND') {
+    if (account.lastSyncStatus !== 'ok') {
+      throw new BadRequestException(`Google Ads account sync is not successful for action ${action.actionId}.`);
+    }
+    this.assertCanonicalFreshness(account, action.actionId);
+    if (account.currency !== 'VND') {
       throw new BadRequestException(`Google Ads account currency mismatch for action ${action.actionId}.`);
     }
-    if (account?.timezoneId && account.timezoneId !== 'Asia/Ho_Chi_Minh') {
+    if (account.timezoneId !== 'Asia/Ho_Chi_Minh') {
       throw new BadRequestException(`Google Ads account timezone mismatch for action ${action.actionId}.`);
     }
     if (action.loginCustomerId && account?.loginCustomerId
       && this.digits(account.loginCustomerId) !== action.loginCustomerId) {
       throw new BadRequestException(`loginCustomerId mismatch for action ${action.actionId}.`);
+    }
+    if (action.loginCustomerId) {
+      let manager = managerCache.get(action.loginCustomerId);
+      if (manager === undefined) {
+        const managers: any[] = await this.managerAccountModel.find({
+          provider: 'google',
+          managerAccountType: 'google_ads_mcc',
+          isActive: true,
+        }).lean();
+        manager = googleAdsManagerByLoginCustomerId(managers, action.loginCustomerId) || null;
+        managerCache.set(action.loginCustomerId, manager);
+      }
+      const blockers = googleAdsMccReadinessBlockers(manager, action.customerId);
+      if (blockers.length) {
+        throw new BadRequestException(
+          `Google Ads MCC readiness blocked action ${action.actionId}: ${blockers.join(', ')}.`,
+        );
+      }
     }
   }
 
@@ -259,9 +495,11 @@ export class GoogleAdsExecutionPolicyService {
         throw new BadRequestException(`Invalid landing page URL for action ${action.actionId}.`);
       }
       const host = url.hostname.toLowerCase();
-      if (url.protocol !== 'https:' || !allowlist.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+      if (url.protocol !== 'https:' || url.username || url.password
+        || !allowlist.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
         throw new BadRequestException(`Landing page is not allowlisted for action ${action.actionId}.`);
       }
+      this.rejectSecretLikeData(url.toString(), 'landing page URL', action.actionId);
     }
   }
 
@@ -293,6 +531,283 @@ export class GoogleAdsExecutionPolicyService {
     const maxIncreasePercent = this.positiveEnv('GOOGLE_ADS_MAX_BUDGET_INCREASE_PERCENT', 20);
     if (requested > current * (1 + maxIncreasePercent / 100)) {
       throw new BadRequestException(`Budget increase exceeds policy for action ${action.actionId}.`);
+    }
+  }
+
+  private async validateBidPolicy(action: GoogleAdsActionPlanItem, beforeState: any) {
+    if (action.actionType === 'update_campaign_bidding_strategy') {
+      if (String(beforeState?.biddingStrategyResourceName || '').trim()) {
+        throw new BadRequestException(
+          `Portfolio bidding is not mutable for action ${action.actionId}.`,
+        );
+      }
+      const payload = action.typedPayload || {};
+      const strategy = String(payload.biddingStrategyType || '').toUpperCase();
+      const target = strategy === 'MAXIMIZE_CLICKS'
+        ? payload.maxCpcBidCeilingMicros
+        : payload.targetCpaMicros;
+      if (target !== undefined) {
+        const maximumVnd = strategy === 'MAXIMIZE_CLICKS'
+          ? this.positiveEnv('GOOGLE_ADS_MAX_CPC_BID_VND', 1_000_000)
+          : this.positiveEnv('GOOGLE_ADS_MAX_TARGET_CPA_VND', 100_000_000);
+        const micros = Number(target);
+        if (!Number.isSafeInteger(micros)
+          || micros <= 0
+          || micros > maximumVnd * 1_000_000) {
+          throw new BadRequestException(
+            `Bidding target violates policy for action ${action.actionId}.`,
+          );
+        }
+      }
+      if (strategy === 'MAXIMIZE_CONVERSIONS') {
+        const readiness = this.conversionReadinessService
+          ? await this.conversionReadinessService.evaluate(
+            action.customerId,
+            String(payload.campaignId || beforeState?.campaignId || ''),
+          )
+          : {
+            ready: false,
+            blockers: ['CONVERSION_READINESS_SERVICE_UNAVAILABLE'],
+          };
+        if (!readiness.ready) {
+          throw new BadRequestException(
+            `Conversion bidding lacks canonical readiness for action ${action.actionId}: ${readiness.blockers.join(', ')}.`,
+          );
+        }
+      }
+      return;
+    }
+    const requested = action.typedPayload?.cpcBidMicros;
+    if (requested === undefined) return;
+    const micros = Number(requested);
+    const maximum = this.positiveEnv('GOOGLE_ADS_MAX_CPC_BID_VND', 1_000_000) * 1_000_000;
+    if (!Number.isSafeInteger(micros) || micros < 0 || micros > maximum) {
+      throw new BadRequestException(`CPC bid violates policy for action ${action.actionId}.`);
+    }
+    const campaignId = String(action.typedPayload?.campaignId || beforeState?.campaignId || '');
+    const campaign: any = await this.campaignModel.findOne({
+      customerId: action.customerId,
+      campaignId,
+      advertisingChannelType: 'SEARCH',
+    }).lean();
+    if (!campaign || String(campaign.biddingStrategyType || '').toUpperCase() !== 'MANUAL_CPC') {
+      throw new BadRequestException(
+        `CPC bids require a canonical MANUAL_CPC Search campaign for action ${action.actionId}.`,
+      );
+    }
+    this.assertCanonicalFreshness(campaign, action.actionId);
+    if (!['update_ad_group', 'update_keyword'].includes(action.actionType)) return;
+    const current = Number(beforeState?.cpcBidMicros);
+    if (!Number.isFinite(current) || current < 0) {
+      throw new BadRequestException(`Canonical CPC bid baseline is missing for action ${action.actionId}.`);
+    }
+    if (micros <= current) return;
+    if (current === 0) {
+      throw new BadRequestException(`Cannot increase CPC bid from an unset baseline for action ${action.actionId}.`);
+    }
+    const maximumPercent = this.positiveEnv('GOOGLE_ADS_MAX_CPC_BID_INCREASE_PERCENT', 20);
+    if (((micros - current) / current) * 100 > maximumPercent) {
+      throw new BadRequestException(`CPC bid increase exceeds policy for action ${action.actionId}.`);
+    }
+  }
+
+  private async assertActivationPolicy(action: GoogleAdsActionPlanItem, beforeState: any) {
+    if (!action.actionType.startsWith('resume_')) return;
+    const payload = action.typedPayload || {};
+    if (String(beforeState?.status || '').toUpperCase() !== 'PAUSED') {
+      throw new BadRequestException(`Canonical resource must be PAUSED before action ${action.actionId}.`);
+    }
+    const campaign: any = action.actionType === 'resume_campaign'
+      ? beforeState
+      : await this.campaignModel.findOne({
+        customerId: action.customerId,
+        campaignId: payload.campaignId || beforeState?.campaignId,
+        advertisingChannelType: 'SEARCH',
+      }).lean();
+    if (!campaign || String(campaign.status || '').toUpperCase() !== 'PAUSED') {
+      throw new BadRequestException(
+        `Child resume requires a canonical PAUSED Search campaign for action ${action.actionId}.`,
+      );
+    }
+    this.assertCanonicalFreshness(campaign, action.actionId);
+
+    if (action.actionType === 'resume_responsive_search_ad') {
+      this.assertCanonicalRsaActivation(beforeState, action.actionId);
+      return;
+    }
+    if (action.actionType === 'resume_keyword') {
+      if (beforeState?.negative === true) {
+        throw new BadRequestException(`Negative keyword cannot resume for action ${action.actionId}.`);
+      }
+      return;
+    }
+    if (action.actionType === 'resume_ad_group') {
+      await this.assertEnabledDeliveryChildren(
+        action.customerId,
+        String(campaign.campaignId),
+        String(beforeState.adGroupId),
+        action.actionId,
+      );
+      return;
+    }
+
+    if (campaign.targetGoogleSearch !== true
+      || campaign.targetContentNetwork !== false
+      || campaign.targetPartnerSearchNetwork !== false) {
+      throw new BadRequestException(`Search network invariants fail for action ${action.actionId}.`);
+    }
+    await this.assertCanonicalTargetingEvidence(
+      action.customerId,
+      String(campaign.campaignId),
+      action.actionId,
+    );
+    const bidding = String(campaign.biddingStrategyType || '').toUpperCase();
+    if (['MAXIMIZE_CONVERSIONS', 'MAXIMIZE_CONVERSION_VALUE'].includes(bidding)) {
+      const readiness = this.conversionReadinessService
+        ? await this.conversionReadinessService.evaluate(
+          action.customerId,
+          String(campaign.campaignId),
+        )
+        : {
+          ready: false,
+          blockers: ['CONVERSION_READINESS_SERVICE_UNAVAILABLE'],
+        };
+      if (!readiness.ready) {
+        throw new BadRequestException(
+          `Conversion-based activation lacks canonical primary action and biddable goal evidence for action ${action.actionId}: ${readiness.blockers.join(', ')}.`,
+        );
+      }
+    }
+    if (!['MANUAL_CPC', 'MAXIMIZE_CLICKS', 'MAXIMIZE_CONVERSIONS']
+      .includes(bidding)) {
+      throw new BadRequestException(
+        `Campaign activation supports MANUAL_CPC or MAXIMIZE_CLICKS for action ${action.actionId}.`,
+      );
+    }
+    const adGroups: any[] = await this.adGroupModel.find({
+      customerId: action.customerId,
+      campaignId: String(campaign.campaignId),
+      type: 'SEARCH_STANDARD',
+      status: 'ENABLED',
+    }).lean();
+    let coherent = false;
+    for (const adGroup of adGroups || []) {
+      try {
+        this.assertCanonicalFreshness(adGroup, action.actionId);
+        await this.assertEnabledDeliveryChildren(
+          action.customerId,
+          String(campaign.campaignId),
+          String(adGroup.adGroupId),
+          action.actionId,
+        );
+        coherent = true;
+        break;
+      } catch {
+        // A different enabled Search ad group may still form a coherent graph.
+      }
+    }
+    if (!coherent) {
+      throw new BadRequestException(`No coherent enabled Search delivery graph for action ${action.actionId}.`);
+    }
+  }
+
+  private async assertEnabledDeliveryChildren(
+    customerId: string,
+    campaignId: string,
+    adGroupId: string,
+    actionId: string,
+  ) {
+    if (!this.keywordModel || !this.adModel) {
+      throw new BadRequestException(`Canonical delivery models are unavailable for action ${actionId}.`);
+    }
+    const [keyword, ad]: any[] = await Promise.all([
+      this.keywordModel.findOne({
+        customerId, campaignId, adGroupId, negative: false, status: 'ENABLED',
+      }).lean(),
+      this.adModel.findOne({
+        customerId,
+        campaignId,
+        adGroupId,
+        adType: 'RESPONSIVE_SEARCH_AD',
+        status: 'ENABLED',
+        policyApprovalStatus: 'APPROVED',
+      }).lean(),
+    ]);
+    if (!keyword || !ad) {
+      throw new BadRequestException(`Enabled keyword/RSA graph is incomplete for action ${actionId}.`);
+    }
+    this.assertCanonicalFreshness(keyword, actionId);
+    this.assertCanonicalFreshness(ad, actionId);
+    this.assertCanonicalRsaActivation(ad, actionId);
+  }
+
+  private async assertCanonicalTargetingEvidence(
+    customerId: string,
+    campaignId: string,
+    actionId: string,
+  ) {
+    if (!this.campaignCriterionModel) {
+      throw new BadRequestException(`Canonical targeting model is unavailable for action ${actionId}.`);
+    }
+    const [locations, languages]: any[][] = await Promise.all([
+      this.campaignCriterionModel.find({
+        customerId,
+        campaignId,
+        criterionType: 'LOCATION',
+        negative: false,
+        status: 'ENABLED',
+      }).lean(),
+      this.campaignCriterionModel.find({
+        customerId,
+        campaignId,
+        criterionType: 'LANGUAGE',
+        negative: false,
+        status: 'ENABLED',
+      }).lean(),
+    ]);
+    if (!locations.length || !languages.length) {
+      throw new BadRequestException(`Location/language targeting evidence is missing for action ${actionId}.`);
+    }
+    for (const criterion of [...locations, ...languages]) {
+      this.assertCanonicalFreshness(criterion, actionId);
+    }
+  }
+
+  private assertCanonicalRsaActivation(ad: any, actionId: string) {
+    if (String(ad?.adType || '').toUpperCase() !== 'RESPONSIVE_SEARCH_AD'
+      || String(ad?.policyApprovalStatus || '').toUpperCase() !== 'APPROVED') {
+      throw new BadRequestException(`RSA is not policy-approved for action ${actionId}.`);
+    }
+    const urls = Array.isArray(ad?.finalUrls) ? ad.finalUrls : [];
+    if (!urls.length) throw new BadRequestException(`RSA final URL is missing for action ${actionId}.`);
+    const allowlist = this.csvEnv(
+      'GOOGLE_ADS_LANDING_PAGE_ALLOWLIST',
+      'AI_MARKETING_LANDING_PAGE_ALLOWLIST',
+    ).map((value) => value.toLowerCase());
+    if (!allowlist.length) throw new BadRequestException('Landing page allowlist is empty.');
+    for (const raw of urls) {
+      try {
+        const url = new URL(raw);
+        const host = url.hostname.toLowerCase();
+        if (url.protocol !== 'https:' || url.username || url.password
+          || !allowlist.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+          throw new Error();
+        }
+        this.rejectSecretLikeData(url.toString(), 'RSA final URL', actionId);
+      } catch {
+        throw new BadRequestException(`RSA final URL is not allowlisted for action ${actionId}.`);
+      }
+    }
+    if (ad.trackingUrlTemplate) this.assertTrackingTemplate(ad.trackingUrlTemplate, actionId);
+    if (ad.finalUrlSuffix) {
+      const suffix = String(ad.finalUrlSuffix);
+      if (!suffix || suffix.length > 2048 || /^[?#]/.test(suffix)
+        || suffix.includes('://') || suffix.includes('#')
+        || suffix.split('&').some((part) => !part || !part.includes('='))
+        || /[\u0000-\u001F\u007F]/.test(suffix)) {
+        throw new BadRequestException(`Unsafe canonical finalUrlSuffix for action ${actionId}.`);
+      }
+      this.rejectSecretLikeData(suffix, 'finalUrlSuffix', actionId);
     }
   }
 
@@ -690,6 +1205,13 @@ export class GoogleAdsExecutionPolicyService {
       const budget = await this.findCampaignBudget(action.customerId, beforeState);
       return this.resumeExposure(action, budget, [beforeState?.lastSyncAt, budget?.lastSyncAt]);
     }
+    if (action.actionType === 'update_campaign_bidding_strategy') {
+      const budget = await this.findCampaignBudget(action.customerId, beforeState);
+      return this.resumeExposure(action, budget, [
+        beforeState?.lastSyncAt,
+        budget?.lastSyncAt,
+      ]);
+    }
     if (action.actionType === 'resume_ad_group') {
       const campaignId = String(beforeState?.campaignId || '');
       const campaign = campaignId
@@ -761,17 +1283,46 @@ export class GoogleAdsExecutionPolicyService {
     switch (action.actionType) {
       case 'create_search_campaign':
         return undefined;
-      case 'create_ad_group':
-        return this.requiredLean(
+      case 'update_search_campaign':
+      case 'update_campaign_bidding_strategy':
+        return this.validateSearchCampaignUpdate(action, await this.requiredLean(
           this.campaignModel.findOne({ customerId: action.customerId, campaignId: payload.campaignId }),
           `Campaign is not present in synced ERP data for action ${action.actionId}.`,
-        );
+        ));
+      case 'create_ad_group':
+        return this.validateSearchCampaignUpdate(action, await this.requiredLean(
+          this.campaignModel.findOne({ customerId: action.customerId, campaignId: payload.campaignId }),
+          `Campaign is not present in synced ERP data for action ${action.actionId}.`,
+        ));
+      case 'update_ad_group':
       case 'create_keyword':
       case 'create_responsive_search_ad':
-        return this.requiredLean(
+        return this.validateSearchAdGroup(action, await this.requiredLean(
           this.adGroupModel.findOne({ customerId: action.customerId, adGroupId: payload.adGroupId }),
           `Ad group is not present in synced ERP data for action ${action.actionId}.`,
-        );
+        ));
+      case 'update_keyword':
+      case 'pause_keyword':
+      case 'resume_keyword':
+        return this.validatePositiveKeyword(action, await this.requiredLean(
+          this.keywordModel.findOne({
+            customerId: action.customerId,
+            adGroupId: payload.adGroupId,
+            criterionId: payload.criterionId,
+          }),
+          `Keyword is not present in synced ERP data for action ${action.actionId}.`,
+        ));
+      case 'update_responsive_search_ad':
+      case 'pause_responsive_search_ad':
+      case 'resume_responsive_search_ad':
+        return this.validateResponsiveSearchAd(action, await this.requiredLean(
+          this.adModel.findOne({
+            customerId: action.customerId,
+            adGroupId: payload.adGroupId,
+            adId: payload.adId,
+          }),
+          `Responsive Search Ad is not present in synced ERP data for action ${action.actionId}.`,
+        ));
       case 'update_campaign_budget':
         return this.findBudget(action);
       case 'pause_campaign':
@@ -782,10 +1333,10 @@ export class GoogleAdsExecutionPolicyService {
         );
       case 'pause_ad_group':
       case 'resume_ad_group':
-        return this.requiredLean(
+        return this.validateSearchAdGroup(action, await this.requiredLean(
           this.adGroupModel.findOne({ customerId: action.customerId, adGroupId: payload.adGroupId }),
           `Ad group is not present in synced ERP data for action ${action.actionId}.`,
-        );
+        ));
       default:
         return undefined;
     }
@@ -810,6 +1361,157 @@ export class GoogleAdsExecutionPolicyService {
     return value;
   }
 
+  private validateSearchCampaignUpdate(action: GoogleAdsActionPlanItem, campaign: any) {
+    if (String(campaign?.advertisingChannelType || '').toUpperCase() !== 'SEARCH') {
+      throw new BadRequestException(
+        `Only a canonical Search campaign can be updated for action ${action.actionId}.`,
+      );
+    }
+    this.assertCanonicalFreshness(campaign, action.actionId);
+    const requestedEndDate = action.typedPayload?.endDate;
+    if (requestedEndDate !== undefined) {
+      const normalized = String(requestedEndDate);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+        throw new BadRequestException(`Invalid endDate for action ${action.actionId}.`);
+      }
+      const currentEndDate = String(campaign?.endDate || '');
+      if (currentEndDate && normalized > currentEndDate) {
+        throw new BadRequestException(
+          `Action ${action.actionId} may not extend the canonical campaign endDate.`,
+        );
+      }
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+      if (normalized < today) {
+        throw new BadRequestException(`Action ${action.actionId} endDate cannot be in the past.`);
+      }
+    }
+    return campaign;
+  }
+
+  private async validateSearchAdGroup(action: GoogleAdsActionPlanItem, adGroup: any) {
+    const payload = action.typedPayload || {};
+    if (String(adGroup?.type || '').toUpperCase() !== 'SEARCH_STANDARD'
+      || String(adGroup?.adGroupId || '') !== String(payload.adGroupId || '')
+      || (payload.campaignId !== undefined
+        && String(adGroup?.campaignId || '') !== String(payload.campaignId))) {
+      throw new BadRequestException(
+        `Only a canonical SEARCH_STANDARD ad group can be mutated for action ${action.actionId}.`,
+      );
+    }
+    const campaign = await this.campaignModel.findOne({
+      customerId: action.customerId,
+      campaignId: String(adGroup.campaignId),
+      advertisingChannelType: 'SEARCH',
+    }).lean();
+    if (!campaign) {
+      throw new BadRequestException(
+        `Ad group parent is not a canonical Search campaign for action ${action.actionId}.`,
+      );
+    }
+    this.assertCanonicalFreshness(adGroup, action.actionId);
+    this.assertCanonicalFreshness(campaign, action.actionId);
+    return adGroup;
+  }
+
+  private async validatePositiveKeyword(action: GoogleAdsActionPlanItem, keyword: any) {
+    const payload = action.typedPayload || {};
+    if (keyword?.negative === true) {
+      throw new BadRequestException(
+        `Negative keyword criteria cannot be updated for action ${action.actionId}; delete is disabled.`,
+      );
+    }
+    const expected = `customers/${action.customerId}/adGroupCriteria/${payload.adGroupId}~${payload.criterionId}`;
+    if (String(keyword?.resourceName || '') !== expected
+      || String(payload.criterionResourceName || '') !== expected) {
+      throw new BadRequestException(`Canonical keyword resource mismatch for action ${action.actionId}.`);
+    }
+    await this.validateSearchAdGroup(action, await this.requiredLean(
+      this.adGroupModel.findOne({
+        customerId: action.customerId,
+        adGroupId: payload.adGroupId,
+      }),
+      `Keyword parent ad group is missing for action ${action.actionId}.`,
+    ));
+    return keyword;
+  }
+
+  private async validateResponsiveSearchAd(action: GoogleAdsActionPlanItem, ad: any) {
+    const payload = action.typedPayload || {};
+    const expected = `customers/${action.customerId}/adGroupAds/${payload.adGroupId}~${payload.adId}`;
+    if (String(ad?.adType || '').toUpperCase() !== 'RESPONSIVE_SEARCH_AD'
+      || String(ad?.resourceName || '') !== expected) {
+      throw new BadRequestException(`Canonical Responsive Search Ad mismatch for action ${action.actionId}.`);
+    }
+    if (['pause_responsive_search_ad', 'resume_responsive_search_ad'].includes(action.actionType)
+      && String(payload.adGroupAdResourceName || '') !== expected) {
+      throw new BadRequestException(`Canonical AdGroupAd resource mismatch for action ${action.actionId}.`);
+    }
+    await this.validateSearchAdGroup(action, await this.requiredLean(
+      this.adGroupModel.findOne({
+        customerId: action.customerId,
+        adGroupId: payload.adGroupId,
+      }),
+      `RSA parent ad group is missing for action ${action.actionId}.`,
+    ));
+    return ad;
+  }
+
+  private assertTrackingTemplate(value: unknown, actionId: string) {
+    const template = String(value || '').trim();
+    if (!template || template.length > 2048 || !template.includes('{lpurl}')
+      || /[\u0000-\u001F\u007F]/.test(template)) {
+      throw new BadRequestException(`Invalid trackingUrlTemplate for action ${actionId}.`);
+    }
+    this.rejectSecretLikeData(template, 'trackingUrlTemplate', actionId);
+    const allowlist = this.csvEnv(
+      'GOOGLE_ADS_TRACKING_DOMAIN_ALLOWLIST',
+      'GOOGLE_ADS_LANDING_PAGE_ALLOWLIST',
+      'AI_MARKETING_LANDING_PAGE_ALLOWLIST',
+    ).map((domain) => domain.toLowerCase());
+    if (!allowlist.length) {
+      throw new BadRequestException('Tracking domain allowlist is empty.');
+    }
+    try {
+      const parsed = new URL(template.replace(/\{[^{}]+\}/g, 'value'));
+      const host = parsed.hostname.toLowerCase();
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password
+        || !allowlist.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+        throw new Error();
+      }
+    } catch {
+      throw new BadRequestException(
+        `trackingUrlTemplate domain is invalid or not allowlisted for action ${actionId}.`,
+      );
+    }
+  }
+
+  private assertCanonicalFreshness(value: any, actionId: string) {
+    const timestamp = value?.lastSyncAt ? new Date(value.lastSyncAt) : null;
+    const maximumAge = this.positiveEnv(
+      'GOOGLE_ADS_CANONICAL_SYNC_MAX_AGE_MS',
+      15 * 60 * 1000,
+    );
+    if (!timestamp || Number.isNaN(timestamp.getTime())
+      || timestamp.getTime() > Date.now() + 60_000
+      || Date.now() - timestamp.getTime() > maximumAge) {
+      throw new BadRequestException(`Canonical provider state is missing or stale for action ${actionId}.`);
+    }
+  }
+
+  private rejectSecretLikeData(value: string, field: string, actionId: string) {
+    let decoded = value;
+    try { decoded = decodeURIComponent(value); } catch { /* keep raw value */ }
+    if (/(access_?token|refresh_?token|api_?key|client_?secret|password|authorization)/i
+      .test(decoded)) {
+      throw new BadRequestException(`${field} contains secret-like data for action ${actionId}.`);
+    }
+  }
+
   private rejectRawExecutionPayload(value: any) {
     const blockedKeys = new Set(['api_execution_queue', 'rawApiRequest', 'rawPayload', 'mutateOperation', 'providerRequest']);
     const walk = (input: any): boolean => {
@@ -818,6 +1520,31 @@ export class GoogleAdsExecutionPolicyService {
       return Object.entries(input).some(([key, child]) => blockedKeys.has(key) || walk(child));
     };
     if (walk(value)) throw new BadRequestException('Raw provider execution payload is forbidden.');
+  }
+
+  private assertValidatedOperations(
+    action: GoogleAdsActionPlanItem,
+    operations: Array<Record<string, any>>,
+  ) {
+    const expectedHash = String(action.providerValidationOperationHash || '');
+    if (!/^[a-f0-9]{64}$/.test(expectedHash)) {
+      throw new BadRequestException(
+        `Action ${action.actionId} is missing provider validateOnly operation binding.`,
+      );
+    }
+    if (googleAdsOperationHash(operations) !== expectedHash) {
+      throw new BadRequestException(
+        `Action ${action.actionId} changed after provider validateOnly; validate it again.`,
+      );
+    }
+    if (action.providerValidationExpiresAt) {
+      const expiresAt = new Date(action.providerValidationExpiresAt);
+      if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+        throw new BadRequestException(
+          `Action ${action.actionId} provider validateOnly evidence has expired.`,
+        );
+      }
+    }
   }
 
   private collectUrls(value: any, key = ''): string[] {

@@ -12,6 +12,7 @@ import { JwtAuthGuard, RolesGuard } from './guards/auth.guard';
 import { SessionLogModule } from '../session-log/session-log.module';
 import { SalaryConfig, SalaryConfigSchema } from '../salary-config/schemas/salary-config.schema';
 import { LaborCost1, LaborCost1Schema } from '../labor-cost1/schemas/labor-cost1.schema';
+import { AdvertisingCostRefreshModule } from '../advertising-cost/advertising-cost-refresh.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { LaborCost1, LaborCost1Schema } from '../labor-cost1/schemas/labor-cost1
       { name: LaborCost1.name, schema: LaborCost1Schema },
     ]),
     SessionLogModule,
+    AdvertisingCostRefreshModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard],

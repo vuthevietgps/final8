@@ -58,6 +58,7 @@ describe('Ads automation evidence rules', () => {
   it('blocks budget scale when campaignBudgetId is missing without fallback', () => {
     const result = evaluateAdGroupEvidence({
       ...baseInput,
+      platform: 'google_ads',
       campaignBudgetId: undefined,
       campaignId: 'campaign-001',
       adGroupId: 'ag-001',
@@ -66,6 +67,21 @@ describe('Ads automation evidence rules', () => {
     expect(result.readinessStatus).toBe('blocked');
     expect(result.blockers.map((item) => item.code)).toContain('BUDGET_CAMPAIGN_BUDGET_ID_MISSING');
     expect(result.campaignBudgetId).toBeUndefined();
+  });
+
+  it('does not require the Google campaignBudgetId contract for Meta ad sets', () => {
+    const result = evaluateAdGroupEvidence({
+      ...baseInput,
+      platform: 'meta_ads',
+      campaignBudgetId: undefined,
+      campaignId: 'campaign-001',
+      adGroupId: 'ad-set-001',
+    });
+
+    expect(result.readinessStatus).toBe('scale_ready');
+    expect(result.blockers.map((item) => item.code)).not.toContain(
+      'BUDGET_CAMPAIGN_BUDGET_ID_MISSING',
+    );
   });
 
   it('blocks negative profit after ads and recommends pause review', () => {

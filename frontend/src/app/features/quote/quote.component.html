@@ -239,6 +239,11 @@
 
             <!-- Unit Price -->
             <div class="form-group">
+              <label>Phí giao thu đại lý (mỗi lần giao)</label>
+              <input type="number" min="0" formControlName="shippingFee" placeholder="Để trống: theo phí thực tế" />
+              <label>Phí hoàn thu đại lý (mỗi lần hoàn)</label>
+              <input type="number" min="0" formControlName="returnFee" placeholder="Để trống: theo phí thực tế" />
+              <small>Giá 0 là miễn phí, khác với để trống. Phí được chụp cùng báo giá vào đơn.</small>
               <label for="unitPrice">Giá báo (VNĐ) *</label>
               <input 
                 type="number" 

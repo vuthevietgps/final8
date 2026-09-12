@@ -1,0 +1,85 @@
+<main>
+  <nav><a routerLink="/ads-settings">Cài đặt Ads</a><a routerLink="/fanpages">Fanpage</a></nav>
+  <h1>Kết nối Windsor và Bird</h1>
+  <p>Quản lý kết nối quảng cáo và Messenger dùng cho ERP.</p>
+  <aside class="stage">Windsor là nguồn chi phí Google Ads chính. Sau khi đọc, ERP ghi dữ liệu hợp lệ vào sổ chi phí để phân bổ cho đơn hàng và báo cáo lợi nhuận. Ghi quảng cáo và Bird Messenger vẫn chưa được kích hoạt.</aside>
+  <p class="notice" *ngIf="storageReason() === 'PREVIEW_EPHEMERAL_VAULT'">Đây là bản xem thử với khóa mã hóa tạm thời. Nhập key trên backend được cấu hình khóa mã hóa bền vững; bản xem thử chỉ cho xem giao diện.</p>
+  <p class="notice" *ngIf="storageReason() === 'VAULT_KEY_REQUIRED'">Backend cần cấu hình khóa mã hóa riêng trước khi lưu kết nối. Xem hướng dẫn triển khai dành cho quản trị hệ thống.</p>
+  <p role="alert" class="error" *ngIf="error()">{{ error() }}</p>
+  <p role="status" class="notice" *ngIf="notice()">{{ notice() }}</p>
+  <div class="layout">
+    <section>
+      <h2>Kết nối đã lưu</h2>
+      <p *ngIf="!connections().length && !busy()">Chưa có kết nối. Thêm nguồn bên cạnh để bắt đầu.</p>
+      <article *ngFor="let row of connections()">
+        <div class="heading"><h3>{{ row.name }}</h3><span class="badge">{{ row.state === 'disabled' ? 'Đang tắt' : 'Đã cấu hình' }}</span></div>
+        <p>{{ label(row.kind) }}</p>
+        <p *ngIf="row.pageId">Page: {{ row.pageId }} · {{ row.birdApi }}</p>
+        <p *ngIf="row.accountIds.length">Tài khoản: {{ row.accountIds.join(', ') }}</p>
+        <p>API key: đã lưu mã hóa<span *ngIf="row.kind === 'bird-messenger'"> · Signing secret: {{ row.hasSigningSecret ? 'đã lưu' : 'chưa nhập' }}</span></p>
+        <p>{{ checkMessage(row.check?.code) }}</p>
+        <small *ngIf="row.checkedAt">Kiểm tra: {{ row.checkedAt | date:'dd/MM/yyyy HH:mm' }}</small>
+        <p *ngIf="row.lastReadSyncAt">Đồng bộ đọc gần nhất: {{ row.lastReadSyncAt | date:'dd/MM/yyyy HH:mm' }} · {{ row.lastReadSyncStatus }}</p>
+        <details *ngIf="row.check?.accounts?.length"><summary>Tài khoản Windsor trả về</summary>
+          <ul><li *ngFor="let account of row.check?.accounts">{{ account.name }} — {{ account.id }}</li></ul>
+        </details>
+        <details *ngIf="row.check?.actions?.length"><summary>Hành động được nhà cung cấp công bố</summary>
+          <p>Danh sách tham khảo; chưa đủ điều kiện thực thi qua Windsor.</p>
+          <ul><li *ngFor="let action of row.check?.actions">{{ action }}</li></ul>
+        </details>
+        <div class="actions" *ngIf="canEdit() || (canReadAds() && row.kind === 'windsor-google')">
+          <button *ngIf="canEdit()" type="button" (click)="edit(row)" [disabled]="busy()">Sửa kết nối</button>
+          <button *ngIf="canEdit()" type="button" (click)="check(row)" [disabled]="busy() || !storageEnabled() || row.state === 'disabled'">Kiểm tra quyền truy cập</button>
+          <button *ngIf="canReadAds() && row.kind === 'windsor-google'" class="primary" type="button" (click)="syncAds(row)"
+            [disabled]="busy() || !storageEnabled() || row.state === 'disabled' || !row.check?.readAccessConfirmed">Đồng bộ 7 ngày trọn vẹn</button>
+          <button *ngIf="canReadAds() && row.kind === 'windsor-google' && row.lastReadSyncAt" type="button" (click)="viewAds(row)" [disabled]="busy()">Xem dữ liệu đã lưu</button>
+          <button *ngIf="canReadAds() && row.kind === 'windsor-google'" type="button" (click)="syncCatalog(row)" [disabled]="busy() || row.state === 'disabled' || !row.check?.readAccessConfirmed">Đưa dữ liệu đã lưu vào tài khoản / nhóm</button>
+          <a *ngIf="row.kind === 'windsor-google'" routerLink="/ad-accounts">Tài Khoản Quảng Cáo</a>
+          <a *ngIf="row.kind === 'windsor-google'" routerLink="/ad-groups">Nhóm Quảng Cáo</a>
+        </div>
+        <div class="snapshot" *ngIf="adsSnapshots()[row.id] as snapshot">
+          <strong>Kho Windsor {{ snapshot.dateFrom }} → {{ snapshot.dateTo }}</strong>
+          <p class="error" *ngIf="snapshot.estimatedRows">Sổ chi phí có {{ snapshot.estimatedRows }} dòng tạm tính,
+            tổng {{ snapshot.estimatedSpend | number:'1.0-0' }}. Số thực tế sẽ thay thế khi đồng bộ lại thành công.</p>
+          <p>{{ snapshot.summary.rows }} dòng · Chi phí {{ snapshot.summary.spend | number:'1.0-0' }} {{ snapshot.summary.currencies.join(', ') || 'chưa rõ tiền tệ' }}</p>
+          <p>{{ snapshot.summary.impressions | number }} hiển thị · {{ snapshot.summary.clicks | number }} click · {{ snapshot.summary.conversions | number:'1.0-2' }} chuyển đổi</p>
+          <p class="error" *ngIf="snapshot.truncated">Đã chạm giới hạn hiển thị; không dùng tổng này để ra quyết định.</p>
+          <small *ngIf="snapshot.materializedToAdvertisingCost">Đã đưa {{ snapshot.materializedRows }} dòng vào AdvertisingCost để tính lợi nhuận.</small>
+          <small class="error" *ngIf="!snapshot.materializedToAdvertisingCost">Dữ liệu trong khoảng này chưa được đưa đầy đủ vào AdvertisingCost.</small>
+        </div>
+      </article>
+    </section>
+    <section *ngIf="canEdit()">
+      <form #connectionForm="ngForm" (ngSubmit)="save()" autocomplete="off">
+        <h2>{{ editingId ? 'Sửa kết nối' : 'Thêm kết nối' }}</h2>
+        <fieldset [disabled]="busy() || !storageEnabled()">
+          <label>Nguồn<select name="kind" [ngModel]="form.kind" (ngModelChange)="changeKind($event)" [disabled]="!!editingId">
+            <option value="windsor-facebook">Windsor · Facebook Ads</option><option value="windsor-google">Windsor · Google Ads</option><option value="bird-messenger">Bird · Messenger</option>
+          </select></label>
+          <label>Tên kết nối<input name="name" [(ngModel)]="form.name" required maxlength="100"></label>
+          <label>API key {{ editingId ? '(để trống để giữ nguyên)' : '' }}<input name="apiKey" type="password" [(ngModel)]="apiKey" [required]="!editingId" minlength="8" maxlength="4096" autocomplete="new-password" spellcheck="false"></label>
+          <ng-container *ngIf="form.kind !== 'bird-messenger'">
+            <label>ID tài khoản ads<textarea name="accounts" [(ngModel)]="accountsText" rows="3" placeholder="Mỗi ID cách nhau bằng dấu phẩy"></textarea></label>
+            <p class="hint">Có thể lưu trước, kiểm tra để lấy danh sách tài khoản Windsor rồi quay lại chọn ID.</p>
+          </ng-container>
+          <ng-container *ngIf="form.kind === 'bird-messenger'">
+            <label>Phiên bản tài khoản<select name="birdApi" [(ngModel)]="form.birdApi" required><option value="bird-v1">Bird API mới</option><option value="messagebird-v1">MessageBird Conversations v1</option></select></label>
+            <label *ngIf="form.birdApi === 'bird-v1'">Workspace ID<input name="workspaceId" [(ngModel)]="form.workspaceId" required></label>
+            <label>Channel ID<input name="channelId" [(ngModel)]="form.channelId" required></label>
+            <label>Fanpage trong ERP<select name="pageId" [(ngModel)]="form.pageId" required><option [ngValue]="undefined">Chọn Fanpage</option><option *ngFor="let page of pages()" [value]="page.pageId">{{ page.name }} · {{ page.pageId }}</option></select></label>
+            <label>Signing secret {{ editingId ? '(để trống để giữ nguyên)' : '(có thể bổ sung sau)' }}<input name="signingSecret" type="password" [(ngModel)]="signingSecret" minlength="8" maxlength="4096" autocomplete="new-password" spellcheck="false"></label>
+            <p class="hint">Đổi phiên bản API cần nhập lại API key và signing secret. Kiểm tra quyền truy cập chưa xác nhận tracking quảng cáo.</p>
+          </ng-container>
+          <label>Trạng thái<select name="state" [(ngModel)]="form.state"><option value="configured">Đã cấu hình</option><option value="disabled">Tắt kết nối</option></select></label>
+          <div class="actions"><button class="primary" type="submit" [disabled]="connectionForm.invalid">{{ busy() ? 'Đang xử lý…' : 'Lưu kết nối' }}</button><button type="button" (click)="reset()">Thêm mới</button></div>
+        </fieldset>
+      </form>
+      <aside>
+        <h3>Thiết lập tiết kiệm</h3>
+        <p>Forever Free chỉ duy trì một nguồn và một tài khoản sau trial. Nếu quản lý đồng thời ba tài khoản Google Ads, cần đối chiếu gói Windsor trước khi trial kết thúc.</p>
+        <p>Với Bird, chọn Messenger API/Connectivity và xác nhận phí tối thiểu, webhook, lưu trữ. Chatbot và đơn hàng tiếp tục dùng ERP.</p>
+        <a href="https://onboard.windsor.ai/" target="_blank" rel="noopener noreferrer">Mở Windsor</a> · <a href="https://bird.com/" target="_blank" rel="noopener noreferrer">Mở Bird</a>
+      </aside>
+    </section>
+  </div>
+</main>

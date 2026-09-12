@@ -184,13 +184,22 @@ export class AdAccountService {
     try {
       const current = await this.adAccountModel
         .findById(id)
-        .select('accountType accountId loginCustomerId')
+        .select('accountType accountId loginCustomerId name sourceSystem')
         .lean();
       if (!current) {
         throw new NotFoundException('Khong tim thay tai khoan quang cao de cap nhat');
       }
       const nextAccountType = ((dto.accountType as AccountType) || current.accountType) as AccountType;
       const payload = this.buildPayload(dto, nextAccountType);
+      if (current.sourceSystem === 'windsor') {
+        for (const field of ['name', 'accountId', 'accountType']) {
+          if (field in dto && String((payload as any)[field] ?? '') !== String((current as any)[field] ?? '')) {
+            throw new BadRequestException('Tên và ID tài khoản được đồng bộ từ Windsor.');
+          }
+          delete (payload as any)[field];
+        }
+        if (dto.managementMode === undefined) delete payload.managementMode;
+      }
       const nextAccountId = (payload.accountId as string | undefined) || current.accountId;
       const nextLoginCustomerId =
         (payload.loginCustomerId as string | undefined) || current.loginCustomerId;
@@ -199,8 +208,8 @@ export class AdAccountService {
         || nextAccountType === 'google'
         || nextAccountType === 'tiktok';
       const timezoneIdentityChanged =
-        dto.accountType !== undefined
-        || dto.accountId !== undefined
+        nextAccountType !== current.accountType
+        || nextAccountId !== current.accountId
         || dto.loginCustomerId !== undefined;
 
       if (shouldRevalidateTimezone && timezoneIdentityChanged && nextAccountId) {
@@ -228,6 +237,8 @@ export class AdAccountService {
   }
 
   async remove(id: string): Promise<void> {
+    const current = await this.adAccountModel.findById(id).select('sourceSystem').lean();
+    if (current?.sourceSystem === 'windsor') throw new BadRequestException('Tài khoản được quản lý từ Windsor; không xóa liên kết của các nhóm đã đồng bộ.');
     const deleted = await this.adAccountModel.findByIdAndDelete(id).exec();
     if (!deleted) {
       throw new NotFoundException('Khong tim thay tai khoan quang cao de xoa');

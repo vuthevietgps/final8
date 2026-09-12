@@ -6,6 +6,7 @@
  */
 import { IsDateString, IsNumber, IsOptional, IsString, Min, IsIn } from 'class-validator';
 import { IsBoolean } from 'class-validator';
+import { IsInt, Max } from 'class-validator';
 import { OPS_CATEGORIES, OpsCategory } from '../schemas/other-cost.schema';
 
 export class CreateOtherCostDto {
@@ -20,7 +21,9 @@ export class CreateOtherCostDto {
   dueDate: string;
 
   @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(1_000_000_000_000)
   amount: number;
 
   /**

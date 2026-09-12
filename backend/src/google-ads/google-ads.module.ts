@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AdAccount, AdAccountSchema } from '../ad-account/schemas/ad-account.schema';
 import { AdGroup, AdGroupSchema } from '../ad-group/schemas/ad-group.schema';
+import {
+  AdsManagerAccount,
+  AdsManagerAccountSchema,
+} from '../ads-manager-account/schemas/ads-manager-account.schema';
 import { ApiTokenModule } from '../api-token/api-token.module';
 import { FinanceModule } from '../finance/finance.module';
 import { FinancialControlService } from '../finance/financial-control.service';
@@ -21,6 +25,15 @@ import { GoogleAdsOperationBuilderService } from './google-ads-operation-builder
 import { GoogleAdsProviderValidationService } from './google-ads-provider-validation.service';
 import { GoogleAdsReadonlySyncService } from './google-ads-readonly-sync.service';
 import { GoogleAdsProfitEnrichmentService } from './google-ads-profit-enrichment.service';
+import { GoogleAdsCapabilitiesService } from './google-ads-capabilities.service';
+import { GoogleAdsErpActionPlanService } from './google-ads-erp-action-plan.service';
+import { GoogleAdsLookupService } from './google-ads-lookup.service';
+import { GoogleAdsConversionReadinessService } from './google-ads-conversion-readiness.service';
+import { GoogleAdsBiddingLifecycleService } from './google-ads-bidding-lifecycle.service';
+import {
+  GoogleAdsBiddingLifecycle,
+  GoogleAdsBiddingLifecycleSchema,
+} from './schemas/google-ads-bidding-lifecycle.schema';
 import { GoogleAdsAd, GoogleAdsAdSchema } from './schemas/google-ads-ad.schema';
 import { GoogleAdsAdGroup, GoogleAdsAdGroupSchema } from './schemas/google-ads-ad-group.schema';
 import { GoogleAdsCampaign, GoogleAdsCampaignSchema } from './schemas/google-ads-campaign.schema';
@@ -28,6 +41,22 @@ import {
   GoogleAdsCampaignBudget,
   GoogleAdsCampaignBudgetSchema,
 } from './schemas/google-ads-campaign-budget.schema';
+import {
+  GoogleAdsCampaignCriterion,
+  GoogleAdsCampaignCriterionSchema,
+} from './schemas/google-ads-campaign-criterion.schema';
+import {
+  GoogleAdsCampaignConversionGoal,
+  GoogleAdsCampaignConversionGoalSchema,
+} from './schemas/google-ads-campaign-conversion-goal.schema';
+import {
+  GoogleAdsConversionAction,
+  GoogleAdsConversionActionSchema,
+} from './schemas/google-ads-conversion-action.schema';
+import {
+  GoogleAdsConversionGoalCampaignConfig,
+  GoogleAdsConversionGoalCampaignConfigSchema,
+} from './schemas/google-ads-conversion-goal-campaign-config.schema';
 import { GoogleAdsDailyMetric, GoogleAdsDailyMetricSchema } from './schemas/google-ads-daily-metric.schema';
 import { GoogleAdsKeyword, GoogleAdsKeywordSchema } from './schemas/google-ads-keyword.schema';
 import { GoogleAdsSyncRun, GoogleAdsSyncRunSchema } from './schemas/google-ads-sync-run.schema';
@@ -49,7 +78,18 @@ import {
 
 export const GOOGLE_ADS_MODEL_DEFINITIONS = [
   { name: GoogleAdsCampaign.name, schema: GoogleAdsCampaignSchema },
+  { name: GoogleAdsBiddingLifecycle.name, schema: GoogleAdsBiddingLifecycleSchema },
   { name: GoogleAdsCampaignBudget.name, schema: GoogleAdsCampaignBudgetSchema },
+  { name: GoogleAdsCampaignCriterion.name, schema: GoogleAdsCampaignCriterionSchema },
+  { name: GoogleAdsConversionAction.name, schema: GoogleAdsConversionActionSchema },
+  {
+    name: GoogleAdsCampaignConversionGoal.name,
+    schema: GoogleAdsCampaignConversionGoalSchema,
+  },
+  {
+    name: GoogleAdsConversionGoalCampaignConfig.name,
+    schema: GoogleAdsConversionGoalCampaignConfigSchema,
+  },
   { name: GoogleAdsAdGroup.name, schema: GoogleAdsAdGroupSchema },
   { name: GoogleAdsKeyword.name, schema: GoogleAdsKeywordSchema },
   { name: GoogleAdsAd.name, schema: GoogleAdsAdSchema },
@@ -68,6 +108,7 @@ export const GOOGLE_ADS_MODEL_DEFINITIONS = [
     MongooseModule.forFeature([
       { name: AdAccount.name, schema: AdAccountSchema },
       { name: AdGroup.name, schema: AdGroupSchema },
+      { name: AdsManagerAccount.name, schema: AdsManagerAccountSchema },
       { name: TestOrder2.name, schema: TestOrder2Schema },
       ...GOOGLE_ADS_MODEL_DEFINITIONS,
     ]),
@@ -80,6 +121,11 @@ export const GOOGLE_ADS_MODEL_DEFINITIONS = [
     GoogleAdsProfitEnrichmentService,
     GoogleAdsExportService,
     GoogleAdsActionPlanImportService,
+    GoogleAdsErpActionPlanService,
+    GoogleAdsCapabilitiesService,
+    GoogleAdsLookupService,
+    GoogleAdsConversionReadinessService,
+    GoogleAdsBiddingLifecycleService,
     GoogleAdsOperationBuilderService,
     GoogleAdsProviderValidationService,
     GoogleAdsActionApprovalPolicyService,
@@ -100,6 +146,11 @@ export const GOOGLE_ADS_MODEL_DEFINITIONS = [
     GoogleAdsProfitEnrichmentService,
     GoogleAdsExportService,
     GoogleAdsActionPlanImportService,
+    GoogleAdsErpActionPlanService,
+    GoogleAdsCapabilitiesService,
+    GoogleAdsLookupService,
+    GoogleAdsConversionReadinessService,
+    GoogleAdsBiddingLifecycleService,
     GoogleAdsOperationBuilderService,
     GoogleAdsProviderValidationService,
     GoogleAdsActionApprovalPolicyService,

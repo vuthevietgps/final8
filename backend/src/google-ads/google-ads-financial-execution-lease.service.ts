@@ -126,7 +126,10 @@ export class GoogleAdsFinancialExecutionLeaseService implements OnModuleInit {
     if (this.uniqueIndexReady) return;
     if (this.uniqueIndexPromise) return this.uniqueIndexPromise;
     this.uniqueIndexPromise = (async () => {
-      const indexes = await this.leaseModel.collection.indexes();
+      const indexes = await this.leaseModel.collection.indexes().catch((error: any) => {
+        if (error?.code === 26) return []; // A fresh database has no collection yet.
+        throw error;
+      });
       const hasUniqueScope = indexes.some((index: any) =>
         index?.unique === true
         && index?.key?.scope === 1
@@ -135,7 +138,8 @@ export class GoogleAdsFinancialExecutionLeaseService implements OnModuleInit {
       if (!hasUniqueScope) {
         await this.leaseModel.collection.createIndex(
           { scope: 1 },
-          { unique: true, name: 'uniq_google_ads_financial_execution_lease_scope' },
+          // Match the schema's auto-index name so concurrent startup is idempotent.
+          { unique: true, name: 'scope_1' },
         );
       }
       this.uniqueIndexReady = true;

@@ -47,6 +47,17 @@ describe('HealthService database readiness', () => {
         partialFilterExpression: { idempotencyReserved: true },
       }],
       google_ads_financial_execution_leases: [{ key: { scope: 1 }, unique: true }],
+      meta_ads_action_plans: [
+        { key: { planId: 1 }, unique: true },
+        { key: { 'actions.actionId': 1 }, unique: true },
+        { key: { 'actions.idempotencyKey': 1 }, unique: true },
+      ],
+      meta_ads_execution_reservations: [{ key: { idempotencyKey: 1 }, unique: true }],
+      meta_ads_campaigns: [{ key: { adAccountId: 1, campaignId: 1 }, unique: true }],
+      meta_ads_ad_sets: [{ key: { adAccountId: 1, adSetId: 1 }, unique: true }],
+      meta_ads_ad_creatives: [{ key: { adAccountId: 1, creativeId: 1 }, unique: true }],
+      meta_ads_ads: [{ key: { adAccountId: 1, adId: 1 }, unique: true }],
+      meta_ads_financial_execution_leases: [{ key: { scope: 1 }, unique: true }],
     };
     return {
       readyState: options.readyState ?? 1,

@@ -2,7 +2,7 @@
  * File: product.service.ts
  * Mục đích: Nghiệp vụ Sản phẩm và thao tác dữ liệu MongoDB.
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -11,6 +11,8 @@ import { Product, ProductDocument } from './schemas/product.schema';
 import { Media, MediaDocument } from '../media/schemas/media.schema';
 import * as fs from 'fs';
 import * as path from 'path';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FINANCIAL_INPUT_CHANGED } from '../advertising-cost/advertising-cost-refresh.module';
 
 @Injectable()
 export class ProductService {
@@ -18,7 +20,8 @@ export class ProductService {
     @InjectModel(Product.name)
     private productModel: Model<ProductDocument>,
     @InjectModel(Media.name)
-    private mediaModel: Model<MediaDocument>
+    private mediaModel: Model<MediaDocument>,
+    private readonly events?: EventEmitter2,
   ) {}
 
   private normalizeObjectId(value: unknown): Types.ObjectId | undefined {
@@ -227,10 +230,40 @@ export class ProductService {
     if (!updatedProduct) {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
+    await this.events?.emitAsync(FINANCIAL_INPUT_CHANGED, { productIds: [id] });
     return updatedProduct;
   }
 
   async remove(id: string): Promise<void> {
+    const objectId = this.normalizeObjectId(id);
+    const candidates: unknown[] = objectId ? [objectId, id] : [id];
+    const references = [
+      ['ordertest2', { productId: { $in: candidates } }],
+      ['quotes', { productId: { $in: candidates } }],
+      ['supplierquotes', { productId: { $in: candidates } }],
+      ['inventorybatches', { productId: { $in: candidates } }],
+      ['inventorysummaries', { productId: { $in: candidates } }],
+      ['inventorytransactions', { productId: { $in: candidates } }],
+      ['pendingorders', { productId: { $in: candidates } }],
+      ['media', { productId: { $in: candidates } }],
+      ['landingpages', { productId: { $in: candidates } }],
+      ['purchaseorders', { 'items.productId': { $in: candidates } }],
+      ['returnrequests', { 'items.productId': { $in: candidates } }],
+      ['supplierpayables', { 'items.productId': { $in: candidates } }],
+    ] as const;
+    const counts = await Promise.all(
+      references.map(([collection, filter]) =>
+        this.productModel.db.collection(collection).countDocuments(filter, { limit: 1 }),
+      ),
+    );
+    const referencedBy = references
+      .filter((_, index) => counts[index] > 0)
+      .map(([collection]) => collection);
+    if (referencedBy.length) {
+      throw new ConflictException(
+        `Không thể xóa sản phẩm đã phát sinh dữ liệu (${referencedBy.join(', ')}). Hãy chuyển trạng thái sang Ngừng bán.`,
+      );
+    }
     const result = await this.productModel.findByIdAndDelete(id).exec();
     if (!result) {
       throw new NotFoundException(`Product with ID ${id} not found`);

@@ -26,6 +26,18 @@ export class GoogleAdsCampaign {
   @Prop({ trim: true })
   biddingStrategyType?: string;
 
+  @Prop({ trim: true })
+  biddingStrategySystemStatus?: string;
+
+  @Prop({ trim: true, match: /^customers\/\d+\/biddingStrategies\/\d+$/ })
+  biddingStrategyResourceName?: string;
+
+  @Prop({ type: Number, min: 0 })
+  targetSpendCpcBidCeilingMicros?: number;
+
+  @Prop({ type: Number, min: 0 })
+  maximizeConversionsTargetCpaMicros?: number;
+
   @Prop({ trim: true, match: /^\d+$/ })
   campaignBudgetId?: string;
 
@@ -37,6 +49,27 @@ export class GoogleAdsCampaign {
 
   @Prop({ trim: true, match: /^\d{4}-\d{2}-\d{2}$/ })
   endDate?: string;
+
+  @Prop({ type: Boolean })
+  targetGoogleSearch?: boolean;
+
+  @Prop({ type: Boolean })
+  targetSearchNetwork?: boolean;
+
+  @Prop({ type: Boolean })
+  targetContentNetwork?: boolean;
+
+  @Prop({ type: Boolean })
+  targetPartnerSearchNetwork?: boolean;
+
+  @Prop({ trim: true })
+  positiveGeoTargetType?: string;
+
+  @Prop({ trim: true })
+  negativeGeoTargetType?: string;
+
+  @Prop({ trim: true })
+  containsEuPoliticalAdvertising?: string;
 
   @Prop({ trim: true })
   internalProductId?: string;

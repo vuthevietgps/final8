@@ -34,6 +34,43 @@ export class AdvertisingCost {
   @Prop({ type: String, required: false, index: true, trim: true })
   customerId?: string;
 
+  // Provenance for reconciliation when an account changes read transport.
+  @Prop({ type: String, enum: ['manual', 'native_api', 'windsor', 'import'], index: true })
+  sourceSystem?: 'manual' | 'native_api' | 'windsor' | 'import';
+
+  @Prop({ type: String, index: true, trim: true })
+  sourceConnectionId?: string;
+
+  @Prop({ type: String, index: true, trim: true })
+  sourceSyncRunId?: string;
+
+  @Prop({ type: Boolean, default: false })
+  isEstimated?: boolean;
+
+  @Prop({ type: String })
+  estimationMethod?: string;
+
+  @Prop({ type: [String] })
+  estimationSampleDays?: string[];
+
+  @Prop({ type: Date })
+  estimatedAt?: Date;
+
+  @Prop({ type: String, trim: true })
+  campaignId?: string;
+
+  @Prop({ type: String, trim: true, maxlength: 500 })
+  campaignName?: string;
+
+  @Prop({ type: String, trim: true, maxlength: 500 })
+  adGroupName?: string;
+
+  @Prop({ type: String, trim: true, uppercase: true, match: /^[A-Z]{3}$/ })
+  currency?: string;
+
+  @Prop({ type: Date })
+  providerFetchedAt?: Date;
+
   @Prop({ type: String, required: false, index: true, trim: true })
   businessCenterId?: string;
 
@@ -46,15 +83,15 @@ export class AdvertisingCost {
   managementMode?: 'direct' | 'bm' | 'mcc' | 'bc';
 
   // Số tiền đã chi tiêu (mặc định 0)
-  @Prop({ type: Number, required: false, default: 0 })
+  @Prop({ type: Number, required: false, default: 0, min: 0, max: 1_000_000_000_000 })
   spentAmount?: number;
 
   // CPM (mặc định 0)
-  @Prop({ type: Number, required: false, default: 0 })
+  @Prop({ type: Number, required: false, default: 0, min: 0, max: 1_000_000_000_000 })
   cpm?: number;
 
   // CPC (mặc định 0)
-  @Prop({ type: Number, required: false, default: 0 })
+  @Prop({ type: Number, required: false, default: 0, min: 0, max: 1_000_000_000_000 })
   cpc?: number;
 
   // === NEW MESSAGING METRICS ===
@@ -107,3 +144,7 @@ AdvertisingCostSchema.index(
   { unique: true, name: 'uniq_channel_customer_adGroup_date' },
 );
 AdvertisingCostSchema.index({ channel: 1, date: -1 });
+AdvertisingCostSchema.index(
+  { sourceSystem: 1, sourceConnectionId: 1, date: -1 },
+  { name: 'idx_advertising_cost_source_connection_date' },
+);

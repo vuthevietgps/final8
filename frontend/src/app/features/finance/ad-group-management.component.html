@@ -1,0 +1,103 @@
+<main class="page">
+  <header>
+    <div><h1>Trung tâm lợi nhuận quảng cáo</h1><p>Theo dõi chi phí và lợi nhuận từng nhóm quảng cáo mỗi ngày; tích lũy dữ liệu để ước tính mức chi tối ưu.</p></div>
+    <div class="header-links"><a routerLink="/finance/business-ledger">Sổ kinh doanh</a><a routerLink="/finance/ad-group-daily-report">Báo cáo theo ngày</a><a routerLink="/ad-groups">Cấu hình nhóm</a></div>
+  </header>
+  @if (error) { <p class="error" role="alert">{{ error }}</p> }
+  @if (message) { <p class="success" role="status">{{ message }}</p> }
+
+  <section class="filters">
+    <label>Từ ngày<input type="date" [(ngModel)]="from" /></label>
+    <label>Đến ngày<input type="date" [(ngModel)]="to" /></label>
+    <label>Độ chín đơn<select [(ngModel)]="maturityDays"><option [ngValue]="3">3 ngày</option><option [ngValue]="7">7 ngày</option><option [ngValue]="14">14 ngày</option><option [ngValue]="30">30 ngày</option></select></label>
+    <button (click)="reload()" [disabled]="loading">{{ loading ? 'Đang tải…' : 'Phân tích' }}</button>
+  </section>
+
+  @if (report; as r) {
+    <section class="cards">
+      <article><span>Chi quảng cáo</span><b>{{ amount(r.totals.spend) }}</b></article>
+      <article><span>Chi quảng cáo/ngày</span><b>{{ averagePerDay(r.totals.spend) }}</b></article>
+      <article><span>Doanh thu ghi nhận</span><b>{{ amount(r.totals.revenue) }}</b></article>
+      <article><span>Lợi nhuận sau ads</span><b [class.negative]="r.totals.profitAfterAds < 0">{{ amount(r.totals.profitAfterAds) }}</b></article>
+      <article><span>Thu trực tiếp khách/đại lý sau đảo phiếu</span><b>{{ amount(r.totals.customerCashCollected) }}</b></article>
+      <article><span>Còn phải thu</span><b>{{ amount(r.totals.receivable) }}</b></article>
+      <article><span>Chi phí chưa quy kết</span><b [class.negative]="r.quality.unattributedAdvertisingCost > 0">{{ amount(r.quality.unattributedAdvertisingCost) }}</b></article>
+      <article><span>Đủ dữ liệu cận biên</span><b>{{ r.quality.marginalReadyGroups }}/{{ r.totals.adGroups }} nhóm</b></article>
+    </section>
+    <p class="notice">{{ r.quality.dataIssueGroups }} nhóm cần rà soát dữ liệu · {{ r.quality.insufficientDataGroups }} nhóm chưa đủ dữ liệu. Hiệu quả ads dựa trên lợi nhuận và chất lượng dữ liệu; tỷ lệ thu tiền và công nợ được theo dõi riêng để lập kế hoạch vốn. Mọi quyết định tại đây là hồ sơ nội bộ, không tự thực thi quảng cáo.</p>
+
+    <section class="list-panel">
+      <div class="table-filters">
+        <input [(ngModel)]="search" placeholder="Tìm tên, ID, sản phẩm hoặc nhóm sản phẩm" />
+        <select [(ngModel)]="platformFilter"><option value="">Mọi nền tảng</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="tiktok">TikTok</option></select>
+        <select [(ngModel)]="statusFilter"><option value="">Mọi trạng thái hiệu quả ads</option><option value="data_issue">Cần rà soát dữ liệu</option><option value="insufficient_data">Chưa đủ dữ liệu</option><option value="profitable">Có lãi</option><option value="break_even">Hòa vốn</option><option value="loss">Đang lỗ</option></select>
+      </div>
+      <div class="table-scroll"><table><thead><tr><th>Nhóm quảng cáo</th><th>Phạm vi bán</th><th>Chi ads</th><th>Doanh thu</th><th>Lãi sau ads</th><th>Ngưỡng chi</th><th>Tiền / công nợ</th><th>Hiệu quả ads</th><th></th></tr></thead><tbody>
+        @for (row of rows; track row.adGroupId) {
+          <tr>
+            <td><b>{{ row.name }}</b><small>{{ row.platform || 'Chưa rõ nền tảng' }} · {{ row.adGroupId }}</small><small>Ngân sách ngày: {{ amount(row.dailyBudget) }}</small></td>
+            <td>{{ row.category?.name || 'Chưa gắn nhóm SP' }}<small>{{ row.product?.name || 'Chưa gắn sản phẩm' }}</small></td>
+            <td>{{ amount(row.financial.advertisingCost) }}<small>Phủ quy kết {{ ratio(row.quality.attributionCoverage == null ? null : row.quality.attributionCoverage / 100) }}</small></td>
+            <td>{{ amount(row.financial.revenue) }}<small>{{ row.financial.orders }} đơn · ROAS {{ multiple(row.financial.roas) }}</small></td>
+            <td [class.negative]="row.financial.profitAfterAds < 0">{{ amount(row.financial.profitAfterAds) }}<small>Biên {{ ratio(row.financial.profitMargin) }} · Lãi/chi {{ multiple(row.financial.profitPerSpend) }}</small></td>
+            <td><b>{{ amount(row.marginalAnalysis.optimalDailySpendEstimate) }}</b><small>{{ marginalStatus(row.marginalAnalysis.status) }}</small><small>{{ row.marginalAnalysis.validSpendDays }}/{{ row.marginalAnalysis.observedDays }} ngày hợp lệ</small></td>
+            <td>Thu ròng khách/đại lý {{ amount(row.financial.customerCashCollected) }}<small>Phải thu {{ amount(row.financial.receivable) }}</small></td>
+            <td><span class="badge" [attr.data-status]="row.quality.status">{{ status(row.quality.status) }}</span><small>Tin cậy {{ row.quality.confidence }}/100</small><small>{{ row.quality.maturedOrders }} đơn chín · {{ row.quality.recentOrders }} đơn mới</small></td>
+            <td><button class="secondary" (click)="inspect(row)">Đánh giá</button></td>
+          </tr>
+        } @empty { <tr><td colspan="9">Không có nhóm quảng cáo phù hợp bộ lọc.</td></tr> }
+      </tbody></table></div>
+    </section>
+  }
+
+  @if (selected; as row) {
+    <section class="review-panel">
+      <div class="review-head"><div><h2>{{ row.name }}</h2><p>{{ row.recommendedAction }}</p></div><button class="close" (click)="selected = null">Đóng</button></div>
+      <div class="detail-grid">
+        <div><span>Hiệu quả ads</span><b>{{ status(row.quality.status) }}</b></div><div><span>Độ tin cậy</span><b>{{ row.quality.confidence }}/100</b></div>
+        <div><span>Đơn hoàn</span><b>{{ row.quality.returnedOrders }} · {{ ratio(row.quality.returnRate) }}</b></div><div><span>Tỷ lệ thu tiền (tài chính)</span><b>{{ ratio(row.financial.cashConversion) }}</b></div>
+        <div><span>Chi ads chưa quy kết</span><b>{{ amount(row.quality.unattributedAdvertisingCost) }}</b></div><div><span>Đồng bộ gần nhất</span><b>{{ row.lastSyncAt ? (row.lastSyncAt | date:'dd/MM/yyyy HH:mm') : 'Chưa có' }}</b></div>
+      </div>
+      <section class="marginal-panel">
+        <div>
+          <h3>Ước tính lợi nhuận quảng cáo cận biên</h3>
+          <p><b>{{ marginalStatus(row.marginalAnalysis.status) }}</b> · {{ row.marginalAnalysis.validSpendDays }} ngày chi đạt chất lượng · {{ row.marginalAnalysis.distinctSpendLevels }} mức chi.</p>
+          @if (row.marginalAnalysis.status === 'ready') {
+            <div class="marginal-result">
+              <span>Khoảng chi/ngày có lợi nhuận quan sát tốt nhất</span>
+              <b>{{ amount(row.marginalAnalysis.optimalSpendRange.min) }} – {{ amount(row.marginalAnalysis.optimalSpendRange.max) }}</b>
+              <span>Lợi nhuận cận biên gần mức chi hiện tại</span><b>{{ signed(row.marginalAnalysis.marginalProfitPerAdditionalVnd) }}</b>
+            </div>
+          } @else {
+            <ul>@for (reason of row.marginalAnalysis.blockers; track reason) { <li>{{ reason }}</li> }</ul>
+          }
+          <p class="safe">{{ row.marginalAnalysis.note }}</p>
+        </div>
+        <div class="table-scroll">
+          <h3>Các dải chi phí quan sát</h3>
+          <table><thead><tr><th>Dải</th><th>Chi/ngày</th><th>Doanh thu/ngày</th><th>Lãi/ngày</th><th>Lãi cận biên</th></tr></thead><tbody>
+            @for (band of row.marginalAnalysis.bands; track band.level) {
+              <tr><td>{{ band.level }}</td><td>{{ amount(band.averageSpend) }}</td><td>{{ amount(band.averageRevenue) }}</td><td [class.negative]="band.averageProfitAfterAds < 0">{{ amount(band.averageProfitAfterAds) }}</td><td>{{ signed(band.marginalProfitPerAdditionalVnd) }}</td></tr>
+            } @empty { <tr><td colspan="5">Chưa đủ ngày hợp lệ để chia dải chi phí.</td></tr> }
+          </tbody></table>
+        </div>
+      </section>
+      <section class="daily-panel">
+        <h3>Chi phí và lợi nhuận 14 ngày gần nhất</h3>
+        <div class="table-scroll"><table><thead><tr><th>Ngày</th><th>Chi quảng cáo</th><th>Doanh thu</th><th>Lãi sau ads</th><th>Đơn</th><th>Tiền thu</th><th>Chất lượng</th></tr></thead><tbody>
+          @for (day of recentDays(row); track day.date) {
+            <tr><td>{{ day.date }}</td><td>{{ amount(day.advertisingCost) }}</td><td>{{ amount(day.revenue) }}</td><td [class.negative]="day.profitAfterAds < 0">{{ amount(day.profitAfterAds) }}</td><td>{{ day.orders }}</td><td>{{ amount(day.cashIn) }}</td><td>{{ day.needsReviewOrders || day.unattributedAdvertisingCost ? 'Cần rà soát' : 'Đạt' }}</td></tr>
+          }
+        </tbody></table></div>
+      </section>
+      @if (row.latestReview) { <p class="previous">Đánh giá gần nhất: <b>{{ decision(row.latestReview.decision) }}</b> · {{ row.latestReview.rationale }}</p> }
+      <div class="review-form">
+        <label>Quyết định<select [(ngModel)]="review.decision"><option value="observe">Theo dõi</option><option value="keep_budget">Giữ ngân sách</option><option value="propose_increase">Đề xuất tăng</option><option value="propose_decrease">Đề xuất giảm</option><option value="pause_candidate">Ứng viên tạm dừng</option></select></label>
+        <label>Lý do<textarea rows="3" [(ngModel)]="review.rationale"></textarea></label>
+        <label>Căn cứ<textarea rows="3" [(ngModel)]="review.evidence" placeholder="Báo cáo, thử nghiệm, biên bản đánh giá…"></textarea></label>
+      </div>
+      <button (click)="saveReview()" [disabled]="loading || !review.rationale.trim() || !review.evidence.trim()">Lưu đánh giá nội bộ</button>
+      <p class="safe">Không gọi API quảng cáo, không đổi ngân sách và không tạm dừng nhóm quảng cáo.</p>
+    </section>
+  }
+</main>
